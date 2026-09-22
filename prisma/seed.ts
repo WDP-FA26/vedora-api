@@ -1,17 +1,11 @@
 import 'dotenv/config';
 import { PrismaClient } from '@prisma/client';
+import { seedDatabase } from '../src/database/seed';
 
 const prisma = new PrismaClient();
 
 async function main(): Promise<void> {
-  await prisma.user.upsert({
-    where: { email: 'admin@vedora.local' },
-    update: {},
-    create: {
-      email: 'admin@vedora.local',
-      name: 'Vedora Admin',
-    },
-  });
+  await seedDatabase(prisma);
 }
 
 main()

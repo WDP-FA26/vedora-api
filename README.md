@@ -106,9 +106,32 @@ npm run prisma:migrate:dev -- --name ten_migration
 npm run prisma:migrate:deploy
 npm run prisma:studio
 npm run prisma:seed
+npm run prisma:seed:prod
 ```
 
 Khi sửa `prisma/schema.prisma`, tạo migration bằng `prisma:migrate:dev`, kiểm tra SQL trong `prisma/migrations`, rồi commit cả schema và migration. Container production chạy `prisma migrate deploy` tự động trước khi start NestJS.
+
+### Seed production
+
+Seed không tự chạy trong mỗi lần deploy để tránh vô tình thay đổi dữ liệu production. Sau khi deploy và migration thành công, mở **Terminal** của service `api` trên Dokploy rồi chạy:
+
+```bash
+npm run prisma:seed:prod
+```
+
+Nếu chạy production Compose từ máy chủ bằng CLI:
+
+```bash
+docker compose -f docker-compose.dokploy.yml exec api npm run prisma:seed:prod
+```
+
+Với Compose local, dùng:
+
+```bash
+docker compose exec api npm run prisma:seed:prod
+```
+
+Seed hiện dùng `upsert`, vì vậy có thể chạy lại mà không tạo trùng user `admin@vedora.local`. Sau khi sửa nội dung seed, phải commit, deploy lại image rồi mới chạy lệnh production ở trên.
 
 ## Triển khai lên organization Dokploy
 
@@ -146,7 +169,7 @@ Nếu repository private, owner/admin Dokploy cần kết nối GitHub App trong
 
 ### 4. Khai báo environment variables
 
-Trong tab **Environment**, nhập các biến sau. Dùng mật khẩu ngẫu nhiên mạnh và không dùng giá trị mẫu:
+Mẫu đầy đủ nằm trong `.env.production.example`. Không tạo hoặc commit file production chứa secret thật. Trong tab **Environment** của Dokploy, nhập các biến sau. Dùng mật khẩu ngẫu nhiên mạnh và không dùng giá trị mẫu:
 
 ```dotenv
 API_PREFIX=api/v1
