@@ -1,4 +1,4 @@
-FROM node:22-alpine AS dependencies
+FROM node:24-alpine AS dependencies
 WORKDIR /app
 COPY package*.json ./
 COPY prisma ./prisma
@@ -10,7 +10,7 @@ COPY nest-cli.json tsconfig*.json ./
 COPY src ./src
 RUN npx prisma generate && npm run build
 
-FROM node:22-alpine AS production
+FROM node:24-alpine AS production
 WORKDIR /app
 ENV NODE_ENV=production
 RUN apk add --no-cache dumb-init
