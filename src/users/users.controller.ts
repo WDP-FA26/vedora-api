@@ -9,33 +9,36 @@ import {
   ParseUUIDPipe,
   Patch,
   Post,
+  UseGuards,
 } from '@nestjs/common';
-import { ApiOperation, ApiTags } from '@nestjs/swagger';
-import { User } from '@prisma/client';
+import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
-import { UsersService } from './users.service';
+import { PublicUser, UsersService } from './users.service';
 
 @ApiTags('users')
+@ApiBearerAuth()
+@UseGuards(JwtAuthGuard)
 @Controller('users')
 export class UsersController {
   constructor(private readonly usersService: UsersService) {}
 
   @Post()
   @ApiOperation({ summary: 'Create a user' })
-  create(@Body() dto: CreateUserDto): Promise<User> {
-    return this.usersService.create(dto);
+  create(@Body() dto: CreateUserDto): Promise<PublicUser> {
+    return this.usersService.createWithPassword(dto);
   }
 
   @Get()
   @ApiOperation({ summary: 'List users' })
-  findAll(): Promise<User[]> {
+  findAll(): Promise<PublicUser[]> {
     return this.usersService.findAll();
   }
 
   @Get(':id')
   @ApiOperation({ summary: 'Get a user by id' })
-  findOne(@Param('id', ParseUUIDPipe) id: string): Promise<User> {
+  findOne(@Param('id', ParseUUIDPipe) id: string): Promise<PublicUser> {
     return this.usersService.findOne(id);
   }
 
@@ -44,7 +47,7 @@ export class UsersController {
   update(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: UpdateUserDto,
-  ): Promise<User> {
+  ): Promise<PublicUser> {
     return this.usersService.update(id, dto);
   }
 

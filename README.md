@@ -80,19 +80,52 @@ Không thêm `-v` nếu muốn giữ dữ liệu PostgreSQL. `docker compose dow
 | `GET` | `/api/v1` | Thông tin API |
 | `GET` | `/api/v1/health` | Liveness |
 | `GET` | `/api/v1/health/ready` | Readiness + PostgreSQL |
-| `POST` | `/api/v1/users` | Tạo user |
-| `GET` | `/api/v1/users` | Danh sách user |
-| `GET` | `/api/v1/users/:id` | Chi tiết user |
-| `PATCH` | `/api/v1/users/:id` | Cập nhật user |
-| `DELETE` | `/api/v1/users/:id` | Xóa user |
+| `POST` | `/api/v1/auth/register` | Đăng ký và nhận cặp AT/RT |
+| `POST` | `/api/v1/auth/login` | Đăng nhập bằng username/password và nhận cặp AT/RT |
+| `POST` | `/api/v1/auth/refresh` | Rotate refresh token và nhận cặp AT/RT mới |
+| `POST` | `/api/v1/auth/logout` | Thu hồi refresh-token family |
+| `GET` | `/api/v1/auth/google` | Bắt đầu đăng nhập Google |
+| `GET` | `/api/v1/auth/google/callback` | Callback Google và nhận cặp AT/RT |
+| `GET` | `/api/v1/auth/me` | Thông tin user hiện tại (Bearer token) |
+| `POST` | `/api/v1/users` | Tạo user (Bearer token) |
+| `GET` | `/api/v1/users` | Danh sách user (Bearer token) |
+| `GET` | `/api/v1/users/:id` | Chi tiết user (Bearer token) |
+| `PATCH` | `/api/v1/users/:id` | Cập nhật user (Bearer token) |
+| `DELETE` | `/api/v1/users/:id` | Xóa user (Bearer token) |
 
 Ví dụ:
 
 ```bash
-curl -X POST http://localhost:3000/api/v1/users \
+curl -X POST http://localhost:3000/api/v1/auth/register \
   -H "Content-Type: application/json" \
-  -d '{"email":"hello@vedora.vn","name":"Vedora User"}'
+  -d '{"username":"vedora.user","password":"StrongPassword123!","fullName":"Vedora User","email":"hello@vedora.vn"}'
 ```
+
+Đăng ký, đăng nhập và Google callback trả về `accessToken` cùng `refreshToken`.
+Gửi access token cho endpoint cần xác thực bằng header
+`Authorization: Bearer <accessToken>`. Access token mặc định hết hạn sau 3600 giây,
+refresh token sau 30 ngày.
+
+Refresh token là token opaque, chỉ hash SHA-256 được lưu trong database. Mỗi lần gọi
+`POST /auth/refresh`, token cũ bị thu hồi và một refresh token mới được phát. Nếu token
+cũ bị dùng lại, toàn bộ token family sẽ bị thu hồi và client phải đăng nhập lại.
+
+```bash
+curl -X POST http://localhost:3000/api/v1/auth/refresh \
+  -H "Content-Type: application/json" \
+  -d '{"refreshToken":"REFRESH_TOKEN_HIEN_TAI"}'
+```
+
+### Đăng nhập Google
+
+1. Tạo OAuth 2.0 Client loại **Web application** trong Google Cloud Console.
+2. Thêm Authorized redirect URI đúng bằng `GOOGLE_CALLBACK_URL`, local mặc định là
+   `http://localhost:3000/api/v1/auth/google/callback`.
+3. Điền `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` và `GOOGLE_CALLBACK_URL` vào `.env`.
+4. Mở `GET /api/v1/auth/google` trên trình duyệt để bắt đầu đăng nhập.
+
+Nếu chưa khai báo Google credentials, route Google trả `503` nhưng các phương thức
+đăng nhập khác vẫn hoạt động. API chỉ liên kết tài khoản khi Google trả về email đã xác minh.
 
 ## Lệnh phát triển
 
@@ -131,7 +164,7 @@ Với Compose local, dùng:
 docker compose exec api npm run prisma:seed:prod
 ```
 
-Seed hiện dùng `upsert`, vì vậy có thể chạy lại mà không tạo trùng user `admin@vedora.local`. Sau khi sửa nội dung seed, phải commit, deploy lại image rồi mới chạy lệnh production ở trên.
+Seed có tính idempotent, vì vậy có thể chạy lại mà không tạo trùng user `vedora.admin`. Khai báo `SEED_USER_PASSWORD` trước khi seed; nếu không có biến này thì seed user sẽ được bỏ qua. Seed không đặt lại mật khẩu của user đã tồn tại, ngoại trừ user cũ được chuyển đổi từ schema trước auth và chưa có mật khẩu. Sau khi sửa nội dung seed, phải commit, deploy lại image rồi mới chạy lệnh production ở trên.
 
 ## Triển khai lên organization Dokploy
 
@@ -169,11 +202,17 @@ Nếu repository private, owner/admin Dokploy cần kết nối GitHub App trong
 
 ### 4. Khai báo environment variables
 
-Mẫu đầy đủ nằm trong `.env.production.example`. Không tạo hoặc commit file production chứa secret thật. Trong tab **Environment** của Dokploy, nhập các biến sau. Dùng mật khẩu ngẫu nhiên mạnh và không dùng giá trị mẫu:
+Mẫu cơ bản nằm trong `.env.example`. Không tạo hoặc commit file production chứa secret thật. Trong tab **Environment** của Dokploy, nhập các biến sau. Dùng mật khẩu ngẫu nhiên mạnh và không dùng giá trị mẫu:
 
 ```dotenv
 API_PREFIX=api/v1
 CORS_ORIGIN=https://ten-mien-frontend.example.com
+JWT_SECRET=THAY_BANG_CHUOI_NGAU_NHIEN_IT_NHAT_32_KY_TU
+JWT_ACCESS_TTL=3600
+REFRESH_TOKEN_TTL=2592000
+GOOGLE_CLIENT_ID=GOOGLE_OAUTH_CLIENT_ID
+GOOGLE_CLIENT_SECRET=GOOGLE_OAUTH_CLIENT_SECRET
+GOOGLE_CALLBACK_URL=https://api.example.com/api/v1/auth/google/callback
 POSTGRES_DB=vedora
 POSTGRES_USER=vedora
 POSTGRES_PASSWORD=THAY_BANG_MAT_KHAU_NGAU_NHIEN
@@ -231,6 +270,13 @@ Tài liệu Dokploy tham khảo:
 | `PORT` | Không | `3000` | Port của NestJS |
 | `API_PREFIX` | Không | `api/v1` | Global API prefix |
 | `CORS_ORIGIN` | Không | `*` | Một hoặc nhiều origin, phân tách bằng dấu phẩy |
+| `JWT_SECRET` | Có | — | Secret ký và xác thực access token, tối thiểu 32 ký tự |
+| `JWT_ACCESS_TTL` | Không | `3600` | Thời hạn access token, tính bằng giây |
+| `REFRESH_TOKEN_TTL` | Không | `2592000` | Thời hạn refresh token, tính bằng giây |
+| `GOOGLE_CLIENT_ID` | Khi dùng Google login | — | OAuth 2.0 Client ID của Google |
+| `GOOGLE_CLIENT_SECRET` | Khi dùng Google login | — | OAuth 2.0 Client Secret của Google |
+| `GOOGLE_CALLBACK_URL` | Khi dùng Google login | URL callback local | Redirect URI phải khớp Google Cloud Console |
+| `SEED_USER_PASSWORD` | Khi muốn seed user | — | Mật khẩu ban đầu cho `vedora.admin` |
 | `POSTGRES_DB` | Khi dùng Compose | — | Database được container PostgreSQL tạo |
 | `POSTGRES_USER` | Khi dùng Compose | — | Database user |
 | `POSTGRES_PASSWORD` | Khi dùng Compose | — | Database password |
@@ -242,4 +288,6 @@ Tài liệu Dokploy tham khảo:
 - Gắn domain HTTPS và kiểm tra `/api/v1/health/ready`.
 - Bật backup định kỳ và kiểm thử restore.
 - Bảo vệ hoặc tắt Swagger nếu API không muốn public tài liệu.
-- Bổ sung authentication/authorization trước khi đưa CRUD nghiệp vụ thật ra Internet.
+- Dùng `JWT_SECRET` ngẫu nhiên, đủ dài và khác nhau giữa các môi trường.
+- Đăng ký chính xác production `GOOGLE_CALLBACK_URL` trong Google Cloud Console.
+- Bổ sung authorization theo nghiệp vụ trước khi đưa endpoint nhạy cảm ra Internet.

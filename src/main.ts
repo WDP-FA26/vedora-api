@@ -14,7 +14,8 @@ async function bootstrap(): Promise<void> {
 
   app.use(helmet());
   app.enableCors({
-    origin: corsOrigin === '*' ? true : corsOrigin.split(',').map((v) => v.trim()),
+    origin:
+      corsOrigin === '*' ? true : corsOrigin.split(',').map((v) => v.trim()),
     credentials: corsOrigin !== '*',
   });
   app.setGlobalPrefix(prefix);
@@ -31,6 +32,7 @@ async function bootstrap(): Promise<void> {
     .setTitle('Vedora API')
     .setDescription('Vedora backend API documentation')
     .setVersion('0.1.0')
+    .addBearerAuth()
     .build();
   const document = SwaggerModule.createDocument(app, swaggerConfig);
   SwaggerModule.setup('docs', app, document);
