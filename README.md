@@ -23,6 +23,9 @@ Backend starter cho Vedora, sử dụng NestJS, Prisma ORM, PostgreSQL và Docke
 │   └── seed.ts
 ├── src/
 │   ├── health/                # Liveness/readiness
+│   ├── media/                 # Upload video lên Mux, webhook, dọn dẹp định kỳ
+│   ├── mux/                   # Mux client dùng chung
+│   ├── posts/                 # Bài đăng (POST; BLOG sẽ có model Blog riêng)
 │   ├── prisma/                # PrismaService dùng chung
 │   ├── users/                 # CRUD mẫu
 │   ├── app.module.ts
@@ -149,6 +152,26 @@ Nếu chưa khai báo Google credentials, các route Google trả `503` nhưng c
 đăng nhập khác vẫn hoạt động. API chỉ liên kết tài khoản khi Google trả về email đã xác minh. Nếu email đó thuộc một
 tài khoản mật khẩu chưa xác minh, API xoá mật khẩu và thu hồi mọi phiên của tài khoản đó
 trước khi liên kết, để người đăng ký hộ email của người khác không giữ được quyền truy cập.
+
+### Bài đăng có video (Mux)
+
+File video đi thẳng từ trình duyệt lên Mux, không qua API:
+
+1. `POST /api/v1/media/uploads` với `{"type":"VIDEO"}` trả về `media.id` và `uploadUrl`
+   (Mux direct upload, hết hạn sau 1 giờ, chỉ nhận từ origin `FRONTEND_URL`).
+2. Trình duyệt `PUT` file lên `uploadUrl` (nên dùng `@mux/upchunk` để có tiến trình).
+3. `POST /api/v1/posts` với `{"type":"POST","body":"…","mediaIds":["<media.id>"]}` được
+   gọi ngay, không cần đợi Mux xử lý xong. Bài ở trạng thái `PROCESSING` (chỉ tác giả
+   thấy) rồi chuyển sang `PUBLISHED` khi video sẵn sàng, hoặc `FAILED` (ví dụ video dài
+   hơn `MAX_VIDEO_DURATION_SEC`).
+4. Frontend poll `GET /api/v1/posts/:id` tới khi hết `PROCESSING`, rồi phát video bằng
+   `playbackId` (`https://stream.mux.com/<playbackId>.m3u8`).
+
+Mux báo tiến trình qua webhook `POST /api/v1/webhooks/mux`. Ở production, tạo webhook
+trỏ tới URL đó trong Mux dashboard và điền signing secret vào `MUX_WEBHOOK_SECRET`. Khi
+để trống (local, Mux không gọi được `localhost`), API tự hỏi Mux mỗi lần media/bài đang
+chờ được đọc. Một cron 10 phút một lần cũng cập nhật media bị lỡ webhook, và cron hằng
+giờ xoá upload không được gắn vào bài nào sau 24 giờ.
 
 ## Lệnh phát triển
 
@@ -299,6 +322,11 @@ Tài liệu Dokploy tham khảo:
 | `GOOGLE_CLIENT_ID` | Khi dùng Google login | — | OAuth 2.0 Client ID của Google |
 | `GOOGLE_CLIENT_SECRET` | Khi dùng Google login | — | OAuth 2.0 Client Secret của Google |
 | `GOOGLE_CALLBACK_URL` | Khi dùng Google login | URL callback local | Redirect URI phải khớp Google Cloud Console |
+| `MUX_TOKEN_ID` | Khi upload video | — | Mux access token ID; trống thì route media trả `503` |
+| `MUX_TOKEN_SECRET` | Khi upload video | — | Mux access token secret |
+| `MUX_WEBHOOK_SECRET` | Production | — | Signing secret của webhook Mux; trống thì tự hỏi Mux khi đọc |
+| `FRONTEND_URL` | Không | `http://localhost:3000` | Origin được phép upload video lên Mux |
+| `MAX_VIDEO_DURATION_SEC` | Không | `180` | Video dài hơn bị đánh dấu `FAILED` và xoá khỏi Mux |
 | `SEED_USER_PASSWORD` | Khi muốn seed user | — | Mật khẩu ban đầu cho `vedora.admin` |
 | `POSTGRES_DB` | Khi dùng Compose | — | Database được container PostgreSQL tạo |
 | `POSTGRES_USER` | Khi dùng Compose | — | Database user |

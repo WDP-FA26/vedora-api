@@ -1,10 +1,14 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
+import { ScheduleModule } from '@nestjs/schedule';
 import Joi from 'joi';
 import { AppController } from './app.controller';
 import { AuthModule } from './auth/auth.module';
 import { HealthModule } from './health/health.module';
 import { MailModule } from './mail/mail.module';
+import { MediaModule } from './media/media.module';
+import { MuxModule } from './mux/mux.module';
+import { PostsModule } from './posts/posts.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { UsersModule } from './users/users.module';
 
@@ -38,13 +42,25 @@ import { UsersModule } from './users/users.module';
           otherwise: Joi.allow('').default(''),
         }),
         MAIL_FROM: Joi.string().default('Vedora <onboarding@resend.dev>'),
+        // Origin the browser uploads videos from (Mux direct-upload CORS).
+        FRONTEND_URL: Joi.string().uri().default('http://localhost:3000'),
+        // Empty: video uploads answer 503.
+        MUX_TOKEN_ID: Joi.string().allow('').default(''),
+        MUX_TOKEN_SECRET: Joi.string().allow('').default(''),
+        // Empty: no webhooks; pending media is refreshed from Mux on read.
+        MUX_WEBHOOK_SECRET: Joi.string().allow('').default(''),
+        MAX_VIDEO_DURATION_SEC: Joi.number().integer().positive().default(180),
       }),
     }),
+    ScheduleModule.forRoot(),
     PrismaModule,
     MailModule,
+    MuxModule,
     AuthModule,
     HealthModule,
     UsersModule,
+    MediaModule,
+    PostsModule,
   ],
   controllers: [AppController],
 })

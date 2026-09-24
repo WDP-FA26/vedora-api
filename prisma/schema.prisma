@@ -20,6 +20,8 @@ model User {
   updatedAt             DateTime               @updatedAt
   refreshTokens         RefreshToken[]
   emailVerificationCode EmailVerificationCode?
+  posts                 Post[]
+  media                 MediaAsset[]
 
   @@map("users")
 }
@@ -64,4 +66,76 @@ model EmailVerificationGuesses {
   windowStart DateTime @map("window_start")
 
   @@map("email_verification_guesses")
+}
+
+enum PostType {
+  POST
+  /// Long-form post. Its content will live in a `Blog` row linked 1:1 to the
+  /// post; not implemented yet, so the API only accepts `POST`.
+  BLOG
+}
+
+enum PostStatus {
+  /// Waiting for attached media to finish processing; visible to its author only.
+  PROCESSING
+  PUBLISHED
+  FAILED
+}
+
+model Post {
+  id          String       @id @default(uuid()) @db.Uuid
+  authorId    String       @map("author_id") @db.Uuid
+  type        PostType     @default(POST)
+  status      PostStatus   @default(PROCESSING)
+  body        String?      @db.VarChar(280)
+  publishedAt DateTime?    @map("published_at")
+  createdAt   DateTime     @default(now()) @map("created_at")
+  updatedAt   DateTime     @updatedAt @map("updated_at")
+  author      User         @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  media       MediaAsset[]
+
+  @@index([status, publishedAt])
+  @@index([authorId, createdAt])
+  @@map("posts")
+}
+
+enum MediaType {
+  VIDEO
+  IMAGE
+}
+
+enum MediaStatus {
+  /// Upload URL issued; the browser has not finished sending the file.
+  WAITING_UPLOAD
+  /// File received; Mux is encoding it.
+  PROCESSING
+  READY
+  FAILED
+}
+
+/// A file a user uploaded, attached to at most one post. Videos are hosted by
+/// Mux: `id` is sent as the asset's `passthrough`, so webhooks map back to it.
+model MediaAsset {
+  id            String      @id @default(uuid()) @db.Uuid
+  ownerId       String      @map("owner_id") @db.Uuid
+  type          MediaType
+  status        MediaStatus @default(WAITING_UPLOAD)
+  /// Machine-readable reason when `status` is FAILED, e.g. `TOO_LONG`.
+  failureReason String?     @map("failure_reason") @db.VarChar(64)
+  postId        String?     @map("post_id") @db.Uuid
+  position      Int         @default(0)
+  muxUploadId   String?     @unique @map("mux_upload_id") @db.VarChar(255)
+  muxAssetId    String?     @unique @map("mux_asset_id") @db.VarChar(255)
+  playbackId    String?     @map("playback_id") @db.VarChar(255)
+  durationSec   Float?      @map("duration_sec")
+  aspectRatio   String?     @map("aspect_ratio") @db.VarChar(16)
+  createdAt     DateTime    @default(now()) @map("created_at")
+  updatedAt     DateTime    @updatedAt @map("updated_at")
+  owner         User        @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  post          Post?       @relation(fields: [postId], references: [id], onDelete: SetNull)
+
+  @@index([ownerId, status])
+  @@index([postId])
+  @@index([status, updatedAt])
+  @@map("media_assets")
 }

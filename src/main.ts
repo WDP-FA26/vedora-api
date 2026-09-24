@@ -6,7 +6,10 @@ import helmet from 'helmet';
 import { AppModule } from './app.module';
 
 async function bootstrap(): Promise<void> {
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create(AppModule, {
+    // Mux webhook signatures are computed over the exact request body.
+    rawBody: true,
+  });
   const config = app.get(ConfigService);
   const port = config.get<number>('PORT', 3000);
   const prefix = config.get<string>('API_PREFIX', 'api/v1');
