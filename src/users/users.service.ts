@@ -92,16 +92,42 @@ export class UsersService {
     return this.prisma.user.findUnique({ where: { email } });
   }
 
-  async linkGoogleAccount(id: string, googleId: string): Promise<PublicUser> {
+  /**
+   * Links Google to an existing account with the same email. If that account
+   * never verified its email, anyone could have registered it, so its password
+   * is removed and Google's verification takes over.
+   */
+  async linkGoogleAccount(user: User, googleId: string): Promise<PublicUser> {
     try {
       return await this.prisma.user.update({
-        where: { id },
-        data: { googleId },
+        where: { id: user.id },
+        data: user.emailVerifiedAt
+          ? { googleId }
+          : { googleId, passwordHash: null, emailVerifiedAt: new Date() },
         select: publicUserSelect,
       });
     } catch (error: unknown) {
       this.rethrowKnownError(error);
     }
+  }
+
+  /**
+   * Frees an email or username held by a password account that was never
+   * verified and is older than `createdBefore`, so nobody can squat on an
+   * address they don't own.
+   */
+  async deleteStaleUnverified(
+    { email, username }: { email: string; username: string },
+    createdBefore: Date,
+  ): Promise<void> {
+    await this.prisma.user.deleteMany({
+      where: {
+        OR: [{ email }, { username }],
+        emailVerifiedAt: null,
+        googleId: null,
+        createdAt: { lt: createdBefore },
+      },
+    });
   }
 
   findPublicById(id: string): Promise<PublicUser | null> {

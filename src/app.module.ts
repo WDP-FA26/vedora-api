@@ -4,6 +4,7 @@ import Joi from 'joi';
 import { AppController } from './app.controller';
 import { AuthModule } from './auth/auth.module';
 import { HealthModule } from './health/health.module';
+import { MailModule } from './mail/mail.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { UsersModule } from './users/users.module';
 
@@ -30,9 +31,17 @@ import { UsersModule } from './users/users.module';
         GOOGLE_CLIENT_ID: Joi.string().allow('').default(''),
         GOOGLE_CLIENT_SECRET: Joi.string().allow('').default(''),
         GOOGLE_CALLBACK_URL: Joi.string().uri().allow('').default(''),
+        // Empty outside production: verification codes go to the log instead.
+        RESEND_API_KEY: Joi.string().when('NODE_ENV', {
+          is: 'production',
+          then: Joi.required(),
+          otherwise: Joi.allow('').default(''),
+        }),
+        MAIL_FROM: Joi.string().default('Vedora <onboarding@resend.dev>'),
       }),
     }),
     PrismaModule,
+    MailModule,
     AuthModule,
     HealthModule,
     UsersModule,
