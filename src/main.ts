@@ -35,7 +35,10 @@ async function bootstrap(): Promise<void> {
     .addBearerAuth()
     .build();
   const document = SwaggerModule.createDocument(app, swaggerConfig);
-  SwaggerModule.setup('docs', app, document);
+  SwaggerModule.setup('docs', app, document, {
+    jsonDocumentUrl: 'docs/json',
+    yamlDocumentUrl: 'docs/yaml',
+  });
 
   await app.listen(port, '0.0.0.0');
 }
