@@ -1,5 +1,6 @@
 import eslint from '@eslint/js';
 import eslintConfigPrettier from 'eslint-config-prettier';
+import jest from 'eslint-plugin-jest';
 import tseslint from 'typescript-eslint';
 
 export default tseslint.config(
@@ -17,6 +18,15 @@ export default tseslint.config(
     rules: {
       '@typescript-eslint/no-floating-promises': 'error',
       '@typescript-eslint/no-explicit-any': 'off',
+    },
+  },
+  {
+    // `expect(mock.method)` is safe; jest/unbound-method knows that.
+    files: ['**/*.spec.ts'],
+    plugins: { jest },
+    rules: {
+      '@typescript-eslint/unbound-method': 'off',
+      'jest/unbound-method': 'error',
     },
   },
 );

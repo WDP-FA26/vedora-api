@@ -1,18 +1,19 @@
 import {
   BadRequestException,
   Controller,
+  Headers,
   HttpCode,
   HttpStatus,
   Logger,
   Post,
-  Req,
   ServiceUnavailableException,
 } from '@nestjs/common';
-import type { RawBodyRequest } from '@nestjs/common';
 import { ApiExcludeController } from '@nestjs/swagger';
-import type { Request } from 'express';
+import type { UnwrapWebhookEvent } from '@mux/ts/resources/webhooks/webhooks';
+import type { IncomingHttpHeaders } from 'node:http';
 import { MuxService } from '../mux/mux.service';
 import { MediaService } from './media.service';
+import { RawBody } from './raw-body.decorator';
 
 /**
  * Mux calls this for upload and asset events. It is public; the signature
@@ -31,23 +32,31 @@ export class MuxWebhookController {
 
   @Post('mux')
   @HttpCode(HttpStatus.NO_CONTENT)
-  async receive(@Req() request: RawBodyRequest<Request>): Promise<void> {
+  async receive(
+    @RawBody() rawBody: Buffer | undefined,
+    @Headers() headers: IncomingHttpHeaders,
+  ): Promise<void> {
     if (!this.mux.webhooksEnabled) {
       throw new ServiceUnavailableException('Mux webhooks are not configured');
     }
-    if (!request.rawBody) {
+    if (!rawBody) {
       throw new BadRequestException('Missing body');
     }
+    const event = await this.verify(rawBody, headers);
+    await this.mediaService.handleWebhook(event);
+  }
 
-    let event;
+  private async verify(
+    rawBody: Buffer,
+    headers: IncomingHttpHeaders,
+  ): Promise<UnwrapWebhookEvent> {
     try {
-      event = await this.mux
+      return await this.mux
         .require()
-        .webhooks.unwrap(request.rawBody.toString('utf8'), request.headers);
+        .webhooks.unwrap(rawBody.toString('utf8'), headers);
     } catch (error) {
       this.logger.warn(`Rejected Mux webhook: ${String(error)}`);
       throw new BadRequestException('Invalid webhook signature');
     }
-    await this.mediaService.handleWebhook(event);
   }
 }

@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   ForbiddenException,
+  HttpStatus,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
@@ -39,7 +40,12 @@ export class PostsService {
     const body = dto.body || null;
     const mediaIds = dto.mediaIds ?? [];
     if (!body && mediaIds.length === 0) {
-      throw new BadRequestException('A post needs text or a video');
+      throw new BadRequestException({
+        statusCode: HttpStatus.BAD_REQUEST,
+        error: 'Bad Request',
+        code: 'EMPTY_POST',
+        message: 'A post needs text or a video',
+      });
     }
 
     const { id } = await this.prisma.$transaction(async (tx) => {

@@ -113,26 +113,37 @@ enum MediaStatus {
   FAILED
 }
 
+enum MediaFailureReason {
+  /// Longer than `MAX_VIDEO_DURATION_SEC`; deleted from Mux.
+  TOO_LONG
+  ENCODING_FAILED
+  UPLOAD_ERRORED
+  UPLOAD_CANCELLED
+  UPLOAD_TIMED_OUT
+  /// Mux created the asset without a public playback ID.
+  NO_PLAYBACK_ID
+}
+
 /// A file a user uploaded, attached to at most one post. Videos are hosted by
 /// Mux: `id` is sent as the asset's `passthrough`, so webhooks map back to it.
 model MediaAsset {
-  id            String      @id @default(uuid()) @db.Uuid
-  ownerId       String      @map("owner_id") @db.Uuid
+  id            String              @id @default(uuid()) @db.Uuid
+  ownerId       String              @map("owner_id") @db.Uuid
   type          MediaType
-  status        MediaStatus @default(WAITING_UPLOAD)
-  /// Machine-readable reason when `status` is FAILED, e.g. `TOO_LONG`.
-  failureReason String?     @map("failure_reason") @db.VarChar(64)
-  postId        String?     @map("post_id") @db.Uuid
-  position      Int         @default(0)
-  muxUploadId   String?     @unique @map("mux_upload_id") @db.VarChar(255)
-  muxAssetId    String?     @unique @map("mux_asset_id") @db.VarChar(255)
-  playbackId    String?     @map("playback_id") @db.VarChar(255)
-  durationSec   Float?      @map("duration_sec")
-  aspectRatio   String?     @map("aspect_ratio") @db.VarChar(16)
-  createdAt     DateTime    @default(now()) @map("created_at")
-  updatedAt     DateTime    @updatedAt @map("updated_at")
-  owner         User        @relation(fields: [ownerId], references: [id], onDelete: Cascade)
-  post          Post?       @relation(fields: [postId], references: [id], onDelete: SetNull)
+  status        MediaStatus         @default(WAITING_UPLOAD)
+  /// Set when `status` is FAILED.
+  failureReason MediaFailureReason? @map("failure_reason")
+  postId        String?             @map("post_id") @db.Uuid
+  position      Int                 @default(0)
+  muxUploadId   String?             @unique @map("mux_upload_id") @db.VarChar(255)
+  muxAssetId    String?             @unique @map("mux_asset_id") @db.VarChar(255)
+  playbackId    String?             @map("playback_id") @db.VarChar(255)
+  durationSec   Float?              @map("duration_sec")
+  aspectRatio   String?             @map("aspect_ratio") @db.VarChar(16)
+  createdAt     DateTime            @default(now()) @map("created_at")
+  updatedAt     DateTime            @updatedAt @map("updated_at")
+  owner         User                @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  post          Post?               @relation(fields: [postId], references: [id], onDelete: SetNull)
 
   @@index([ownerId, status])
   @@index([postId])

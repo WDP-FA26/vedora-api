@@ -13,27 +13,19 @@ import type { Asset } from '@mux/ts/resources/video/assets';
 import type { UnwrapWebhookEvent } from '@mux/ts/resources/webhooks/webhooks';
 import {
   MediaAsset,
+  MediaFailureReason,
   MediaStatus,
   MediaType,
   PostStatus,
   Prisma,
 } from '@prisma/client';
+import { isUUID } from 'class-validator';
 import { MuxService } from '../mux/mux.service';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   CreateUploadResponseDto,
   MediaResponseDto,
 } from './dto/media-response.dto';
-
-export const mediaSelect = {
-  id: true,
-  type: true,
-  status: true,
-  failureReason: true,
-  playbackId: true,
-  durationSec: true,
-  aspectRatio: true,
-} satisfies Prisma.MediaAssetSelect;
 
 /** The asset fields we read, shared by API responses and webhook payloads. */
 type MuxAsset = Pick<
@@ -57,7 +49,12 @@ const MAX_UNATTACHED_UPLOADS = 5;
 /** Mux direct-upload URLs stop accepting the file after this long. */
 const UPLOAD_URL_TTL_SECONDS = 3600;
 
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+/** Upload states after which no file will arrive. */
+const UPLOAD_FAILURES = {
+  errored: MediaFailureReason.UPLOAD_ERRORED,
+  cancelled: MediaFailureReason.UPLOAD_CANCELLED,
+  timed_out: MediaFailureReason.UPLOAD_TIMED_OUT,
+} as const satisfies Record<string, MediaFailureReason>;
 
 /**
  * Videos go straight from the browser to Mux: `createUpload` hands out a
@@ -118,7 +115,7 @@ export class MediaService {
         cors_origin: this.frontendUrl,
         timeout: UPLOAD_URL_TTL_SECONDS,
         new_asset_settings: {
-          playback_policy: ['public'],
+          playback_policies: ['public'],
           video_quality: 'basic',
           max_resolution_tier: '1080p',
           passthrough: media.id,
@@ -130,9 +127,8 @@ export class MediaService {
       const updated = await this.prisma.mediaAsset.update({
         where: { id: media.id },
         data: { muxUploadId: upload.id },
-        select: mediaSelect,
       });
-      return { media: updated, uploadUrl: upload.url };
+      return { media: this.toResponse(updated), uploadUrl: upload.url };
     } catch (error) {
       await this.prisma.mediaAsset.delete({ where: { id: media.id } });
       throw error;
@@ -192,9 +188,12 @@ export class MediaService {
         data: { postId, position },
       });
       if (count !== 1) {
-        throw new BadRequestException(
-          `Media ${id} can't be attached: it doesn't exist, is used by another post, or failed to process`,
-        );
+        throw new BadRequestException({
+          statusCode: HttpStatus.BAD_REQUEST,
+          error: 'Bad Request',
+          code: 'MEDIA_UNAVAILABLE',
+          message: `Media ${id} can't be attached: it doesn't exist, is used by another post, or failed to process`,
+        });
       }
     }
   }
@@ -236,19 +235,25 @@ export class MediaService {
         }
         break;
       case 'video.upload.errored':
-        await this.markFailed({ muxUploadId: event.data.id }, 'UPLOAD_ERRORED');
+        await this.markFailed(
+          { muxUploadId: event.data.id },
+          MediaFailureReason.UPLOAD_ERRORED,
+        );
         break;
       case 'video.upload.cancelled':
         await this.markFailed(
           { muxUploadId: event.data.id },
-          'UPLOAD_CANCELLED',
+          MediaFailureReason.UPLOAD_CANCELLED,
         );
         break;
       case 'video.asset.ready':
         await this.applyAssetReady(event.data);
         break;
       case 'video.asset.errored':
-        await this.markFailed(this.assetWhere(event.data), 'ENCODING_FAILED');
+        await this.markFailed(
+          this.assetWhere(event.data),
+          MediaFailureReason.ENCODING_FAILED,
+        );
         break;
       default:
         break;
@@ -264,15 +269,15 @@ export class MediaService {
       let assetId = media.muxAssetId;
       if (!assetId && media.muxUploadId) {
         const upload = await mux.video.uploads.retrieve(media.muxUploadId);
-        if (upload.status === 'errored' || upload.status === 'cancelled') {
+        if (
+          upload.status === 'errored' ||
+          upload.status === 'cancelled' ||
+          upload.status === 'timed_out'
+        ) {
           await this.markFailed(
             { id: media.id },
-            `UPLOAD_${upload.status.toUpperCase()}`,
+            UPLOAD_FAILURES[upload.status],
           );
-          return;
-        }
-        if (upload.status === 'timed_out') {
-          await this.markFailed({ id: media.id }, 'UPLOAD_TIMED_OUT');
           return;
         }
         if (!upload.asset_id) return;
@@ -285,11 +290,17 @@ export class MediaService {
       if (asset.status === 'ready') {
         await this.applyAssetReady(asset);
       } else if (asset.status === 'errored') {
-        await this.markFailed({ id: media.id }, 'ENCODING_FAILED');
+        await this.markFailed(
+          { id: media.id },
+          MediaFailureReason.ENCODING_FAILED,
+        );
       }
     } catch (error) {
       if (error instanceof NotFoundError) {
-        await this.markFailed({ id: media.id }, 'UPLOAD_ERRORED');
+        await this.markFailed(
+          { id: media.id },
+          MediaFailureReason.UPLOAD_ERRORED,
+        );
         return;
       }
       this.logger.warn(`Refreshing media ${media.id} failed: ${String(error)}`);
@@ -350,7 +361,7 @@ export class MediaService {
     if (!media || !PENDING.includes(media.status)) return;
 
     if ((asset.duration ?? 0) > this.maxVideoDurationSec) {
-      await this.markFailed({ id: media.id }, 'TOO_LONG');
+      await this.markFailed({ id: media.id }, MediaFailureReason.TOO_LONG);
       await this.deleteFromMux({ ...media, muxAssetId: asset.id });
       return;
     }
@@ -358,7 +369,10 @@ export class MediaService {
       (playback) => playback.policy === 'public',
     )?.id;
     if (!playbackId) {
-      await this.markFailed({ id: media.id }, 'NO_PLAYBACK_ID');
+      await this.markFailed(
+        { id: media.id },
+        MediaFailureReason.NO_PLAYBACK_ID,
+      );
       return;
     }
 
@@ -377,7 +391,7 @@ export class MediaService {
 
   private async markFailed(
     where: Prisma.MediaAssetWhereInput,
-    reason: string,
+    reason: MediaFailureReason,
   ): Promise<void> {
     const media = await this.prisma.mediaAsset.findFirst({ where });
     if (!media) return;
@@ -395,7 +409,7 @@ export class MediaService {
   private assetWhere(
     asset: Pick<MuxAsset, 'id' | 'passthrough' | 'upload_id'>,
   ): Prisma.MediaAssetWhereInput {
-    if (asset.passthrough && UUID.test(asset.passthrough)) {
+    if (asset.passthrough && isUUID(asset.passthrough)) {
       return { id: asset.passthrough };
     }
     return {

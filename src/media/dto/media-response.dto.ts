@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { MediaStatus, MediaType } from '@prisma/client';
+import { MediaFailureReason, MediaStatus, MediaType } from '@prisma/client';
 
 export class MediaResponseDto {
   @ApiProperty({ format: 'uuid' })
@@ -12,12 +12,11 @@ export class MediaResponseDto {
   status!: MediaStatus;
 
   @ApiProperty({
+    enum: MediaFailureReason,
     nullable: true,
-    type: String,
-    description:
-      'Why processing failed: TOO_LONG, ENCODING_FAILED, UPLOAD_ERRORED, UPLOAD_CANCELLED, UPLOAD_TIMED_OUT, NO_PLAYBACK_ID',
+    description: 'Why processing failed; set when status is FAILED',
   })
-  failureReason!: string | null;
+  failureReason!: MediaFailureReason | null;
 
   @ApiProperty({
     nullable: true,
