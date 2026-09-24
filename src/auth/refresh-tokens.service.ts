@@ -114,6 +114,14 @@ export class RefreshTokensService {
     await this.revokeFamily(storedToken.familyId, new Date());
   }
 
+  /** Signs the user out everywhere. */
+  async revokeAllForUser(userId: string): Promise<void> {
+    await this.prisma.refreshToken.updateMany({
+      where: { userId, revokedAt: null },
+      data: { revokedAt: new Date() },
+    });
+  }
+
   private revokeFamily(familyId: string, revokedAt: Date): Promise<unknown> {
     return this.prisma.refreshToken.updateMany({
       where: { familyId, revokedAt: null },

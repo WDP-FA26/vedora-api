@@ -22,6 +22,7 @@ export async function seedDatabase(prisma: PrismaClient): Promise<void> {
       data: {
         username: 'vedora.admin',
         fullName: 'Vedora Admin',
+        emailVerifiedAt: existingUser.emailVerifiedAt ?? new Date(),
         ...(existingUser.passwordHash === '!migrated-user-has-no-password'
           ? { passwordHash }
           : {}),
@@ -34,6 +35,8 @@ export async function seedDatabase(prisma: PrismaClient): Promise<void> {
         passwordHash,
         email: 'admin@vedora.local',
         fullName: 'Vedora Admin',
+        // admin@vedora.local can't receive mail.
+        emailVerifiedAt: new Date(),
       },
     });
   }

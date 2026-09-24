@@ -8,15 +8,18 @@ datasource db {
 }
 
 model User {
-  id            String         @id @default(uuid()) @db.Uuid
-  username      String         @unique @db.VarChar(30)
-  passwordHash  String?        @map("password_hash") @db.VarChar(60)
-  googleId      String?        @unique @map("google_id") @db.VarChar(255)
-  fullName      String         @map("full_name") @db.VarChar(100)
-  email         String         @unique @db.VarChar(320)
-  createdAt     DateTime       @default(now())
-  updatedAt     DateTime       @updatedAt
-  refreshTokens RefreshToken[]
+  id                    String                 @id @default(uuid()) @db.Uuid
+  username              String                 @unique @db.VarChar(30)
+  passwordHash          String?                @map("password_hash") @db.VarChar(60)
+  googleId              String?                @unique @map("google_id") @db.VarChar(255)
+  fullName              String                 @map("full_name") @db.VarChar(100)
+  email                 String                 @unique @db.VarChar(320)
+  /// Null until the user proves they own `email` (OTP code or Google).
+  emailVerifiedAt       DateTime?              @map("email_verified_at")
+  createdAt             DateTime               @default(now())
+  updatedAt             DateTime               @updatedAt
+  refreshTokens         RefreshToken[]
+  emailVerificationCode EmailVerificationCode?
 
   @@map("users")
 }
@@ -36,4 +39,29 @@ model RefreshToken {
   @@index([userId])
   @@index([expiresAt])
   @@map("refresh_tokens")
+}
+
+/// The one pending email-verification code per user. Only its hash is stored.
+model EmailVerificationCode {
+  userId      String   @id @map("user_id") @db.Uuid
+  codeHash    String   @map("code_hash") @db.Char(64)
+  attempts    Int      @default(0)
+  expiresAt   DateTime @map("expires_at")
+  sentAt      DateTime @map("sent_at")
+  /// Start of the current resend window; `resendCount` resets after it.
+  firstSentAt DateTime @map("first_sent_at")
+  resendCount Int      @default(0) @map("resend_count")
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("email_verification_codes")
+}
+
+/// Code guesses per email address. Kept apart from users and codes, so neither
+/// new codes nor deleting and re-registering the account resets the count.
+model EmailVerificationGuesses {
+  email       String   @id @db.VarChar(320)
+  guesses     Int      @default(0)
+  windowStart DateTime @map("window_start")
+
+  @@map("email_verification_guesses")
 }

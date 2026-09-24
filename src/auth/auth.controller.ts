@@ -10,19 +10,27 @@ import {
 } from '@nestjs/common';
 import {
   ApiBearerAuth,
+  ApiBadRequestResponse,
   ApiConflictResponse,
+  ApiForbiddenResponse,
   ApiCreatedResponse,
   ApiNoContentResponse,
   ApiOkResponse,
   ApiOperation,
   ApiServiceUnavailableResponse,
   ApiTags,
+  ApiTooManyRequestsResponse,
   ApiUnauthorizedResponse,
 } from '@nestjs/swagger';
 import { PublicUser } from '../users/users.service';
 import { AuthService } from './auth.service';
 import { AuthenticatedRequest } from './auth.types';
 import { AuthResponseDto, UserResponseDto } from './dto/auth-response.dto';
+import {
+  ResendVerificationDto,
+  VerificationRequiredDto,
+  VerifyEmailDto,
+} from './dto/email-verification.dto';
 import { LoginDto } from './dto/login.dto';
 import { RefreshTokenDto } from './dto/refresh-token.dto';
 import { RegisterDto } from './dto/register.dto';
@@ -39,11 +47,43 @@ export class AuthController {
   ) {}
 
   @Post('register')
-  @ApiOperation({ summary: 'Register a user and issue an access token' })
-  @ApiCreatedResponse({ type: AuthResponseDto })
+  @ApiOperation({
+    summary: 'Register a user and email a verification code',
+    description: 'No tokens yet: finish with POST /auth/verify-email.',
+  })
+  @ApiCreatedResponse({ type: VerificationRequiredDto })
   @ApiConflictResponse({ description: 'Username or email already exists' })
-  register(@Body() dto: RegisterDto): Promise<AuthResponseDto> {
+  register(@Body() dto: RegisterDto): Promise<VerificationRequiredDto> {
     return this.authService.register(dto);
+  }
+
+  @Post('verify-email')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Verify the email code and issue a token pair' })
+  @ApiOkResponse({ type: AuthResponseDto })
+  @ApiBadRequestResponse({ description: 'Invalid or expired code' })
+  @ApiTooManyRequestsResponse({
+    description:
+      'Too many wrong codes for this email today (`code: VERIFY_LIMIT_REACHED`)',
+  })
+  verifyEmail(@Body() dto: VerifyEmailDto): Promise<AuthResponseDto> {
+    return this.authService.verifyEmail(dto);
+  }
+
+  @Post('verify-email/resend')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiOperation({
+    summary:
+      'Email a new verification code (every 2 minutes, at most 3 resends an hour)',
+    description: 'Returns 204 whether or not the email is registered.',
+  })
+  @ApiNoContentResponse()
+  @ApiTooManyRequestsResponse({
+    description: 'Resend limit reached (`code: RESEND_LIMIT_REACHED`)',
+  })
+  @ApiServiceUnavailableResponse({ description: 'The email could not be sent' })
+  async resendVerification(@Body() dto: ResendVerificationDto): Promise<void> {
+    await this.authService.resendVerification(dto);
   }
 
   @Post('login')
@@ -51,6 +91,10 @@ export class AuthController {
   @ApiOperation({ summary: 'Log in with username and password' })
   @ApiOkResponse({ type: AuthResponseDto })
   @ApiUnauthorizedResponse({ description: 'Invalid username or password' })
+  @ApiForbiddenResponse({
+    description:
+      'Right password but unverified email (`code: EMAIL_NOT_VERIFIED`); a code was sent to `email`',
+  })
   login(@Body() dto: LoginDto): Promise<AuthResponseDto> {
     return this.authService.login(dto);
   }

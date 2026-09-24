@@ -101,7 +101,19 @@ curl -X POST http://localhost:3000/api/v1/auth/register \
   -d '{"username":"vedora.user","password":"StrongPassword123!","fullName":"Vedora User","email":"hello@vedora.vn"}'
 ```
 
-Đăng ký, đăng nhập và `POST /auth/google` trả về `accessToken` cùng `refreshToken`.
+Đăng ký **không** trả token: API tạo tài khoản chưa xác minh và gửi mã 6 chữ số tới email
+(qua Resend). Gọi `POST /api/v1/auth/verify-email` với `email` và `code` để nhận token.
+Mã hết hạn sau 10 phút, sai tối đa 5 lần; `POST /api/v1/auth/verify-email/resend` gửi mã
+mới sau mỗi 120 giây, tối đa 3 lần trong 1 giờ kể từ mã đầu tiên (quá giới hạn trả `429`
+với `code: "RESEND_LIMIT_REACHED"`). Đăng nhập đúng mật khẩu nhưng email chưa xác minh trả `403`
+với `code: "EMAIL_NOT_VERIFIED"` và tự gửi mã mới. Tài khoản chưa xác minh quá 1 giờ sẽ
+nhường email và username cho người đăng ký sau.
+
+Khi chạy local không có `RESEND_API_KEY`, mã được in ra log của API thay vì gửi email.
+Production bắt buộc có `RESEND_API_KEY`; `MAIL_FROM` phải thuộc domain đã xác minh trên
+Resend (địa chỉ mặc định `onboarding@resend.dev` chỉ gửi được tới email chủ tài khoản Resend).
+
+Xác minh email, đăng nhập và `POST /auth/google` trả về `accessToken` cùng `refreshToken`.
 Gửi access token cho endpoint cần xác thực bằng header
 `Authorization: Bearer <accessToken>`. Access token mặc định hết hạn sau 3600 giây,
 refresh token sau 30 ngày.
@@ -134,7 +146,9 @@ Cài đặt:
 3. Điền `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` và `GOOGLE_CALLBACK_URL` vào `.env`.
 
 Nếu chưa khai báo Google credentials, các route Google trả `503` nhưng các phương thức
-đăng nhập khác vẫn hoạt động. API chỉ liên kết tài khoản khi Google trả về email đã xác minh.
+đăng nhập khác vẫn hoạt động. API chỉ liên kết tài khoản khi Google trả về email đã xác minh. Nếu email đó thuộc một
+tài khoản mật khẩu chưa xác minh, API xoá mật khẩu và thu hồi mọi phiên của tài khoản đó
+trước khi liên kết, để người đăng ký hộ email của người khác không giữ được quyền truy cập.
 
 ## Lệnh phát triển
 
