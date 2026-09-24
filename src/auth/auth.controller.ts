@@ -15,6 +15,7 @@ import {
   ApiNoContentResponse,
   ApiOkResponse,
   ApiOperation,
+  ApiServiceUnavailableResponse,
   ApiTags,
   ApiUnauthorizedResponse,
 } from '@nestjs/swagger';
@@ -26,14 +27,16 @@ import { LoginDto } from './dto/login.dto';
 import { RefreshTokenDto } from './dto/refresh-token.dto';
 import { RegisterDto } from './dto/register.dto';
 import { JwtAuthGuard } from './jwt-auth.guard';
-import { GoogleConfiguredGuard } from './google-configured.guard';
-import { GoogleAuthenticatedRequest } from './google-auth.types';
-import { GoogleOAuthGuard } from './google-oauth.guard';
+import { GoogleAuthorizationDto, GoogleExchangeDto } from './dto/google.dto';
+import { GoogleOAuthService } from './google-oauth.service';
 
 @ApiTags('auth')
 @Controller('auth')
 export class AuthController {
-  constructor(private readonly authService: AuthService) {}
+  constructor(
+    private readonly authService: AuthService,
+    private readonly googleOAuthService: GoogleOAuthService,
+  ) {}
 
   @Post('register')
   @ApiOperation({ summary: 'Register a user and issue an access token' })
@@ -73,19 +76,31 @@ export class AuthController {
     await this.authService.logout(dto.refreshToken);
   }
 
-  @Get('google')
-  @UseGuards(GoogleConfiguredGuard, GoogleOAuthGuard)
-  @ApiOperation({ summary: 'Start Google OAuth login' })
-  google(): void {}
+  @Post('google/authorize')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Start Google sign-in: consent URL plus state and PKCE verifier',
+  })
+  @ApiOkResponse({ type: GoogleAuthorizationDto })
+  @ApiServiceUnavailableResponse({ description: 'Google OAuth is not set up' })
+  googleAuthorize(): Promise<GoogleAuthorizationDto> {
+    return this.googleOAuthService.authorize();
+  }
 
-  @Get('google/callback')
-  @UseGuards(GoogleConfiguredGuard, GoogleOAuthGuard)
-  @ApiOperation({ summary: 'Google OAuth callback and token-pair issuance' })
+  @Post('google')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Exchange a Google authorization code (PKCE) for a token pair',
+  })
   @ApiOkResponse({ type: AuthResponseDto })
-  googleCallback(
-    @Req() request: GoogleAuthenticatedRequest,
-  ): Promise<AuthResponseDto> {
-    return this.authService.googleLogin(request.user);
+  @ApiUnauthorizedResponse({ description: 'Code or verifier was rejected' })
+  @ApiServiceUnavailableResponse({ description: 'Google OAuth is not set up' })
+  async google(@Body() dto: GoogleExchangeDto): Promise<AuthResponseDto> {
+    const profile = await this.googleOAuthService.exchangeCode(
+      dto.code,
+      dto.codeVerifier,
+    );
+    return this.authService.googleLogin(profile);
   }
 
   @Get('me')

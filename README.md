@@ -84,8 +84,8 @@ Không thêm `-v` nếu muốn giữ dữ liệu PostgreSQL. `docker compose dow
 | `POST` | `/api/v1/auth/login` | Đăng nhập bằng username/password và nhận cặp AT/RT |
 | `POST` | `/api/v1/auth/refresh` | Rotate refresh token và nhận cặp AT/RT mới |
 | `POST` | `/api/v1/auth/logout` | Thu hồi refresh-token family |
-| `GET` | `/api/v1/auth/google` | Bắt đầu đăng nhập Google |
-| `GET` | `/api/v1/auth/google/callback` | Callback Google và nhận cặp AT/RT |
+| `POST` | `/api/v1/auth/google/authorize` | Bắt đầu đăng nhập Google: URL, `state`, `codeVerifier` (PKCE) |
+| `POST` | `/api/v1/auth/google` | Đổi `code` + `codeVerifier` (PKCE) lấy cặp AT/RT |
 | `GET` | `/api/v1/auth/me` | Thông tin user hiện tại (Bearer token) |
 | `POST` | `/api/v1/users` | Tạo user (Bearer token) |
 | `GET` | `/api/v1/users` | Danh sách user (Bearer token) |
@@ -101,7 +101,7 @@ curl -X POST http://localhost:3000/api/v1/auth/register \
   -d '{"username":"vedora.user","password":"StrongPassword123!","fullName":"Vedora User","email":"hello@vedora.vn"}'
 ```
 
-Đăng ký, đăng nhập và Google callback trả về `accessToken` cùng `refreshToken`.
+Đăng ký, đăng nhập và `POST /auth/google` trả về `accessToken` cùng `refreshToken`.
 Gửi access token cho endpoint cần xác thực bằng header
 `Authorization: Bearer <accessToken>`. Access token mặc định hết hạn sau 3600 giây,
 refresh token sau 30 ngày.
@@ -118,13 +118,22 @@ curl -X POST http://localhost:3000/api/v1/auth/refresh \
 
 ### Đăng nhập Google
 
-1. Tạo OAuth 2.0 Client loại **Web application** trong Google Cloud Console.
-2. Thêm Authorized redirect URI đúng bằng `GOOGLE_CALLBACK_URL`, local mặc định là
-   `http://localhost:3000/api/v1/auth/google/callback`.
-3. Điền `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` và `GOOGLE_CALLBACK_URL` vào `.env`.
-4. Mở `GET /api/v1/auth/google` trên trình duyệt để bắt đầu đăng nhập.
+Google chuyển hướng về **frontend**, không về API. Luồng:
 
-Nếu chưa khai báo Google credentials, route Google trả `503` nhưng các phương thức
+1. Frontend (`/auth/google`) gọi `POST /api/v1/auth/google/authorize`, lưu `state` và
+   PKCE `codeVerifier` vào cookie httpOnly, rồi chuyển trình duyệt tới `url` của Google.
+2. Google chuyển hướng về `GOOGLE_CALLBACK_URL` (frontend) kèm `code` và `state`.
+3. Frontend kiểm tra `state`, rồi gọi `POST /api/v1/auth/google` với `code` và `codeVerifier`.
+   API đổi code với Google và trả về cặp AT/RT cho server frontend.
+
+Cài đặt:
+
+1. Tạo OAuth 2.0 Client loại **Web application** trong Google Cloud Console.
+2. Thêm Authorized redirect URI đúng bằng `GOOGLE_CALLBACK_URL`, tức URL `/auth/google`
+   của frontend: local là `http://localhost:3000/auth/google`.
+3. Điền `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` và `GOOGLE_CALLBACK_URL` vào `.env`.
+
+Nếu chưa khai báo Google credentials, các route Google trả `503` nhưng các phương thức
 đăng nhập khác vẫn hoạt động. API chỉ liên kết tài khoản khi Google trả về email đã xác minh.
 
 ## Lệnh phát triển
@@ -212,7 +221,7 @@ JWT_ACCESS_TTL=3600
 REFRESH_TOKEN_TTL=2592000
 GOOGLE_CLIENT_ID=GOOGLE_OAUTH_CLIENT_ID
 GOOGLE_CLIENT_SECRET=GOOGLE_OAUTH_CLIENT_SECRET
-GOOGLE_CALLBACK_URL=https://api.example.com/api/v1/auth/google/callback
+GOOGLE_CALLBACK_URL=https://ten-mien-frontend.example.com/auth/google
 POSTGRES_DB=vedora
 POSTGRES_USER=vedora
 POSTGRES_PASSWORD=THAY_BANG_MAT_KHAU_NGAU_NHIEN

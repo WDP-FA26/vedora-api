@@ -14,7 +14,7 @@ services:
       REFRESH_TOKEN_TTL: ${REFRESH_TOKEN_TTL:-2592000}
       GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
       GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
-      GOOGLE_CALLBACK_URL: ${GOOGLE_CALLBACK_URL:-http://localhost:3000/api/v1/auth/google/callback}
+      GOOGLE_CALLBACK_URL: ${GOOGLE_CALLBACK_URL:-http://localhost:3000/auth/google}
       DATABASE_URL: postgresql://${POSTGRES_USER:-vedora}:${POSTGRES_PASSWORD:-vedora_local_password}@postgres:5432/${POSTGRES_DB:-vedora}?schema=public
     ports:
       - "${PORT:-3000}:3000"
