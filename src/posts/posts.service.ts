@@ -108,7 +108,7 @@ export class PostsService {
   async remove(id: string, authorId: string): Promise<void> {
     const post = await this.prisma.post.findUnique({
       where: { id },
-      include: { media: true },
+      include: { media: { select: { id: true } } },
     });
     if (!post) {
       throw new NotFoundException('Post not found');
@@ -117,13 +117,11 @@ export class PostsService {
       throw new ForbiddenException('Only the author can delete this post');
     }
 
-    await this.prisma.$transaction([
-      this.prisma.mediaAsset.deleteMany({ where: { postId: id } }),
-      this.prisma.post.delete({ where: { id } }),
-    ]);
-    for (const media of post.media) {
-      await this.mediaService.deleteFromMux(media);
-    }
+    const mediaIds = post.media.map((media) => media.id);
+    await this.prisma.post.delete({ where: { id } });
+    // The media rows were detached (`onDelete: SetNull`); remove them from
+    // Mux the same way as discarded uploads, retried until Mux confirms.
+    await this.mediaService.discard({ id: { in: mediaIds } });
   }
 
   private load(id: string): Promise<PostWithRelations> {

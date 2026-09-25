@@ -13,7 +13,7 @@ import {
 } from 'class-validator';
 
 export const MAX_POST_BODY_LENGTH = 280;
-export const MAX_POST_MEDIA = 1;
+export const MAX_POST_MEDIA = 4;
 
 export class CreatePostDto {
   @ApiProperty({

@@ -25,6 +25,7 @@ export class MediaMaintenanceService {
     if (!this.mux.configured) return;
     const stale = await this.prisma.mediaAsset.findMany({
       where: {
+        discardedAt: null,
         status: { in: [MediaStatus.WAITING_UPLOAD, MediaStatus.PROCESSING] },
         updatedAt: { lt: new Date(Date.now() - STALE_AFTER_MS) },
       },
@@ -36,26 +37,46 @@ export class MediaMaintenanceService {
     }
   }
 
-  /** Deletes uploads that were never posted, so Mux stops storing them. */
+  /** Discards uploads that were never posted, so Mux stops storing them. */
   @Cron(CronExpression.EVERY_HOUR)
   async deleteOrphans(): Promise<void> {
     const orphans = await this.prisma.mediaAsset.findMany({
       where: {
         postId: null,
+        discardedAt: null,
         createdAt: { lt: new Date(Date.now() - ORPHAN_AFTER_MS) },
       },
+      select: { id: true },
       take: BATCH_SIZE,
     });
-    for (const media of orphans) {
-      const { count } = await this.prisma.mediaAsset.deleteMany({
-        where: { id: media.id, postId: null },
-      });
-      if (count > 0) {
-        await this.mediaService.deleteFromMux(media);
-      }
-    }
-    if (orphans.length > 0) {
-      this.logger.log(`Deleted ${orphans.length} unposted uploads`);
+    if (orphans.length === 0) return;
+    await this.mediaService.discard({
+      id: { in: orphans.map(({ id }) => id) },
+      postId: null,
+    });
+    this.logger.log(`Discarded ${orphans.length} unposted uploads`);
+  }
+
+  /**
+   * Deletes discarded media from Mux: uploads whose owner deleted their
+   * account, and retries for when Mux was unreachable or the upload finished
+   * just after the discard and no webhook came.
+   */
+  @Cron(CronExpression.EVERY_10_MINUTES)
+  async purgeDiscarded(): Promise<void> {
+    if (!this.mux.configured) return;
+    // Media whose owner deleted their account is discarded along with it.
+    await this.prisma.mediaAsset.updateMany({
+      where: { ownerId: null, discardedAt: null },
+      data: { discardedAt: new Date() },
+    });
+    const discarded = await this.prisma.mediaAsset.findMany({
+      where: { discardedAt: { not: null } },
+      orderBy: { discardedAt: 'asc' },
+      take: BATCH_SIZE,
+    });
+    for (const media of discarded) {
+      await this.mediaService.purge(media);
     }
   }
 }

@@ -44,6 +44,9 @@ const PENDING: MediaStatus[] = [
   MediaStatus.PROCESSING,
 ];
 
+/** Rows that haven't been discarded; every user-facing query uses it. */
+const LIVE = { discardedAt: null } satisfies Prisma.MediaAssetWhereInput;
+
 /** Unattached uploads a user may hold at once, so one account can't flood Mux. */
 const MAX_UNATTACHED_UPLOADS = 5;
 /** Mux direct-upload URLs stop accepting the file after this long. */
@@ -62,6 +65,11 @@ const UPLOAD_FAILURES = {
  * (`handleWebhook`). When webhooks aren't configured (local dev) or one was
  * missed, `refresh` asks Mux for the current state instead. Every transition
  * is a conditional update, so replays and out-of-order events are harmless.
+ *
+ * Discarding is two-phase: `discard` marks the row, then `purge` deletes the
+ * Mux upload/asset and only drops the row once Mux confirms nothing is left.
+ * An asset Mux creates after the discard (the file had just finished) is
+ * caught by its webhook or by the maintenance cron, so nothing lingers in Mux.
  */
 @Injectable()
 export class MediaService {
@@ -92,7 +100,12 @@ export class MediaService {
     const mux = this.mux.require();
 
     const unattached = await this.prisma.mediaAsset.count({
-      where: { ownerId, postId: null, status: { not: MediaStatus.FAILED } },
+      where: {
+        ...LIVE,
+        ownerId,
+        postId: null,
+        status: { not: MediaStatus.FAILED },
+      },
     });
     if (unattached >= MAX_UNATTACHED_UPLOADS) {
       throw new HttpException(
@@ -137,7 +150,7 @@ export class MediaService {
 
   async findOwned(id: string, ownerId: string): Promise<MediaResponseDto> {
     let media = await this.prisma.mediaAsset.findFirst({
-      where: { id, ownerId },
+      where: { ...LIVE, id, ownerId },
     });
     if (!media) {
       throw new NotFoundException('Media not found');
@@ -154,7 +167,7 @@ export class MediaService {
   /** Removes an upload the user dropped from the composer before posting. */
   async removeOwned(id: string, ownerId: string): Promise<void> {
     const media = await this.prisma.mediaAsset.findFirst({
-      where: { id, ownerId },
+      where: { ...LIVE, id, ownerId },
     });
     if (!media) {
       throw new NotFoundException('Media not found');
@@ -162,8 +175,41 @@ export class MediaService {
     if (media.postId) {
       throw new ConflictException('Media is attached to a post');
     }
-    await this.prisma.mediaAsset.delete({ where: { id } });
-    await this.deleteFromMux(media);
+    await this.discard({ id, postId: null });
+  }
+
+  /**
+   * Hides the matching media from every query, then deletes it from Mux.
+   * Rows that Mux can't confirm gone yet are retried by `purge` later.
+   */
+  async discard(where: Prisma.MediaAssetWhereInput): Promise<void> {
+    const media = await this.prisma.mediaAsset.findMany({
+      where: { ...where, ...LIVE },
+    });
+    if (media.length === 0) return;
+    await this.prisma.mediaAsset.updateMany({
+      where: { id: { in: media.map(({ id }) => id) }, ...LIVE },
+      data: { discardedAt: new Date() },
+    });
+    for (const item of media) {
+      await this.purge(item);
+    }
+  }
+
+  /**
+   * Deletes a discarded video from Mux, then from our database. Mux goes
+   * first: if it fails, the row stays (still discarded) and the
+   * `purgeDiscarded` cron or a late webhook tries again. Returns whether the
+   * video is fully gone.
+   */
+  async purge(
+    media: Pick<MediaAsset, 'id' | 'muxAssetId' | 'muxUploadId'>,
+  ): Promise<boolean> {
+    if (!(await this.deleteFromMux(media))) return false;
+    await this.prisma.mediaAsset.deleteMany({
+      where: { id: media.id, discardedAt: { not: null } },
+    });
+    return true;
   }
 
   /**
@@ -180,6 +226,7 @@ export class MediaService {
     for (const [position, id] of mediaIds.entries()) {
       const { count } = await tx.mediaAsset.updateMany({
         where: {
+          ...LIVE,
           id,
           ownerId,
           postId: null,
@@ -307,29 +354,46 @@ export class MediaService {
     }
   }
 
-  /** Deletes the Mux side of `media`; failures are logged, not thrown. */
+  /**
+   * Deletes the Mux side of `media`: cancels an unfinished upload and deletes
+   * its asset. Returns whether Mux is confirmed to hold nothing for it;
+   * failures are logged, not thrown, so callers can retry later.
+   */
   async deleteFromMux(
     media: Pick<MediaAsset, 'id' | 'muxAssetId' | 'muxUploadId'>,
-  ): Promise<void> {
-    if (!this.mux.configured) return;
+  ): Promise<boolean> {
+    if (!this.mux.configured) return true;
     const mux = this.mux.require();
     try {
       let assetId = media.muxAssetId;
       if (!assetId && media.muxUploadId) {
         const upload = await mux.video.uploads.retrieve(media.muxUploadId);
         if (upload.status === 'waiting') {
+          // Fails if the file finished meanwhile; the retry finds the asset.
           await mux.video.uploads.cancel(media.muxUploadId);
+          return true;
         }
         assetId = upload.asset_id ?? null;
       }
       if (assetId) {
-        await mux.video.assets.delete(assetId);
+        await this.deleteAsset(assetId);
       }
+      return true;
     } catch (error) {
-      if (error instanceof NotFoundError) return;
+      if (error instanceof NotFoundError) return true;
       this.logger.warn(
         `Deleting Mux resources of media ${media.id} failed: ${String(error)}`,
       );
+      return false;
+    }
+  }
+
+  private async deleteAsset(assetId: string): Promise<void> {
+    try {
+      await this.mux.require().video.assets.delete(assetId);
+    } catch (error) {
+      // Already gone counts as deleted.
+      if (!(error instanceof NotFoundError)) throw error;
     }
   }
 
@@ -349,8 +413,16 @@ export class MediaService {
     muxUploadId: string,
     muxAssetId: string,
   ): Promise<void> {
+    const discarded = await this.prisma.mediaAsset.findFirst({
+      where: { muxUploadId, discardedAt: { not: null } },
+    });
+    if (discarded) {
+      // The file finished after the user discarded it.
+      await this.purge({ ...discarded, muxAssetId });
+      return;
+    }
     await this.prisma.mediaAsset.updateMany({
-      where: { muxUploadId, status: MediaStatus.WAITING_UPLOAD },
+      where: { ...LIVE, muxUploadId, status: MediaStatus.WAITING_UPLOAD },
       data: { status: MediaStatus.PROCESSING, muxAssetId },
     });
   }
@@ -358,7 +430,12 @@ export class MediaService {
   private async applyAssetReady(asset: MuxAsset): Promise<void> {
     const where = this.assetWhere(asset);
     const media = await this.prisma.mediaAsset.findFirst({ where });
-    if (!media || !PENDING.includes(media.status)) return;
+    if (!media) return;
+    if (media.discardedAt) {
+      await this.purge({ ...media, muxAssetId: asset.id });
+      return;
+    }
+    if (!PENDING.includes(media.status)) return;
 
     if ((asset.duration ?? 0) > this.maxVideoDurationSec) {
       await this.markFailed({ id: media.id }, MediaFailureReason.TOO_LONG);
@@ -393,7 +470,9 @@ export class MediaService {
     where: Prisma.MediaAssetWhereInput,
     reason: MediaFailureReason,
   ): Promise<void> {
-    const media = await this.prisma.mediaAsset.findFirst({ where });
+    const media = await this.prisma.mediaAsset.findFirst({
+      where: { ...where, ...LIVE },
+    });
     if (!media) return;
     const { count } = await this.prisma.mediaAsset.updateMany({
       where: { id: media.id, status: { in: PENDING } },
@@ -402,6 +481,9 @@ export class MediaService {
     if (count > 0) {
       this.logger.log(`Media ${media.id} failed: ${reason}`);
       await this.settlePosts({ media: { some: { id: media.id } } });
+      // A failed video can never play; free the Mux storage now. The row
+      // stays so the author sees why, and discarding it later retries this.
+      await this.deleteFromMux(media);
     }
   }
 

@@ -31,7 +31,7 @@ export class PostsController {
   @ApiOperation({
     summary: 'Create a post',
     description:
-      'Text and/or one video from POST /media/uploads. The post is PROCESSING until the video is ready, then PUBLISHED.',
+      'Text and/or up to four videos from POST /media/uploads. The post is PROCESSING until every video is ready, then PUBLISHED.',
   })
   create(
     @Req() request: AuthenticatedRequest,

@@ -128,7 +128,9 @@ enum MediaFailureReason {
 /// Mux: `id` is sent as the asset's `passthrough`, so webhooks map back to it.
 model MediaAsset {
   id            String              @id @default(uuid()) @db.Uuid
-  ownerId       String              @map("owner_id") @db.Uuid
+  /// Null once the owner's account is deleted; the purge cron then removes
+  /// the media from Mux before dropping the row.
+  ownerId       String?             @map("owner_id") @db.Uuid
   type          MediaType
   status        MediaStatus         @default(WAITING_UPLOAD)
   /// Set when `status` is FAILED.
@@ -140,13 +142,17 @@ model MediaAsset {
   playbackId    String?             @map("playback_id") @db.VarChar(255)
   durationSec   Float?              @map("duration_sec")
   aspectRatio   String?             @map("aspect_ratio") @db.VarChar(16)
+  /// Set when the upload was discarded; the row stays until its Mux upload
+  /// and asset are confirmed gone, so late webhooks can still clean up.
+  discardedAt   DateTime?           @map("discarded_at")
   createdAt     DateTime            @default(now()) @map("created_at")
   updatedAt     DateTime            @updatedAt @map("updated_at")
-  owner         User                @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  owner         User?               @relation(fields: [ownerId], references: [id], onDelete: SetNull)
   post          Post?               @relation(fields: [postId], references: [id], onDelete: SetNull)
 
   @@index([ownerId, status])
   @@index([postId])
   @@index([status, updatedAt])
+  @@index([discardedAt])
   @@map("media_assets")
 }
