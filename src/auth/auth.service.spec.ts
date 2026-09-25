@@ -5,7 +5,10 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
+import { Test } from '@nestjs/testing';
+import { User } from '@prisma/client';
 import { hash } from 'bcryptjs';
+import { type DeepMockProxy, mockDeep } from 'vitest-mock-extended';
 import { PublicUser, UsersService } from '../users/users.service';
 import { AuthService } from './auth.service';
 import { EmailVerificationService } from './email-verification.service';
@@ -22,70 +25,48 @@ describe('AuthService', () => {
     updatedAt: now,
   };
 
-  const verifiedUser = {
+  const verifiedUser: User = {
     ...publicUser,
-    passwordHash: null as string | null,
-    googleId: null as string | null,
-    emailVerifiedAt: now as Date | null,
+    passwordHash: null,
+    googleId: null,
+    emailVerifiedAt: now,
   };
 
-  const create = jest.fn();
-  const findByUsername = jest.fn();
-  const findByEmail = jest.fn();
-  const findByGoogleId = jest.fn();
-  const findPublicById = jest.fn();
-  const deleteStaleUnverified = jest.fn();
-  const linkGoogleAccount = jest.fn();
-  const signAsync = jest.fn().mockResolvedValue('signed-token');
-  const issue = jest.fn().mockResolvedValue({
-    token: 'refresh-token',
-    expiresIn: 2592000,
-  });
-  const rotate = jest.fn();
-  const revoke = jest.fn();
-  const revokeAllForUser = jest.fn();
-  const send = jest.fn();
-  const verify = jest.fn();
-  const discard = jest.fn();
-  const usersService = {
-    create,
-    findByUsername,
-    findByEmail,
-    findByGoogleId,
-    findPublicById,
-    deleteStaleUnverified,
-    linkGoogleAccount,
-  } as unknown as UsersService;
-  const jwtService = { signAsync } as unknown as JwtService;
-  const refreshTokensService = {
-    issue,
-    rotate,
-    revoke,
-    revokeAllForUser,
-  } as unknown as RefreshTokensService;
-  const emailVerificationService = {
-    send,
-    verify,
-    discard,
-  } as unknown as EmailVerificationService;
-  const configService = {
-    get: jest.fn().mockReturnValue(3600),
-  } as unknown as ConfigService;
-  const service = new AuthService(
-    usersService,
-    jwtService,
-    refreshTokensService,
-    emailVerificationService,
-    configService,
-  );
+  let service: AuthService;
+  let users: DeepMockProxy<UsersService>;
+  let refreshTokens: DeepMockProxy<RefreshTokensService>;
+  let emailVerification: DeepMockProxy<EmailVerificationService>;
 
-  beforeEach(() => {
-    jest.clearAllMocks();
-    send.mockResolvedValue('sent');
+  beforeEach(async () => {
+    users = mockDeep<UsersService>();
+    refreshTokens = mockDeep<RefreshTokensService>();
+    emailVerification = mockDeep<EmailVerificationService>();
+    const jwt = mockDeep<JwtService>();
+    jwt.signAsync.mockResolvedValue('signed-token');
+    refreshTokens.issue.mockResolvedValue({
+      token: 'refresh-token',
+      expiresIn: 2592000,
+    });
+    emailVerification.send.mockResolvedValue('sent');
+
+    const moduleRef = await Test.createTestingModule({
+      providers: [
+        AuthService,
+        { provide: UsersService, useValue: users },
+        { provide: JwtService, useValue: jwt },
+        { provide: RefreshTokensService, useValue: refreshTokens },
+        { provide: EmailVerificationService, useValue: emailVerification },
+        {
+          provide: ConfigService,
+          useValue: new ConfigService({ JWT_ACCESS_TTL: 3600 }),
+        },
+      ],
+    }).compile();
+    service = moduleRef.get(AuthService);
   });
 
   it('hashes the password and emails a code, without tokens, when registering', async () => {
-    create.mockResolvedValue(publicUser);
+    users.create.mockResolvedValue(publicUser);
 
     const result = await service.register({
       username: 'vedora.user',
@@ -94,29 +75,28 @@ describe('AuthService', () => {
       email: 'hello@vedora.vn',
     });
 
-    expect(create).toHaveBeenCalledWith(
-      expect.objectContaining({
-        username: 'vedora.user',
-        fullName: 'Vedora User',
-        email: 'hello@vedora.vn',
-        passwordHash: expect.stringMatching(/^\$2[aby]\$12\$/) as string,
-      }),
-    );
-    expect(deleteStaleUnverified).toHaveBeenCalledWith(
+    const [created] = users.create.mock.calls[0];
+    expect(created).toMatchObject({
+      username: 'vedora.user',
+      fullName: 'Vedora User',
+      email: 'hello@vedora.vn',
+    });
+    expect(created.passwordHash).toMatch(/^\$2[aby]\$12\$/);
+    expect(users.deleteStaleUnverified).toHaveBeenCalledWith(
       expect.objectContaining({
         username: 'vedora.user',
         email: 'hello@vedora.vn',
       }),
       expect.any(Date),
     );
-    expect(send).toHaveBeenCalledWith(publicUser);
-    expect(issue).not.toHaveBeenCalled();
+    expect(emailVerification.send).toHaveBeenCalledWith(publicUser);
+    expect(refreshTokens.issue).not.toHaveBeenCalled();
     expect(result).toEqual({ email: 'hello@vedora.vn' });
   });
 
   it('still registers when the verification email fails', async () => {
-    create.mockResolvedValue(publicUser);
-    send.mockRejectedValue(new Error('Resend is down'));
+    users.create.mockResolvedValue(publicUser);
+    emailVerification.send.mockRejectedValue(new Error('Resend is down'));
 
     await expect(
       service.register({
@@ -129,7 +109,7 @@ describe('AuthService', () => {
   });
 
   it('returns a token for valid credentials without exposing the hash', async () => {
-    findByUsername.mockResolvedValue({
+    users.findByUsername.mockResolvedValue({
       ...verifiedUser,
       passwordHash: await hash('StrongPassword123!', 4),
     });
@@ -149,7 +129,7 @@ describe('AuthService', () => {
       emailVerifiedAt: null,
       passwordHash: await hash('StrongPassword123!', 4),
     };
-    findByUsername.mockResolvedValue(user);
+    users.findByUsername.mockResolvedValue(user);
 
     const login = service.login({
       username: 'vedora.user',
@@ -160,12 +140,12 @@ describe('AuthService', () => {
     await expect(login).rejects.toMatchObject({
       response: { code: 'EMAIL_NOT_VERIFIED', email: 'hello@vedora.vn' },
     });
-    expect(send).toHaveBeenCalledWith(user);
-    expect(issue).not.toHaveBeenCalled();
+    expect(emailVerification.send).toHaveBeenCalledWith(user);
+    expect(refreshTokens.issue).not.toHaveBeenCalled();
   });
 
   it('does not reveal an unverified account to a wrong password', async () => {
-    findByUsername.mockResolvedValue({
+    users.findByUsername.mockResolvedValue({
       ...verifiedUser,
       emailVerifiedAt: null,
       passwordHash: await hash('StrongPassword123!', 4),
@@ -174,20 +154,20 @@ describe('AuthService', () => {
     await expect(
       service.login({ username: 'vedora.user', password: 'WrongPassword123!' }),
     ).rejects.toBeInstanceOf(UnauthorizedException);
-    expect(send).not.toHaveBeenCalled();
+    expect(emailVerification.send).not.toHaveBeenCalled();
   });
 
   it('issues tokens once the email code is verified', async () => {
     const user = { ...verifiedUser, emailVerifiedAt: null };
-    findByEmail.mockResolvedValue(user);
-    verify.mockResolvedValue('verified');
+    users.findByEmail.mockResolvedValue(user);
+    emailVerification.verify.mockResolvedValue('verified');
 
     const result = await service.verifyEmail({
       email: 'hello@vedora.vn',
       code: '123456',
     });
 
-    expect(verify).toHaveBeenCalledWith(user, '123456');
+    expect(emailVerification.verify).toHaveBeenCalledWith(user, '123456');
     expect(result.user).toEqual(publicUser);
     expect(result.accessToken).toBe('signed-token');
   });
@@ -196,19 +176,19 @@ describe('AuthService', () => {
     ['a wrong code', { ...verifiedUser, emailVerifiedAt: null }, 'invalid'],
     ['an unknown email', null, 'verified'],
     ['an already verified email', verifiedUser, 'verified'],
-  ])('rejects verification for %s', async (_, user, result) => {
-    findByEmail.mockResolvedValue(user);
-    verify.mockResolvedValue(result);
+  ] as const)('rejects verification for %s', async (_, user, result) => {
+    users.findByEmail.mockResolvedValue(user);
+    emailVerification.verify.mockResolvedValue(result);
 
     await expect(
       service.verifyEmail({ email: 'hello@vedora.vn', code: '123456' }),
     ).rejects.toBeInstanceOf(BadRequestException);
-    expect(issue).not.toHaveBeenCalled();
+    expect(refreshTokens.issue).not.toHaveBeenCalled();
   });
 
   it('rejects verification with 429 once the email is out of guesses', async () => {
-    findByEmail.mockResolvedValue({ ...verifiedUser, emailVerifiedAt: null });
-    verify.mockResolvedValue('locked');
+    users.findByEmail.mockResolvedValue({ ...verifiedUser, emailVerifiedAt: null });
+    emailVerification.verify.mockResolvedValue('locked');
 
     await expect(
       service.verifyEmail({ email: 'hello@vedora.vn', code: '123456' }),
@@ -216,12 +196,12 @@ describe('AuthService', () => {
       status: 429,
       response: { code: 'VERIFY_LIMIT_REACHED' },
     });
-    expect(issue).not.toHaveBeenCalled();
+    expect(refreshTokens.issue).not.toHaveBeenCalled();
   });
 
   it('rejects resends past the limit with 429', async () => {
-    findByEmail.mockResolvedValue({ ...verifiedUser, emailVerifiedAt: null });
-    send.mockResolvedValue('limit');
+    users.findByEmail.mockResolvedValue({ ...verifiedUser, emailVerifiedAt: null });
+    emailVerification.send.mockResolvedValue('limit');
 
     await expect(
       service.resendVerification({ email: 'hello@vedora.vn' }),
@@ -232,12 +212,12 @@ describe('AuthService', () => {
   });
 
   it('ignores resend requests for unknown or verified emails', async () => {
-    findByEmail.mockResolvedValueOnce(null).mockResolvedValueOnce(verifiedUser);
+    users.findByEmail.mockResolvedValueOnce(null).mockResolvedValueOnce(verifiedUser);
 
     await service.resendVerification({ email: 'nobody@vedora.vn' });
     await service.resendVerification({ email: 'hello@vedora.vn' });
 
-    expect(send).not.toHaveBeenCalled();
+    expect(emailVerification.send).not.toHaveBeenCalled();
   });
 
   it('takes over an unverified account when Google proves the email', async () => {
@@ -246,9 +226,9 @@ describe('AuthService', () => {
       emailVerifiedAt: null,
       passwordHash: 'attacker-hash',
     };
-    findByGoogleId.mockResolvedValue(null);
-    findByEmail.mockResolvedValue(squatted);
-    linkGoogleAccount.mockResolvedValue(publicUser);
+    users.findByGoogleId.mockResolvedValue(null);
+    users.findByEmail.mockResolvedValue(squatted);
+    users.linkGoogleAccount.mockResolvedValue(publicUser);
 
     await service.googleLogin({
       googleId: 'google-sub',
@@ -256,15 +236,15 @@ describe('AuthService', () => {
       fullName: 'Vedora User',
     });
 
-    expect(linkGoogleAccount).toHaveBeenCalledWith(squatted, 'google-sub');
-    expect(revokeAllForUser).toHaveBeenCalledWith(publicUser.id);
-    expect(discard).toHaveBeenCalledWith(publicUser.id);
+    expect(users.linkGoogleAccount).toHaveBeenCalledWith(squatted, 'google-sub');
+    expect(refreshTokens.revokeAllForUser).toHaveBeenCalledWith(publicUser.id);
+    expect(emailVerification.discard).toHaveBeenCalledWith(publicUser.id);
   });
 
   it('keeps existing sessions when linking Google to a verified account', async () => {
-    findByGoogleId.mockResolvedValue(null);
-    findByEmail.mockResolvedValue(verifiedUser);
-    linkGoogleAccount.mockResolvedValue(publicUser);
+    users.findByGoogleId.mockResolvedValue(null);
+    users.findByEmail.mockResolvedValue(verifiedUser);
+    users.linkGoogleAccount.mockResolvedValue(publicUser);
 
     await service.googleLogin({
       googleId: 'google-sub',
@@ -272,13 +252,13 @@ describe('AuthService', () => {
       fullName: 'Vedora User',
     });
 
-    expect(revokeAllForUser).not.toHaveBeenCalled();
+    expect(refreshTokens.revokeAllForUser).not.toHaveBeenCalled();
   });
 
   it('creates new Google users as verified', async () => {
-    findByGoogleId.mockResolvedValue(null);
-    findByEmail.mockResolvedValue(null);
-    create.mockResolvedValue(publicUser);
+    users.findByGoogleId.mockResolvedValue(null);
+    users.findByEmail.mockResolvedValue(null);
+    users.create.mockResolvedValue(publicUser);
 
     await service.googleLogin({
       googleId: 'google-sub',
@@ -286,13 +266,12 @@ describe('AuthService', () => {
       fullName: 'Vedora User',
     });
 
-    expect(create).toHaveBeenCalledWith(
-      expect.objectContaining({ emailVerifiedAt: expect.any(Date) as Date }),
-    );
+    const [created] = users.create.mock.calls[0];
+    expect(created.emailVerifiedAt).toBeInstanceOf(Date);
   });
 
   it('rejects invalid credentials with a generic error', async () => {
-    findByUsername.mockResolvedValue(null);
+    users.findByUsername.mockResolvedValue(null);
 
     await expect(
       service.login({ username: 'unknown', password: 'WrongPassword123!' }),
@@ -300,16 +279,16 @@ describe('AuthService', () => {
   });
 
   it('returns a new token pair when rotating a refresh token', async () => {
-    rotate.mockResolvedValue({
+    refreshTokens.rotate.mockResolvedValue({
       token: 'rotated-refresh-token',
       expiresIn: 2592000,
       userId: publicUser.id,
     });
-    findPublicById.mockResolvedValue(publicUser);
+    users.findPublicById.mockResolvedValue(publicUser);
 
     const result = await service.refresh('current-refresh-token');
 
-    expect(rotate).toHaveBeenCalledWith('current-refresh-token');
+    expect(refreshTokens.rotate).toHaveBeenCalledWith('current-refresh-token');
     expect(result).toEqual({
       accessToken: 'signed-token',
       refreshToken: 'rotated-refresh-token',
@@ -321,10 +300,10 @@ describe('AuthService', () => {
   });
 
   it('revokes a refresh-token family on logout', async () => {
-    revoke.mockResolvedValue(undefined);
+    refreshTokens.revoke.mockResolvedValue(undefined);
 
     await service.logout('refresh-token');
 
-    expect(revoke).toHaveBeenCalledWith('refresh-token');
+    expect(refreshTokens.revoke).toHaveBeenCalledWith('refresh-token');
   });
 });

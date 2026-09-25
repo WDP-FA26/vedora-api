@@ -179,7 +179,8 @@ giờ xoá upload không được gắn vào bài nào sau 24 giờ.
 npm run start:dev
 npm run build
 npm run lint
-npm test
+npm test            # unit (Vitest)
+npm run test:e2e    # HTTP e2e (Vitest + supertest)
 npm run prisma:generate
 npm run prisma:migrate:dev -- --name ten_migration
 npm run prisma:migrate:deploy
@@ -187,6 +188,8 @@ npm run prisma:studio
 npm run prisma:seed
 npm run prisma:seed:prod
 ```
+
+Test dùng Vitest + `@nestjs/testing` theo [hướng dẫn của NestJS](https://docs.nestjs.com/fundamentals/testing): unit test (`src/**/*.spec.ts`) dựng service bằng `Test.createTestingModule` với mock `vitest-mock-extended`; e2e (`test/**/*.e2e-spec.ts`) chạy cả `AppModule` qua HTTP với `configureApp` giống production, chỉ Prisma bị mock.
 
 Khi sửa `prisma/schema.prisma`, tạo migration bằng `prisma:migrate:dev`, kiểm tra SQL trong `prisma/migrations`, rồi commit cả schema và migration. Container production chạy `prisma migrate deploy` tự động trước khi start NestJS.
 

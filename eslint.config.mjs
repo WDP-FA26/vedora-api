@@ -1,6 +1,6 @@
 import eslint from '@eslint/js';
 import eslintConfigPrettier from 'eslint-config-prettier';
-import jest from 'eslint-plugin-jest';
+import vitest from '@vitest/eslint-plugin';
 import tseslint from 'typescript-eslint';
 
 export default tseslint.config(
@@ -21,12 +21,18 @@ export default tseslint.config(
     },
   },
   {
-    // `expect(mock.method)` is safe; jest/unbound-method knows that.
-    files: ['**/*.spec.ts'],
-    plugins: { jest },
+    files: ['**/*.spec.ts', '**/*.e2e-spec.ts'],
+    ...vitest.configs.recommended,
     rules: {
+      ...vitest.configs.recommended.rules,
+      // `expect(mock.method).toHaveBeenCalled()` passes a method unbound on
+      // purpose; Vitest has no type-aware replacement for this rule.
       '@typescript-eslint/unbound-method': 'off',
-      'jest/unbound-method': 'error',
+      // supertest's `.expect(status)` is an assertion too.
+      'vitest/expect-expect': [
+        'error',
+        { assertFunctionNames: ['expect', 'request.**.expect'] },
+      ],
     },
   },
 );

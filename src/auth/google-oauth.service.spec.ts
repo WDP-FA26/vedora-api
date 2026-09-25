@@ -4,7 +4,9 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { Test } from '@nestjs/testing';
 import { OAuth2Client } from 'google-auth-library';
+import type { Mock } from 'vitest';
 import { GoogleOAuthService } from './google-oauth.service';
 
 describe('GoogleOAuthService', () => {
@@ -13,32 +15,32 @@ describe('GoogleOAuthService', () => {
     GOOGLE_CLIENT_SECRET: 'client-secret',
     GOOGLE_CALLBACK_URL: 'https://vedora.example.com/auth/google',
   };
-  const configFrom = (values: Record<string, string>) =>
-    ({
-      get: (key: string, fallback?: string) => values[key] ?? fallback,
-    }) as unknown as ConfigService;
+  async function createService(values: Record<string, string>) {
+    const moduleRef = await Test.createTestingModule({
+      providers: [
+        GoogleOAuthService,
+        { provide: ConfigService, useValue: new ConfigService(values) },
+      ],
+    }).compile();
+    return moduleRef.get(GoogleOAuthService);
+  }
 
-  const service = new GoogleOAuthService(configFrom(env));
+  let service: GoogleOAuthService;
   const verifier = 'v'.repeat(43);
 
-  // getToken/verifyIdToken have callback overloads; plain mocks keep the
-  // Promise-returning signature simple to stub.
-  let getToken: jest.Mock;
-  let verifyIdToken: jest.Mock;
+  // getToken/verifyIdToken have callback overloads, so their spies are typed
+  // by the callback form; a generic Mock lets us stub the Promise form.
+  let getToken: Mock;
+  let verifyIdToken: Mock;
 
-  beforeEach(() => {
-    getToken = jest.spyOn(
-      OAuth2Client.prototype,
-      'getToken',
-    ) as unknown as jest.Mock;
-    verifyIdToken = jest.spyOn(
-      OAuth2Client.prototype,
-      'verifyIdToken',
-    ) as unknown as jest.Mock;
-    jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
+  beforeEach(async () => {
+    service = await createService(env);
+    getToken = vi.spyOn(OAuth2Client.prototype, 'getToken');
+    verifyIdToken = vi.spyOn(OAuth2Client.prototype, 'verifyIdToken');
+    vi.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
   });
 
-  afterEach(() => jest.restoreAllMocks());
+  afterEach(() => vi.restoreAllMocks());
 
   function mockIdToken(payload: Record<string, unknown>) {
     getToken.mockResolvedValue({ tokens: { id_token: 'id-token' } });
@@ -100,7 +102,7 @@ describe('GoogleOAuthService', () => {
   });
 
   it('returns 503 when Google is not configured', async () => {
-    const unconfigured = new GoogleOAuthService(configFrom({}));
+    const unconfigured = await createService({});
 
     await expect(unconfigured.authorize()).rejects.toBeInstanceOf(
       ServiceUnavailableException,

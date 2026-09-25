@@ -1,34 +1,15 @@
-import { ValidationPipe } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { NestFactory } from '@nestjs/core';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
-import helmet from 'helmet';
 import { AppModule } from './app.module';
+import { configureApp } from './app.setup';
 
 async function bootstrap(): Promise<void> {
   const app = await NestFactory.create(AppModule, {
     // Mux webhook signatures are computed over the exact request body.
     rawBody: true,
   });
-  const config = app.get(ConfigService);
-  const port = config.get<number>('PORT', 3000);
-  const prefix = config.get<string>('API_PREFIX', 'api/v1');
-  const corsOrigin = config.get<string>('CORS_ORIGIN', '*');
-
-  app.use(helmet());
-  app.enableCors({
-    origin:
-      corsOrigin === '*' ? true : corsOrigin.split(',').map((v) => v.trim()),
-    credentials: corsOrigin !== '*',
-  });
-  app.setGlobalPrefix(prefix);
-  app.useGlobalPipes(
-    new ValidationPipe({
-      whitelist: true,
-      forbidNonWhitelisted: true,
-      transform: true,
-    }),
-  );
+  configureApp(app);
   app.enableShutdownHooks();
 
   const swaggerConfig = new DocumentBuilder()
@@ -43,6 +24,7 @@ async function bootstrap(): Promise<void> {
     yamlDocumentUrl: 'docs/yaml',
   });
 
+  const port = app.get(ConfigService).get<number>('PORT', 3000);
   await app.listen(port, '0.0.0.0');
 }
 
