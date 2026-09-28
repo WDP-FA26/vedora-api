@@ -22,6 +22,7 @@ Backend starter cho Vedora, sử dụng NestJS, Prisma ORM, PostgreSQL và Docke
 │   ├── schema.prisma
 │   └── seed.ts
 ├── src/
+│   ├── common/pagination/     # DTO, helper và Swagger cho phân trang dùng chung
 │   ├── health/                # Liveness/readiness
 │   ├── media/                 # Upload video lên Mux, webhook, dọn dẹp định kỳ
 │   ├── mux/                   # Mux client dùng chung
@@ -90,18 +91,11 @@ Không thêm `-v` nếu muốn giữ dữ liệu PostgreSQL. `docker compose dow
 | `POST` | `/api/v1/auth/google/authorize` | Bắt đầu đăng nhập Google: URL, `state`, `codeVerifier` (PKCE) |
 | `POST` | `/api/v1/auth/google` | Đổi `code` + `codeVerifier` (PKCE) lấy cặp AT/RT |
 | `GET` | `/api/v1/auth/me` | Thông tin user hiện tại (Bearer token) |
-| `POST` | `/api/v1/users` | Tạo user (ADMIN) |
-| `GET` | `/api/v1/users` | Danh sách user (ADMIN) |
-| `GET` | `/api/v1/users/:id` | Chi tiết tài khoản của mình hoặc tài khoản bất kỳ với ADMIN |
-| `PATCH` | `/api/v1/users/:id` | Cập nhật tài khoản của mình hoặc tài khoản bất kỳ với ADMIN |
-| `PATCH` | `/api/v1/users/:id/role` | Đổi vai trò USER/ADMIN (ADMIN) |
-| `DELETE` | `/api/v1/users/:id` | Xóa tài khoản của mình hoặc tài khoản bất kỳ với ADMIN |
-
-Vai trò được đọc từ database trong mỗi request đã xác thực, nên thay đổi quyền có
-hiệu lực ngay với JWT đang dùng. Tài khoản mới và tài khoản có trước migration
-đều mặc định `USER`; seed cấp `ADMIN` cho tài khoản bootstrap `vedora.admin`.
-Response user từ auth và users có thêm trường `role`. Hợp đồng tích hợp frontend:
-[Phân quyền người dùng](docs/docs-for-FE/user-authorization.md).
+| `POST` | `/api/v1/users` | Tạo user (Bearer token) |
+| `GET` | `/api/v1/users` | Danh sách user phân trang `page`/`limit` (Bearer token) |
+| `GET` | `/api/v1/users/:id` | Chi tiết user (Bearer token) |
+| `PATCH` | `/api/v1/users/:id` | Cập nhật user (Bearer token) |
+| `DELETE` | `/api/v1/users/:id` | Xóa user (Bearer token) |
 
 Ví dụ:
 
@@ -179,6 +173,69 @@ trỏ tới URL đó trong Mux dashboard và điền signing secret vào `MUX_WE
 để trống (local, Mux không gọi được `localhost`), API tự hỏi Mux mỗi lần media/bài đang
 chờ được đọc. Một cron 10 phút một lần cũng cập nhật media bị lỡ webhook, và cron hằng
 giờ xoá upload không được gắn vào bài nào sau 24 giờ.
+
+## Phân trang dùng chung
+
+Thành phần tại `src/common/pagination` hỗ trợ hai kiểu phân trang cho GET danh sách:
+
+- `PaginationQueryDto`: `page` mặc định 1, tối đa 1000000; `limit` mặc định 20, tối đa 50.
+- `CursorPaginationQueryDto`: `cursor` tùy chọn (UUID v4), cùng quy tắc `limit`.
+- `getPaginationArgs(query)`: chuyển page/limit đã validate thành `{ skip, take }` cho Prisma.
+- `createPaginatedResponse(items, totalItems, query)`: trả `{ items, meta }`.
+- `createCursorPaginatedResponse(rows, limit)`: nhận tối đa `limit + 1` bản ghi,
+  bỏ bản ghi dư và trả `{ items, nextCursor }`.
+- `@ApiPaginatedResponse(ItemDto)`: mô tả response page với schema item cụ thể trong Swagger.
+
+Ví dụ GET danh sách người dùng ở controller:
+
+```ts
+import { Get, Query } from '@nestjs/common';
+import { ApiPaginatedResponse, PaginationQueryDto } from '../common/pagination';
+
+// Bên trong UsersController, giữ guard xác thực của endpoint.
+@Get()
+@ApiPaginatedResponse(UserResponseDto)
+findAll(@Query() query: PaginationQueryDto) {
+  return this.usersService.findAll(query);
+}
+```
+
+Phần truy vấn trong `UsersService.findAll`:
+
+```ts
+import { Prisma } from '@prisma/client';
+import { createPaginatedResponse, getPaginationArgs } from '../common/pagination';
+
+const [items, totalItems] = await this.prisma.$transaction(
+  [
+    this.prisma.user.findMany({
+      select: publicUserSelect,
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+      ...getPaginationArgs(query),
+    }),
+    this.prisma.user.count(),
+  ],
+  { isolationLevel: Prisma.TransactionIsolationLevel.RepeatableRead },
+);
+return createPaginatedResponse(items, totalItems, query);
+```
+
+Để thêm bộ lọc, tạo DTO kế thừa `PaginationQueryDto` hoặc `CursorPaginationQueryDto`
+và khai báo validator/Swagger cho từng trường. Với phân trang page, `findMany` và
+`count` phải dùng cùng điều kiện `where`; sắp xếp luôn có khóa duy nhất để phân định
+khi trùng giá trị (ví dụ `id`). Transaction `RepeatableRead` giúp số lượng và danh sách
+nhất quán trong một response.
+
+Với cursor, xem `PostsService.list`: lấy `limit + 1` item, sắp xếp ổn định,
+truyền `cursor: { id }` cùng `skip: 1` khi có cursor. Dùng
+`CursorPaginatedResponseDto<ItemDto>` và khai báo lại schema `items` trong DTO response
+cụ thể như `PostPageDto`.
+
+Không cần đăng ký module hoặc interceptor. Tích hợp DTO/helper trực tiếp ở từng GET
+danh sách; GET chi tiết giữ response hiện tại. `GET /users` đã chuyển từ mảng trực tiếp
+sang `{ items, meta }`, còn `GET /posts` giữ `{ items, nextCursor }`.
+
+Tài liệu tích hợp frontend: [docs/docs-for-FE/pagination.md](docs/docs-for-FE/pagination.md).
 
 ## Lệnh phát triển
 

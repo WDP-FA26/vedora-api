@@ -9,6 +9,7 @@ import {
   ParseUUIDPipe,
   Patch,
   Post,
+  Query,
   Req,
   UseGuards,
 } from '@nestjs/common';
@@ -22,6 +23,12 @@ import {
 import { UserRole } from '@prisma/client';
 import type { AuthenticatedRequest } from '../auth/auth.types';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { UserResponseDto } from '../auth/dto/auth-response.dto';
+import {
+  ApiPaginatedResponse,
+  PaginatedResponseDto,
+  PaginationQueryDto,
+} from '../common/pagination';
 import { Roles } from '../auth/roles.decorator';
 import { RolesGuard } from '../auth/roles.guard';
 import { CreateUserDto } from './dto/create-user.dto';
@@ -46,10 +53,12 @@ export class UsersController {
   }
 
   @Get()
-  @Roles(UserRole.ADMIN)
-  @ApiOperation({ summary: 'List users (admin only)' })
-  findAll(): Promise<PublicUser[]> {
-    return this.usersService.findAll();
+  @ApiOperation({ summary: 'List users with page-based pagination' })
+  @ApiPaginatedResponse(UserResponseDto)
+  findAll(
+    @Query() query: PaginationQueryDto,
+  ): Promise<PaginatedResponseDto<PublicUser>> {
+    return this.usersService.findAll(query);
   }
 
   @Get(':id')
