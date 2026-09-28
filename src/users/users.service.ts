@@ -1,9 +1,11 @@
 import {
   ConflictException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { Prisma, User } from '@prisma/client';
+import { Prisma, User, UserRole } from '@prisma/client';
+import type { AuthenticatedUser } from '../auth/auth.types';
 import { hashPassword } from '../auth/password';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateUserDto } from './dto/create-user.dto';
@@ -14,6 +16,7 @@ export const publicUserSelect = {
   username: true,
   fullName: true,
   email: true,
+  role: true,
   createdAt: true,
   updatedAt: true,
 } satisfies Prisma.UserSelect;
@@ -54,17 +57,28 @@ export class UsersService {
     });
   }
 
-  async findOne(id: string): Promise<PublicUser> {
+  async findOne(id: string, actor: AuthenticatedUser): Promise<PublicUser> {
+    this.assertCanAccess(id, actor);
     const user = await this.findPublicById(id);
     if (!user) throw new NotFoundException('User not found');
     return user;
   }
 
-  async update(id: string, dto: UpdateUserDto): Promise<PublicUser> {
+  async update(
+    id: string,
+    dto: UpdateUserDto,
+    actor: AuthenticatedUser,
+  ): Promise<PublicUser> {
+    this.assertCanAccess(id, actor);
     try {
       return await this.prisma.user.update({
         where: { id },
-        data: dto,
+        // Explicit fields keep account permissions out of profile updates.
+        data: {
+          username: dto.username,
+          fullName: dto.fullName,
+          email: dto.email,
+        },
         select: publicUserSelect,
       });
     } catch (error: unknown) {
@@ -72,7 +86,8 @@ export class UsersService {
     }
   }
 
-  async remove(id: string): Promise<void> {
+  async remove(id: string, actor: AuthenticatedUser): Promise<void> {
+    this.assertCanAccess(id, actor);
     try {
       await this.prisma.user.delete({ where: { id } });
     } catch (error: unknown) {
@@ -82,6 +97,25 @@ export class UsersService {
 
   findByUsername(username: string): Promise<User | null> {
     return this.prisma.user.findUnique({ where: { username } });
+  }
+
+  async updateRole(
+    id: string,
+    role: UserRole,
+    actor: AuthenticatedUser,
+  ): Promise<PublicUser> {
+    if (actor.role !== UserRole.ADMIN) {
+      throw new ForbiddenException('Only admins can change user roles');
+    }
+    try {
+      return await this.prisma.user.update({
+        where: { id },
+        data: { role },
+        select: publicUserSelect,
+      });
+    } catch (error: unknown) {
+      this.rethrowKnownError(error);
+    }
   }
 
   findByGoogleId(googleId: string): Promise<User | null> {
@@ -135,6 +169,12 @@ export class UsersService {
       where: { id },
       select: publicUserSelect,
     });
+  }
+
+  private assertCanAccess(id: string, actor: AuthenticatedUser): void {
+    if (actor.role !== UserRole.ADMIN && actor.sub !== id) {
+      throw new ForbiddenException('You can only access your own account');
+    }
   }
 
   private rethrowKnownError(error: unknown): never {

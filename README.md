@@ -83,18 +83,25 @@ Không thêm `-v` nếu muốn giữ dữ liệu PostgreSQL. `docker compose dow
 | `GET` | `/api/v1` | Thông tin API |
 | `GET` | `/api/v1/health` | Liveness |
 | `GET` | `/api/v1/health/ready` | Readiness + PostgreSQL |
-| `POST` | `/api/v1/auth/register` | Đăng ký và nhận cặp AT/RT |
+| `POST` | `/api/v1/auth/register` | Đăng ký và gửi mã xác minh email; chưa trả token |
 | `POST` | `/api/v1/auth/login` | Đăng nhập bằng username/password và nhận cặp AT/RT |
 | `POST` | `/api/v1/auth/refresh` | Rotate refresh token và nhận cặp AT/RT mới |
 | `POST` | `/api/v1/auth/logout` | Thu hồi refresh-token family |
 | `POST` | `/api/v1/auth/google/authorize` | Bắt đầu đăng nhập Google: URL, `state`, `codeVerifier` (PKCE) |
 | `POST` | `/api/v1/auth/google` | Đổi `code` + `codeVerifier` (PKCE) lấy cặp AT/RT |
 | `GET` | `/api/v1/auth/me` | Thông tin user hiện tại (Bearer token) |
-| `POST` | `/api/v1/users` | Tạo user (Bearer token) |
-| `GET` | `/api/v1/users` | Danh sách user (Bearer token) |
-| `GET` | `/api/v1/users/:id` | Chi tiết user (Bearer token) |
-| `PATCH` | `/api/v1/users/:id` | Cập nhật user (Bearer token) |
-| `DELETE` | `/api/v1/users/:id` | Xóa user (Bearer token) |
+| `POST` | `/api/v1/users` | Tạo user (ADMIN) |
+| `GET` | `/api/v1/users` | Danh sách user (ADMIN) |
+| `GET` | `/api/v1/users/:id` | Chi tiết tài khoản của mình hoặc tài khoản bất kỳ với ADMIN |
+| `PATCH` | `/api/v1/users/:id` | Cập nhật tài khoản của mình hoặc tài khoản bất kỳ với ADMIN |
+| `PATCH` | `/api/v1/users/:id/role` | Đổi vai trò USER/ADMIN (ADMIN) |
+| `DELETE` | `/api/v1/users/:id` | Xóa tài khoản của mình hoặc tài khoản bất kỳ với ADMIN |
+
+Vai trò được đọc từ database trong mỗi request đã xác thực, nên thay đổi quyền có
+hiệu lực ngay với JWT đang dùng. Tài khoản mới và tài khoản có trước migration
+đều mặc định `USER`; seed cấp `ADMIN` cho tài khoản bootstrap `vedora.admin`.
+Response user từ auth và users có thêm trường `role`. Hợp đồng tích hợp frontend:
+[Phân quyền người dùng](docs/docs-for-FE/user-authorization.md).
 
 Ví dụ:
 
@@ -214,6 +221,13 @@ docker compose exec api npm run prisma:seed:prod
 ```
 
 Seed có tính idempotent, vì vậy có thể chạy lại mà không tạo trùng user `vedora.admin`. Khai báo `SEED_USER_PASSWORD` trước khi seed; nếu không có biến này thì seed user sẽ được bỏ qua. Seed không đặt lại mật khẩu của user đã tồn tại, ngoại trừ user cũ được chuyển đổi từ schema trước auth và chưa có mật khẩu. Sau khi sửa nội dung seed, phải commit, deploy lại image rồi mới chạy lệnh production ở trên.
+
+Seed tạo tài khoản với vai trò `ADMIN`, hoặc cấp quyền đó cho tài khoản seed cũ
+có username `vedora.admin`, email `admin@vedora.local` và email đã xác minh.
+Khi tài khoản cũ còn là `USER`, `SEED_USER_PASSWORD` phải khớp mật khẩu hiện tại
+trước khi seed cấp `ADMIN`; chỉ trùng tên và email không đủ để được nâng quyền.
+Nếu email seed thuộc tài khoản khác hoặc chưa xác minh, seed dừng với lỗi thay vì
+cấp quyền admin. Migration không tự cấp quyền dựa trên username/email.
 
 ## Triển khai lên organization Dokploy
 

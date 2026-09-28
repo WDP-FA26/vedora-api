@@ -1,6 +1,7 @@
 import { createHmac } from 'node:crypto';
 import { INestApplication } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
+import { UserRole } from '@prisma/client';
 import { Test } from '@nestjs/testing';
 import request from 'supertest';
 import type { App } from 'supertest/types';
@@ -27,6 +28,18 @@ describe('Vedora API (e2e)', () => {
 
   beforeAll(async () => {
     prisma = mockDeep<PrismaService>();
+    prisma.user.findUnique.mockResolvedValue({
+      id: '4a1e32e4-e18e-4dd7-8b4a-246ef2113ff2',
+      username: 'vedora.user',
+      role: UserRole.USER,
+      fullName: 'Vedora User',
+      email: 'hello@vedora.vn',
+      passwordHash: null,
+      googleId: null,
+      emailVerifiedAt: new Date(),
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
     const moduleRef = await Test.createTestingModule({ imports: [AppModule] })
       .overrideProvider(PrismaService)
       .useValue(prisma)
