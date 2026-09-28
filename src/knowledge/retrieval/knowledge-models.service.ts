@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { z } from 'zod';
 
-export type EmbeddingInput = string | { image: Uint8Array };
+type EmbeddingInput = string | { image: Uint8Array };
 
 export interface RerankResult {
   index: number;
@@ -112,14 +112,14 @@ export class KnowledgeModelsService {
     query: string,
     documents: string[],
     topN: number,
-    signal?: AbortSignal,
+    signal: AbortSignal,
   ): Promise<RerankResult[] | null> {
     if (!this.rerankModel || !documents.length) return null;
     const { results } = await this.post(
       '/rerank',
       { model: this.rerankModel, query, documents, top_n: topN },
       rerankResponse,
-      signal ?? AbortSignal.timeout(EMBED_TIMEOUT_MS),
+      signal,
     );
     return results.map(({ index, relevance_score }) => ({
       index,

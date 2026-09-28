@@ -187,7 +187,10 @@ describe('AuthService', () => {
   });
 
   it('rejects verification with 429 once the email is out of guesses', async () => {
-    users.findByEmail.mockResolvedValue({ ...verifiedUser, emailVerifiedAt: null });
+    users.findByEmail.mockResolvedValue({
+      ...verifiedUser,
+      emailVerifiedAt: null,
+    });
     emailVerification.verify.mockResolvedValue('locked');
 
     await expect(
@@ -200,7 +203,10 @@ describe('AuthService', () => {
   });
 
   it('rejects resends past the limit with 429', async () => {
-    users.findByEmail.mockResolvedValue({ ...verifiedUser, emailVerifiedAt: null });
+    users.findByEmail.mockResolvedValue({
+      ...verifiedUser,
+      emailVerifiedAt: null,
+    });
     emailVerification.send.mockResolvedValue('limit');
 
     await expect(
@@ -212,7 +218,9 @@ describe('AuthService', () => {
   });
 
   it('ignores resend requests for unknown or verified emails', async () => {
-    users.findByEmail.mockResolvedValueOnce(null).mockResolvedValueOnce(verifiedUser);
+    users.findByEmail
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce(verifiedUser);
 
     await service.resendVerification({ email: 'nobody@vedora.vn' });
     await service.resendVerification({ email: 'hello@vedora.vn' });
@@ -236,7 +244,10 @@ describe('AuthService', () => {
       fullName: 'Vedora User',
     });
 
-    expect(users.linkGoogleAccount).toHaveBeenCalledWith(squatted, 'google-sub');
+    expect(users.linkGoogleAccount).toHaveBeenCalledWith(
+      squatted,
+      'google-sub',
+    );
     expect(refreshTokens.revokeAllForUser).toHaveBeenCalledWith(publicUser.id);
     expect(emailVerification.discard).toHaveBeenCalledWith(publicUser.id);
   });

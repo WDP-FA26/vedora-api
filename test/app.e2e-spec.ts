@@ -116,6 +116,19 @@ describe('Vedora API (e2e)', () => {
       });
     });
 
+    it('accepts only the latest five messages', async () => {
+      await request(app.getHttpServer())
+        .post('/api/v1/nutrition-chat')
+        .auth(token, { type: 'bearer' })
+        .send({
+          messages: Array.from({ length: 6 }, (_, index) => ({
+            role: index % 2 ? 'assistant' : 'user',
+            text: 'Đậu phụ',
+          })),
+        })
+        .expect(400);
+    });
+
     it('limits each user to 10 messages a minute', async () => {
       for (let sent = 0; sent < 10; sent++) {
         await request(app.getHttpServer())

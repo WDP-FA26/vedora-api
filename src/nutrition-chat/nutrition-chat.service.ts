@@ -21,8 +21,6 @@ import { replyFilter } from './reply-filter';
 const SEARCH_TIMEOUT_MS = 5000;
 const MODERATION_TIMEOUT_MS = 4000;
 const MODERATION_ATTEMPTS = 2;
-// the agent sees its instructions plus only the latest turns
-const CONTEXT_MESSAGES = 5;
 
 const REFUSALS: Record<Exclude<ModerationVerdict, 'allow'>, string> = {
   off_topic:
@@ -35,7 +33,7 @@ const REFUSALS: Record<Exclude<ModerationVerdict, 'allow'>, string> = {
     'Mình không thể giúp yêu cầu này. Nếu bạn có câu hỏi về dinh dưỡng hay món ăn thực vật, mình sẵn sàng hỗ trợ nhé.',
 };
 
-export type ChatErrorCode = 'RATE_LIMITED' | 'MODEL_ERROR';
+type ChatErrorCode = 'RATE_LIMITED' | 'MODEL_ERROR';
 
 function failedCall(error: unknown): APICallError | null {
   const cause = RetryError.isInstance(error) ? error.lastError : error;
@@ -84,9 +82,7 @@ export class NutritionChatService {
     }
 
     const result = await this.agent.stream({
-      messages: messages
-        .slice(-CONTEXT_MESSAGES)
-        .map(({ role, text }) => ({ role, content: text })),
+      messages: messages.map(({ role, text }) => ({ role, content: text })),
       abortSignal,
       timeout: { tools: { searchKnowledgeMs: SEARCH_TIMEOUT_MS } },
       experimental_transform: replyFilter(),

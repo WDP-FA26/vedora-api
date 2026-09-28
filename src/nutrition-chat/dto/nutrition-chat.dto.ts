@@ -11,8 +11,9 @@ import {
   ValidateNested,
 } from 'class-validator';
 
-export const MAX_CHAT_MESSAGES = 40;
-export const MAX_CHAT_MESSAGE_LENGTH = 4000;
+// the agent sees its instructions plus only the latest turns
+const MAX_CHAT_MESSAGES = 5;
+const MAX_CHAT_MESSAGE_LENGTH = 4000;
 
 export class ChatMessageDto {
   @ApiProperty({ enum: ['user', 'assistant'] })
@@ -30,7 +31,7 @@ export class NutritionChatDto {
   @ApiProperty({
     type: [ChatMessageDto],
     maxItems: MAX_CHAT_MESSAGES,
-    description: 'The conversation so far, oldest first, ending with the user',
+    description: 'The latest turns, oldest first, ending with the user',
   })
   @IsArray()
   @ArrayMinSize(1)

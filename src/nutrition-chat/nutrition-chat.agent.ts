@@ -16,7 +16,7 @@ export type ReasoningEffort = (typeof REASONING_EFFORTS)[number];
 
 const MAX_STEPS = 5;
 
-export interface NutritionAgentOptions {
+interface NutritionAgentOptions {
   apiKey: string;
   modelId: string;
   reasoningEffort: ReasoningEffort;

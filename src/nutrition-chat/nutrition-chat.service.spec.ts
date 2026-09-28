@@ -179,16 +179,12 @@ describe('NutritionChatService', () => {
     });
   });
 
-  it('gives the agent its instructions, its tool and the latest five messages', async () => {
-    await ask('1', '2', '3', '4', '5', '6', '7');
+  it('gives the agent its instructions and its tool', async () => {
+    await ask('Đậu phụ có bao nhiêu canxi?');
 
     const { prompt, tools } = model.doStreamCalls[0];
     expect(prompt[0]).toMatchObject({ role: 'system', content: INSTRUCTIONS });
     expect(tools?.map((tool) => tool.name)).toEqual(['searchKnowledge']);
-    expect(prompt.slice(1)).toHaveLength(5);
-    expect(prompt.at(-1)).toMatchObject({
-      content: [{ type: 'text', text: '7' }],
-    });
   });
 
   it('refuses anything but nutrition questions', async () => {

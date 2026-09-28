@@ -83,7 +83,7 @@ describe('KnowledgeModelsService', () => {
 
     const results = await createService({
       OPENROUTER_RERANK_MODEL: 'cohere/rerank-v3.5',
-    }).rerank('q', ['a', 'b'], 6);
+    }).rerank('q', ['a', 'b'], 6, new AbortController().signal);
 
     expect(results).toEqual([
       { index: 1, relevanceScore: 0.9 },
@@ -116,7 +116,9 @@ describe('KnowledgeModelsService', () => {
   });
 
   it('skips reranking without a rerank model', async () => {
-    expect(await createService().rerank('q', ['a'], 6)).toBeNull();
+    expect(
+      await createService().rerank('q', ['a'], 6, new AbortController().signal),
+    ).toBeNull();
     expect(fetchMock).not.toHaveBeenCalled();
   });
 

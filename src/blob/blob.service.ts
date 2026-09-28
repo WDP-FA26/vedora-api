@@ -18,10 +18,6 @@ export class BlobService {
     this.callbackUrl = configService.get<string>('BLOB_CALLBACK_URL', '');
   }
 
-  get configured(): boolean {
-    return this.token !== '';
-  }
-
   /**
    * Uploads are only confirmed by Vercel Blob's callback, so they can't
    * start without one. Locally, tunnel the API (e.g. cloudflared).

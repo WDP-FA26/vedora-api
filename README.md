@@ -22,14 +22,12 @@ Backend starter cho Vedora, sử dụng NestJS, Prisma ORM, PostgreSQL và Docke
 │   ├── schema.prisma
 │   └── seed.ts
 ├── src/
-│   ├── blob/                  # Vercel Blob token/cấu hình dùng chung
+│   ├── common/pagination/     # DTO, helper và Swagger cho phân trang dùng chung
 │   ├── health/                # Liveness/readiness
-│   ├── knowledge/             # Tài liệu kiến thức: upload, OCR, index vào Qdrant, tìm kiếm cho chatbot
 │   ├── media/                 # Upload video lên Mux, webhook, dọn dẹp định kỳ
 │   ├── mux/                   # Mux client dùng chung
 │   ├── posts/                 # Bài đăng (POST; BLOG sẽ có model Blog riêng)
 │   ├── prisma/                # PrismaService dùng chung
-│   ├── qdrant/                # Qdrant client dùng chung
 │   ├── users/                 # CRUD mẫu
 │   ├── app.module.ts
 │   └── main.ts
@@ -86,7 +84,7 @@ Không thêm `-v` nếu muốn giữ dữ liệu PostgreSQL. `docker compose dow
 | `GET` | `/api/v1` | Thông tin API |
 | `GET` | `/api/v1/health` | Liveness |
 | `GET` | `/api/v1/health/ready` | Readiness + PostgreSQL |
-| `POST` | `/api/v1/auth/register` | Đăng ký và nhận cặp AT/RT |
+| `POST` | `/api/v1/auth/register` | Đăng ký và gửi mã xác minh email; chưa trả token |
 | `POST` | `/api/v1/auth/login` | Đăng nhập bằng username/password và nhận cặp AT/RT |
 | `POST` | `/api/v1/auth/refresh` | Rotate refresh token và nhận cặp AT/RT mới |
 | `POST` | `/api/v1/auth/logout` | Thu hồi refresh-token family |
@@ -94,7 +92,7 @@ Không thêm `-v` nếu muốn giữ dữ liệu PostgreSQL. `docker compose dow
 | `POST` | `/api/v1/auth/google` | Đổi `code` + `codeVerifier` (PKCE) lấy cặp AT/RT |
 | `GET` | `/api/v1/auth/me` | Thông tin user hiện tại (Bearer token) |
 | `POST` | `/api/v1/users` | Tạo user (Bearer token) |
-| `GET` | `/api/v1/users` | Danh sách user (Bearer token) |
+| `GET` | `/api/v1/users` | Danh sách user phân trang `page`/`limit` (Bearer token) |
 | `GET` | `/api/v1/users/:id` | Chi tiết user (Bearer token) |
 | `PATCH` | `/api/v1/users/:id` | Cập nhật user (Bearer token) |
 | `DELETE` | `/api/v1/users/:id` | Xóa user (Bearer token) |
@@ -176,61 +174,68 @@ trỏ tới URL đó trong Mux dashboard và điền signing secret vào `MUX_WE
 chờ được đọc. Một cron 10 phút một lần cũng cập nhật media bị lỡ webhook, và cron hằng
 giờ xoá upload không được gắn vào bài nào sau 24 giờ.
 
-### Tài liệu kiến thức (RAG cho trợ lý dinh dưỡng)
+## Phân trang dùng chung
 
-File đi thẳng từ trình duyệt lên Vercel Blob, không qua API:
+Thành phần tại `src/common/pagination` hỗ trợ hai kiểu phân trang cho GET danh sách:
 
-1. `POST /api/v1/knowledge/documents` với `{ "filename": "dinh-duong.pdf", "sizeBytes": 482133 }`
-   → API kiểm tra loại file (đuôi file chọn extractor, hiện chỉ `pdf`; khác thì `415`) và
-   dung lượng (`413` nếu vượt `MAX_KNOWLEDGE_FILE_MB`), tạo document `WAITING_UPLOAD` và
-   trả `pathname`, `clientToken`.
-2. Trình duyệt upload bằng `put(pathname, file, { access: 'private', token: clientToken })`
-   từ `@vercel/blob/client`. Token chỉ hợp lệ cho đúng `pathname` và content type đó, hết
-   hạn sau 1 giờ.
-3. Chỉ callback có chữ ký của Vercel Blob (`POST /api/v1/webhooks/vercel-blob`, HMAC bằng
-   `BLOB_READ_WRITE_TOKEN`) mới xác nhận upload xong; không tin trình duyệt. Vì vậy
-   `BLOB_CALLBACK_URL` là bắt buộc (trống thì trả `503`); ở local cần tunnel, vd.
-   `cloudflared tunnel --url http://localhost:4000`.
-4. Document chuyển `PROCESSING`, API tải file về và `PdfExtractor` xử lý:
-   - MuPDF lấy ảnh trong PDF (bỏ ảnh nhỏ, trùng; tối đa 100 ảnh) rồi thay ảnh bằng một
-     pixel trắng, vì OpenRouter chỉ trả tối đa 8 ảnh mỗi PDF.
-   - PDF đã bỏ ảnh được gửi tới Mistral OCR qua plugin `file-parser` của OpenRouter,
-     trả Markdown theo từng trang: bảng thành bảng Markdown, trang nhiều cột đúng thứ
-     tự đọc, trang scan cũng đọc được.
-5. `chunkdown` chia Markdown mỗi trang thành chunk (~1000 ký tự, giữ header bảng và
-   tiêu đề mục). Chunk và ảnh được embed trực tiếp bằng `google/gemini-embedding-2`
-   (cùng một không gian vector) rồi ghi vào Qdrant; Qdrant tự tính thêm hai vector BM25
-   cho chunk (giữ dấu và bỏ dấu tiếng Việt). Văn bản mỗi trang lưu ở
-   `knowledge_document_sections`, document thành `READY` hoặc `FAILED` kèm
-   `failureReason`. Cron 10 phút một lần đánh dấu `FAILED` các upload không nhận được
-   callback sau khi token hết hạn và các lần xử lý bị gián đoạn.
+- `PaginationQueryDto`: `page` mặc định 1, tối đa 1000000; `limit` mặc định 20, tối đa 50.
+- `CursorPaginationQueryDto`: `cursor` tùy chọn (UUID v4), cùng quy tắc `limit`.
+- `getPaginationArgs(query)`: chuyển page/limit đã validate thành `{ skip, take }` cho Prisma.
+- `createPaginatedResponse(items, totalItems, query)`: trả `{ items, meta }`.
+- `createCursorPaginatedResponse(rows, limit)`: nhận tối đa `limit + 1` bản ghi,
+  bỏ bản ghi dư và trả `{ items, nextCursor }`.
+- `@ApiPaginatedResponse(ItemDto)`: mô tả response page với schema item cụ thể trong Swagger.
 
-Khi chat, `POST /nutrition-chat` chạy một agent (`ToolLoopAgent` của AI SDK) có công cụ
-`searchKnowledge`: model tự quyết định có tra cứu không và tự viết truy vấn (bằng tiếng Anh,
-không phụ thuộc hội thoại) cho mỗi câu hỏi, kể cả câu hỏi nối tiếp; chưa thấy đoạn liên quan thì tra lại với
-truy vấn khác, tối đa 4 lần, rồi bắt buộc trả lời. Mỗi lần tra embed truy vấn,
-ghép kết quả dense + hai BM25 bằng RRF, rerank bằng `cohere/rerank-v3.5` và trả về tối đa 6
-đoạn. Tra cứu lỗi hoặc quá 5 giây (rerank quá 0,8 giây thì bỏ qua rerank) thì công cụ báo không
-tìm thấy. Trợ lý chỉ trả lời từ tài liệu; không tìm thấy thì xin lỗi thay vì dùng kiến thức riêng. Collection được tạo tự động lần đầu index; đổi
-model hoặc số chiều embedding cần `QDRANT_COLLECTION` mới.
+Ví dụ GET danh sách người dùng ở controller:
 
-Lớp bảo vệ chatbot:
+```ts
+import { Get, Query } from '@nestjs/common';
+import { ApiPaginatedResponse, PaginationQueryDto } from '../common/pagination';
 
-- **Kiểm duyệt**: tin nhắn mới nhất được `OPENROUTER_MODERATION_MODEL` phân loại theo chính sách
-  trong `nutrition-chat.moderation.ts` (`allow`, `self_harm`, `injection`, `harmful`). Không phải
-  `allow` thì trả câu từ chối cố định, không gọi agent. Kiểm duyệt lỗi hoặc quá 4 giây (thử lại
-  một lần) thì trả `503`, tin nhắn không được xử lý.
-- **Prompt**: nội dung trong thẻ `<document>` của kết quả tra cứu chỉ là dữ liệu; tin nhắn nhiều yêu
-  cầu chỉ trả lời phần dinh dưỡng; không viết code, không đóng vai, không lộ hướng dẫn, trích
-  nguyên văn tối đa một câu.
-- **Lọc câu trả lời** (`reply-filter.ts`, chạy khi stream): bỏ khối code, ảnh, link, URL và thẻ HTML.
-- **Frontend**: Streamdown không hiển thị ảnh, link chỉ còn chữ.
-- **Giới hạn**: mỗi người dùng 10 tin nhắn/phút (`429`).
-- **Kiểm thử hồi quy**: `npm run redteam` gửi các kiểu tấn công vào API đang chạy (cần
-  `REDTEAM_USERNAME`, `REDTEAM_PASSWORD`, tùy chọn `REDTEAM_API`) và báo đạt/không đạt.
+// Bên trong UsersController, giữ guard xác thực của endpoint.
+@Get()
+@ApiPaginatedResponse(UserResponseDto)
+findAll(@Query() query: PaginationQueryDto) {
+  return this.usersService.findAll(query);
+}
+```
 
-Thêm loại file mới: tạo class kế thừa `DocumentExtractor` khai báo `formats`, rồi thêm vào
-`extractors` trong `src/knowledge/knowledge.module.ts`.
+Phần truy vấn trong `UsersService.findAll`:
+
+```ts
+import { Prisma } from '@prisma/client';
+import { createPaginatedResponse, getPaginationArgs } from '../common/pagination';
+
+const [items, totalItems] = await this.prisma.$transaction(
+  [
+    this.prisma.user.findMany({
+      select: publicUserSelect,
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+      ...getPaginationArgs(query),
+    }),
+    this.prisma.user.count(),
+  ],
+  { isolationLevel: Prisma.TransactionIsolationLevel.RepeatableRead },
+);
+return createPaginatedResponse(items, totalItems, query);
+```
+
+Để thêm bộ lọc, tạo DTO kế thừa `PaginationQueryDto` hoặc `CursorPaginationQueryDto`
+và khai báo validator/Swagger cho từng trường. Với phân trang page, `findMany` và
+`count` phải dùng cùng điều kiện `where`; sắp xếp luôn có khóa duy nhất để phân định
+khi trùng giá trị (ví dụ `id`). Transaction `RepeatableRead` giúp số lượng và danh sách
+nhất quán trong một response.
+
+Với cursor, xem `PostsService.list`: lấy `limit + 1` item, sắp xếp ổn định,
+truyền `cursor: { id }` cùng `skip: 1` khi có cursor. Dùng
+`CursorPaginatedResponseDto<ItemDto>` và khai báo lại schema `items` trong DTO response
+cụ thể như `PostPageDto`.
+
+Không cần đăng ký module hoặc interceptor. Tích hợp DTO/helper trực tiếp ở từng GET
+danh sách; GET chi tiết giữ response hiện tại. `GET /users` đã chuyển từ mảng trực tiếp
+sang `{ items, meta }`, còn `GET /posts` giữ `{ items, nextCursor }`.
+
+Tài liệu tích hợp frontend: [docs/docs-for-FE/pagination.md](docs/docs-for-FE/pagination.md).
 
 ## Lệnh phát triển
 
@@ -273,6 +278,13 @@ docker compose exec api npm run prisma:seed:prod
 ```
 
 Seed có tính idempotent, vì vậy có thể chạy lại mà không tạo trùng user `vedora.admin`. Khai báo `SEED_USER_PASSWORD` trước khi seed; nếu không có biến này thì seed user sẽ được bỏ qua. Seed không đặt lại mật khẩu của user đã tồn tại, ngoại trừ user cũ được chuyển đổi từ schema trước auth và chưa có mật khẩu. Sau khi sửa nội dung seed, phải commit, deploy lại image rồi mới chạy lệnh production ở trên.
+
+Seed tạo tài khoản với vai trò `ADMIN`, hoặc cấp quyền đó cho tài khoản seed cũ
+có username `vedora.admin`, email `admin@vedora.local` và email đã xác minh.
+Khi tài khoản cũ còn là `USER`, `SEED_USER_PASSWORD` phải khớp mật khẩu hiện tại
+trước khi seed cấp `ADMIN`; chỉ trùng tên và email không đủ để được nâng quyền.
+Nếu email seed thuộc tài khoản khác hoặc chưa xác minh, seed dừng với lỗi thay vì
+cấp quyền admin. Migration không tự cấp quyền dựa trên username/email.
 
 ## Triển khai lên organization Dokploy
 
@@ -387,19 +399,6 @@ Tài liệu Dokploy tham khảo:
 | `MUX_TOKEN_ID` | Khi upload video | — | Mux access token ID; trống thì route media trả `503` |
 | `MUX_TOKEN_SECRET` | Khi upload video | — | Mux access token secret |
 | `MUX_WEBHOOK_SECRET` | Production | — | Signing secret của webhook Mux; trống thì tự hỏi Mux khi đọc |
-| `OPENROUTER_API_KEY` | Có | — | API key OpenRouter (chatbot, OCR, embedding, rerank); thiếu thì API không khởi động |
-| `OPENROUTER_MODEL` | Không | `openrouter/auto` | Model ID trên OpenRouter, vd. `google/gemini-2.5-flash` |
-| `OPENROUTER_REASONING_EFFORT` | Không | `low` | Mức suy nghĩ của model reasoning: `none`–`xhigh` |
-| `OPENROUTER_MODERATION_MODEL` | Không | `openai/gpt-oss-safeguard-20b` | Model kiểm duyệt tin nhắn chat theo chính sách riêng |
-| `BLOB_READ_WRITE_TOKEN` | Khi upload tài liệu | — | Token đọc/ghi của Vercel Blob store (private); trống thì `/knowledge` trả `503` |
-| `BLOB_CALLBACK_URL` | Khi upload tài liệu | — | `https://<api>/api/v1/webhooks/vercel-blob` (local: URL tunnel); trống thì `/knowledge` trả `503` |
-| `MAX_KNOWLEDGE_FILE_MB` | Không | `50` | Dung lượng tối đa mỗi file tài liệu |
-| `QDRANT_URL` | Có | — (Docker: `http://qdrant:6333`) | URL Qdrant; local: `docker compose up -d qdrant` rồi `http://localhost:6333`. Thiếu thì API không khởi động |
-| `QDRANT_API_KEY` | Khi Qdrant yêu cầu | — | API key Qdrant; service `qdrant` trong Compose cũng dùng giá trị này |
-| `QDRANT_COLLECTION` | Không | `vedora_knowledge` | Collection chứa chunk và ảnh |
-| `OPENROUTER_EMBEDDING_MODEL` | Không | `google/gemini-embedding-2` | Model embedding đa phương thức |
-| `KNOWLEDGE_EMBEDDING_DIMENSIONS` | Không | `1536` | Số chiều vector; đổi thì cần collection mới |
-| `OPENROUTER_RERANK_MODEL` | Không | `cohere/rerank-v3.5` | Model rerank; để trống thì bỏ rerank |
 | `FRONTEND_URL` | Không | `http://localhost:3000` | Origin được phép upload video lên Mux |
 | `MAX_VIDEO_DURATION_SEC` | Không | `180` | Video dài hơn bị đánh dấu `FAILED` và xoá khỏi Mux |
 | `SEED_USER_PASSWORD` | Khi muốn seed user | — | Mật khẩu ban đầu cho `vedora.admin` |
