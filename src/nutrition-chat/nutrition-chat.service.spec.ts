@@ -196,11 +196,11 @@ describe('NutritionChatService', () => {
     expect(replyText(chunks)).toContain('dinh dưỡng và chế độ ăn');
   });
 
-  it('retries moderation once before giving up', async () => {
+  it('retries moderation with backoff before giving up', async () => {
     verdict = 'not-a-verdict';
     const chunks = ask('Đậu phụ có bao nhiêu canxi?');
     await expect(chunks).rejects.toThrow(ServiceUnavailableException);
-    expect(moderator.doGenerateCalls).toHaveLength(2);
+    expect(moderator.doGenerateCalls).toHaveLength(3);
   });
 
   it('answers 503 without the agent when moderation fails', async () => {

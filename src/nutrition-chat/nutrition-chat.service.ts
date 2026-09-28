@@ -1,3 +1,4 @@
+import { setTimeout as sleep } from 'node:timers/promises';
 import {
   Injectable,
   Logger,
@@ -20,11 +21,14 @@ import { replyFilter } from './reply-filter';
 
 const SEARCH_TIMEOUT_MS = 5000;
 const MODERATION_TIMEOUT_MS = 4000;
-const MODERATION_ATTEMPTS = 2;
+const MODERATION_ATTEMPTS = 3;
+const MODERATION_RETRY_DELAY_MS = 400;
 
 const REFUSALS: Record<Exclude<ModerationVerdict, 'allow'>, string> = {
   off_topic:
     'Mình chỉ trả lời các câu hỏi về dinh dưỡng và chế độ ăn từ thực vật thôi. Bạn muốn hỏi gì về chủ đề này không?',
+  unsupported_language:
+    'Mình chỉ hiểu tiếng Việt và tiếng Anh thôi. Bạn hỏi lại bằng một trong hai ngôn ngữ này nhé. (I can only reply in Vietnamese or English.)',
   self_harm:
     'Mình rất lo khi nghe bạn nói vậy. Nhịn ăn kéo dài hay ép cân quá mức có thể nguy hiểm đến tính mạng. Bạn hãy nói chuyện với bác sĩ hoặc người thân bạn tin tưởng nhé; nếu đang gặp nguy hiểm, gọi ngay 115.',
   injection:
@@ -103,7 +107,7 @@ export class NutritionChatService {
     });
   }
 
-  // one immediate retry: the only provider sometimes answers 429, and the
+  // our own short backoff: the only provider sometimes answers 429, and the
   // SDK's backoff would outlast the timeout
   private async moderate(
     text: string,
@@ -116,7 +120,18 @@ export class NutritionChatService {
         return await moderate(this.moderationModel, text, signal);
       } catch (error) {
         if (abortSignal.aborted) throw error;
-        if (attempt < MODERATION_ATTEMPTS && !timeout.aborted) continue;
+        if (attempt < MODERATION_ATTEMPTS && !timeout.aborted) {
+          const retry = await sleep(
+            MODERATION_RETRY_DELAY_MS * attempt,
+            undefined,
+            { signal },
+          ).then(
+            () => true,
+            () => false,
+          );
+          if (abortSignal.aborted) throw error;
+          if (retry) continue;
+        }
         this.logger.error(`Moderation failed: ${String(error)}`);
         throw new ServiceUnavailableException('Moderation is unavailable');
       }
