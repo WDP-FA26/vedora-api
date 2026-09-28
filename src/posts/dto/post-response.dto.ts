@@ -1,5 +1,6 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { PostStatus, PostType } from '@prisma/client';
+import { CursorPaginatedResponseDto } from '../../common/pagination';
 import { MediaResponseDto } from '../../media/dto/media-response.dto';
 
 export class PostAuthorDto {
@@ -43,10 +44,7 @@ export class PostResponseDto {
   media!: MediaResponseDto[];
 }
 
-export class PostPageDto {
+export class PostPageDto extends CursorPaginatedResponseDto<PostResponseDto> {
   @ApiProperty({ type: [PostResponseDto] })
-  items!: PostResponseDto[];
-
-  @ApiProperty({ nullable: true, type: String, format: 'uuid' })
-  nextCursor!: string | null;
+  declare items: PostResponseDto[];
 }

@@ -12,7 +12,12 @@ import {
   Req,
   UseGuards,
 } from '@nestjs/common';
-import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import {
+  ApiBearerAuth,
+  ApiOkResponse,
+  ApiOperation,
+  ApiTags,
+} from '@nestjs/swagger';
 import type { AuthenticatedRequest } from '../auth/auth.types';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CreatePostDto } from './dto/create-post.dto';
@@ -42,6 +47,7 @@ export class PostsController {
 
   @Get()
   @ApiOperation({ summary: 'List published posts, newest first' })
+  @ApiOkResponse({ type: PostPageDto })
   list(@Query() query: ListPostsQueryDto): Promise<PostPageDto> {
     return this.postsService.list(query);
   }

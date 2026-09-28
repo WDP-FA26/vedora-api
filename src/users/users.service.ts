@@ -5,6 +5,12 @@ import {
 } from '@nestjs/common';
 import { Prisma, User } from '@prisma/client';
 import { hashPassword } from '../auth/password';
+import {
+  createPaginatedResponse,
+  getPaginationArgs,
+  PaginatedResponseDto,
+  PaginationQueryDto,
+} from '../common/pagination';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
@@ -47,11 +53,22 @@ export class UsersService {
     });
   }
 
-  findAll(): Promise<PublicUser[]> {
-    return this.prisma.user.findMany({
-      select: publicUserSelect,
-      orderBy: { createdAt: 'desc' },
-    });
+  async findAll(
+    query: PaginationQueryDto,
+  ): Promise<PaginatedResponseDto<PublicUser>> {
+    // Count and rows use one snapshot so concurrent writes cannot disagree.
+    const [items, totalItems] = await this.prisma.$transaction(
+      [
+        this.prisma.user.findMany({
+          select: publicUserSelect,
+          orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+          ...getPaginationArgs(query),
+        }),
+        this.prisma.user.count(),
+      ],
+      { isolationLevel: Prisma.TransactionIsolationLevel.RepeatableRead },
+    );
+    return createPaginatedResponse(items, totalItems, query);
   }
 
   async findOne(id: string): Promise<PublicUser> {

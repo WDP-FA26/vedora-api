@@ -9,10 +9,17 @@ import {
   ParseUUIDPipe,
   Patch,
   Post,
+  Query,
   UseGuards,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { UserResponseDto } from '../auth/dto/auth-response.dto';
+import {
+  ApiPaginatedResponse,
+  PaginatedResponseDto,
+  PaginationQueryDto,
+} from '../common/pagination';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { PublicUser, UsersService } from './users.service';
@@ -31,9 +38,12 @@ export class UsersController {
   }
 
   @Get()
-  @ApiOperation({ summary: 'List users' })
-  findAll(): Promise<PublicUser[]> {
-    return this.usersService.findAll();
+  @ApiOperation({ summary: 'List users with page-based pagination' })
+  @ApiPaginatedResponse(UserResponseDto)
+  findAll(
+    @Query() query: PaginationQueryDto,
+  ): Promise<PaginatedResponseDto<PublicUser>> {
+    return this.usersService.findAll(query);
   }
 
   @Get(':id')
