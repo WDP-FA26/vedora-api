@@ -4,20 +4,14 @@ services:
       context: .
       dockerfile: Dockerfile
     restart: unless-stopped
+    # Dokploy writes the app's Environment tab to .env next to this file; the
+    # API gets all of it, and app.module.ts validates it and fills defaults.
+    env_file:
+      - .env
+    # Fixed for this image; these win over .env.
     environment:
       NODE_ENV: production
       PORT: 3000
-      API_PREFIX: ${API_PREFIX:-api/v1}
-      CORS_ORIGIN: ${CORS_ORIGIN:-*}
-      JWT_SECRET: ${JWT_SECRET}
-      JWT_ACCESS_TTL: ${JWT_ACCESS_TTL:-3600}
-      REFRESH_TOKEN_TTL: ${REFRESH_TOKEN_TTL:-2592000}
-      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
-      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
-      GOOGLE_CALLBACK_URL: ${GOOGLE_CALLBACK_URL}
-      RESEND_API_KEY: ${RESEND_API_KEY}
-      MAIL_FROM: ${MAIL_FROM:-Vedora <onboarding@resend.dev>}
-      DATABASE_URL: ${DATABASE_URL}
     expose:
       - "3000"
     depends_on:
