@@ -1,7 +1,7 @@
 import { KnowledgeDocumentFailureReason } from '@prisma/client';
 import { type DeepMockProxy, mockDeep } from 'vitest-mock-extended';
 import { KnowledgeModelsService } from '../retrieval/knowledge-models.service';
-import { DocumentExtractionError } from './document-extractor';
+import { IngestionError } from '../ingestion';
 import { PdfExtractor } from './pdf-extractor';
 
 type Page = { text?: string; image?: boolean };
@@ -54,7 +54,7 @@ describe('PdfExtractor', () => {
     try {
       await extractor.extract(file);
     } catch (error) {
-      if (error instanceof DocumentExtractionError) return error.reason;
+      if (error instanceof IngestionError) return error.reason;
       throw error;
     }
     throw new Error('expected the extraction to fail');

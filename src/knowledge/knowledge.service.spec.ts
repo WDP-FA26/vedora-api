@@ -14,8 +14,8 @@ import { generateClientTokenFromReadWriteToken } from '@vercel/blob/client';
 import { type DeepMockProxy, mockDeep } from 'vitest-mock-extended';
 import { BlobService } from '../blob/blob.service';
 import { PrismaService } from '../prisma/prisma.service';
-import { DocumentExtractionError } from './extractors/document-extractor';
 import { PdfExtractor } from './extractors/pdf-extractor';
+import { IngestionError } from './ingestion';
 import { KnowledgeService } from './knowledge.service';
 import { KnowledgeIndexService } from './retrieval/knowledge-index.service';
 
@@ -111,7 +111,7 @@ describe('KnowledgeService', () => {
           pathname: result.pathname,
           allowedContentTypes: ['application/pdf'],
           maximumSizeInBytes: 50 * 1024 * 1024,
-          onUploadCompleted: { callbackUrl, tokenPayload: result.document.id },
+          onUploadCompleted: { callbackUrl },
         }),
       );
       expect(result.clientToken).toBe('client-token');
@@ -241,7 +241,7 @@ describe('KnowledgeService', () => {
 
     it('fails the document with the extraction reason', async () => {
       extractor.extract.mockRejectedValue(
-        new DocumentExtractionError(
+        new IngestionError(
           KnowledgeDocumentFailureReason.NO_TEXT,
           'No page has a text layer',
         ),

@@ -1,28 +1,21 @@
 import { randomUUID } from 'node:crypto';
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import type { KnowledgeDocument } from '@prisma/client';
 import { chunkdown } from 'chunkdown';
 import { QdrantService } from '../../qdrant/qdrant.service';
-import type { ExtractedSection } from '../extractors/document-extractor';
+import type { ExtractedSection } from '../ingestion';
 import {
   BM25_FOLDED_VECTOR,
   BM25_VECTOR,
-  bm25,
   DENSE_VECTOR,
   type KnowledgePointPayload,
+  sparseVectors,
 } from './knowledge-collection';
-import {
-  documentText,
-  KnowledgeModelsService,
-} from './knowledge-models.service';
+import { KnowledgeModelsService } from './knowledge-models.service';
 
 const CHUNK_CHARS = 1000;
 const UPSERT_BATCH = 64;
-
-interface IndexedDocument {
-  id: string;
-  title: string;
-}
 
 @Injectable()
 export class KnowledgeIndexService {
@@ -31,7 +24,7 @@ export class KnowledgeIndexService {
     chunkSize: CHUNK_CHARS,
     maxOverflowRatio: 1.5,
   });
-  readonly collection: string;
+  private readonly collection: string;
   private collectionReady: Promise<void> | null = null;
 
   constructor(
@@ -39,14 +32,11 @@ export class KnowledgeIndexService {
     private readonly models: KnowledgeModelsService,
     configService: ConfigService,
   ) {
-    this.collection = configService.get<string>(
-      'QDRANT_COLLECTION',
-      'vedora_knowledge',
-    );
+    this.collection = configService.getOrThrow<string>('QDRANT_COLLECTION');
   }
 
   async index(
-    document: IndexedDocument,
+    document: Pick<KnowledgeDocument, 'id' | 'title'>,
     sections: ExtractedSection[],
   ): Promise<number> {
     await this.ensureCollection();
@@ -61,27 +51,37 @@ export class KnowledgeIndexService {
     );
 
     const [chunkVectors, imageVectors] = await Promise.all([
-      this.models.embed(
-        chunks.map(({ text }) => documentText(document.title, text)),
+      this.models.embedDocuments(
+        document.title,
+        chunks.map(({ text }) => text),
       ),
-      this.models.embed(images.map(({ jpeg }) => ({ image: jpeg }))),
+      this.models.embedImages(images.map(({ jpeg }) => jpeg)),
     ]);
+    const { id: documentId, title } = document;
 
     const points = [
       ...chunks.map(({ page, text }, index) => ({
         id: randomUUID(),
-        vector: {
-          [DENSE_VECTOR]: chunkVectors[index],
-          [BM25_VECTOR]: bm25(text, false),
-          [BM25_FOLDED_VECTOR]: bm25(text, true),
-        },
-        payload: payload(document, page, 'text', text),
+        vector: { [DENSE_VECTOR]: chunkVectors[index], ...sparseVectors(text) },
+        payload: {
+          documentId,
+          title,
+          page,
+          kind: 'text',
+          text,
+        } satisfies KnowledgePointPayload,
       })),
       // an image carries its page text for the chatbot; keyword search skips it
       ...images.map(({ page, text }, index) => ({
         id: randomUUID(),
         vector: { [DENSE_VECTOR]: imageVectors[index] },
-        payload: payload(document, page, 'image', text),
+        payload: {
+          documentId,
+          title,
+          page,
+          kind: 'image',
+          text,
+        } satisfies KnowledgePointPayload,
       })),
     ];
 
@@ -103,12 +103,14 @@ export class KnowledgeIndexService {
     });
   }
 
-  private ensureCollection(): Promise<void> {
-    this.collectionReady ??= this.createCollection().catch((error: unknown) => {
+  private async ensureCollection(): Promise<void> {
+    this.collectionReady ??= this.createCollection();
+    try {
+      await this.collectionReady;
+    } catch (error) {
       this.collectionReady = null;
       throw error;
-    });
-    return this.collectionReady;
+    }
   }
 
   private async createCollection(): Promise<void> {
@@ -140,13 +142,4 @@ export class KnowledgeIndexService {
     });
     this.logger.log(`Created Qdrant collection ${this.collection}`);
   }
-}
-
-function payload(
-  document: IndexedDocument,
-  page: number,
-  kind: KnowledgePointPayload['kind'],
-  text: string,
-): KnowledgePointPayload {
-  return { documentId: document.id, title: document.title, page, kind, text };
 }

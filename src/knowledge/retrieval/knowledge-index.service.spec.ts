@@ -15,8 +15,11 @@ describe('KnowledgeIndexService', () => {
     client = mockDeep<QdrantService>();
     models = mockDeep<KnowledgeModelsService>();
     Object.defineProperty(models, 'dimensions', { value: 4 });
-    models.embed.mockImplementation((inputs) =>
-      Promise.resolve(inputs.map(() => [0.1, 0.2, 0.3, 0.4])),
+    models.embedDocuments.mockImplementation((_title, texts) =>
+      Promise.resolve(texts.map(() => [0.1, 0.2, 0.3, 0.4])),
+    );
+    models.embedImages.mockImplementation((jpegs) =>
+      Promise.resolve(jpegs.map(() => [0.1, 0.2, 0.3, 0.4])),
     );
     client.collectionExists.mockResolvedValue({ exists: false });
     service = new KnowledgeIndexService(
@@ -67,10 +70,10 @@ describe('KnowledgeIndexService', () => {
     ]);
 
     expect(imageCount).toBe(1);
-    expect(models.embed).toHaveBeenCalledWith([
-      'title: dinh-duong.pdf | text: # Canxi\n\nĐậu phụ giàu canxi.',
+    expect(models.embedDocuments).toHaveBeenCalledWith('dinh-duong.pdf', [
+      '# Canxi\n\nĐậu phụ giàu canxi.',
     ]);
-    expect(models.embed).toHaveBeenCalledWith([{ image }]);
+    expect(models.embedImages).toHaveBeenCalledWith([image]);
     expect(client.delete.mock.invocationCallOrder[0]).toBeLessThan(
       client.upsert.mock.invocationCallOrder[0],
     );
@@ -101,8 +104,8 @@ describe('KnowledgeIndexService', () => {
       { text: `# Canxi\n\n${paragraph}\n\n${paragraph}`, images: [] },
     ]);
 
-    const [texts] = models.embed.mock.calls[0] as [string[]];
+    const [, texts] = models.embedDocuments.mock.calls[0];
     expect(texts.length).toBeGreaterThan(1);
-    expect(texts.at(-1)).toMatch(/^title: dinh-duong\.pdf \| text: Canxi\n/);
+    expect(texts.at(-1)).toMatch(/^Canxi\n/);
   });
 });

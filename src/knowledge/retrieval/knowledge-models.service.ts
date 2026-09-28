@@ -1,8 +1,11 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { z } from 'zod';
+import { PDF_CONTENT_TYPE } from '../ingestion';
 
-type EmbeddingInput = string | { image: Uint8Array };
+type EmbeddingContent =
+  | { type: 'text'; text: string }
+  | { type: 'image_url'; image_url: { url: string } };
 
 export interface RerankResult {
   index: number;
@@ -73,36 +76,40 @@ export class KnowledgeModelsService {
 
   constructor(configService: ConfigService) {
     this.apiKey = configService.getOrThrow<string>('OPENROUTER_API_KEY');
-    this.embeddingModel = configService.get<string>(
+    this.embeddingModel = configService.getOrThrow<string>(
       'OPENROUTER_EMBEDDING_MODEL',
-      'google/gemini-embedding-2',
     );
-    this.rerankModel = configService.get<string>('OPENROUTER_RERANK_MODEL', '');
-    this.dimensions = configService.get<number>(
+    this.rerankModel = configService.getOrThrow<string>(
+      'OPENROUTER_RERANK_MODEL',
+    );
+    this.dimensions = configService.getOrThrow<number>(
       'KNOWLEDGE_EMBEDDING_DIMENSIONS',
-      1536,
     );
   }
 
-  async embed(inputs: EmbeddingInput[]): Promise<number[][]> {
-    const size = inputs.some((input) => typeof input !== 'string')
-      ? IMAGE_BATCH
-      : TEXT_BATCH;
-    const vectors: number[][] = [];
-    for (let start = 0; start < inputs.length; start += size) {
-      vectors.push(
-        ...(await this.embedBatch(
-          inputs.slice(start, start + size),
-          AbortSignal.timeout(EMBED_TIMEOUT_MS),
-        )),
-      );
-    }
-    return vectors;
+  embedDocuments(title: string, texts: string[]): Promise<number[][]> {
+    return this.embedBatches(
+      texts.map((text) => ({
+        type: 'text',
+        text: `title: ${title} | text: ${text}`,
+      })),
+      TEXT_BATCH,
+    );
+  }
+
+  embedImages(jpegs: Uint8Array[]): Promise<number[][]> {
+    return this.embedBatches(
+      jpegs.map((jpeg) => ({
+        type: 'image_url',
+        image_url: { url: dataUrl('image/jpeg', jpeg) },
+      })),
+      IMAGE_BATCH,
+    );
   }
 
   async embedQuery(query: string, signal?: AbortSignal): Promise<number[]> {
     const [vector] = await this.embedBatch(
-      [`task: question answering | query: ${query}`],
+      [{ type: 'text', text: `task: question answering | query: ${query}` }],
       signal ?? AbortSignal.timeout(EMBED_TIMEOUT_MS),
     );
     return vector;
@@ -142,7 +149,7 @@ export class KnowledgeModelsService {
                 type: 'file',
                 file: {
                   filename: 'document.pdf',
-                  file_data: `data:application/pdf;base64,${Buffer.from(pdf).toString('base64')}`,
+                  file_data: dataUrl(PDF_CONTENT_TYPE, pdf),
                 },
               },
             ],
@@ -168,8 +175,24 @@ export class KnowledgeModelsService {
       .map((text) => text.replace(/!\[[^\]]*\]\([^)]*\)/g, '').trim());
   }
 
+  private async embedBatches(
+    contents: EmbeddingContent[],
+    size: number,
+  ): Promise<number[][]> {
+    const vectors: number[][] = [];
+    for (let start = 0; start < contents.length; start += size) {
+      vectors.push(
+        ...(await this.embedBatch(
+          contents.slice(start, start + size),
+          AbortSignal.timeout(EMBED_TIMEOUT_MS),
+        )),
+      );
+    }
+    return vectors;
+  }
+
   private async embedBatch(
-    inputs: EmbeddingInput[],
+    contents: EmbeddingContent[],
     signal: AbortSignal,
   ): Promise<number[][]> {
     const { data } = await this.post(
@@ -178,18 +201,7 @@ export class KnowledgeModelsService {
         model: this.embeddingModel,
         dimensions: this.dimensions,
         encoding_format: 'float',
-        input: inputs.map((input) => ({
-          content: [
-            typeof input === 'string'
-              ? { type: 'text', text: input }
-              : {
-                  type: 'image_url',
-                  image_url: {
-                    url: `data:image/jpeg;base64,${Buffer.from(input.image).toString('base64')}`,
-                  },
-                },
-          ],
-        })),
+        input: contents.map((content) => ({ content: [content] })),
       },
       embeddingsResponse,
       signal,
@@ -234,6 +246,6 @@ export class KnowledgeModelsService {
   }
 }
 
-export function documentText(title: string, text: string): string {
-  return `title: ${title} | text: ${text}`;
+function dataUrl(contentType: string, bytes: Uint8Array): string {
+  return `data:${contentType};base64,${Buffer.from(bytes).toString('base64')}`;
 }

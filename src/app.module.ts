@@ -78,10 +78,10 @@ import { UsersModule } from './users/users.module';
           .integer()
           .positive()
           .default(1536),
-        // Empty: no reranking.
         OPENROUTER_MODERATION_MODEL: Joi.string().default(
           'openai/gpt-oss-safeguard-20b',
         ),
+        // Empty: no reranking.
         OPENROUTER_RERANK_MODEL: Joi.string()
           .allow('')
           .default('cohere/rerank-v3.5'),

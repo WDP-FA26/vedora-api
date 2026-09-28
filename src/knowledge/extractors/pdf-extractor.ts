@@ -1,17 +1,13 @@
 import { createHash } from 'node:crypto';
 import { Injectable, Logger } from '@nestjs/common';
 import { KnowledgeDocumentFailureReason } from '@prisma/client';
-import { KnowledgeModelsService } from '../retrieval/knowledge-models.service';
+import type * as MuPdf from 'mupdf' with { 'resolution-mode': 'import' };
 import {
-  DocumentExtractionError,
   type ExtractedSection,
-} from './document-extractor';
-
-type MuPdf = typeof import('mupdf');
-type MuPdfDocument = InstanceType<MuPdf['Document']>;
-type MuPdfImage = InstanceType<MuPdf['Image']>;
-
-export const PDF_CONTENT_TYPE = 'application/pdf';
+  IngestionError,
+  PDF_CONTENT_TYPE,
+} from '../ingestion';
+import { KnowledgeModelsService } from '../retrieval/knowledge-models.service';
 
 const MIN_IMAGE_PX = 100;
 const MIN_IMAGE_PT = 48;
@@ -33,16 +29,16 @@ export class PdfExtractor {
 
   constructor(private readonly models: KnowledgeModelsService) {}
 
-  /** Throws `DocumentExtractionError` for files that can't be ingested. */
+  /** Throws `IngestionError` for files that can't be ingested. */
   async extract(file: Uint8Array): Promise<ExtractedSection[]> {
     // ESM-only with top-level await; module: nodenext keeps this a real import()
     const mupdf = await import('mupdf');
 
-    let document: MuPdfDocument;
+    let document: MuPdf.Document;
     try {
       document = mupdf.Document.openDocument(file, PDF_CONTENT_TYPE);
     } catch (error) {
-      throw new DocumentExtractionError(
+      throw new IngestionError(
         KnowledgeDocumentFailureReason.INVALID_FILE,
         `MuPDF could not open the file: ${String(error)}`,
       );
@@ -51,13 +47,13 @@ export class PdfExtractor {
     try {
       const pdf = document.asPDF();
       if (!pdf) {
-        throw new DocumentExtractionError(
+        throw new IngestionError(
           KnowledgeDocumentFailureReason.INVALID_FILE,
           'Not a PDF',
         );
       }
       if (document.needsPassword()) {
-        throw new DocumentExtractionError(
+        throw new IngestionError(
           KnowledgeDocumentFailureReason.ENCRYPTED,
           'The file is password-protected',
         );
@@ -87,7 +83,7 @@ export class PdfExtractor {
         return { text: `${text}\n\n${layerText}`.trim(), images };
       });
       if (sections.every(({ text, images }) => !text && !images.length)) {
-        throw new DocumentExtractionError(
+        throw new IngestionError(
           KnowledgeDocumentFailureReason.NO_TEXT,
           'No page has text or images',
         );
@@ -99,10 +95,11 @@ export class PdfExtractor {
   }
 }
 
-function readPages(mupdf: MuPdf, document: MuPdfDocument) {
+function readPages(mupdf: typeof MuPdf, document: MuPdf.Document) {
   const seen = new Set<string>();
   const pages: { images: Uint8Array[]; layerText: string }[] = [];
-  for (let index = 0; index < document.countPages(); index++) {
+  const count = document.countPages();
+  for (let index = 0; index < count; index++) {
     const page = document.loadPage(index);
     const text = page.toStructuredText('preserve-images');
     const images: Uint8Array[] = [];
@@ -157,7 +154,7 @@ function words(text: string): string[] {
   );
 }
 
-function imageToJpeg(mupdf: MuPdf, image: MuPdfImage): Uint8Array {
+function imageToJpeg(mupdf: typeof MuPdf, image: MuPdf.Image): Uint8Array {
   const scale = Math.min(
     1,
     MAX_IMAGE_PX / Math.max(image.getWidth(), image.getHeight()),
@@ -181,7 +178,7 @@ function imageToJpeg(mupdf: MuPdf, image: MuPdfImage): Uint8Array {
   }
 }
 
-function blankImages(pdf: InstanceType<MuPdf['PDFDocument']>): void {
+function blankImages(pdf: MuPdf.PDFDocument): void {
   for (let number = 1; number < pdf.countObjects(); number++) {
     const object = pdf.newIndirect(number);
     if (!object.isStream() || object.get('Subtype').toString() !== '/Image') {

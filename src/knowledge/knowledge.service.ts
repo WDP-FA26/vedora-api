@@ -1,7 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { IncomingMessage } from 'node:http';
 import {
-  BadRequestException,
   Injectable,
   Logger,
   NotFoundException,
@@ -14,23 +13,15 @@ import {
   KnowledgeDocumentFailureReason,
   KnowledgeDocumentStatus,
 } from '@prisma/client';
-import { BlobNotFoundError, del, get } from '@vercel/blob';
-import {
-  generateClientTokenFromReadWriteToken,
-  handleUpload,
-  type HandleUploadBody,
-} from '@vercel/blob/client';
+import type { HandleUploadBody } from '@vercel/blob/client';
 import { BlobService } from '../blob/blob.service';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   CreateKnowledgeUploadResponseDto,
   KnowledgeDocumentResponseDto,
 } from './dto/knowledge-document-response.dto';
-import {
-  DocumentExtractionError,
-  type ExtractedSection,
-} from './extractors/document-extractor';
-import { PDF_CONTENT_TYPE, PdfExtractor } from './extractors/pdf-extractor';
+import { PdfExtractor } from './extractors/pdf-extractor';
+import { IngestionError, PDF_CONTENT_TYPE } from './ingestion';
 import { KnowledgeIndexService } from './retrieval/knowledge-index.service';
 
 /** Client tokens stop accepting the upload after this long. */
@@ -43,9 +34,9 @@ export const UPLOAD_TOKEN_TTL_MS = 60 * 60 * 1000;
  * Blob's signed upload-completed callback (`handleCallback`) starts
  * ingestion; the browser is never trusted to say an upload finished.
  * `markUploaded` moves the row to PROCESSING exactly once (Vercel retries
- * callbacks), and `ingest` extracts the PDF and indexes the result
- * into Qdrant. The maintenance cron fails documents that
- * never complete.
+ * callbacks), and `ingest` extracts the PDF and indexes the result into
+ * Qdrant; every failure is an `IngestionError` whose reason lands on the
+ * row. The maintenance cron fails documents that never complete.
  */
 @Injectable()
 export class KnowledgeService {
@@ -60,7 +51,7 @@ export class KnowledgeService {
     configService: ConfigService,
   ) {
     this.maxBytes =
-      configService.get<number>('MAX_KNOWLEDGE_FILE_MB', 50) * 1024 * 1024;
+      configService.getOrThrow<number>('MAX_KNOWLEDGE_FILE_MB') * 1024 * 1024;
   }
 
   async createUpload(
@@ -68,8 +59,6 @@ export class KnowledgeService {
     filename: string,
     sizeBytes: number,
   ): Promise<CreateKnowledgeUploadResponseDto> {
-    const token = this.blob.require();
-    const callbackUrl = this.blob.requireCallbackUrl();
     if (sizeBytes > this.maxBytes) {
       throw new PayloadTooLargeException(
         `Files are limited to ${this.maxBytes / 1024 / 1024} MB`,
@@ -81,13 +70,11 @@ export class KnowledgeService {
     const id = randomUUID();
     const pathname = `knowledge/${id}.pdf`;
 
-    const clientToken = await generateClientTokenFromReadWriteToken({
-      token,
+    const clientToken = await this.blob.createClientToken({
       pathname,
-      allowedContentTypes: [PDF_CONTENT_TYPE],
-      maximumSizeInBytes: this.maxBytes,
+      contentType: PDF_CONTENT_TYPE,
+      maxBytes: this.maxBytes,
       validUntil: Date.now() + UPLOAD_TOKEN_TTL_MS,
-      onUploadCompleted: { callbackUrl, tokenPayload: id },
     });
     const document = await this.prisma.knowledgeDocument.create({
       data: {
@@ -102,29 +89,13 @@ export class KnowledgeService {
     return { document: toResponse(document), pathname, clientToken };
   }
 
-  /**
-   * Verifies Vercel Blob's upload-completed callback. Token requests are
-   * refused here: tokens only come from the authenticated `createUpload`.
-   */
-  async handleCallback(
+  handleCallback(
     body: HandleUploadBody,
     request: IncomingMessage,
   ): Promise<void> {
-    if (body?.type !== 'blob.upload-completed') {
-      throw new BadRequestException('Expected an upload-completed callback');
-    }
-    await handleUpload({
-      token: this.blob.require(),
-      body,
-      request,
-      onBeforeGenerateToken: () =>
-        Promise.reject(
-          new Error('Tokens are issued by POST /knowledge/documents'),
-        ),
-      onUploadCompleted: async ({ blob }) => {
-        await this.markUploaded(blob.pathname);
-      },
-    });
+    return this.blob.handleCallback(body, request, (pathname) =>
+      this.markUploaded(pathname),
+    );
   }
 
   /**
@@ -144,63 +115,53 @@ export class KnowledgeService {
   }
 
   async ingest(document: KnowledgeDocument): Promise<void> {
-    let file: Uint8Array;
-    let sections: ExtractedSection[];
     try {
-      file = await this.download(document.blobPathname);
-      sections = await this.pdf.extract(file);
-    } catch (error) {
-      await this.failExtraction(document.id, error);
-      return;
-    }
-
-    let imageCount: number;
-    try {
-      imageCount = await this.index.index(document, sections);
-    } catch (error) {
-      await this.fail(
-        document.id,
-        KnowledgeDocumentFailureReason.INDEXING_FAILED,
+      const { sections, sizeBytes } = await failingWith(
+        KnowledgeDocumentFailureReason.EXTRACTION_FAILED,
+        this.extract(document.blobPathname),
       );
-      this.logger.error(`Indexing ${document.id} failed: ${String(error)}`);
-      return;
+      const imageCount = await failingWith(
+        KnowledgeDocumentFailureReason.INDEXING_FAILED,
+        this.index.index(document, sections),
+      );
+      await this.prisma.knowledgeDocument.update({
+        where: { id: document.id },
+        data: {
+          status: KnowledgeDocumentStatus.READY,
+          failureReason: null,
+          sectionCount: sections.length,
+          imageCount,
+          sizeBytes,
+        },
+      });
+      this.logger.log(
+        `Ingested ${document.id} (${sections.length} sections, ${imageCount} images)`,
+      );
+    } catch (error) {
+      if (!(error instanceof IngestionError)) throw error;
+      await this.prisma.knowledgeDocument.update({
+        where: { id: document.id },
+        data: {
+          status: KnowledgeDocumentStatus.FAILED,
+          failureReason: error.reason,
+        },
+      });
+      this.logger.warn(`Rejected ${document.id}: ${error.message}`);
     }
-
-    await this.prisma.knowledgeDocument.update({
-      where: { id: document.id },
-      data: {
-        status: KnowledgeDocumentStatus.READY,
-        failureReason: null,
-        sectionCount: sections.length,
-        imageCount,
-        sizeBytes: file.byteLength,
-      },
-    });
-    this.logger.log(
-      `Ingested ${document.id} (${sections.length} sections, ${imageCount} images)`,
-    );
   }
 
-  private async failExtraction(id: string, error: unknown): Promise<void> {
-    if (error instanceof DocumentExtractionError) {
-      await this.fail(id, error.reason);
-      this.logger.warn(`Rejected ${id}: ${error.message}`);
-    } else if (error instanceof BlobNotFoundError) {
-      await this.fail(id, KnowledgeDocumentFailureReason.UPLOAD_EXPIRED);
-    } else {
-      await this.fail(id, KnowledgeDocumentFailureReason.EXTRACTION_FAILED);
-      this.logger.error(`Extracting ${id} failed: ${String(error)}`);
+  private async extract(pathname: string) {
+    const file = await this.blob.download(pathname);
+    if (!file) {
+      throw new IngestionError(
+        KnowledgeDocumentFailureReason.UPLOAD_EXPIRED,
+        'The upload is gone',
+      );
     }
-  }
-
-  async fail(
-    id: string,
-    reason: KnowledgeDocumentFailureReason,
-  ): Promise<void> {
-    await this.prisma.knowledgeDocument.update({
-      where: { id },
-      data: { status: KnowledgeDocumentStatus.FAILED, failureReason: reason },
-    });
+    return {
+      sections: await this.pdf.extract(file),
+      sizeBytes: file.byteLength,
+    };
   }
 
   async findAll(): Promise<KnowledgeDocumentResponseDto[]> {
@@ -217,20 +178,11 @@ export class KnowledgeService {
   /** Deletes the row last, so a failure leaves it to retry from. */
   async remove(id: string): Promise<void> {
     const document = await this.findDocument(id);
-    await del(document.blobPathname, { token: this.blob.require() });
-    await this.index.remove(id);
+    await Promise.all([
+      this.blob.delete(document.blobPathname),
+      this.index.remove(id),
+    ]);
     await this.prisma.knowledgeDocument.delete({ where: { id } });
-  }
-
-  private async download(pathname: string): Promise<Uint8Array> {
-    const result = await get(pathname, {
-      access: 'private',
-      token: this.blob.require(),
-    });
-    if (!result || result.statusCode !== 200) {
-      throw new BlobNotFoundError();
-    }
-    return new Uint8Array(await new Response(result.stream).arrayBuffer());
   }
 
   private async findDocument(id: string): Promise<KnowledgeDocument> {
@@ -239,6 +191,19 @@ export class KnowledgeService {
     });
     if (!document) throw new NotFoundException('Document not found');
     return document;
+  }
+}
+
+/** Tags a step's unexpected errors with the reason to store. */
+async function failingWith<T>(
+  reason: KnowledgeDocumentFailureReason,
+  step: Promise<T>,
+): Promise<T> {
+  try {
+    return await step;
+  } catch (error) {
+    if (error instanceof IngestionError) throw error;
+    throw new IngestionError(reason, String(error));
   }
 }
 

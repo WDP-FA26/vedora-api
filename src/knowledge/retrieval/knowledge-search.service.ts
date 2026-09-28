@@ -1,14 +1,12 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { QdrantService } from '../../qdrant/qdrant.service';
 import {
-  BM25_FOLDED_VECTOR,
-  BM25_VECTOR,
-  bm25,
   DENSE_VECTOR,
   knowledgePointPayload,
   type KnowledgePointPayload,
+  sparseVectors,
 } from './knowledge-collection';
-import { KnowledgeIndexService } from './knowledge-index.service';
 import {
   KnowledgeModelsService,
   type RerankResult,
@@ -30,28 +28,26 @@ export type KnowledgeHit = Pick<
 @Injectable()
 export class KnowledgeSearchService {
   private readonly logger = new Logger(KnowledgeSearchService.name);
+  private readonly collection: string;
 
   constructor(
     private readonly qdrant: QdrantService,
     private readonly models: KnowledgeModelsService,
-    private readonly index: KnowledgeIndexService,
-  ) {}
+    configService: ConfigService,
+  ) {
+    this.collection = configService.getOrThrow<string>('QDRANT_COLLECTION');
+  }
 
   async search(query: string, signal?: AbortSignal): Promise<KnowledgeHit[]> {
     const dense = await this.models.embedQuery(query, signal);
-    const { points } = await this.qdrant.query(this.index.collection, {
+    const { points } = await this.qdrant.query(this.collection, {
       prefetch: [
         { query: dense, using: DENSE_VECTOR, limit: PREFETCH_LIMIT },
-        {
-          query: bm25(query, false),
-          using: BM25_VECTOR,
+        ...Object.entries(sparseVectors(query)).map(([using, bm25]) => ({
+          query: bm25,
+          using,
           limit: PREFETCH_LIMIT,
-        },
-        {
-          query: bm25(query, true),
-          using: BM25_FOLDED_VECTOR,
-          limit: PREFETCH_LIMIT,
-        },
+        })),
       ],
       query: { fusion: 'rrf' },
       limit: CANDIDATES,

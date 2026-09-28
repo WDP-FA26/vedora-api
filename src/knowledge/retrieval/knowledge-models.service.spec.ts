@@ -6,7 +6,13 @@ const fetchMock = vi.fn<typeof fetch>();
 
 function createService(config: Record<string, unknown> = {}) {
   return new KnowledgeModelsService(
-    new ConfigService({ OPENROUTER_API_KEY: 'key', ...config }),
+    new ConfigService({
+      OPENROUTER_API_KEY: 'key',
+      OPENROUTER_EMBEDDING_MODEL: 'google/gemini-embedding-2',
+      OPENROUTER_RERANK_MODEL: '',
+      KNOWLEDGE_EMBEDDING_DIMENSIONS: 1536,
+      ...config,
+    }),
   );
 }
 
@@ -22,7 +28,36 @@ describe('KnowledgeModelsService', () => {
   });
   afterEach(() => vi.unstubAllGlobals());
 
-  it('embeds text and images at the configured size, in input order', async () => {
+  it('embeds document text under its title at the configured size', async () => {
+    fetchMock.mockResolvedValue(
+      Response.json({
+        data: [{ object: 'embedding', index: 0, embedding: [1] }],
+      }),
+    );
+
+    const vectors = await createService({
+      KNOWLEDGE_EMBEDDING_DIMENSIONS: 768,
+    }).embedDocuments('dinh-duong.pdf', ['đậu phụ']);
+
+    expect(vectors).toEqual([[1]]);
+    expect(fetchMock.mock.calls[0][0]).toBe(
+      'https://openrouter.ai/api/v1/embeddings',
+    );
+    expect(requestBody()).toEqual({
+      model: 'google/gemini-embedding-2',
+      dimensions: 768,
+      encoding_format: 'float',
+      input: [
+        {
+          content: [
+            { type: 'text', text: 'title: dinh-duong.pdf | text: đậu phụ' },
+          ],
+        },
+      ],
+    });
+  });
+
+  it('embeds images as JPEG data URLs, in input order', async () => {
     fetchMock.mockResolvedValue(
       Response.json({
         data: [
@@ -32,25 +67,27 @@ describe('KnowledgeModelsService', () => {
       }),
     );
 
-    const vectors = await createService({
-      KNOWLEDGE_EMBEDDING_DIMENSIONS: 768,
-    }).embed(['đậu phụ', { image: new Uint8Array([0xff, 0xd8]) }]);
+    const vectors = await createService().embedImages([
+      new Uint8Array([0xff, 0xd8]),
+      new Uint8Array([0xff]),
+    ]);
 
     expect(vectors).toEqual([[1], [2]]);
-    expect(fetchMock.mock.calls[0][0]).toBe(
-      'https://openrouter.ai/api/v1/embeddings',
-    );
-    expect(requestBody()).toEqual({
-      model: 'google/gemini-embedding-2',
-      dimensions: 768,
-      encoding_format: 'float',
+    expect(requestBody()).toMatchObject({
       input: [
-        { content: [{ type: 'text', text: 'đậu phụ' }] },
         {
           content: [
             {
               type: 'image_url',
               image_url: { url: 'data:image/jpeg;base64,/9g=' },
+            },
+          ],
+        },
+        {
+          content: [
+            {
+              type: 'image_url',
+              image_url: { url: 'data:image/jpeg;base64,/w==' },
             },
           ],
         },

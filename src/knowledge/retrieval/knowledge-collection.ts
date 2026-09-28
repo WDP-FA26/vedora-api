@@ -4,15 +4,25 @@ export const DENSE_VECTOR = 'dense';
 export const BM25_VECTOR = 'bm25';
 export const BM25_FOLDED_VECTOR = 'bm25_folded';
 
-const bm25Base = { stemmer: { type: 'none' }, stopwords: { custom: [] } };
+const bm25Options = { stemmer: { type: 'none' }, stopwords: { custom: [] } };
 
-export function bm25(text: string, folded: boolean) {
+/** Exact and accent-folded BM25 of `text`, computed by Qdrant. */
+export function sparseVectors(text: string) {
   return {
-    text,
-    model: 'qdrant/bm25',
-    options: folded
-      ? { ...bm25Base, tokenizer: 'multilingual', ascii_folding: true }
-      : { ...bm25Base, tokenizer: 'word' },
+    [BM25_VECTOR]: {
+      text,
+      model: 'qdrant/bm25',
+      options: { ...bm25Options, tokenizer: 'word' },
+    },
+    [BM25_FOLDED_VECTOR]: {
+      text,
+      model: 'qdrant/bm25',
+      options: {
+        ...bm25Options,
+        tokenizer: 'multilingual',
+        ascii_folding: true,
+      },
+    },
   };
 }
 

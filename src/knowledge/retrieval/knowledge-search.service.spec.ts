@@ -1,6 +1,6 @@
+import { ConfigService } from '@nestjs/config';
 import { type DeepMockProxy, mockDeep } from 'vitest-mock-extended';
 import { QdrantService } from '../../qdrant/qdrant.service';
-import { KnowledgeIndexService } from './knowledge-index.service';
 import { KnowledgeModelsService } from './knowledge-models.service';
 import { KnowledgeSearchService } from './knowledge-search.service';
 
@@ -20,9 +20,11 @@ describe('KnowledgeSearchService', () => {
     client = mockDeep<QdrantService>();
     models = mockDeep<KnowledgeModelsService>();
     models.embedQuery.mockResolvedValue([0.1, 0.2]);
-    const index = mockDeep<KnowledgeIndexService>();
-    Object.defineProperty(index, 'collection', { value: 'test_knowledge' });
-    service = new KnowledgeSearchService(client, models, index);
+    service = new KnowledgeSearchService(
+      client,
+      models,
+      new ConfigService({ QDRANT_COLLECTION: 'test_knowledge' }),
+    );
     client.query.mockResolvedValue({
       points: [
         point('text', 1, 'Đậu phụ 350 mg canxi'),
