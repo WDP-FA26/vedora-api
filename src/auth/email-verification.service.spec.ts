@@ -48,8 +48,7 @@ describe('EmailVerificationService.send', () => {
   });
   afterEach(() => vi.useRealTimers());
 
-  const upserted = () =>
-    prisma.emailVerificationCode.upsert.mock.calls[0][0].update;
+  const upserted = () => prisma.emailVerificationCode.upsert.mock.calls[0][0].update;
 
   it('sends the first code and starts a resend window', async () => {
     prisma.emailVerificationCode.findUnique.mockResolvedValue(null);
@@ -63,9 +62,7 @@ describe('EmailVerificationService.send', () => {
   });
 
   it('waits 120 seconds between codes', async () => {
-    prisma.emailVerificationCode.findUnique.mockResolvedValue(
-      pendingCode({ sentAt: secondsAgo(119) }),
-    );
+    prisma.emailVerificationCode.findUnique.mockResolvedValue(pendingCode({ sentAt: secondsAgo(119) }));
 
     await expect(service.send(user)).resolves.toBe('cooldown');
     expect(mail.sendVerificationCode).not.toHaveBeenCalled();
@@ -82,9 +79,7 @@ describe('EmailVerificationService.send', () => {
   });
 
   it('stops after three resends within the hour', async () => {
-    prisma.emailVerificationCode.findUnique.mockResolvedValue(
-      pendingCode({ resendCount: 3 }),
-    );
+    prisma.emailVerificationCode.findUnique.mockResolvedValue(pendingCode({ resendCount: 3 }));
 
     await expect(service.send(user)).resolves.toBe('limit');
     expect(mail.sendVerificationCode).not.toHaveBeenCalled();
@@ -116,9 +111,7 @@ describe('EmailVerificationService.send', () => {
     mail.sendVerificationCode.mockRejectedValue(new Error('Resend is down'));
 
     await expect(service.send(user)).rejects.toThrow('Resend is down');
-    expect(prisma.emailVerificationCode.deleteMany).toHaveBeenCalledWith({
-      where: { userId: user.id },
-    });
+    expect(prisma.emailVerificationCode.deleteMany).toHaveBeenCalledWith({ where: { userId: user.id } });
   });
 });
 
@@ -159,12 +152,10 @@ describe('EmailVerificationService.verify', () => {
   it('counts every guess against the email, capped at 15 a day', async () => {
     await service.verify(user, '654321');
 
-    expect(prisma.emailVerificationGuesses.updateMany).toHaveBeenLastCalledWith(
-      {
-        where: { email: user.email, guesses: { lt: 15 } },
-        data: { guesses: { increment: 1 } },
-      },
-    );
+    expect(prisma.emailVerificationGuesses.updateMany).toHaveBeenLastCalledWith({
+      where: { email: user.email, guesses: { lt: 15 } },
+      data: { guesses: { increment: 1 } },
+    });
   });
 
   it('locks the email once its guesses are used up, even with a fresh code', async () => {

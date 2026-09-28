@@ -6,7 +6,7 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { Test } from '@nestjs/testing';
-import { User } from '@prisma/client';
+import { User, UserRole } from '@prisma/client';
 import { hash } from 'bcryptjs';
 import { type DeepMockProxy, mockDeep } from 'vitest-mock-extended';
 import { PublicUser, UsersService } from '../users/users.service';
@@ -21,6 +21,7 @@ describe('AuthService', () => {
     username: 'vedora.user',
     fullName: 'Vedora User',
     email: 'hello@vedora.vn',
+    role: UserRole.USER,
     createdAt: now,
     updatedAt: now,
   };
