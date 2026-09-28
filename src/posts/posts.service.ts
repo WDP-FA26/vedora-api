@@ -6,6 +6,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { MediaStatus, PostStatus, Prisma } from '@prisma/client';
+import { createCursorPaginatedResponse } from '../common/pagination';
 import { MediaService } from '../media/media.service';
 import { MuxService } from '../mux/mux.service';
 import { PrismaService } from '../prisma/prisma.service';
@@ -21,8 +22,6 @@ const postInclude = {
 type PostWithRelations = Prisma.PostGetPayload<{
   include: typeof postInclude;
 }>;
-
-const DEFAULT_PAGE_SIZE = 20;
 
 @Injectable()
 export class PostsService {
@@ -61,7 +60,7 @@ export class PostsService {
   }
 
   async list(query: ListPostsQueryDto): Promise<PostPageDto> {
-    const take = query.limit ?? DEFAULT_PAGE_SIZE;
+    const take = query.limit;
     const posts = await this.prisma.post.findMany({
       where: {
         status: PostStatus.PUBLISHED,
@@ -72,10 +71,10 @@ export class PostsService {
       ...(query.cursor ? { cursor: { id: query.cursor }, skip: 1 } : {}),
       include: postInclude,
     });
-    const page = posts.slice(0, take);
+    const page = createCursorPaginatedResponse(posts, take);
     return {
-      items: page.map((post) => this.toResponse(post)),
-      nextCursor: posts.length > take ? page[page.length - 1].id : null,
+      items: page.items.map((post) => this.toResponse(post)),
+      nextCursor: page.nextCursor,
     };
   }
 

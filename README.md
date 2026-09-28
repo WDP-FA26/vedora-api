@@ -22,6 +22,7 @@ Backend starter cho Vedora, sử dụng NestJS, Prisma ORM, PostgreSQL và Docke
 │   ├── schema.prisma
 │   └── seed.ts
 ├── src/
+│   ├── common/pagination/     # DTO, helper và Swagger cho phân trang dùng chung
 │   ├── health/                # Liveness/readiness
 │   ├── media/                 # Upload video lên Mux, webhook, dọn dẹp định kỳ
 │   ├── mux/                   # Mux client dùng chung
@@ -83,7 +84,7 @@ Không thêm `-v` nếu muốn giữ dữ liệu PostgreSQL. `docker compose dow
 | `GET` | `/api/v1` | Thông tin API |
 | `GET` | `/api/v1/health` | Liveness |
 | `GET` | `/api/v1/health/ready` | Readiness + PostgreSQL |
-| `POST` | `/api/v1/auth/register` | Đăng ký và nhận cặp AT/RT |
+| `POST` | `/api/v1/auth/register` | Đăng ký và gửi mã xác minh email; chưa trả token |
 | `POST` | `/api/v1/auth/login` | Đăng nhập bằng username/password và nhận cặp AT/RT |
 | `POST` | `/api/v1/auth/refresh` | Rotate refresh token và nhận cặp AT/RT mới |
 | `POST` | `/api/v1/auth/logout` | Thu hồi refresh-token family |
@@ -91,7 +92,7 @@ Không thêm `-v` nếu muốn giữ dữ liệu PostgreSQL. `docker compose dow
 | `POST` | `/api/v1/auth/google` | Đổi `code` + `codeVerifier` (PKCE) lấy cặp AT/RT |
 | `GET` | `/api/v1/auth/me` | Thông tin user hiện tại (Bearer token) |
 | `POST` | `/api/v1/users` | Tạo user (Bearer token) |
-| `GET` | `/api/v1/users` | Danh sách user (Bearer token) |
+| `GET` | `/api/v1/users` | Danh sách user phân trang `page`/`limit` (Bearer token) |
 | `GET` | `/api/v1/users/:id` | Chi tiết user (Bearer token) |
 | `PATCH` | `/api/v1/users/:id` | Cập nhật user (Bearer token) |
 | `DELETE` | `/api/v1/users/:id` | Xóa user (Bearer token) |
@@ -173,6 +174,69 @@ trỏ tới URL đó trong Mux dashboard và điền signing secret vào `MUX_WE
 chờ được đọc. Một cron 10 phút một lần cũng cập nhật media bị lỡ webhook, và cron hằng
 giờ xoá upload không được gắn vào bài nào sau 24 giờ.
 
+## Phân trang dùng chung
+
+Thành phần tại `src/common/pagination` hỗ trợ hai kiểu phân trang cho GET danh sách:
+
+- `PaginationQueryDto`: `page` mặc định 1, tối đa 1000000; `limit` mặc định 20, tối đa 50.
+- `CursorPaginationQueryDto`: `cursor` tùy chọn (UUID v4), cùng quy tắc `limit`.
+- `getPaginationArgs(query)`: chuyển page/limit đã validate thành `{ skip, take }` cho Prisma.
+- `createPaginatedResponse(items, totalItems, query)`: trả `{ items, meta }`.
+- `createCursorPaginatedResponse(rows, limit)`: nhận tối đa `limit + 1` bản ghi,
+  bỏ bản ghi dư và trả `{ items, nextCursor }`.
+- `@ApiPaginatedResponse(ItemDto)`: mô tả response page với schema item cụ thể trong Swagger.
+
+Ví dụ GET danh sách người dùng ở controller:
+
+```ts
+import { Get, Query } from '@nestjs/common';
+import { ApiPaginatedResponse, PaginationQueryDto } from '../common/pagination';
+
+// Bên trong UsersController, giữ guard xác thực của endpoint.
+@Get()
+@ApiPaginatedResponse(UserResponseDto)
+findAll(@Query() query: PaginationQueryDto) {
+  return this.usersService.findAll(query);
+}
+```
+
+Phần truy vấn trong `UsersService.findAll`:
+
+```ts
+import { Prisma } from '@prisma/client';
+import { createPaginatedResponse, getPaginationArgs } from '../common/pagination';
+
+const [items, totalItems] = await this.prisma.$transaction(
+  [
+    this.prisma.user.findMany({
+      select: publicUserSelect,
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+      ...getPaginationArgs(query),
+    }),
+    this.prisma.user.count(),
+  ],
+  { isolationLevel: Prisma.TransactionIsolationLevel.RepeatableRead },
+);
+return createPaginatedResponse(items, totalItems, query);
+```
+
+Để thêm bộ lọc, tạo DTO kế thừa `PaginationQueryDto` hoặc `CursorPaginationQueryDto`
+và khai báo validator/Swagger cho từng trường. Với phân trang page, `findMany` và
+`count` phải dùng cùng điều kiện `where`; sắp xếp luôn có khóa duy nhất để phân định
+khi trùng giá trị (ví dụ `id`). Transaction `RepeatableRead` giúp số lượng và danh sách
+nhất quán trong một response.
+
+Với cursor, xem `PostsService.list`: lấy `limit + 1` item, sắp xếp ổn định,
+truyền `cursor: { id }` cùng `skip: 1` khi có cursor. Dùng
+`CursorPaginatedResponseDto<ItemDto>` và khai báo lại schema `items` trong DTO response
+cụ thể như `PostPageDto`.
+
+Không cần đăng ký module hoặc interceptor. Tích hợp DTO/helper trực tiếp ở từng GET
+danh sách; GET chi tiết giữ response hiện tại. `GET /users` đã chuyển từ mảng trực tiếp
+sang `{ items, meta }`, còn `GET /posts` giữ `{ items, nextCursor }`.
+
+Tài liệu tích hợp frontend: [docs/docs-for-FE/pagination.md](docs/docs-for-FE/pagination.md).
+
 ## Lệnh phát triển
 
 ```bash
@@ -214,6 +278,13 @@ docker compose exec api npm run prisma:seed:prod
 ```
 
 Seed có tính idempotent, vì vậy có thể chạy lại mà không tạo trùng user `vedora.admin`. Khai báo `SEED_USER_PASSWORD` trước khi seed; nếu không có biến này thì seed user sẽ được bỏ qua. Seed không đặt lại mật khẩu của user đã tồn tại, ngoại trừ user cũ được chuyển đổi từ schema trước auth và chưa có mật khẩu. Sau khi sửa nội dung seed, phải commit, deploy lại image rồi mới chạy lệnh production ở trên.
+
+Seed tạo tài khoản với vai trò `ADMIN`, hoặc cấp quyền đó cho tài khoản seed cũ
+có username `vedora.admin`, email `admin@vedora.local` và email đã xác minh.
+Khi tài khoản cũ còn là `USER`, `SEED_USER_PASSWORD` phải khớp mật khẩu hiện tại
+trước khi seed cấp `ADMIN`; chỉ trùng tên và email không đủ để được nâng quyền.
+Nếu email seed thuộc tài khoản khác hoặc chưa xác minh, seed dừng với lỗi thay vì
+cấp quyền admin. Migration không tự cấp quyền dựa trên username/email.
 
 ## Triển khai lên organization Dokploy
 
