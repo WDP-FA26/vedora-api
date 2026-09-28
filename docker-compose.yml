@@ -18,12 +18,27 @@ services:
       MUX_TOKEN_ID: ${MUX_TOKEN_ID:-}
       MUX_TOKEN_SECRET: ${MUX_TOKEN_SECRET:-}
       MUX_WEBHOOK_SECRET: ${MUX_WEBHOOK_SECRET:-}
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY}
+      OPENROUTER_MODEL: ${OPENROUTER_MODEL:-openrouter/auto}
+      OPENROUTER_REASONING_EFFORT: ${OPENROUTER_REASONING_EFFORT:-low}
+      OPENROUTER_MODERATION_MODEL: ${OPENROUTER_MODERATION_MODEL:-openai/gpt-oss-safeguard-20b}
+      BLOB_READ_WRITE_TOKEN: ${BLOB_READ_WRITE_TOKEN:-}
+      BLOB_CALLBACK_URL: ${BLOB_CALLBACK_URL:-}
+      MAX_KNOWLEDGE_FILE_MB: ${MAX_KNOWLEDGE_FILE_MB:-50}
+      QDRANT_URL: ${QDRANT_URL:-http://qdrant:6333}
+      QDRANT_API_KEY: ${QDRANT_API_KEY:-}
+      QDRANT_COLLECTION: ${QDRANT_COLLECTION:-vedora_knowledge}
+      OPENROUTER_EMBEDDING_MODEL: ${OPENROUTER_EMBEDDING_MODEL:-google/gemini-embedding-2}
+      KNOWLEDGE_EMBEDDING_DIMENSIONS: ${KNOWLEDGE_EMBEDDING_DIMENSIONS:-1536}
+      OPENROUTER_RERANK_MODEL: ${OPENROUTER_RERANK_MODEL-cohere/rerank-v3.5}
       DATABASE_URL: postgresql://${POSTGRES_USER:-vedora}:${POSTGRES_PASSWORD:-vedora_local_password}@postgres:5432/${POSTGRES_DB:-vedora}?schema=public
     ports:
       - "${PORT:-3000}:3000"
     depends_on:
       postgres:
         condition: service_healthy
+      qdrant:
+        condition: service_started
     healthcheck:
       test:
         [
@@ -58,5 +73,16 @@ services:
       timeout: 5s
       retries: 10
 
+  qdrant:
+    image: qdrant/qdrant:v1.19.1
+    restart: unless-stopped
+    environment:
+      QDRANT__SERVICE__API_KEY: ${QDRANT_API_KEY:-}
+    ports:
+      - "6333:6333"
+    volumes:
+      - qdrant_data:/qdrant/storage
+
 volumes:
   postgres_data:
+  qdrant_data:

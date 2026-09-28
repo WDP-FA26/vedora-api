@@ -28,6 +28,7 @@ model User {
   emailVerificationCode EmailVerificationCode?
   posts                 Post[]
   media                 MediaAsset[]
+  knowledgeDocuments    KnowledgeDocument[]
 
   @@map("users")
 }
@@ -161,4 +162,54 @@ model MediaAsset {
   @@index([status, updatedAt])
   @@index([discardedAt])
   @@map("media_assets")
+}
+
+enum KnowledgeDocumentStatus {
+  /// Upload token issued; the browser has not finished sending the file.
+  WAITING_UPLOAD
+  /// File is in Vercel Blob; its text and images are being extracted and
+  /// indexed into Qdrant.
+  PROCESSING
+  READY
+  FAILED
+}
+
+enum KnowledgeDocumentFailureReason {
+  /// No Vercel Blob callback arrived before the upload token expired.
+  UPLOAD_EXPIRED
+  /// The extractor could not open the file as its content type.
+  INVALID_FILE
+  /// The file is password-protected.
+  ENCRYPTED
+  /// Neither text nor images to extract.
+  NO_TEXT
+  /// Extraction errored, or was interrupted (e.g. by a restart).
+  EXTRACTION_FAILED
+  INDEXING_FAILED
+}
+
+/// A file uploaded to Vercel Blob for the nutrition chatbot's knowledge base.
+/// The browser uploads it directly with a client token scoped to
+/// `blobPathname`; its text chunks and images are then embedded into Qdrant.
+model KnowledgeDocument {
+  id            String                          @id @default(uuid()) @db.Uuid
+  uploadedById  String?                         @map("uploaded_by_id") @db.Uuid
+  /// The original file name, shown in the admin UI.
+  title         String                          @db.VarChar(255)
+  /// Always application/pdf today; the client token only accepts it.
+  contentType   String                          @map("content_type") @db.VarChar(255)
+  blobPathname  String                          @unique @map("blob_pathname") @db.VarChar(512)
+  /// Set once the text has been extracted.
+  sizeBytes     Int?                            @map("size_bytes")
+  status        KnowledgeDocumentStatus         @default(WAITING_UPLOAD)
+  /// Set when `status` is FAILED.
+  failureReason KnowledgeDocumentFailureReason? @map("failure_reason")
+  sectionCount  Int?                            @map("section_count")
+  imageCount    Int?                            @map("image_count")
+  createdAt     DateTime                        @default(now()) @map("created_at")
+  updatedAt     DateTime                        @updatedAt @map("updated_at")
+  uploadedBy    User?                           @relation(fields: [uploadedById], references: [id], onDelete: SetNull)
+
+  @@index([status, updatedAt])
+  @@map("knowledge_documents")
 }

@@ -4,12 +4,17 @@ import { ScheduleModule } from '@nestjs/schedule';
 import Joi from 'joi';
 import { AppController } from './app.controller';
 import { AuthModule } from './auth/auth.module';
+import { BlobModule } from './blob/blob.module';
 import { HealthModule } from './health/health.module';
+import { KnowledgeModule } from './knowledge/knowledge.module';
 import { MailModule } from './mail/mail.module';
 import { MediaModule } from './media/media.module';
 import { MuxModule } from './mux/mux.module';
+import { NutritionChatModule } from './nutrition-chat/nutrition-chat.module';
+import { REASONING_EFFORTS } from './nutrition-chat/nutrition-chat.agent';
 import { PostsModule } from './posts/posts.module';
 import { PrismaModule } from './prisma/prisma.module';
+import { QdrantModule } from './qdrant/qdrant.module';
 import { UsersModule } from './users/users.module';
 
 @Module({
@@ -50,17 +55,51 @@ import { UsersModule } from './users/users.module';
         // Empty: no webhooks; pending media is refreshed from Mux on read.
         MUX_WEBHOOK_SECRET: Joi.string().allow('').default(''),
         MAX_VIDEO_DURATION_SEC: Joi.number().integer().positive().default(180),
+        OPENROUTER_API_KEY: Joi.string().required(),
+        OPENROUTER_MODEL: Joi.string().default('openrouter/auto'),
+        // How long reasoning models think before answering.
+        OPENROUTER_REASONING_EFFORT: Joi.string()
+          .valid(...REASONING_EFFORTS)
+          .default('low'),
+        // Empty: knowledge-base uploads answer 503.
+        BLOB_READ_WRITE_TOKEN: Joi.string().allow('').default(''),
+        // Public URL of POST /webhooks/vercel-blob; empty disables uploads
+        // (503). Locally, point it at a tunnel.
+        BLOB_CALLBACK_URL: Joi.string().uri().allow('').default(''),
+        MAX_KNOWLEDGE_FILE_MB: Joi.number().integer().positive().default(50),
+        QDRANT_URL: Joi.string().uri().required(),
+        QDRANT_API_KEY: Joi.string().allow('').default(''),
+        QDRANT_COLLECTION: Joi.string().default('vedora_knowledge'),
+        OPENROUTER_EMBEDDING_MODEL: Joi.string().default(
+          'google/gemini-embedding-2',
+        ),
+        // Changing it needs a new QDRANT_COLLECTION.
+        KNOWLEDGE_EMBEDDING_DIMENSIONS: Joi.number()
+          .integer()
+          .positive()
+          .default(1536),
+        // Empty: no reranking.
+        OPENROUTER_MODERATION_MODEL: Joi.string().default(
+          'openai/gpt-oss-safeguard-20b',
+        ),
+        OPENROUTER_RERANK_MODEL: Joi.string()
+          .allow('')
+          .default('cohere/rerank-v3.5'),
       }),
     }),
     ScheduleModule.forRoot(),
     PrismaModule,
     MailModule,
     MuxModule,
+    BlobModule,
+    QdrantModule,
     AuthModule,
     HealthModule,
     UsersModule,
     MediaModule,
     PostsModule,
+    NutritionChatModule,
+    KnowledgeModule,
   ],
   controllers: [AppController],
 })
