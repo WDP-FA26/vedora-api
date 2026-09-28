@@ -14,14 +14,8 @@ import { generateClientTokenFromReadWriteToken } from '@vercel/blob/client';
 import { type DeepMockProxy, mockDeep } from 'vitest-mock-extended';
 import { BlobService } from '../blob/blob.service';
 import { PrismaService } from '../prisma/prisma.service';
-import {
-  DocumentExtractionError,
-  DocumentExtractor,
-} from './extractors/document-extractor';
-import {
-  DOCUMENT_EXTRACTORS,
-  DocumentExtractorRegistry,
-} from './extractors/document-extractor.registry';
+import { DocumentExtractionError } from './extractors/document-extractor';
+import { PdfExtractor } from './extractors/pdf-extractor';
 import { KnowledgeService } from './knowledge.service';
 import { KnowledgeIndexService } from './retrieval/knowledge-index.service';
 
@@ -57,7 +51,7 @@ const waitingDocument: KnowledgeDocument = {
 describe('KnowledgeService', () => {
   let service: KnowledgeService;
   let prisma: DeepMockProxy<PrismaService>;
-  let extractor: DeepMockProxy<DocumentExtractor>;
+  let extractor: DeepMockProxy<PdfExtractor>;
   let index: DeepMockProxy<KnowledgeIndexService>;
 
   async function build(env: Record<string, unknown> = {}) {
@@ -66,8 +60,7 @@ describe('KnowledgeService', () => {
         KnowledgeService,
         BlobService,
         { provide: PrismaService, useValue: prisma },
-        DocumentExtractorRegistry,
-        { provide: DOCUMENT_EXTRACTORS, useValue: [extractor] },
+        { provide: PdfExtractor, useValue: extractor },
         { provide: KnowledgeIndexService, useValue: index },
         {
           provide: ConfigService,
@@ -86,11 +79,8 @@ describe('KnowledgeService', () => {
   beforeEach(async () => {
     vi.clearAllMocks();
     prisma = mockDeep<PrismaService>();
-    extractor = mockDeep<DocumentExtractor>();
+    extractor = mockDeep<PdfExtractor>();
     index = mockDeep<KnowledgeIndexService>();
-    Object.assign(extractor, {
-      formats: [{ contentType: 'application/pdf', extension: 'pdf' }],
-    });
     service = await build();
   });
 
@@ -127,7 +117,7 @@ describe('KnowledgeService', () => {
       expect(result.clientToken).toBe('client-token');
     });
 
-    it('refuses file types no extractor handles', async () => {
+    it('refuses anything but PDFs', async () => {
       await expect(
         service.createUpload('user', 'anh-mon-an.jpg', 1234),
       ).rejects.toBeInstanceOf(UnsupportedMediaTypeException);
@@ -206,7 +196,7 @@ describe('KnowledgeService', () => {
       } as never);
     });
 
-    it('indexes the sections, stores their text and marks the document READY', async () => {
+    it('indexes the sections and marks the document READY', async () => {
       const sections = [
         { text: 'Trang 1', images: [new Uint8Array([1])] },
         { text: 'Trang 2', images: [] },
@@ -220,16 +210,7 @@ describe('KnowledgeService', () => {
         access: 'private',
         token: 'vercel_blob_rw_store_secret',
       });
-      expect(extractor.extract).toHaveBeenCalledWith(
-        expect.any(Uint8Array),
-        'application/pdf',
-      );
-      expect(prisma.knowledgeDocumentSection.createMany).toHaveBeenCalledWith({
-        data: [
-          { documentId, position: 1, text: 'Trang 1' },
-          { documentId, position: 2, text: 'Trang 2' },
-        ],
-      });
+      expect(extractor.extract).toHaveBeenCalledWith(expect.any(Uint8Array));
       expect(prisma.knowledgeDocument.update).toHaveBeenCalledWith({
         where: { id: documentId },
         data: {
@@ -240,11 +221,10 @@ describe('KnowledgeService', () => {
           sizeBytes: 8,
         },
       });
-      expect(prisma.$transaction).toHaveBeenCalledOnce();
       expect(index.index).toHaveBeenCalledWith(processing, sections);
     });
 
-    it('fails the document when indexing fails, keeping no sections', async () => {
+    it('fails the document when indexing fails', async () => {
       extractor.extract.mockResolvedValue([{ text: 'Trang 1', images: [] }]);
       index.index.mockRejectedValue(new Error('Qdrant down'));
 
@@ -257,7 +237,6 @@ describe('KnowledgeService', () => {
           failureReason: KnowledgeDocumentFailureReason.INDEXING_FAILED,
         },
       });
-      expect(prisma.$transaction).not.toHaveBeenCalled();
     });
 
     it('fails the document with the extraction reason', async () => {
@@ -275,19 +254,6 @@ describe('KnowledgeService', () => {
         data: {
           status: KnowledgeDocumentStatus.FAILED,
           failureReason: KnowledgeDocumentFailureReason.NO_TEXT,
-        },
-      });
-    });
-
-    it('fails documents whose content type lost its extractor', async () => {
-      await service.ingest({ ...processing, contentType: 'text/markdown' });
-
-      expect(get).not.toHaveBeenCalled();
-      expect(prisma.knowledgeDocument.update).toHaveBeenCalledWith({
-        where: { id: documentId },
-        data: {
-          status: KnowledgeDocumentStatus.FAILED,
-          failureReason: KnowledgeDocumentFailureReason.UNSUPPORTED_TYPE,
         },
       });
     });

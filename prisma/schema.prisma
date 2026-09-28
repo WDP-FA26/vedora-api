@@ -177,8 +177,6 @@ enum KnowledgeDocumentFailureReason {
   ENCRYPTED
   /// Neither text nor images to extract.
   NO_TEXT
-  /// No extractor handles the stored content type any more.
-  UNSUPPORTED_TYPE
   /// Extraction errored, or was interrupted (e.g. by a restart).
   EXTRACTION_FAILED
   INDEXING_FAILED
@@ -186,14 +184,13 @@ enum KnowledgeDocumentFailureReason {
 
 /// A file uploaded to Vercel Blob for the nutrition chatbot's knowledge base.
 /// The browser uploads it directly with a client token scoped to
-/// `blobPathname`; the extractor for `contentType` then stores its text in
-/// `sections`, and its text chunks and images are embedded into Qdrant.
+/// `blobPathname`; its text chunks and images are then embedded into Qdrant.
 model KnowledgeDocument {
   id            String                          @id @default(uuid()) @db.Uuid
   uploadedById  String?                         @map("uploaded_by_id") @db.Uuid
   /// The original file name, shown in the admin UI.
   title         String                          @db.VarChar(255)
-  /// Decided from the file name at upload; the client token only accepts it.
+  /// Always application/pdf today; the client token only accepts it.
   contentType   String                          @map("content_type") @db.VarChar(255)
   blobPathname  String                          @unique @map("blob_pathname") @db.VarChar(512)
   /// Set once the text has been extracted.
@@ -206,21 +203,7 @@ model KnowledgeDocument {
   createdAt     DateTime                        @default(now()) @map("created_at")
   updatedAt     DateTime                        @updatedAt @map("updated_at")
   uploadedBy    User?                           @relation(fields: [uploadedById], references: [id], onDelete: SetNull)
-  sections      KnowledgeDocumentSection[]
 
   @@index([status, updatedAt])
   @@map("knowledge_documents")
-}
-
-/// A unit of extracted text (a page for PDFs), kept as the source of truth
-/// for what Qdrant indexes.
-model KnowledgeDocumentSection {
-  documentId String            @map("document_id") @db.Uuid
-  /// 1-based order within the document; the page number for PDFs.
-  position   Int
-  text       String
-  document   KnowledgeDocument @relation(fields: [documentId], references: [id], onDelete: Cascade)
-
-  @@id([documentId, position])
-  @@map("knowledge_document_sections")
 }

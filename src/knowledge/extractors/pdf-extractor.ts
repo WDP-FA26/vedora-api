@@ -4,13 +4,14 @@ import { KnowledgeDocumentFailureReason } from '@prisma/client';
 import { KnowledgeModelsService } from '../retrieval/knowledge-models.service';
 import {
   DocumentExtractionError,
-  DocumentExtractor,
   type ExtractedSection,
 } from './document-extractor';
 
 type MuPdf = typeof import('mupdf');
 type MuPdfDocument = InstanceType<MuPdf['Document']>;
 type MuPdfImage = InstanceType<MuPdf['Image']>;
+
+export const PDF_CONTENT_TYPE = 'application/pdf';
 
 const MIN_IMAGE_PX = 100;
 const MIN_IMAGE_PT = 48;
@@ -27,28 +28,23 @@ const MIN_OCR_COVERAGE = 0.9;
  * before OCR since OpenRouter returns at most 8 per PDF.
  */
 @Injectable()
-export class PdfExtractor extends DocumentExtractor {
-  readonly formats = [{ contentType: 'application/pdf', extension: 'pdf' }];
+export class PdfExtractor {
   private readonly logger = new Logger(PdfExtractor.name);
 
-  constructor(private readonly models: KnowledgeModelsService) {
-    super();
-  }
+  constructor(private readonly models: KnowledgeModelsService) {}
 
-  async extract(
-    file: Uint8Array,
-    contentType: string,
-  ): Promise<ExtractedSection[]> {
+  /** Throws `DocumentExtractionError` for files that can't be ingested. */
+  async extract(file: Uint8Array): Promise<ExtractedSection[]> {
     // ESM-only with top-level await; module: nodenext keeps this a real import()
     const mupdf = await import('mupdf');
 
     let document: MuPdfDocument;
     try {
-      document = mupdf.Document.openDocument(file, contentType);
+      document = mupdf.Document.openDocument(file, PDF_CONTENT_TYPE);
     } catch (error) {
       throw new DocumentExtractionError(
         KnowledgeDocumentFailureReason.INVALID_FILE,
-        `MuPDF could not open the file as ${contentType}: ${String(error)}`,
+        `MuPDF could not open the file: ${String(error)}`,
       );
     }
 

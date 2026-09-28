@@ -43,7 +43,7 @@ export class KnowledgeController {
       'Creates the document and returns a Vercel Blob client token for its pathname. The browser uploads the file straight to Vercel Blob.',
   })
   @ApiUnsupportedMediaTypeResponse({
-    description: 'No extractor handles the file extension',
+    description: 'The file is not a PDF',
   })
   @ApiPayloadTooLargeResponse({ description: 'Over MAX_KNOWLEDGE_FILE_MB' })
   @ApiServiceUnavailableResponse({

@@ -30,7 +30,7 @@ import {
   DocumentExtractionError,
   type ExtractedSection,
 } from './extractors/document-extractor';
-import { DocumentExtractorRegistry } from './extractors/document-extractor.registry';
+import { PDF_CONTENT_TYPE, PdfExtractor } from './extractors/pdf-extractor';
 import { KnowledgeIndexService } from './retrieval/knowledge-index.service';
 
 /** Client tokens stop accepting the upload after this long. */
@@ -38,13 +38,13 @@ export const UPLOAD_TOKEN_TTL_MS = 60 * 60 * 1000;
 
 /**
  * Knowledge-base files go straight from the browser to Vercel Blob:
- * `createUpload` picks the file type's extractor, then creates the document
- * row and a client token scoped to its pathname and content type. Only Vercel
+ * `createUpload` accepts PDFs only, then creates the document row and a
+ * client token scoped to its pathname and content type. Only Vercel
  * Blob's signed upload-completed callback (`handleCallback`) starts
  * ingestion; the browser is never trusted to say an upload finished.
  * `markUploaded` moves the row to PROCESSING exactly once (Vercel retries
- * callbacks), and `ingest` runs the extractor for its content type and
- * indexes the result into Qdrant. The maintenance cron fails documents that
+ * callbacks), and `ingest` extracts the PDF and indexes the result
+ * into Qdrant. The maintenance cron fails documents that
  * never complete.
  */
 @Injectable()
@@ -55,7 +55,7 @@ export class KnowledgeService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly blob: BlobService,
-    private readonly extractors: DocumentExtractorRegistry,
+    private readonly pdf: PdfExtractor,
     private readonly index: KnowledgeIndexService,
     configService: ConfigService,
   ) {
@@ -75,19 +75,16 @@ export class KnowledgeService {
         `Files are limited to ${this.maxBytes / 1024 / 1024} MB`,
       );
     }
-    const format = this.extractors.formatFor(filename);
-    if (!format) {
-      throw new UnsupportedMediaTypeException(
-        `Supported file types: ${this.extractors.extensions.join(', ')}`,
-      );
+    if (!/\.pdf$/i.test(filename)) {
+      throw new UnsupportedMediaTypeException('Only PDF files are supported');
     }
     const id = randomUUID();
-    const pathname = `knowledge/${id}.${format.extension}`;
+    const pathname = `knowledge/${id}.pdf`;
 
     const clientToken = await generateClientTokenFromReadWriteToken({
       token,
       pathname,
-      allowedContentTypes: [format.contentType],
+      allowedContentTypes: [PDF_CONTENT_TYPE],
       maximumSizeInBytes: this.maxBytes,
       validUntil: Date.now() + UPLOAD_TOKEN_TTL_MS,
       onUploadCompleted: { callbackUrl, tokenPayload: id },
@@ -97,7 +94,7 @@ export class KnowledgeService {
         id,
         uploadedById: userId,
         title: filename,
-        contentType: format.contentType,
+        contentType: PDF_CONTENT_TYPE,
         blobPathname: pathname,
       },
     });
@@ -147,19 +144,11 @@ export class KnowledgeService {
   }
 
   async ingest(document: KnowledgeDocument): Promise<void> {
-    const extractor = this.extractors.extractorFor(document.contentType);
-    if (!extractor) {
-      await this.fail(
-        document.id,
-        KnowledgeDocumentFailureReason.UNSUPPORTED_TYPE,
-      );
-      return;
-    }
     let file: Uint8Array;
     let sections: ExtractedSection[];
     try {
       file = await this.download(document.blobPathname);
-      sections = await extractor.extract(file, document.contentType);
+      sections = await this.pdf.extract(file);
     } catch (error) {
       await this.failExtraction(document.id, error);
       return;
@@ -177,28 +166,16 @@ export class KnowledgeService {
       return;
     }
 
-    await this.prisma.$transaction([
-      this.prisma.knowledgeDocumentSection.deleteMany({
-        where: { documentId: document.id },
-      }),
-      this.prisma.knowledgeDocumentSection.createMany({
-        data: sections.map(({ text }, index) => ({
-          documentId: document.id,
-          position: index + 1,
-          text,
-        })),
-      }),
-      this.prisma.knowledgeDocument.update({
-        where: { id: document.id },
-        data: {
-          status: KnowledgeDocumentStatus.READY,
-          failureReason: null,
-          sectionCount: sections.length,
-          imageCount,
-          sizeBytes: file.byteLength,
-        },
-      }),
-    ]);
+    await this.prisma.knowledgeDocument.update({
+      where: { id: document.id },
+      data: {
+        status: KnowledgeDocumentStatus.READY,
+        failureReason: null,
+        sectionCount: sections.length,
+        imageCount,
+        sizeBytes: file.byteLength,
+      },
+    });
     this.logger.log(
       `Ingested ${document.id} (${sections.length} sections, ${imageCount} images)`,
     );

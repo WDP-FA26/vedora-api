@@ -52,7 +52,7 @@ describe('PdfExtractor', () => {
 
   async function failureOf(file: Uint8Array) {
     try {
-      await extractor.extract(file, 'application/pdf');
+      await extractor.extract(file);
     } catch (error) {
       if (error instanceof DocumentExtractionError) return error.reason;
       throw error;
@@ -65,7 +65,6 @@ describe('PdfExtractor', () => {
 
     const sections = await extractor.extract(
       pdfWithPages({ image: true }, { text: 'Dau phu 8g' }),
-      'application/pdf',
     );
 
     expect(sections).toEqual([
@@ -80,7 +79,7 @@ describe('PdfExtractor', () => {
     const file = pdfWithPages({ image: true });
     expect(await darkestPixel(file)).toBeLessThan(255);
 
-    await extractor.extract(file, 'application/pdf');
+    await extractor.extract(file);
 
     expect(await darkestPixel(models.ocrPdf.mock.calls[0][0])).toBe(255);
   });
@@ -90,7 +89,6 @@ describe('PdfExtractor', () => {
 
     const sections = await extractor.extract(
       pdfWithPages({ text: 'a' }, { text: 'b' }),
-      'application/pdf',
     );
 
     expect(sections.map(({ text }) => text)).toEqual(['a', 'b\n\nc']);
@@ -101,7 +99,6 @@ describe('PdfExtractor', () => {
 
     const [section] = await extractor.extract(
       pdfWithPages({ text: 'ASV61 13.01 0.80 Firmicutes' }),
-      'application/pdf',
     );
 
     expect(section.text).toBe('| ASV61 |\n\nASV61 13.01 0.80 Firmicutes');
