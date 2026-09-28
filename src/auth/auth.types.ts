@@ -1,5 +1,4 @@
 import type { Request } from 'express';
-import type { UserRole } from '@prisma/client';
 
 export interface JwtPayload {
   sub: string;
@@ -7,10 +6,5 @@ export interface JwtPayload {
 }
 
 export interface AuthenticatedRequest extends Request {
-  user: AuthenticatedUser;
-}
-
-/** Current account permissions, loaded from the database by JwtAuthGuard. */
-export interface AuthenticatedUser extends JwtPayload {
-  role: UserRole;
+  user: JwtPayload;
 }
