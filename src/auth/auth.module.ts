@@ -8,6 +8,7 @@ import { JwtAuthGuard } from './jwt-auth.guard';
 import { RefreshTokensService } from './refresh-tokens.service';
 import { GoogleOAuthService } from './google-oauth.service';
 import { EmailVerificationService } from './email-verification.service';
+import { RolesGuard } from './roles.guard';
 
 @Global()
 @Module({
@@ -27,10 +28,11 @@ import { EmailVerificationService } from './email-verification.service';
   providers: [
     AuthService,
     JwtAuthGuard,
+    RolesGuard,
     RefreshTokensService,
     GoogleOAuthService,
     EmailVerificationService,
   ],
-  exports: [JwtAuthGuard, JwtModule],
+  exports: [JwtAuthGuard, RolesGuard, JwtModule],
 })
 export class AuthModule {}

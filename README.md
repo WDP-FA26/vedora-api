@@ -84,7 +84,7 @@ Không thêm `-v` nếu muốn giữ dữ liệu PostgreSQL. `docker compose dow
 | `GET` | `/api/v1` | Thông tin API |
 | `GET` | `/api/v1/health` | Liveness |
 | `GET` | `/api/v1/health/ready` | Readiness + PostgreSQL |
-| `POST` | `/api/v1/auth/register` | Đăng ký và nhận cặp AT/RT |
+| `POST` | `/api/v1/auth/register` | Đăng ký và gửi mã xác minh email; chưa trả token |
 | `POST` | `/api/v1/auth/login` | Đăng nhập bằng username/password và nhận cặp AT/RT |
 | `POST` | `/api/v1/auth/refresh` | Rotate refresh token và nhận cặp AT/RT mới |
 | `POST` | `/api/v1/auth/logout` | Thu hồi refresh-token family |
@@ -278,6 +278,13 @@ docker compose exec api npm run prisma:seed:prod
 ```
 
 Seed có tính idempotent, vì vậy có thể chạy lại mà không tạo trùng user `vedora.admin`. Khai báo `SEED_USER_PASSWORD` trước khi seed; nếu không có biến này thì seed user sẽ được bỏ qua. Seed không đặt lại mật khẩu của user đã tồn tại, ngoại trừ user cũ được chuyển đổi từ schema trước auth và chưa có mật khẩu. Sau khi sửa nội dung seed, phải commit, deploy lại image rồi mới chạy lệnh production ở trên.
+
+Seed tạo tài khoản với vai trò `ADMIN`, hoặc cấp quyền đó cho tài khoản seed cũ
+có username `vedora.admin`, email `admin@vedora.local` và email đã xác minh.
+Khi tài khoản cũ còn là `USER`, `SEED_USER_PASSWORD` phải khớp mật khẩu hiện tại
+trước khi seed cấp `ADMIN`; chỉ trùng tên và email không đủ để được nâng quyền.
+Nếu email seed thuộc tài khoản khác hoặc chưa xác minh, seed dừng với lỗi thay vì
+cấp quyền admin. Migration không tự cấp quyền dựa trên username/email.
 
 ## Triển khai lên organization Dokploy
 
