@@ -131,36 +131,62 @@ enum MediaFailureReason {
   NO_PLAYBACK_ID
 }
 
+/// Mux Robots captions for a published video: generated in the spoken
+/// language, then translated between Vietnamese and English.
+enum CaptionStatus {
+  /// Not started; only videos of published posts get captions.
+  NONE
+  /// The `generate-premium-captions` job in `captionJobId` is running.
+  GENERATING
+  /// The generated track `captionTrackId` is being attached to the asset.
+  ATTACHING
+  /// The `translate-captions` job in `captionJobId` is running.
+  TRANSLATING
+  /// Captions are attached; the translation may have failed (logged).
+  READY
+  /// No speech to caption, so nothing was attached.
+  NO_SPEECH
+  FAILED
+}
+
 /// A file a user uploaded, attached to at most one post. Videos are hosted by
 /// Mux: `id` is sent as the asset's `passthrough`, so webhooks map back to it.
 model MediaAsset {
-  id            String              @id @default(uuid()) @db.Uuid
+  id              String              @id @default(uuid()) @db.Uuid
   /// Null once the owner's account is deleted; the purge cron then removes
   /// the media from Mux before dropping the row.
-  ownerId       String?             @map("owner_id") @db.Uuid
-  type          MediaType
-  status        MediaStatus         @default(WAITING_UPLOAD)
+  ownerId         String?             @map("owner_id") @db.Uuid
+  type            MediaType
+  status          MediaStatus         @default(WAITING_UPLOAD)
   /// Set when `status` is FAILED.
-  failureReason MediaFailureReason? @map("failure_reason")
-  postId        String?             @map("post_id") @db.Uuid
-  position      Int                 @default(0)
-  muxUploadId   String?             @unique @map("mux_upload_id") @db.VarChar(255)
-  muxAssetId    String?             @unique @map("mux_asset_id") @db.VarChar(255)
-  playbackId    String?             @map("playback_id") @db.VarChar(255)
-  durationSec   Float?              @map("duration_sec")
-  aspectRatio   String?             @map("aspect_ratio") @db.VarChar(16)
+  failureReason   MediaFailureReason? @map("failure_reason")
+  postId          String?             @map("post_id") @db.Uuid
+  position        Int                 @default(0)
+  muxUploadId     String?             @unique @map("mux_upload_id") @db.VarChar(255)
+  muxAssetId      String?             @unique @map("mux_asset_id") @db.VarChar(255)
+  playbackId      String?             @map("playback_id") @db.VarChar(255)
+  durationSec     Float?              @map("duration_sec")
+  aspectRatio     String?             @map("aspect_ratio") @db.VarChar(16)
+  captionStatus   CaptionStatus       @default(NONE) @map("caption_status")
+  /// Spoken language Mux detected, e.g. `vi`.
+  captionLanguage String?             @map("caption_language") @db.VarChar(16)
+  captionTrackId  String?             @map("caption_track_id") @db.VarChar(255)
+  captionJobId    String?             @map("caption_job_id") @db.VarChar(255)
   /// Set when the upload was discarded; the row stays until its Mux upload
   /// and asset are confirmed gone, so late webhooks can still clean up.
-  discardedAt   DateTime?           @map("discarded_at")
-  createdAt     DateTime            @default(now()) @map("created_at")
-  updatedAt     DateTime            @updatedAt @map("updated_at")
-  owner         User?               @relation(fields: [ownerId], references: [id], onDelete: SetNull)
-  post          Post?               @relation(fields: [postId], references: [id], onDelete: SetNull)
+  discardedAt     DateTime?           @map("discarded_at")
+  createdAt       DateTime            @default(now()) @map("created_at")
+  updatedAt       DateTime            @updatedAt @map("updated_at")
+  owner           User?               @relation(fields: [ownerId], references: [id], onDelete: SetNull)
+  post            Post?               @relation(fields: [postId], references: [id], onDelete: SetNull)
 
   @@index([ownerId, status])
   @@index([postId])
   @@index([status, updatedAt])
   @@index([discardedAt])
+  @@index([captionStatus, updatedAt])
+  @@index([captionJobId])
+  @@index([captionTrackId])
   @@map("media_assets")
 }
 

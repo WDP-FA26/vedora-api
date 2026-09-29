@@ -22,6 +22,7 @@ import {
 import { isUUID } from 'class-validator';
 import { MuxService } from '../mux/mux.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { CaptionService } from './caption.service';
 import {
   CreateUploadResponseDto,
   MediaResponseDto,
@@ -60,6 +61,18 @@ const UPLOAD_FAILURES = {
 } as const satisfies Record<string, MediaFailureReason>;
 
 /**
+ * The SDK types Robots job events as flat, but notes that the payload nests
+ * the job under the event type (e.g. `data["robots.job.x.completed"]`).
+ */
+function robotsJobId(event: { type: string; data: unknown }): string | null {
+  const data = event.data as Record<string, { id?: unknown } | undefined> & {
+    id?: unknown;
+  };
+  const id = data[event.type]?.id ?? data.id;
+  return typeof id === 'string' ? id : null;
+}
+
+/**
  * Videos go straight from the browser to Mux: `createUpload` hands out a
  * direct-upload URL, and Mux reports progress through webhooks
  * (`handleWebhook`). When webhooks aren't configured (local dev) or one was
@@ -80,6 +93,7 @@ export class MediaService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly mux: MuxService,
+    private readonly captions: CaptionService,
     configService: ConfigService,
   ) {
     this.frontendUrl = configService.get<string>(
@@ -250,6 +264,7 @@ export class MediaService {
    * failed, or to PUBLISHED once all of it is READY. Call it after any change
    * to media status or attachment has been committed: whichever change lands
    * last then sees the final state, so concurrent updates can't strand a post.
+   * Videos of posts it publishes are then sent for captioning.
    */
   async settlePosts(where: Prisma.PostWhereInput): Promise<void> {
     await this.prisma.post.updateMany({
@@ -272,6 +287,7 @@ export class MediaService {
       },
       data: { status: PostStatus.PUBLISHED, publishedAt: new Date() },
     });
+    await this.captions.start({ post: where });
   }
 
   async handleWebhook(event: UnwrapWebhookEvent): Promise<void> {
@@ -302,6 +318,22 @@ export class MediaService {
           MediaFailureReason.ENCODING_FAILED,
         );
         break;
+      case 'video.asset.track.ready':
+      case 'video.asset.track.errored':
+        if (event.data.id) {
+          await this.captions.handleTrackEvent(event.data.id);
+        }
+        break;
+      case 'robots.job.generate_premium_captions.completed':
+      case 'robots.job.generate_premium_captions.errored':
+      case 'robots.job.generate_premium_captions.cancelled':
+      case 'robots.job.translate_captions.completed':
+      case 'robots.job.translate_captions.errored':
+      case 'robots.job.translate_captions.cancelled': {
+        const jobId = robotsJobId(event);
+        if (jobId) await this.captions.handleJobEvent(jobId);
+        break;
+      }
       default:
         break;
     }

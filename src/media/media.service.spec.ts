@@ -1,6 +1,7 @@
 import { ConfigService } from '@nestjs/config';
 import { Test } from '@nestjs/testing';
 import type Mux from '@mux/ts';
+import type { UnwrapWebhookEvent } from '@mux/ts/resources/webhooks/webhooks';
 import {
   MediaAsset,
   MediaFailureReason,
@@ -10,6 +11,7 @@ import {
 import { type DeepMockProxy, mockDeep } from 'vitest-mock-extended';
 import { MuxService } from '../mux/mux.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { CaptionService } from './caption.service';
 import { MediaService } from './media.service';
 
 import {
@@ -25,15 +27,18 @@ describe('MediaService', () => {
   let service: MediaService;
   let prisma: DeepMockProxy<PrismaService>;
   let muxClient: DeepMockProxy<Mux>;
+  let captions: DeepMockProxy<CaptionService>;
 
   beforeEach(async () => {
     prisma = mockDeep<PrismaService>();
     muxClient = mockDeep<Mux>();
+    captions = mockDeep<CaptionService>();
     const moduleRef = await Test.createTestingModule({
       providers: [
         MediaService,
         MuxService,
         { provide: PrismaService, useValue: prisma },
+        { provide: CaptionService, useValue: captions },
         {
           provide: ConfigService,
           useValue: new ConfigService({
@@ -68,6 +73,33 @@ describe('MediaService', () => {
     });
     const [publish] = prisma.post.updateMany.mock.calls[1];
     expect(publish.data).toMatchObject({ status: PostStatus.PUBLISHED });
+  });
+
+  it('sends the videos of posts it publishes for captioning', async () => {
+    await service.settlePosts({ id: 'post-1' });
+
+    expect(captions.start).toHaveBeenCalledWith({ post: { id: 'post-1' } });
+  });
+
+  it('reads the job ID of Robots events nested under the event type', async () => {
+    const type = 'robots.job.generate_premium_captions.completed';
+    await service.handleWebhook({
+      ...eventBase,
+      type,
+      data: { [type]: { id: 'job-1' } },
+    } as unknown as UnwrapWebhookEvent);
+
+    expect(captions.handleJobEvent).toHaveBeenCalledWith('job-1');
+  });
+
+  it('passes caption track events to CaptionService', async () => {
+    await service.handleWebhook({
+      ...eventBase,
+      type: 'video.asset.track.ready',
+      data: { id: 'track-1', type: 'text', status: 'ready' },
+    });
+
+    expect(captions.handleTrackEvent).toHaveBeenCalledWith('track-1');
   });
 
   it('ignores a replayed ready event for media that is already READY', async () => {

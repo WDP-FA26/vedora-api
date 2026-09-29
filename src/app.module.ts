@@ -55,6 +55,8 @@ import { UsersModule } from './users/users.module';
         // Empty: no webhooks; pending media is refreshed from Mux on read.
         MUX_WEBHOOK_SECRET: Joi.string().allow('').default(''),
         MAX_VIDEO_DURATION_SEC: Joi.number().integer().positive().default(180),
+        // Caption published videos with Mux Robots (billed per minute).
+        MUX_CAPTIONS_ENABLED: Joi.boolean().default(false),
         OPENROUTER_API_KEY: Joi.string().required(),
         OPENROUTER_MODEL: Joi.string().default('openrouter/auto'),
         // How long reasoning models think before answering.
