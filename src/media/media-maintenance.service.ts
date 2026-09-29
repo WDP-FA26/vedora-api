@@ -3,6 +3,7 @@ import { Cron, CronExpression } from '@nestjs/schedule';
 import { MediaStatus } from '@prisma/client';
 import { MuxService } from '../mux/mux.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { CaptionService } from './caption.service';
 import { MediaService } from './media.service';
 
 const STALE_AFTER_MS = 10 * 60 * 1000;
@@ -17,6 +18,7 @@ export class MediaMaintenanceService {
     private readonly prisma: PrismaService,
     private readonly mux: MuxService,
     private readonly mediaService: MediaService,
+    private readonly captions: CaptionService,
   ) {}
 
   /** Catches up on media whose webhook never arrived. */
@@ -34,6 +36,18 @@ export class MediaMaintenanceService {
     });
     for (const media of stale) {
       await this.mediaService.refresh(media);
+    }
+  }
+
+  /** Retries captions that failed to start or whose webhook never arrived. */
+  @Cron(CronExpression.EVERY_10_MINUTES)
+  async advanceCaptions(): Promise<void> {
+    await this.captions.start();
+    const inFlight = await this.captions.findInFlight(
+      new Date(Date.now() - STALE_AFTER_MS),
+    );
+    for (const media of inFlight) {
+      await this.captions.advance(media);
     }
   }
 

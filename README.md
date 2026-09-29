@@ -174,6 +174,15 @@ trỏ tới URL đó trong Mux dashboard và điền signing secret vào `MUX_WE
 chờ được đọc. Một cron 10 phút một lần cũng cập nhật media bị lỡ webhook, và cron hằng
 giờ xoá upload không được gắn vào bài nào sau 24 giờ.
 
+Khi `MUX_CAPTIONS_ENABLED=true`, video của bài vừa `PUBLISHED` được tạo phụ đề bằng Mux
+Robots: `generate-premium-captions` tự nhận diện ngôn ngữ nói, API gắn track phụ đề
+(tên theo ngôn ngữ đó, ví dụ "Tiếng Việt") rồi `translate-captions` dịch tiếng Việt sang
+tiếng Anh, ngôn ngữ khác sang tiếng Việt. Video không có lời (độ tin cậy nhận diện
+ngôn ngữ thấp, hoặc chỉ có `[beep]`, `[music]`) không được gắn phụ đề. Trạng thái nằm
+ở `MediaAsset.captionStatus`; các bước tiếp theo chạy theo webhook `robots.job.*` và
+`video.asset.track.ready`, cron 10 phút một lần chạy lại bước bị lỡ webhook.
+MuxPlayer tự hiện các track trong menu CC nên frontend không cần đổi gì.
+
 ## Phân trang dùng chung
 
 Thành phần tại `src/common/pagination` hỗ trợ hai kiểu phân trang cho GET danh sách:
@@ -399,6 +408,7 @@ Tài liệu Dokploy tham khảo:
 | `MUX_TOKEN_ID` | Khi upload video | — | Mux access token ID; trống thì route media trả `503` |
 | `MUX_TOKEN_SECRET` | Khi upload video | — | Mux access token secret |
 | `MUX_WEBHOOK_SECRET` | Production | — | Signing secret của webhook Mux; trống thì tự hỏi Mux khi đọc |
+| `MUX_CAPTIONS_ENABLED` | Không | `false` | Tạo và dịch phụ đề cho video đã đăng (Mux Robots, tính phí theo phút) |
 | `FRONTEND_URL` | Không | `http://localhost:3000` | Origin được phép upload video lên Mux |
 | `MAX_VIDEO_DURATION_SEC` | Không | `180` | Video dài hơn bị đánh dấu `FAILED` và xoá khỏi Mux |
 | `SEED_USER_PASSWORD` | Khi muốn seed user | — | Mật khẩu ban đầu cho `vedora.admin` |

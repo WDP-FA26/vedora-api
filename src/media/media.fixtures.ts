@@ -3,7 +3,7 @@ import type {
   VideoAssetReadyWebhookEvent,
   VideoUploadAssetCreatedWebhookEvent,
 } from '@mux/ts/resources/webhooks/webhooks';
-import { MediaAsset, MediaStatus, MediaType } from '@prisma/client';
+import { CaptionStatus, MediaAsset, MediaStatus, MediaType } from '@prisma/client';
 
 // Test fixtures shared by the media specs.
 
@@ -23,6 +23,10 @@ export const pendingMedia: MediaAsset = {
   playbackId: null,
   durationSec: null,
   aspectRatio: null,
+  captionStatus: CaptionStatus.NONE,
+  captionLanguage: null,
+  captionTrackId: null,
+  captionJobId: null,
   discardedAt: null,
   createdAt: new Date('2026-09-24T00:00:00.000Z'),
   updatedAt: new Date('2026-09-24T00:00:00.000Z'),
