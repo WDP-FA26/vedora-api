@@ -28,6 +28,11 @@ describe('AuthService', () => {
 
   const verifiedUser: User = {
     ...publicUser,
+    bio: null,
+    avatarUrl: null,
+    avatarPathname: null,
+    coverUrl: null,
+    coverPathname: null,
     passwordHash: null,
     googleId: null,
     emailVerifiedAt: now,

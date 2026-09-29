@@ -2,8 +2,9 @@ import { Injectable, ServiceUnavailableException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 
 /**
- * Holds the Vercel Blob credentials. The store is private: blobs are only
- * readable with the token, so every read and upload uses `access: 'private'`.
+ * Holds the shared Vercel Blob credentials. Knowledge PDFs request private
+ * access and profile images request public access; the store must support the
+ * requested mode.
  * Endpoints that need Blob answer 503 while `BLOB_READ_WRITE_TOKEN` is empty,
  * like Mux does.
  */

@@ -14,6 +14,7 @@ import { NutritionChatModule } from './nutrition-chat/nutrition-chat.module';
 import { REASONING_EFFORTS } from './nutrition-chat/nutrition-chat.agent';
 import { PostsModule } from './posts/posts.module';
 import { PrismaModule } from './prisma/prisma.module';
+import { ProfilesModule } from './profiles/profiles.module';
 import { QdrantModule } from './qdrant/qdrant.module';
 import { UsersModule } from './users/users.module';
 
@@ -100,6 +101,7 @@ import { UsersModule } from './users/users.module';
     PostsModule,
     NutritionChatModule,
     KnowledgeModule,
+    ProfilesModule,
   ],
   controllers: [AppController],
 })

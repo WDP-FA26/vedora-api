@@ -15,7 +15,9 @@ import { ListPostsQueryDto } from './dto/list-posts-query.dto';
 import { PostPageDto, PostResponseDto } from './dto/post-response.dto';
 
 const postInclude = {
-  author: { select: { id: true, username: true, fullName: true } },
+  author: {
+    select: { id: true, username: true, fullName: true, avatarUrl: true },
+  },
   media: { orderBy: { position: 'asc' } },
 } satisfies Prisma.PostInclude;
 

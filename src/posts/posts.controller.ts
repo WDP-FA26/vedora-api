@@ -26,13 +26,13 @@ import { PostPageDto, PostResponseDto } from './dto/post-response.dto';
 import { PostsService } from './posts.service';
 
 @ApiTags('posts')
-@ApiBearerAuth()
-@UseGuards(JwtAuthGuard)
 @Controller('posts')
 export class PostsController {
   constructor(private readonly postsService: PostsService) {}
 
   @Post()
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
   @ApiOperation({
     summary: 'Create a post',
     description:
@@ -53,6 +53,8 @@ export class PostsController {
   }
 
   @Get(':id')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
   @ApiOperation({
     summary: 'Get a post',
     description: 'Poll this while your post is PROCESSING.',
@@ -65,6 +67,8 @@ export class PostsController {
   }
 
   @Delete(':id')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ summary: 'Delete your post and its videos' })
   async remove(

@@ -12,6 +12,9 @@ export class PostAuthorDto {
 
   @ApiProperty({ example: 'Vedora User' })
   fullName!: string;
+
+  @ApiProperty({ nullable: true, type: String })
+  avatarUrl!: string | null;
 }
 
 export class PostResponseDto {

@@ -12,6 +12,7 @@ import { ApiExcludeController } from '@nestjs/swagger';
 import { BlobError } from '@vercel/blob';
 import type { HandleUploadBody } from '@vercel/blob/client';
 import type { Request } from 'express';
+import { ProfilesService } from '../profiles/profiles.service';
 import { KnowledgeService } from './knowledge.service';
 
 /**
@@ -25,7 +26,10 @@ import { KnowledgeService } from './knowledge.service';
 export class VercelBlobWebhookController {
   private readonly logger = new Logger(VercelBlobWebhookController.name);
 
-  constructor(private readonly knowledgeService: KnowledgeService) {}
+  constructor(
+    private readonly knowledgeService: KnowledgeService,
+    private readonly profilesService: ProfilesService,
+  ) {}
 
   @Post('vercel-blob')
   @HttpCode(HttpStatus.NO_CONTENT)
@@ -34,7 +38,14 @@ export class VercelBlobWebhookController {
     @Req() request: Request,
   ): Promise<void> {
     try {
-      await this.knowledgeService.handleCallback(body, request);
+      if (body?.type !== 'blob.upload-completed')
+        throw new BadRequestException('Expected an upload-completed callback');
+      const pathname = body.payload?.blob?.pathname;
+      if (pathname?.startsWith('profiles/'))
+        await this.profilesService.handleImageCallback(body, request);
+      else if (pathname?.startsWith('knowledge/'))
+        await this.knowledgeService.handleCallback(body, request);
+      else throw new BadRequestException('Unknown Blob callback pathname');
     } catch (error) {
       // signature and event-type failures; anything else is a 500 to retry
       if (!(error instanceof BlobError)) throw error;
