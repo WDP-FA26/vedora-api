@@ -19,6 +19,11 @@ function account(id: string, role: UserRole = UserRole.USER): User {
     username: role === UserRole.ADMIN ? 'vedora.admin' : 'vedora.user',
     fullName: 'Vedora User',
     email: `${id}@vedora.vn`,
+    bio: null,
+    avatarUrl: null,
+    avatarPathname: null,
+    coverUrl: null,
+    coverPathname: null,
     role,
     passwordHash: null,
     googleId: null,
@@ -75,6 +80,7 @@ describe('Account permissions (e2e)', () => {
     prisma.user.delete.mockResolvedValue(account(USER_ID));
     prisma.user.create.mockResolvedValue(account(OTHER_ID));
     prisma.user.findMany.mockResolvedValue([account(USER_ID)]);
+    prisma.$transaction.mockResolvedValue([[account(USER_ID)], 1]);
   });
 
   afterAll(async () => {
@@ -188,7 +194,10 @@ describe('Account permissions (e2e)', () => {
       .get('/api/v1/users')
       .auth(adminToken, { type: 'bearer' })
       .expect(200);
-    expect(response.body).toHaveLength(1);
+    expect(response.body).toMatchObject({
+      items: [{ id: USER_ID }],
+      meta: { totalItems: 1 },
+    });
   });
 
   it('allows admins to create ordinary accounts', async () => {
@@ -298,7 +307,11 @@ describe('Account permissions (e2e)', () => {
     expect(prisma.user.findMany).not.toHaveBeenCalled();
   });
 
-  it.each(['/api/v1/auth/me', '/api/v1/posts', `/api/v1/media/${OTHER_ID}`])(
+  it.each([
+    '/api/v1/auth/me',
+    `/api/v1/posts/${OTHER_ID}`,
+    `/api/v1/media/${OTHER_ID}`,
+  ])(
     'rejects a deleted account on %s even with an unexpired token',
     async (path) => {
       prisma.user.findUnique.mockResolvedValue(null);

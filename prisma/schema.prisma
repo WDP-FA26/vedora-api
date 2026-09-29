@@ -19,6 +19,11 @@ model User {
   googleId              String?                @unique @map("google_id") @db.VarChar(255)
   fullName              String                 @map("full_name") @db.VarChar(100)
   email                 String                 @unique @db.VarChar(320)
+  bio                   String?                @db.VarChar(500)
+  avatarUrl             String?                @map("avatar_url") @db.VarChar(2048)
+  avatarPathname        String?                @map("avatar_pathname") @db.VarChar(512)
+  coverUrl              String?                @map("cover_url") @db.VarChar(2048)
+  coverPathname         String?                @map("cover_pathname") @db.VarChar(512)
   role                  UserRole               @default(USER)
   /// Null until the user proves they own `email` (OTP code or Google).
   emailVerifiedAt       DateTime?              @map("email_verified_at")
@@ -29,8 +34,50 @@ model User {
   posts                 Post[]
   media                 MediaAsset[]
   knowledgeDocuments    KnowledgeDocument[]
+  following             Follow[]               @relation("Following")
+  followers             Follow[]               @relation("Followers")
+  profileImages         ProfileImageUpload[]
 
   @@map("users")
+}
+
+model Follow {
+  followerId  String   @map("follower_id") @db.Uuid
+  followingId String   @map("following_id") @db.Uuid
+  createdAt   DateTime @default(now()) @map("created_at")
+  follower    User     @relation("Following", fields: [followerId], references: [id], onDelete: Cascade)
+  following   User     @relation("Followers", fields: [followingId], references: [id], onDelete: Cascade)
+
+  @@id([followerId, followingId])
+  @@index([followingId, createdAt, followerId])
+  @@index([followerId, createdAt, followingId])
+  @@map("follows")
+}
+
+enum ProfileImageKind {
+  AVATAR
+  COVER
+}
+
+enum ProfileImageStatus {
+  WAITING_UPLOAD
+  READY
+}
+
+model ProfileImageUpload {
+  id          String             @id @default(uuid()) @db.Uuid
+  ownerId     String?            @map("owner_id") @db.Uuid
+  kind        ProfileImageKind
+  status      ProfileImageStatus @default(WAITING_UPLOAD)
+  contentType String             @map("content_type") @db.VarChar(32)
+  pathname    String             @unique @db.VarChar(512)
+  url         String?            @db.VarChar(2048)
+  createdAt   DateTime           @default(now()) @map("created_at")
+  owner       User?              @relation(fields: [ownerId], references: [id], onDelete: SetNull)
+
+  @@index([ownerId, status])
+  @@index([status, createdAt])
+  @@map("profile_image_uploads")
 }
 
 model RefreshToken {

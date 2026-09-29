@@ -63,7 +63,6 @@ export class UsersController {
   }
 
   @Get(':id')
-  @Roles(UserRole.ADMIN)
   @ApiOperation({ summary: 'Get your account, or any account as an admin' })
   findOne(
     @Req() request: AuthenticatedRequest,
@@ -73,7 +72,6 @@ export class UsersController {
   }
 
   @Patch(':id')
-  @Roles(UserRole.ADMIN)
   @ApiOperation({ summary: 'Update your account, or any account as an admin' })
   update(
     @Req() request: AuthenticatedRequest,

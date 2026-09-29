@@ -2,7 +2,7 @@ import { INestApplication } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { Test } from '@nestjs/testing';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
-import { PostStatus, PostType, Prisma } from '@prisma/client';
+import { PostStatus, PostType, Prisma, UserRole } from '@prisma/client';
 import request from 'supertest';
 import type { App } from 'supertest/types';
 import { mockDeep, mockReset } from 'vitest-mock-extended';
@@ -37,7 +37,12 @@ describe('Shared pagination (e2e)', () => {
     status: PostStatus.PUBLISHED,
     body: id,
     authorId: AUTHOR_ID,
-    author: { id: AUTHOR_ID, username: user.username, fullName: user.fullName },
+    author: {
+      id: AUTHOR_ID,
+      username: user.username,
+      fullName: user.fullName,
+      avatarUrl: null,
+    },
     media: [],
     publishedAt: now,
     createdAt: now,
@@ -60,6 +65,11 @@ describe('Shared pagination (e2e)', () => {
 
   beforeEach(() => {
     mockReset(prisma);
+    prisma.user.findUnique.mockResolvedValue({
+      id: AUTHOR_ID,
+      username: user.username,
+      role: UserRole.ADMIN,
+    } as never);
     prisma.$transaction.mockResolvedValue([[user], 23]);
     prisma.post.findMany.mockResolvedValue(posts);
   });
