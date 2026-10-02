@@ -44,6 +44,8 @@ describe('Shared pagination (e2e)', () => {
       avatarUrl: null,
     },
     media: [],
+    _count: { comments: 0, likes: 0 },
+    likes: [],
     publishedAt: now,
     createdAt: now,
     updatedAt: now,

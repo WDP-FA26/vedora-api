@@ -45,6 +45,18 @@ export class PostResponseDto {
 
   @ApiProperty({ type: [MediaResponseDto] })
   media!: MediaResponseDto[];
+
+  @ApiProperty({ minimum: 0 })
+  commentCount!: number;
+
+  @ApiProperty({ minimum: 0 })
+  likeCount!: number;
+
+  @ApiProperty({
+    description:
+      'Whether the authenticated viewer likes this post; false for anonymous reads',
+  })
+  isLiked!: boolean;
 }
 
 export class PostPageDto extends CursorPaginatedResponseDto<PostResponseDto> {

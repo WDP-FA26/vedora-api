@@ -5,6 +5,7 @@ import { UsersModule } from '../users/users.module';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 import { JwtAuthGuard } from './jwt-auth.guard';
+import { OptionalJwtAuthGuard } from './optional-jwt-auth.guard';
 import { RefreshTokensService } from './refresh-tokens.service';
 import { GoogleOAuthService } from './google-oauth.service';
 import { EmailVerificationService } from './email-verification.service';
@@ -28,11 +29,12 @@ import { RolesGuard } from './roles.guard';
   providers: [
     AuthService,
     JwtAuthGuard,
+    OptionalJwtAuthGuard,
     RolesGuard,
     RefreshTokensService,
     GoogleOAuthService,
     EmailVerificationService,
   ],
-  exports: [JwtAuthGuard, RolesGuard, JwtModule],
+  exports: [JwtAuthGuard, OptionalJwtAuthGuard, RolesGuard, JwtModule],
 })
 export class AuthModule {}

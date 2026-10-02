@@ -32,6 +32,8 @@ model User {
   refreshTokens         RefreshToken[]
   emailVerificationCode EmailVerificationCode?
   posts                 Post[]
+  postComments          PostComment[]
+  postLikes             PostLike[]
   media                 MediaAsset[]
   knowledgeDocuments    KnowledgeDocument[]
   following             Follow[]               @relation("Following")
@@ -137,20 +139,49 @@ enum PostStatus {
 }
 
 model Post {
-  id          String       @id @default(uuid()) @db.Uuid
-  authorId    String       @map("author_id") @db.Uuid
-  type        PostType     @default(POST)
-  status      PostStatus   @default(PROCESSING)
-  body        String?      @db.VarChar(280)
-  publishedAt DateTime?    @map("published_at")
-  createdAt   DateTime     @default(now()) @map("created_at")
-  updatedAt   DateTime     @updatedAt @map("updated_at")
-  author      User         @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  id          String        @id @default(uuid()) @db.Uuid
+  authorId    String        @map("author_id") @db.Uuid
+  type        PostType      @default(POST)
+  status      PostStatus    @default(PROCESSING)
+  body        String?       @db.VarChar(280)
+  publishedAt DateTime?     @map("published_at")
+  createdAt   DateTime      @default(now()) @map("created_at")
+  updatedAt   DateTime      @updatedAt @map("updated_at")
+  author      User          @relation(fields: [authorId], references: [id], onDelete: Cascade)
   media       MediaAsset[]
+  comments    PostComment[]
+  likes       PostLike[]
 
   @@index([status, publishedAt])
   @@index([authorId, createdAt])
   @@map("posts")
+}
+
+model PostComment {
+  id        String   @id @default(uuid()) @db.Uuid
+  postId    String   @map("post_id") @db.Uuid
+  authorId  String   @map("author_id") @db.Uuid
+  body      String   @db.VarChar(1000)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  post      Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
+  author    User     @relation(fields: [authorId], references: [id], onDelete: Cascade)
+
+  @@index([postId, createdAt, id])
+  @@index([authorId])
+  @@map("post_comments")
+}
+
+model PostLike {
+  postId    String   @map("post_id") @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at")
+  post      Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([postId, userId])
+  @@index([userId])
+  @@map("post_likes")
 }
 
 enum MediaType {
