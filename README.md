@@ -26,7 +26,7 @@ Backend starter cho Vedora, sử dụng NestJS, Prisma ORM, PostgreSQL và Docke
 │   ├── health/                # Liveness/readiness
 │   ├── media/                 # Upload video lên Mux, webhook, dọn dẹp định kỳ
 │   ├── mux/                   # Mux client dùng chung
-│   ├── posts/                 # Bài đăng (POST; BLOG sẽ có model Blog riêng)
+│   ├── posts/                 # Bài đăng, comment và like (BLOG sẽ có model riêng)
 │   ├── prisma/                # PrismaService dùng chung
 │   ├── users/                 # CRUD mẫu
 │   ├── app.module.ts
@@ -182,6 +182,23 @@ ngôn ngữ thấp, hoặc chỉ có `[beep]`, `[music]`) không được gắn 
 ở `MediaAsset.captionStatus`; các bước tiếp theo chạy theo webhook `robots.job.*` và
 `video.asset.track.ready`, cron 10 phút một lần chạy lại bước bị lỡ webhook.
 MuxPlayer tự hiện các track trong menu CC nên frontend không cần đổi gì.
+
+## Comment và like bài đăng
+
+Các API tương tác áp dụng cho bài `PUBLISHED`:
+
+- `GET /api/v1/posts/:postId/comments`: comment mới nhất trước, phân trang cursor.
+- `POST /api/v1/posts/:postId/comments`: tạo comment, nội dung tối đa 1000 ký tự.
+- `PATCH /api/v1/posts/:postId/comments/:commentId`: sửa comment của mình.
+- `DELETE /api/v1/posts/:postId/comments/:commentId`: xóa bởi người viết, chủ bài hoặc admin.
+- `PUT /api/v1/posts/:postId/like` và `DELETE` cùng URL: like/unlike, gọi lặp an toàn.
+
+API ghi yêu cầu Bearer token. Response bài đăng bổ sung `commentCount`, `likeCount`,
+`isLiked`; feed vẫn đọc công khai, gửi token để nhận trạng thái like của người xem.
+
+Migration `20261002000000_post_comments_and_likes` tạo hai bảng, unique key chống like
+trùng và khóa ngoại cascade. Chạy `npm run prisma:migrate:deploy` trước khi dùng bản mới.
+Tài liệu FE: [docs/docs-for-FE/post-comments-likes.md](docs/docs-for-FE/post-comments-likes.md).
 
 ## Phân trang dùng chung
 

@@ -18,8 +18,12 @@ import {
   ApiOperation,
   ApiTags,
 } from '@nestjs/swagger';
-import type { AuthenticatedRequest } from '../auth/auth.types';
+import type {
+  AuthenticatedRequest,
+  OptionalAuthenticatedRequest,
+} from '../auth/auth.types';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { OptionalJwtAuthGuard } from '../auth/optional-jwt-auth.guard';
 import { CreatePostDto } from './dto/create-post.dto';
 import { ListPostsQueryDto } from './dto/list-posts-query.dto';
 import { PostPageDto, PostResponseDto } from './dto/post-response.dto';
@@ -46,10 +50,19 @@ export class PostsController {
   }
 
   @Get()
-  @ApiOperation({ summary: 'List published posts, newest first' })
+  @UseGuards(OptionalJwtAuthGuard)
+  @ApiOperation({
+    summary: 'List published posts, newest first',
+    description:
+      'Public read. Send a Bearer token to receive your isLiked state; an invalid supplied token returns 401.',
+    security: [{}, { bearer: [] }],
+  })
   @ApiOkResponse({ type: PostPageDto })
-  list(@Query() query: ListPostsQueryDto): Promise<PostPageDto> {
-    return this.postsService.list(query);
+  list(
+    @Query() query: ListPostsQueryDto,
+    @Req() request: OptionalAuthenticatedRequest,
+  ): Promise<PostPageDto> {
+    return this.postsService.list(query, request.user?.sub);
   }
 
   @Get(':id')

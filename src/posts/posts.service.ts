@@ -14,15 +14,22 @@ import { CreatePostDto } from './dto/create-post.dto';
 import { ListPostsQueryDto } from './dto/list-posts-query.dto';
 import { PostPageDto, PostResponseDto } from './dto/post-response.dto';
 
-const postInclude = {
-  author: {
-    select: { id: true, username: true, fullName: true, avatarUrl: true },
-  },
-  media: { orderBy: { position: 'asc' } },
-} satisfies Prisma.PostInclude;
+const postInclude = (viewerId?: string) =>
+  ({
+    author: {
+      select: { id: true, username: true, fullName: true, avatarUrl: true },
+    },
+    media: { orderBy: { position: 'asc' } },
+    _count: { select: { comments: true, likes: true } },
+    likes: {
+      where: { userId: viewerId ?? { in: [] } },
+      select: { userId: true },
+      take: 1,
+    },
+  }) satisfies Prisma.PostInclude;
 
 type PostWithRelations = Prisma.PostGetPayload<{
-  include: typeof postInclude;
+  include: ReturnType<typeof postInclude>;
 }>;
 
 @Injectable()
@@ -58,10 +65,13 @@ export class PostsService {
     });
     await this.mediaService.settlePosts({ id });
 
-    return this.toResponse(await this.load(id));
+    return this.toResponse(await this.load(id, authorId));
   }
 
-  async list(query: ListPostsQueryDto): Promise<PostPageDto> {
+  async list(
+    query: ListPostsQueryDto,
+    viewerId?: string,
+  ): Promise<PostPageDto> {
     const take = query.limit;
     const posts = await this.prisma.post.findMany({
       where: {
@@ -71,7 +81,7 @@ export class PostsService {
       orderBy: [{ publishedAt: 'desc' }, { id: 'desc' }],
       take: take + 1,
       ...(query.cursor ? { cursor: { id: query.cursor }, skip: 1 } : {}),
-      include: postInclude,
+      include: postInclude(viewerId),
     });
     const page = createCursorPaginatedResponse(posts, take);
     return {
@@ -83,7 +93,7 @@ export class PostsService {
   async findOne(id: string, viewerId: string): Promise<PostResponseDto> {
     let post = await this.prisma.post.findUnique({
       where: { id },
-      include: postInclude,
+      include: postInclude(viewerId),
     });
     const isAuthor = post?.authorId === viewerId;
     if (!post || (post.status !== PostStatus.PUBLISHED && !isAuthor)) {
@@ -101,7 +111,7 @@ export class PostsService {
         await this.mediaService.refresh(media);
       }
       await this.mediaService.settlePosts({ id });
-      post = await this.load(id);
+      post = await this.load(id, viewerId);
     }
     return this.toResponse(post);
   }
@@ -125,10 +135,10 @@ export class PostsService {
     await this.mediaService.discard({ id: { in: mediaIds } });
   }
 
-  private load(id: string): Promise<PostWithRelations> {
+  private load(id: string, viewerId?: string): Promise<PostWithRelations> {
     return this.prisma.post.findUniqueOrThrow({
       where: { id },
-      include: postInclude,
+      include: postInclude(viewerId),
     });
   }
 
@@ -142,6 +152,9 @@ export class PostsService {
       createdAt: post.createdAt,
       author: post.author,
       media: post.media.map((media) => this.mediaService.toResponse(media)),
+      commentCount: post._count.comments,
+      likeCount: post._count.likes,
+      isLiked: post.likes.length > 0,
     };
   }
 }
