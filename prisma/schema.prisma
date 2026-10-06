@@ -21,9 +21,7 @@ model User {
   email                 String                 @unique @db.VarChar(320)
   bio                   String?                @db.VarChar(500)
   avatarUrl             String?                @map("avatar_url") @db.VarChar(2048)
-  avatarPathname        String?                @map("avatar_pathname") @db.VarChar(512)
   coverUrl              String?                @map("cover_url") @db.VarChar(2048)
-  coverPathname         String?                @map("cover_pathname") @db.VarChar(512)
   role                  UserRole               @default(USER)
   /// Null until the user proves they own `email` (OTP code or Google).
   emailVerifiedAt       DateTime?              @map("email_verified_at")
@@ -71,9 +69,7 @@ model ProfileImageUpload {
   ownerId     String?            @map("owner_id") @db.Uuid
   kind        ProfileImageKind
   status      ProfileImageStatus @default(WAITING_UPLOAD)
-  contentType String             @map("content_type") @db.VarChar(32)
-  pathname    String             @unique @db.VarChar(512)
-  url         String?            @db.VarChar(2048)
+  storageKey  String             @unique @map("storage_key") @db.VarChar(512)
   createdAt   DateTime           @default(now()) @map("created_at")
   owner       User?              @relation(fields: [ownerId], references: [id], onDelete: SetNull)
 

@@ -10,6 +10,7 @@ import {
   Min,
   MinLength,
 } from 'class-validator';
+import { PresignedUploadDto } from '../../storage/presigned-upload.dto';
 
 export class ProfileSummaryDto {
   @ApiProperty({ format: 'uuid' }) id!: string;
@@ -78,6 +79,10 @@ export class CreateProfileImageUploadDto {
 
 export class ProfileImageUploadDto {
   @ApiProperty({ format: 'uuid' }) id!: string;
-  @ApiProperty() pathname!: string;
-  @ApiProperty() clientToken!: string;
+  @ApiProperty({
+    type: PresignedUploadDto,
+    description:
+      'PUT the image here within the hour, then activate the upload by id',
+  })
+  upload!: PresignedUploadDto;
 }

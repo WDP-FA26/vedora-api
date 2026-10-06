@@ -1,5 +1,4 @@
 import { randomUUID } from 'node:crypto';
-import type { IncomingMessage } from 'node:http';
 import {
   BadRequestException,
   ConflictException,
@@ -7,24 +6,17 @@ import {
   Logger,
   NotFoundException,
   PayloadTooLargeException,
-  ServiceUnavailableException,
 } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
 import {
   PostStatus,
   Prisma,
   ProfileImageKind,
   ProfileImageStatus,
 } from '@prisma/client';
-import { BlobNotFoundError, del } from '@vercel/blob';
-import {
-  generateClientTokenFromReadWriteToken,
-  handleUpload,
-  type HandleUploadBody,
-} from '@vercel/blob/client';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { CursorPaginationQueryDto } from '../common/pagination';
 import { PrismaService } from '../prisma/prisma.service';
+import { StorageService, StorageTarget } from '../storage/storage.service';
 import {
   CreateProfileImageUploadDto,
   ProfileDto,
@@ -52,23 +44,21 @@ const IMAGE_EXTENSIONS: Record<string, string> = {
   'image/png': 'png',
   'image/webp': 'webp',
 };
-const UPLOAD_TTL_MS = 60 * 60 * 1000;
+const MAX_IMAGE_BYTES: Record<ProfileImageKind, number> = {
+  AVATAR: 5 * 1024 * 1024,
+  COVER: 10 * 1024 * 1024,
+};
 const ACTIVATE_TTL_MS = 24 * 60 * 60 * 1000;
 const CLEANUP_AGE_MS = 48 * 60 * 60 * 1000;
 
 @Injectable()
 export class ProfilesService {
   private readonly logger = new Logger(ProfilesService.name);
-  private readonly blobToken: string;
-  private readonly callbackUrl: string;
 
   constructor(
     private readonly prisma: PrismaService,
-    config: ConfigService,
-  ) {
-    this.blobToken = config.get<string>('BLOB_READ_WRITE_TOKEN', '');
-    this.callbackUrl = config.get<string>('BLOB_CALLBACK_URL', '');
-  }
+    private readonly storage: StorageService,
+  ) {}
 
   async findOne(id: string): Promise<ProfileDto> {
     const user = await this.requirePublicUser(id);
@@ -190,65 +180,39 @@ export class ProfilesService {
     ownerId: string,
     dto: CreateProfileImageUploadDto,
   ): Promise<ProfileImageUploadDto> {
-    const token = this.requireBlob();
-    const callbackUrl = this.requireCallback();
-    const maximumSizeInBytes =
-      dto.kind === ProfileImageKind.AVATAR ? 5 * 1024 * 1024 : 10 * 1024 * 1024;
-    if (dto.sizeBytes > maximumSizeInBytes)
+    if (dto.sizeBytes > MAX_IMAGE_BYTES[dto.kind])
       throw new PayloadTooLargeException('Profile image is too large');
     const extension = IMAGE_EXTENSIONS[dto.contentType];
     if (!extension) throw new BadRequestException('Unsupported image type');
     const id = randomUUID();
-    const pathname = `profiles/${ownerId}/${dto.kind.toLowerCase()}/${id}.${extension}`;
-    const clientToken = await generateClientTokenFromReadWriteToken({
-      token,
-      pathname,
-      allowedContentTypes: [dto.contentType],
-      maximumSizeInBytes,
-      validUntil: Date.now() + UPLOAD_TTL_MS,
-      onUploadCompleted: { callbackUrl, tokenPayload: id },
-    });
+    const key = `profiles/${ownerId}/${dto.kind.toLowerCase()}/${id}.${extension}`;
+    const upload = await this.storage.presignUpload(
+      StorageTarget.Profiles,
+      key,
+      dto.contentType,
+      dto.sizeBytes,
+    );
     await this.prisma.profileImageUpload.create({
       data: {
         id,
         ownerId,
         kind: dto.kind,
-        contentType: dto.contentType,
-        pathname,
+        storageKey: key,
       },
     });
-    return { id, pathname, clientToken };
+    return { id, upload };
   }
 
-  async handleImageCallback(
-    body: HandleUploadBody,
-    request: IncomingMessage,
-  ): Promise<void> {
-    if (body?.type !== 'blob.upload-completed')
-      throw new BadRequestException('Expected an upload-completed callback');
-    await handleUpload({
-      token: this.requireBlob(),
-      body,
-      request,
-      onBeforeGenerateToken: () =>
-        Promise.reject(
-          new Error('Upload tokens are issued by the profile API'),
-        ),
-      onUploadCompleted: async ({ blob }) => {
-        const result = await this.prisma.profileImageUpload.updateMany({
-          where: {
-            pathname: blob.pathname,
-            contentType: blob.contentType,
-            status: ProfileImageStatus.WAITING_UPLOAD,
-          },
-          data: { status: ProfileImageStatus.READY, url: blob.url },
-        });
-        if (result.count === 0)
-          this.logger.warn(
-            `Unmatched profile image callback: ${blob.pathname}`,
-          );
+  async markImageUploaded(key: string): Promise<void> {
+    const result = await this.prisma.profileImageUpload.updateMany({
+      where: {
+        storageKey: key,
+        status: ProfileImageStatus.WAITING_UPLOAD,
       },
+      data: { status: ProfileImageStatus.READY },
     });
+    if (result.count === 0)
+      this.logger.warn(`No waiting profile image for ${key}`);
   }
 
   async activateImage(ownerId: string, uploadId: string): Promise<ProfileDto> {
@@ -256,14 +220,15 @@ export class ProfilesService {
       where: { id: uploadId, ownerId },
     });
     if (!image) throw new NotFoundException('Image upload not found');
-    if (image.status !== ProfileImageStatus.READY || !image.url)
+    if (image.status !== ProfileImageStatus.READY)
       throw new ConflictException('Image upload is not ready');
     if (image.createdAt.getTime() < Date.now() - ACTIVATE_TTL_MS)
       throw new ConflictException('Image upload has expired');
+    const url = this.storage.publicObjectUrl(image.storageKey);
     const data =
       image.kind === ProfileImageKind.AVATAR
-        ? { avatarUrl: image.url, avatarPathname: image.pathname }
-        : { coverUrl: image.url, coverPathname: image.pathname };
+        ? { avatarUrl: url }
+        : { coverUrl: url };
     await this.prisma.user.update({ where: { id: ownerId }, data });
     return this.findOne(ownerId);
   }
@@ -276,15 +241,15 @@ export class ProfilesService {
       where: { id: ownerId },
       data:
         kind === ProfileImageKind.AVATAR
-          ? { avatarUrl: null, avatarPathname: null }
-          : { coverUrl: null, coverPathname: null },
+          ? { avatarUrl: null }
+          : { coverUrl: null },
     });
     return this.findOne(ownerId);
   }
 
   @Cron(CronExpression.EVERY_HOUR)
   async purgeUnusedImages(): Promise<void> {
-    if (!this.blobToken) return;
+    if (!this.storage.isConfigured()) return;
     const cutoff = new Date(Date.now() - CLEANUP_AGE_MS);
     let after: { id: string; createdAt: Date } | undefined;
     // Keyset paging keeps active images from blocking cleanup of later rows.
@@ -305,24 +270,18 @@ export class ProfilesService {
         take: 100,
       });
       for (const image of images) {
+        const url = this.storage.publicObjectUrl(image.storageKey);
         const inUse = await this.prisma.user.count({
-          where: {
-            OR: [
-              { avatarPathname: image.pathname },
-              { coverPathname: image.pathname },
-            ],
-          },
+          where: { OR: [{ avatarUrl: url }, { coverUrl: url }] },
         });
         if (inUse) continue;
         try {
-          await del(image.pathname, { token: this.blobToken });
+          await this.storage.delete(StorageTarget.Profiles, image.storageKey);
         } catch (error) {
-          if (!(error instanceof BlobNotFoundError)) {
-            this.logger.warn(
-              `Could not purge ${image.pathname}: ${String(error)}`,
-            );
-            continue;
-          }
+          this.logger.warn(
+            `Could not purge ${image.storageKey}: ${String(error)}`,
+          );
+          continue;
         }
         await this.prisma.profileImageUpload.delete({
           where: { id: image.id },
@@ -360,21 +319,5 @@ export class ProfilesService {
       items,
       nextCursor: rows.length > limit ? items[items.length - 1].id : null,
     };
-  }
-
-  private requireBlob(): string {
-    if (!this.blobToken)
-      throw new ServiceUnavailableException(
-        'Profile image storage is not configured',
-      );
-    return this.blobToken;
-  }
-
-  private requireCallback(): string {
-    if (!this.callbackUrl)
-      throw new ServiceUnavailableException(
-        'Profile image callback is not configured',
-      );
-    return this.callbackUrl;
   }
 }
