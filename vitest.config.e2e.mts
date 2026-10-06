@@ -18,8 +18,6 @@ export default defineConfig({
       RESEND_API_KEY: '',
       OPENROUTER_API_KEY: 'e2e-openrouter-key',
       QDRANT_URL: 'http://localhost:6333',
-      BLOB_READ_WRITE_TOKEN: 'vercel_blob_rw_e2estore_e2e-blob-secret',
-      BLOB_CALLBACK_URL: 'https://api.e2e.test/api/v1/webhooks/vercel-blob',
       // Without an endpoint the API skips RustFS setup; webhooks only need
       // the token.
       STORAGE_WEBHOOK_TOKEN: 'e2e-storage-webhook-token',
