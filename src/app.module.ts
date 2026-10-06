@@ -4,7 +4,6 @@ import { ScheduleModule } from '@nestjs/schedule';
 import Joi from 'joi';
 import { AppController } from './app.controller';
 import { AuthModule } from './auth/auth.module';
-import { BlobModule } from './blob/blob.module';
 import { StorageModule } from './storage/storage.module';
 import { HealthModule } from './health/health.module';
 import { KnowledgeModule } from './knowledge/knowledge.module';
@@ -103,7 +102,6 @@ import { UsersModule } from './users/users.module';
     PrismaModule,
     MailModule,
     MuxModule,
-    BlobModule,
     StorageModule,
     QdrantModule,
     AuthModule,

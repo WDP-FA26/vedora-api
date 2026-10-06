@@ -269,9 +269,9 @@ model MediaAsset {
 }
 
 enum KnowledgeDocumentStatus {
-  /// Upload token issued; the browser has not finished sending the file.
+  /// Upload URL issued; RustFS has not reported the file yet.
   WAITING_UPLOAD
-  /// File is in Vercel Blob; its text and images are being extracted and
+  /// File is in RustFS; its text and images are being extracted and
   /// indexed into Qdrant.
   PROCESSING
   READY
@@ -279,7 +279,7 @@ enum KnowledgeDocumentStatus {
 }
 
 enum KnowledgeDocumentFailureReason {
-  /// No Vercel Blob callback arrived before the upload token expired.
+  /// No RustFS upload event arrived before the upload URL expired.
   UPLOAD_EXPIRED
   /// The extractor could not open the file as its content type.
   INVALID_FILE
@@ -292,17 +292,17 @@ enum KnowledgeDocumentFailureReason {
   INDEXING_FAILED
 }
 
-/// A file uploaded to Vercel Blob for the nutrition chatbot's knowledge base.
-/// The browser uploads it directly with a client token scoped to
-/// `blobPathname`; its text chunks and images are then embedded into Qdrant.
+/// A file uploaded to RustFS for the nutrition chatbot's knowledge base.
+/// The browser uploads it directly with a URL presigned for `storageKey`;
+/// its text chunks and images are then embedded into Qdrant.
 model KnowledgeDocument {
   id            String                          @id @default(uuid()) @db.Uuid
   uploadedById  String?                         @map("uploaded_by_id") @db.Uuid
   /// The original file name, shown in the admin UI.
   title         String                          @db.VarChar(255)
-  /// Always application/pdf today; the client token only accepts it.
+  /// Always application/pdf today; the presigned URL only accepts it.
   contentType   String                          @map("content_type") @db.VarChar(255)
-  blobPathname  String                          @unique @map("blob_pathname") @db.VarChar(512)
+  storageKey    String                          @unique @map("storage_key") @db.VarChar(512)
   /// Set once the text has been extracted.
   sizeBytes     Int?                            @map("size_bytes")
   status        KnowledgeDocumentStatus         @default(WAITING_UPLOAD)

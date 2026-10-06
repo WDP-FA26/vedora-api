@@ -1,5 +1,6 @@
 import {
   PayloadTooLargeException,
+  ServiceUnavailableException,
   UnsupportedMediaTypeException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
@@ -9,36 +10,31 @@ import {
   KnowledgeDocumentFailureReason,
   KnowledgeDocumentStatus,
 } from '@prisma/client';
-import { del, get } from '@vercel/blob';
-import { generateClientTokenFromReadWriteToken } from '@vercel/blob/client';
+import { NoSuchKey } from '@aws-sdk/client-s3';
 import { type DeepMockProxy, mockDeep } from 'vitest-mock-extended';
-import { BlobService } from '../blob/blob.service';
 import { PrismaService } from '../prisma/prisma.service';
+import type { PresignedUploadDto } from '../storage/presigned-upload.dto';
+import { StorageService, StorageTarget } from '../storage/storage.service';
 import { DocumentExtractionError } from './extractors/document-extractor';
 import { PdfExtractor } from './extractors/pdf-extractor';
 import { KnowledgeService } from './knowledge.service';
 import { KnowledgeIndexService } from './retrieval/knowledge-index.service';
 
-vi.mock('@vercel/blob', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('@vercel/blob')>()),
-  get: vi.fn(),
-  del: vi.fn(),
-}));
-vi.mock('@vercel/blob/client', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('@vercel/blob/client')>()),
-  generateClientTokenFromReadWriteToken: vi.fn(),
-}));
-
 const documentId = '0b8f0c1e-3c55-4c1b-9d0e-2f7f3a9f7a10';
-const pathname = `knowledge/${documentId}.pdf`;
-const callbackUrl = 'https://api.vedora.vn/api/v1/webhooks/vercel-blob';
+const key = `knowledge/${documentId}.pdf`;
+const presigned: PresignedUploadDto = {
+  url: 'https://storage.vedora.vn/vedora-knowledge/knowledge/d.pdf?X-Amz-Signature=s',
+  method: 'PUT',
+  headers: { 'content-type': 'application/pdf' },
+  expiresAt: new Date('2026-09-28T09:00:00Z'),
+};
 
 const waitingDocument: KnowledgeDocument = {
   id: documentId,
   uploadedById: '4a1e32e4-e18e-4dd7-8b4a-246ef2113ff2',
   title: 'dinh-duong.pdf',
   contentType: 'application/pdf',
-  blobPathname: pathname,
+  storageKey: key,
   sizeBytes: null,
   status: KnowledgeDocumentStatus.WAITING_UPLOAD,
   failureReason: null,
@@ -53,42 +49,33 @@ describe('KnowledgeService', () => {
   let prisma: DeepMockProxy<PrismaService>;
   let extractor: DeepMockProxy<PdfExtractor>;
   let index: DeepMockProxy<KnowledgeIndexService>;
-
-  async function build(env: Record<string, unknown> = {}) {
-    const moduleRef = await Test.createTestingModule({
-      providers: [
-        KnowledgeService,
-        BlobService,
-        { provide: PrismaService, useValue: prisma },
-        { provide: PdfExtractor, useValue: extractor },
-        { provide: KnowledgeIndexService, useValue: index },
-        {
-          provide: ConfigService,
-          useValue: new ConfigService({
-            BLOB_READ_WRITE_TOKEN: 'vercel_blob_rw_store_secret',
-            BLOB_CALLBACK_URL: callbackUrl,
-            MAX_KNOWLEDGE_FILE_MB: 50,
-            ...env,
-          }),
-        },
-      ],
-    }).compile();
-    return moduleRef.get(KnowledgeService);
-  }
+  let storage: DeepMockProxy<StorageService>;
 
   beforeEach(async () => {
     vi.clearAllMocks();
     prisma = mockDeep<PrismaService>();
     extractor = mockDeep<PdfExtractor>();
     index = mockDeep<KnowledgeIndexService>();
-    service = await build();
+    storage = mockDeep<StorageService>();
+    const moduleRef = await Test.createTestingModule({
+      providers: [
+        KnowledgeService,
+        { provide: StorageService, useValue: storage },
+        { provide: PrismaService, useValue: prisma },
+        { provide: PdfExtractor, useValue: extractor },
+        { provide: KnowledgeIndexService, useValue: index },
+        {
+          provide: ConfigService,
+          useValue: new ConfigService({ MAX_KNOWLEDGE_FILE_MB: 50 }),
+        },
+      ],
+    }).compile();
+    service = moduleRef.get(KnowledgeService);
   });
 
   describe('createUpload', () => {
-    it('scopes the client token to the new document and its callback', async () => {
-      vi.mocked(generateClientTokenFromReadWriteToken).mockResolvedValue(
-        'client-token',
-      );
+    it('creates the document with an upload presigned for its key, type and size', async () => {
+      storage.presignUpload.mockResolvedValue(presigned);
       prisma.knowledgeDocument.create.mockImplementation(
         ({ data }) => Promise.resolve({ ...waitingDocument, ...data }) as never,
       );
@@ -99,22 +86,21 @@ describe('KnowledgeService', () => {
         1234,
       );
 
+      const storageKey = `knowledge/${result.document.id}.pdf`;
+      expect(storage.presignUpload).toHaveBeenCalledWith(
+        StorageTarget.Knowledge,
+        storageKey,
+        'application/pdf',
+        1234,
+      );
       expect(
         prisma.knowledgeDocument.create.mock.calls[0][0].data,
       ).toMatchObject({
         title: 'Dinh Duong.PDF',
         contentType: 'application/pdf',
+        storageKey,
       });
-      expect(result.pathname).toMatch(/^knowledge\/[0-9a-f-]{36}\.pdf$/);
-      expect(generateClientTokenFromReadWriteToken).toHaveBeenCalledWith(
-        expect.objectContaining({
-          pathname: result.pathname,
-          allowedContentTypes: ['application/pdf'],
-          maximumSizeInBytes: 50 * 1024 * 1024,
-          onUploadCompleted: { callbackUrl, tokenPayload: result.document.id },
-        }),
-      );
-      expect(result.clientToken).toBe('client-token');
+      expect(result.upload).toBe(presigned);
     });
 
     it('refuses anything but PDFs', async () => {
@@ -131,20 +117,15 @@ describe('KnowledgeService', () => {
       expect(prisma.knowledgeDocument.create).not.toHaveBeenCalled();
     });
 
-    it('answers 503 without a callback URL to confirm uploads', async () => {
-      service = await build({ BLOB_CALLBACK_URL: '' });
-
-      await expect(service.createUpload('user', 'a.pdf', 1)).rejects.toThrow(
-        'File storage callback is not configured',
+    it('creates no document while storage is not configured', async () => {
+      storage.presignUpload.mockRejectedValue(
+        new ServiceUnavailableException(),
       );
-    });
 
-    it('answers 503 without a Blob token', async () => {
-      service = await build({ BLOB_READ_WRITE_TOKEN: '' });
-
-      await expect(service.createUpload('user', 'a.pdf', 1)).rejects.toThrow(
-        'File storage is not configured',
-      );
+      await expect(
+        service.createUpload('user', 'a.pdf', 1),
+      ).rejects.toBeInstanceOf(ServiceUnavailableException);
+      expect(prisma.knowledgeDocument.create).not.toHaveBeenCalled();
     });
   });
 
@@ -159,12 +140,12 @@ describe('KnowledgeService', () => {
       ]);
       const ingest = vi.spyOn(service, 'ingest').mockResolvedValue();
 
-      await service.markUploaded(pathname);
+      await service.markUploaded(key);
 
       expect(prisma.knowledgeDocument.updateManyAndReturn).toHaveBeenCalledWith(
         {
           where: {
-            blobPathname: pathname,
+            storageKey: key,
             status: KnowledgeDocumentStatus.WAITING_UPLOAD,
           },
           data: { status: KnowledgeDocumentStatus.PROCESSING },
@@ -173,11 +154,11 @@ describe('KnowledgeService', () => {
       expect(ingest).toHaveBeenCalledWith(processing);
     });
 
-    it('does nothing when a retried callback finds it already moved on', async () => {
+    it('does nothing when a redelivered event finds it already moved on', async () => {
       prisma.knowledgeDocument.updateManyAndReturn.mockResolvedValue([]);
       const ingest = vi.spyOn(service, 'ingest');
 
-      await service.markUploaded(pathname);
+      await service.markUploaded(key);
 
       expect(ingest).not.toHaveBeenCalled();
     });
@@ -190,10 +171,7 @@ describe('KnowledgeService', () => {
     };
 
     beforeEach(() => {
-      vi.mocked(get).mockResolvedValue({
-        statusCode: 200,
-        stream: new Blob(['%PDF-1.4']).stream(),
-      } as never);
+      storage.getBytes.mockResolvedValue(new TextEncoder().encode('%PDF-1.4'));
     });
 
     it('indexes the sections and marks the document READY', async () => {
@@ -206,10 +184,10 @@ describe('KnowledgeService', () => {
 
       await service.ingest(processing);
 
-      expect(get).toHaveBeenCalledWith(pathname, {
-        access: 'private',
-        token: 'vercel_blob_rw_store_secret',
-      });
+      expect(storage.getBytes).toHaveBeenCalledWith(
+        StorageTarget.Knowledge,
+        key,
+      );
       expect(extractor.extract).toHaveBeenCalledWith(expect.any(Uint8Array));
       expect(prisma.knowledgeDocument.update).toHaveBeenCalledWith({
         where: { id: documentId },
@@ -258,8 +236,24 @@ describe('KnowledgeService', () => {
       });
     });
 
+    it('fails the document when its file is gone', async () => {
+      storage.getBytes.mockRejectedValue(
+        new NoSuchKey({ message: 'gone', $metadata: {} }),
+      );
+
+      await service.ingest(processing);
+
+      expect(prisma.knowledgeDocument.update).toHaveBeenCalledWith({
+        where: { id: documentId },
+        data: {
+          status: KnowledgeDocumentStatus.FAILED,
+          failureReason: KnowledgeDocumentFailureReason.UPLOAD_EXPIRED,
+        },
+      });
+    });
+
     it('fails the document on unexpected errors', async () => {
-      vi.mocked(get).mockRejectedValue(new Error('network down'));
+      storage.getBytes.mockRejectedValue(new Error('network down'));
 
       await service.ingest(processing);
 
@@ -274,14 +268,12 @@ describe('KnowledgeService', () => {
   });
 
   describe('remove', () => {
-    it('deletes the blob, the Qdrant points, then the row', async () => {
+    it('deletes the file, the Qdrant points, then the row', async () => {
       prisma.knowledgeDocument.findUnique.mockResolvedValue(waitingDocument);
 
       await service.remove(documentId);
 
-      expect(del).toHaveBeenCalledWith(pathname, {
-        token: 'vercel_blob_rw_store_secret',
-      });
+      expect(storage.delete).toHaveBeenCalledWith(StorageTarget.Knowledge, key);
       expect(index.remove).toHaveBeenCalledWith(documentId);
       expect(prisma.knowledgeDocument.delete).toHaveBeenCalledWith({
         where: { id: documentId },

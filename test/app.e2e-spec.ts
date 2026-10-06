@@ -5,16 +5,13 @@ import { UserRole } from '@prisma/client';
 import { Test } from '@nestjs/testing';
 import request from 'supertest';
 import type { App } from 'supertest/types';
-import type { MockInstance } from 'vitest';
 import { type DeepMockProxy, mockDeep } from 'vitest-mock-extended';
 import { AppModule } from '../src/app.module';
 import { configureApp } from '../src/app.setup';
-import { KnowledgeService } from '../src/knowledge/knowledge.service';
 import { assetReady } from '../src/media/media.fixtures';
 import { PrismaService } from '../src/prisma/prisma.service';
 
 const WEBHOOK_SECRET = 'e2e-webhook-secret';
-const BLOB_TOKEN = 'vercel_blob_rw_e2estore_e2e-blob-secret';
 
 function signWebhook(payload: string, key = WEBHOOK_SECRET) {
   const timestamp = Math.floor(Date.now() / 1000);
@@ -207,78 +204,6 @@ describe('Vedora API (e2e)', () => {
         .set('authorization', `Bearer ${token}`)
         .send({ filename: 'anh-mon-an.jpg', sizeBytes: 1234 })
         .expect(415);
-    });
-  });
-
-  describe('POST /api/v1/webhooks/vercel-blob', () => {
-    const pathname = 'knowledge/0b8f0c1e-3c55-4c1b-9d0e-2f7f3a9f7a10.pdf';
-    const url = `https://e2estore.private.blob.vercel-storage.com/${pathname}`;
-    const payload = JSON.stringify({
-      type: 'blob.upload-completed',
-      payload: {
-        blob: {
-          url,
-          downloadUrl: `${url}?download=1`,
-          pathname,
-          contentType: 'application/pdf',
-          contentDisposition: 'inline; filename="0b8f0c1e.pdf"',
-        },
-        tokenPayload: '0b8f0c1e-3c55-4c1b-9d0e-2f7f3a9f7a10',
-      },
-    });
-    const sign = (body: string, key = BLOB_TOKEN) =>
-      createHmac('sha256', key).update(body).digest('hex');
-
-    let markUploaded: MockInstance<KnowledgeService['markUploaded']>;
-
-    beforeEach(() => {
-      markUploaded = vi
-        .spyOn(app.get(KnowledgeService), 'markUploaded')
-        .mockResolvedValue();
-    });
-
-    afterEach(() => {
-      markUploaded.mockRestore();
-    });
-
-    it('accepts callbacks signed with the Blob token', async () => {
-      await request(app.getHttpServer())
-        .post('/api/v1/webhooks/vercel-blob')
-        .set('content-type', 'application/json')
-        .set('x-vercel-signature', sign(payload))
-        .send(payload)
-        .expect(204);
-
-      expect(markUploaded).toHaveBeenCalledWith(pathname);
-    });
-
-    it('rejects callbacks with a bad signature', async () => {
-      await request(app.getHttpServer())
-        .post('/api/v1/webhooks/vercel-blob')
-        .set('content-type', 'application/json')
-        .set('x-vercel-signature', sign(payload, 'wrong-token'))
-        .send(payload)
-        .expect(400);
-
-      expect(markUploaded).not.toHaveBeenCalled();
-    });
-
-    it('never issues upload tokens', async () => {
-      const tokenRequest = JSON.stringify({
-        type: 'blob.generate-client-token',
-        payload: {
-          pathname: 'knowledge/x.pdf',
-          multipart: false,
-          clientPayload: null,
-        },
-      });
-
-      await request(app.getHttpServer())
-        .post('/api/v1/webhooks/vercel-blob')
-        .set('content-type', 'application/json')
-        .set('x-vercel-signature', sign(tokenRequest))
-        .send(tokenRequest)
-        .expect(400);
     });
   });
 });

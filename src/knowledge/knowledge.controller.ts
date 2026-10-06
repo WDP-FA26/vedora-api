@@ -40,14 +40,14 @@ export class KnowledgeController {
   @ApiOperation({
     summary: 'Start a knowledge-base file upload',
     description:
-      'Creates the document and returns a Vercel Blob client token for its pathname. The browser uploads the file straight to Vercel Blob.',
+      'Creates the document and returns a presigned URL; the browser PUTs the PDF straight to RustFS.',
   })
   @ApiUnsupportedMediaTypeResponse({
     description: 'The file is not a PDF',
   })
   @ApiPayloadTooLargeResponse({ description: 'Over MAX_KNOWLEDGE_FILE_MB' })
   @ApiServiceUnavailableResponse({
-    description: 'Vercel Blob or its callback URL is not configured',
+    description: 'File storage is not configured',
   })
   createUpload(
     @Req() request: AuthenticatedRequest,
