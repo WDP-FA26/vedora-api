@@ -94,22 +94,17 @@ ID không tồn tại hoặc chưa xác minh trả `404`. Guest bấm Follow nê
 Endpoint này không sửa `username`, `email`, `role` hoặc Dietary Profile. Field
 không khai báo bị từ chối `400`.
 
-## Avatar và ảnh bìa bằng Vercel Blob
+## Avatar và ảnh bìa (RustFS)
 
-Ảnh profile hiện dùng chung `BLOB_READ_WRITE_TOKEN` và `BLOB_CALLBACK_URL` với
-PDF kiến thức. Code upload ảnh yêu cầu `access: 'public'`, còn PDF yêu cầu
-`access: 'private'`. Vercel Blob chọn quyền truy cập khi tạo **store**, vì vậy
-**một token của một store không thể đáp ứng đồng thời hai luồng này**. Nếu token
-trỏ tới store Private, bước `put` ảnh trên FE sẽ bị Vercel từ chối; nếu trỏ tới
-store Public, luồng PDF Private sẽ không hoạt động. Backend cần dùng hai store
-hoặc phục vụ ảnh qua API từ store Private trước khi cả hai tính năng có thể hoạt
-động cùng lúc. API hiện chưa kiểm tra trước loại store để trả `503`; FE cần xử lý
-lỗi từ lệnh `put`.
+File được lưu trên RustFS (lưu trữ tương thích S3, tự host). Ảnh profile nằm
+trong bucket công khai `vedora-profiles`, PDF kiến thức nằm trong bucket riêng
+tư `vedora-knowledge`. FE không bao giờ giữ khóa truy cập: API ký sẵn một URL
+`PUT` cho đúng một file, cố định key, `Content-Type`, kích thước và hạn dùng.
 
 Chỉ tài khoản đăng nhập được upload. Nhận JPEG, PNG, WebP; avatar tối đa 5 MiB,
 ảnh bìa tối đa 10 MiB. FE nên crop/resize trước khi gửi.
 
-1. Gọi `POST /profiles/me/images/uploads`:
+1. Gọi `POST /profiles/me/images/uploads` với **đúng** kích thước file sẽ gửi:
 
    ```json
    { "kind": "AVATAR", "contentType": "image/webp", "sizeBytes": 145000 }
@@ -120,55 +115,56 @@ Chỉ tài khoản đăng nhập được upload. Nhận JPEG, PNG, WebP; avatar
    ```json
    {
      "id": "b7f6f651-b0fc-43a5-b589-edbda60e5983",
-     "pathname": "profiles/<userId>/avatar/b7f6f651-b0fc-43a5-b589-edbda60e5983.webp",
-     "clientToken": "..."
+     "upload": {
+       "url": "https://storage.example.com/vedora-profiles/profiles/<userId>/avatar/<id>.webp?X-Amz-...",
+       "method": "PUT",
+       "headers": { "content-type": "image/webp" },
+       "expiresAt": "2026-10-06T10:00:00.000Z"
+     }
    }
    ```
 
-2. Trong trình duyệt, dùng `@vercel/blob/client`:
+2. Gửi file gốc tới `upload.url` bằng `upload.method`, kèm nguyên `upload.headers`
+   và **không** kèm `Authorization`. FE dùng `uploadToStorage()` trong
+   `features/shared/lib/storage-upload.ts` (Uppy `@uppy/aws-s3`, có tiến độ và hủy).
+   Nếu file khác kích thước hoặc `Content-Type` đã khai báo, RustFS trả `403`.
 
-   ```ts
-   import { put } from '@vercel/blob/client';
-
-   await put(pathname, file, {
-     access: 'public',
-     token: clientToken,
-     contentType: file.type,
-   });
-   ```
-
-3. Vercel Blob gọi callback tới backend để xác nhận upload. Sau khi `put`
-   thành công, gọi `POST /profiles/me/images/:uploadId/activate`. Nếu nhận
-   `409` vì callback chưa tới, đợi ngắn rồi thử lại; chỉ thử trong 24 giờ kể
-   từ lúc xin token. Response `200` là `Profile` mới với `avatarUrl` hoặc
-   `coverUrl` đã cập nhật. FE chỉ lưu URL do API trả về, không gửi URL bất kỳ
-   để cập nhật profile.
+3. RustFS báo cho backend khi file đã lưu (webhook nội bộ, FE không gọi). Sau khi
+   upload thành công, gọi `POST /profiles/me/images/:uploadId/activate`. Nếu nhận
+   `409` vì sự kiện chưa tới, đợi ngắn rồi thử lại; chỉ thử trong 24 giờ kể từ
+   lúc xin URL. Response `200` là `Profile` mới với `avatarUrl` hoặc `coverUrl`
+   đã cập nhật. FE chỉ lưu URL do API trả về, không gửi URL bất kỳ để cập nhật
+   profile.
 
 4. Muốn bỏ ảnh hiện tại: `DELETE /profiles/me/images/AVATAR` hoặc
    `/profiles/me/images/COVER`. Response `200` là `Profile` mới với URL tương
    ứng bằng `null`.
 
-Token upload hết hạn sau 1 giờ. Upload chưa kích hoạt và ảnh cũ được dọn nền
-sau ít nhất 48 giờ. Ảnh đã công khai có thể còn được cache trong thời gian đó.
+URL upload hết hạn sau 1 giờ. Upload chưa kích hoạt và ảnh cũ được dọn nền sau
+ít nhất 48 giờ. Ảnh đã công khai có thể còn được cache trong thời gian đó.
 
 ## Trạng thái lỗi quan trọng
 
-| Status | Trường hợp                                                                  |
-| ------ | --------------------------------------------------------------------------- |
-| `400`  | UUID/query/body sai; tự Follow; loại ảnh không hỗ trợ                       |
-| `401`  | Thiếu hoặc sai access token trên endpoint cần đăng nhập                     |
-| `404`  | Profile không tồn tại/chưa xác minh; upload không thuộc người gọi           |
-| `409`  | Kích hoạt upload chưa được callback xác nhận hoặc đã quá 24 giờ             |
-| `413`  | Kích thước ảnh vượt giới hạn                                                |
-| `503`  | Thiếu `BLOB_READ_WRITE_TOKEN` hoặc `BLOB_CALLBACK_URL` khi xin token upload |
+| Status | Trường hợp                                                          |
+| ------ | ------------------------------------------------------------------- |
+| `400`  | UUID/query/body sai; tự Follow; loại ảnh không hỗ trợ               |
+| `401`  | Thiếu hoặc sai access token trên endpoint cần đăng nhập             |
+| `403`  | (từ RustFS) file gửi lên khác kích thước/loại đã khai báo, hoặc URL hết hạn |
+| `404`  | Profile không tồn tại/chưa xác minh; upload không thuộc người gọi   |
+| `409`  | Kích hoạt upload chưa được RustFS xác nhận hoặc đã quá 24 giờ       |
+| `413`  | Kích thước ảnh vượt giới hạn                                        |
+| `503`  | Backend chưa cấu hình lưu trữ (`STORAGE_*`)                         |
 
-## Cấu hình backend cần có
+## Cấu hình
 
-Không còn biến `PROFILE_BLOB_READ_WRITE_TOKEN` hoặc `PROFILE_BLOB_CALLBACK_URL`.
-`BLOB_READ_WRITE_TOKEN` lấy từ Vercel dashboard → Storage → Blob → cấu hình store.
-`BLOB_CALLBACK_URL` không phải giá trị lấy từ Vercel: đặt bằng URL public đầy đủ
-của API, ví dụ `https://api.example.com/api/v1/webhooks/vercel-blob`. Endpoint
-này nhận callback cho cả ảnh profile và PDF; FE không gọi trực tiếp. Local cần
-tunnel HTTPS tới API rồi dùng URL tunnel kèm `/api/v1/webhooks/vercel-blob`, vì
-Vercel không thể gọi `localhost`. Không đưa token store lên frontend; FE chỉ nhận
-client token giới hạn cho đúng ảnh từ API.
+Backend (`docker-compose.yml` chạy sẵn RustFS ở `localhost:9000`; API tự tạo
+bucket, quyền đọc công khai và liên kết sự kiện khi khởi động):
+
+- `STORAGE_ENDPOINT`: API gọi RustFS qua địa chỉ này (Dokploy: `http://rustfs:9000`, đã cố định trong compose).
+- `STORAGE_PUBLIC_URL`: địa chỉ trình duyệt dùng để upload và tải ảnh (Dokploy: domain gán cho service `rustfs`, cổng 9000).
+- `STORAGE_ACCESS_KEY`, `STORAGE_SECRET_KEY`: tài khoản gốc của RustFS; compose truyền cùng giá trị cho RustFS.
+- `STORAGE_WEBHOOK_TOKEN`: bearer token RustFS gửi kèm sự kiện upload tới `/api/v1/webhooks/storage/{knowledge,profiles}`.
+- `CORS_ORIGIN`: RustFS dùng luôn giá trị này để cho phép trình duyệt upload.
+
+Frontend: `NEXT_PUBLIC_STORAGE_URL` bằng `STORAGE_PUBLIC_URL` (CSP cho upload
+và ảnh; mặc định `http://localhost:9000`).

@@ -4,7 +4,8 @@ import { ScheduleModule } from '@nestjs/schedule';
 import Joi from 'joi';
 import { AppController } from './app.controller';
 import { AuthModule } from './auth/auth.module';
-import { BlobModule } from './blob/blob.module';
+import { StorageModule } from './storage/storage.module';
+import { StorageWebhookModule } from './storage/storage-webhook.module';
 import { HealthModule } from './health/health.module';
 import { KnowledgeModule } from './knowledge/knowledge.module';
 import { MailModule } from './mail/mail.module';
@@ -64,11 +65,14 @@ import { UsersModule } from './users/users.module';
         OPENROUTER_REASONING_EFFORT: Joi.string()
           .valid(...REASONING_EFFORTS)
           .default('low'),
-        // Empty: knowledge-base uploads answer 503.
-        BLOB_READ_WRITE_TOKEN: Joi.string().allow('').default(''),
-        // Public URL of POST /webhooks/vercel-blob; empty disables uploads
-        // (503). Locally, point it at a tunnel.
-        BLOB_CALLBACK_URL: Joi.string().uri().allow('').default(''),
+        STORAGE_ENDPOINT: Joi.string().uri().allow('').default(''),
+        STORAGE_PUBLIC_URL: Joi.string().uri().allow('').default(''),
+        STORAGE_ACCESS_KEY: Joi.string().allow('').default(''),
+        STORAGE_SECRET_KEY: Joi.string().allow('').default(''),
+        STORAGE_REGION: Joi.string().default('us-east-1'),
+        STORAGE_KNOWLEDGE_BUCKET: Joi.string().default('vedora-knowledge'),
+        STORAGE_PROFILES_BUCKET: Joi.string().default('vedora-profiles'),
+        STORAGE_WEBHOOK_TOKEN: Joi.string().allow('').default(''),
         MAX_KNOWLEDGE_FILE_MB: Joi.number().integer().positive().default(50),
         QDRANT_URL: Joi.string().uri().required(),
         QDRANT_API_KEY: Joi.string().allow('').default(''),
@@ -94,7 +98,7 @@ import { UsersModule } from './users/users.module';
     PrismaModule,
     MailModule,
     MuxModule,
-    BlobModule,
+    StorageModule,
     QdrantModule,
     AuthModule,
     HealthModule,
@@ -104,6 +108,7 @@ import { UsersModule } from './users/users.module';
     NutritionChatModule,
     KnowledgeModule,
     ProfilesModule,
+    StorageWebhookModule,
   ],
   controllers: [AppController],
 })

@@ -1,7 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import type { IncomingMessage } from 'node:http';
 import {
-  BadRequestException,
   Injectable,
   Logger,
   NotFoundException,
@@ -14,13 +12,8 @@ import {
   KnowledgeDocumentFailureReason,
   KnowledgeDocumentStatus,
 } from '@prisma/client';
-import { BlobNotFoundError, del, get } from '@vercel/blob';
-import {
-  generateClientTokenFromReadWriteToken,
-  handleUpload,
-  type HandleUploadBody,
-} from '@vercel/blob/client';
-import { BlobService } from '../blob/blob.service';
+import { NoSuchKey } from '@aws-sdk/client-s3';
+import { StorageService, StorageTarget } from '../storage/storage.service';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   CreateKnowledgeUploadResponseDto,
@@ -33,20 +26,6 @@ import {
 import { PDF_CONTENT_TYPE, PdfExtractor } from './extractors/pdf-extractor';
 import { KnowledgeIndexService } from './retrieval/knowledge-index.service';
 
-/** Client tokens stop accepting the upload after this long. */
-export const UPLOAD_TOKEN_TTL_MS = 60 * 60 * 1000;
-
-/**
- * Knowledge-base files go straight from the browser to Vercel Blob:
- * `createUpload` accepts PDFs only, then creates the document row and a
- * client token scoped to its pathname and content type. Only Vercel
- * Blob's signed upload-completed callback (`handleCallback`) starts
- * ingestion; the browser is never trusted to say an upload finished.
- * `markUploaded` moves the row to PROCESSING exactly once (Vercel retries
- * callbacks), and `ingest` extracts the PDF and indexes the result
- * into Qdrant. The maintenance cron fails documents that
- * never complete.
- */
 @Injectable()
 export class KnowledgeService {
   private readonly logger = new Logger(KnowledgeService.name);
@@ -54,7 +33,7 @@ export class KnowledgeService {
 
   constructor(
     private readonly prisma: PrismaService,
-    private readonly blob: BlobService,
+    private readonly storage: StorageService,
     private readonly pdf: PdfExtractor,
     private readonly index: KnowledgeIndexService,
     configService: ConfigService,
@@ -68,8 +47,6 @@ export class KnowledgeService {
     filename: string,
     sizeBytes: number,
   ): Promise<CreateKnowledgeUploadResponseDto> {
-    const token = this.blob.require();
-    const callbackUrl = this.blob.requireCallbackUrl();
     if (sizeBytes > this.maxBytes) {
       throw new PayloadTooLargeException(
         `Files are limited to ${this.maxBytes / 1024 / 1024} MB`,
@@ -79,75 +56,47 @@ export class KnowledgeService {
       throw new UnsupportedMediaTypeException('Only PDF files are supported');
     }
     const id = randomUUID();
-    const pathname = `knowledge/${id}.pdf`;
-
-    const clientToken = await generateClientTokenFromReadWriteToken({
-      token,
-      pathname,
-      allowedContentTypes: [PDF_CONTENT_TYPE],
-      maximumSizeInBytes: this.maxBytes,
-      validUntil: Date.now() + UPLOAD_TOKEN_TTL_MS,
-      onUploadCompleted: { callbackUrl, tokenPayload: id },
-    });
+    const key = `knowledge/${id}.pdf`;
+    const upload = await this.storage.presignUpload(
+      StorageTarget.Knowledge,
+      key,
+      PDF_CONTENT_TYPE,
+      sizeBytes,
+    );
     const document = await this.prisma.knowledgeDocument.create({
       data: {
         id,
         uploadedById: userId,
         title: filename,
         contentType: PDF_CONTENT_TYPE,
-        blobPathname: pathname,
+        storageKey: key,
       },
     });
 
-    return { document: toResponse(document), pathname, clientToken };
+    return { document: toResponse(document), upload };
   }
 
-  /**
-   * Verifies Vercel Blob's upload-completed callback. Token requests are
-   * refused here: tokens only come from the authenticated `createUpload`.
-   */
-  async handleCallback(
-    body: HandleUploadBody,
-    request: IncomingMessage,
-  ): Promise<void> {
-    if (body?.type !== 'blob.upload-completed') {
-      throw new BadRequestException('Expected an upload-completed callback');
-    }
-    await handleUpload({
-      token: this.blob.require(),
-      body,
-      request,
-      onBeforeGenerateToken: () =>
-        Promise.reject(
-          new Error('Tokens are issued by POST /knowledge/documents'),
-        ),
-      onUploadCompleted: async ({ blob }) => {
-        await this.markUploaded(blob.pathname);
-      },
-    });
-  }
-
-  /**
-   * Moves a waiting document to PROCESSING and starts ingestion. Conditional,
-   * so a retried callback and the cron can race safely.
-   */
-  async markUploaded(pathname: string): Promise<void> {
+  async markUploaded(key: string): Promise<void> {
     const [document] = await this.prisma.knowledgeDocument.updateManyAndReturn({
       where: {
-        blobPathname: pathname,
+        storageKey: key,
         status: KnowledgeDocumentStatus.WAITING_UPLOAD,
       },
       data: { status: KnowledgeDocumentStatus.PROCESSING },
     });
-    // don't hold the callback open during extraction; failures land on the row
+    // don't hold the event open during extraction; failures land on the row
     if (document) void this.ingest(document);
+    else this.logger.warn(`No waiting document for ${key}`);
   }
 
   async ingest(document: KnowledgeDocument): Promise<void> {
     let file: Uint8Array;
     let sections: ExtractedSection[];
     try {
-      file = await this.download(document.blobPathname);
+      file = await this.storage.getBytes(
+        StorageTarget.Knowledge,
+        document.storageKey,
+      );
       sections = await this.pdf.extract(file);
     } catch (error) {
       await this.failExtraction(document.id, error);
@@ -185,7 +134,7 @@ export class KnowledgeService {
     if (error instanceof DocumentExtractionError) {
       await this.fail(id, error.reason);
       this.logger.warn(`Rejected ${id}: ${error.message}`);
-    } else if (error instanceof BlobNotFoundError) {
+    } else if (error instanceof NoSuchKey) {
       await this.fail(id, KnowledgeDocumentFailureReason.UPLOAD_EXPIRED);
     } else {
       await this.fail(id, KnowledgeDocumentFailureReason.EXTRACTION_FAILED);
@@ -217,20 +166,9 @@ export class KnowledgeService {
   /** Deletes the row last, so a failure leaves it to retry from. */
   async remove(id: string): Promise<void> {
     const document = await this.findDocument(id);
-    await del(document.blobPathname, { token: this.blob.require() });
+    await this.storage.delete(StorageTarget.Knowledge, document.storageKey);
     await this.index.remove(id);
     await this.prisma.knowledgeDocument.delete({ where: { id } });
-  }
-
-  private async download(pathname: string): Promise<Uint8Array> {
-    const result = await get(pathname, {
-      access: 'private',
-      token: this.blob.require(),
-    });
-    if (!result || result.statusCode !== 200) {
-      throw new BlobNotFoundError();
-    }
-    return new Uint8Array(await new Response(result.stream).arrayBuffer());
   }
 
   private async findDocument(id: string): Promise<KnowledgeDocument> {

@@ -3,6 +3,7 @@ import {
   KnowledgeDocumentFailureReason,
   KnowledgeDocumentStatus,
 } from '@prisma/client';
+import { PresignedUploadDto } from '../../storage/presigned-upload.dto';
 
 export class KnowledgeDocumentResponseDto {
   @ApiProperty({ format: 'uuid' })
@@ -47,14 +48,9 @@ export class CreateKnowledgeUploadResponseDto {
   document!: KnowledgeDocumentResponseDto;
 
   @ApiProperty({
-    example: 'knowledge/0b8f0c1e-3c55-4c1b-9d0e-2f7f3a9f7a10.pdf',
-    description: 'Upload the file to exactly this pathname',
-  })
-  pathname!: string;
-
-  @ApiProperty({
+    type: PresignedUploadDto,
     description:
-      "Vercel Blob client token, valid for this pathname and the document's content type only. Pass it to `put(pathname, file, { access: 'private', token, contentType })` from '@vercel/blob/client'; it expires after an hour. Ingestion starts when Vercel Blob's callback reaches the API, so poll GET /knowledge/documents.",
+      'PUT the PDF here within the hour. Ingestion starts when RustFS reports the upload, so poll GET /knowledge/documents.',
   })
-  clientToken!: string;
+  upload!: PresignedUploadDto;
 }

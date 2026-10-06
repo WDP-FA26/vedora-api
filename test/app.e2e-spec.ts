@@ -14,7 +14,6 @@ import { assetReady } from '../src/media/media.fixtures';
 import { PrismaService } from '../src/prisma/prisma.service';
 
 const WEBHOOK_SECRET = 'e2e-webhook-secret';
-const BLOB_TOKEN = 'vercel_blob_rw_e2estore_e2e-blob-secret';
 
 function signWebhook(payload: string, key = WEBHOOK_SECRET) {
   const timestamp = Math.floor(Date.now() / 1000);
@@ -39,9 +38,7 @@ describe('Vedora API (e2e)', () => {
       email: 'hello@vedora.vn',
       bio: null,
       avatarUrl: null,
-      avatarPathname: null,
       coverUrl: null,
-      coverPathname: null,
       passwordHash: null,
       googleId: null,
       emailVerifiedAt: new Date(),
@@ -210,24 +207,29 @@ describe('Vedora API (e2e)', () => {
     });
   });
 
-  describe('POST /api/v1/webhooks/vercel-blob', () => {
-    const pathname = 'knowledge/0b8f0c1e-3c55-4c1b-9d0e-2f7f3a9f7a10.pdf';
-    const url = `https://e2estore.private.blob.vercel-storage.com/${pathname}`;
-    const payload = JSON.stringify({
-      type: 'blob.upload-completed',
-      payload: {
-        blob: {
-          url,
-          downloadUrl: `${url}?download=1`,
-          pathname,
-          contentType: 'application/pdf',
-          contentDisposition: 'inline; filename="0b8f0c1e.pdf"',
+  describe('POST /api/v1/webhooks/storage/:target', () => {
+    const key = 'knowledge/0b8f0c1e-3c55-4c1b-9d0e-2f7f3a9f7a10.pdf';
+    // The shape RustFS 1.0 sends, keys URL-encoded.
+    const event = (bucket: string, objectKey: string) => ({
+      EventName: 's3:ObjectCreated:Put',
+      Key: `${bucket}/${objectKey}`,
+      Records: [
+        {
+          eventVersion: '2.1',
+          eventSource: 'rustfs:s3',
+          eventName: 's3:ObjectCreated:Put',
+          s3: {
+            bucket: { name: bucket },
+            object: {
+              key: encodeURIComponent(objectKey),
+              size: 19,
+              contentType: 'application/pdf',
+            },
+          },
         },
-        tokenPayload: '0b8f0c1e-3c55-4c1b-9d0e-2f7f3a9f7a10',
-      },
+      ],
     });
-    const sign = (body: string, key = BLOB_TOKEN) =>
-      createHmac('sha256', key).update(body).digest('hex');
+    const token = `Bearer ${process.env.STORAGE_WEBHOOK_TOKEN}`;
 
     let markUploaded: MockInstance<KnowledgeService['markUploaded']>;
 
@@ -241,44 +243,34 @@ describe('Vedora API (e2e)', () => {
       markUploaded.mockRestore();
     });
 
-    it('accepts callbacks signed with the Blob token', async () => {
+    it("starts ingestion for RustFS's knowledge events", async () => {
       await request(app.getHttpServer())
-        .post('/api/v1/webhooks/vercel-blob')
-        .set('content-type', 'application/json')
-        .set('x-vercel-signature', sign(payload))
-        .send(payload)
+        .post('/api/v1/webhooks/storage/knowledge')
+        .set('authorization', token)
+        .send(event('vedora-knowledge', key))
         .expect(204);
 
-      expect(markUploaded).toHaveBeenCalledWith(pathname);
+      expect(markUploaded).toHaveBeenCalledWith(key);
     });
 
-    it('rejects callbacks with a bad signature', async () => {
+    it('rejects events without the shared token', async () => {
       await request(app.getHttpServer())
-        .post('/api/v1/webhooks/vercel-blob')
-        .set('content-type', 'application/json')
-        .set('x-vercel-signature', sign(payload, 'wrong-token'))
-        .send(payload)
-        .expect(400);
+        .post('/api/v1/webhooks/storage/knowledge')
+        .set('authorization', 'Bearer wrong')
+        .send(event('vedora-knowledge', key))
+        .expect(401);
 
       expect(markUploaded).not.toHaveBeenCalled();
     });
 
-    it('never issues upload tokens', async () => {
-      const tokenRequest = JSON.stringify({
-        type: 'blob.generate-client-token',
-        payload: {
-          pathname: 'knowledge/x.pdf',
-          multipart: false,
-          clientPayload: null,
-        },
-      });
-
+    it("ignores other buckets' objects on the knowledge endpoint", async () => {
       await request(app.getHttpServer())
-        .post('/api/v1/webhooks/vercel-blob')
-        .set('content-type', 'application/json')
-        .set('x-vercel-signature', sign(tokenRequest))
-        .send(tokenRequest)
-        .expect(400);
+        .post('/api/v1/webhooks/storage/knowledge')
+        .set('authorization', token)
+        .send(event('vedora-profiles', 'profiles/u/avatar/a.webp'))
+        .expect(204);
+
+      expect(markUploaded).not.toHaveBeenCalled();
     });
   });
 });
