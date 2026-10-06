@@ -27,6 +27,8 @@
     "redteam": "node scripts/redteam.mts"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.1146.0",
+    "@aws-sdk/s3-request-presigner": "^3.1146.0",
     "@mux/ts": "^15.3.0",
     "@nestjs/common": "^11.2.5",
     "@nestjs/config": "^4.0.4",
@@ -67,6 +69,7 @@
     "@types/supertest": "^7.2.1",
     "@vitest/coverage-v8": "^5.0.1",
     "@vitest/eslint-plugin": "^1.6.27",
+    "aws-sdk-client-mock": "^4.1.0",
     "eslint": "^9.36.0",
     "eslint-config-prettier": "^10.1.8",
     "prettier": "^3.6.2",
