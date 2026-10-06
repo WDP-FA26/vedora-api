@@ -31,6 +31,7 @@ describe('AuthService', () => {
     bio: null,
     avatarUrl: null,
     coverUrl: null,
+    isProfessional: false,
     passwordHash: null,
     googleId: null,
     emailVerifiedAt: now,

@@ -17,6 +17,7 @@ describe('Admin bootstrap', () => {
     bio: null,
     avatarUrl: null,
     coverUrl: null,
+    isProfessional: false,
     role: UserRole.USER,
     passwordHash: 'existing-password-hash',
     googleId: null,

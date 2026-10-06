@@ -18,6 +18,7 @@ import { PrismaModule } from './prisma/prisma.module';
 import { ProfilesModule } from './profiles/profiles.module';
 import { QdrantModule } from './qdrant/qdrant.module';
 import { UsersModule } from './users/users.module';
+import { VerificationModule } from './verification/verification.module';
 
 @Module({
   imports: [
@@ -72,6 +73,9 @@ import { UsersModule } from './users/users.module';
         STORAGE_REGION: Joi.string().default('us-east-1'),
         STORAGE_KNOWLEDGE_BUCKET: Joi.string().default('vedora-knowledge'),
         STORAGE_PROFILES_BUCKET: Joi.string().default('vedora-profiles'),
+        STORAGE_VERIFICATIONS_BUCKET: Joi.string().default(
+          'vedora-verifications',
+        ),
         STORAGE_WEBHOOK_TOKEN: Joi.string().allow('').default(''),
         MAX_KNOWLEDGE_FILE_MB: Joi.number().integer().positive().default(50),
         QDRANT_URL: Joi.string().uri().required(),
@@ -108,6 +112,7 @@ import { UsersModule } from './users/users.module';
     NutritionChatModule,
     KnowledgeModule,
     ProfilesModule,
+    VerificationModule,
     StorageWebhookModule,
   ],
   controllers: [AppController],

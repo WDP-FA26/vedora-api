@@ -12,7 +12,9 @@ import {
   CreateBucketCommand,
   DeleteObjectCommand,
   GetObjectCommand,
+  HeadObjectCommand,
   NoSuchKey,
+  NotFound,
   PutBucketNotificationConfigurationCommand,
   PutBucketPolicyCommand,
   PutObjectCommand,
@@ -24,7 +26,16 @@ import type { PresignedUploadDto } from './presigned-upload.dto';
 export enum StorageTarget {
   Knowledge = 'knowledge',
   Profiles = 'profiles',
+  Verifications = 'verifications',
 }
+
+/** Targets whose uploads RustFS reports to `/webhooks/storage/<target>`. */
+export const WebhookStorageTarget = {
+  Knowledge: StorageTarget.Knowledge,
+  Profiles: StorageTarget.Profiles,
+} as const;
+export type WebhookStorageTarget =
+  (typeof WebhookStorageTarget)[keyof typeof WebhookStorageTarget];
 
 export interface StorageEvent {
   Records?: {
@@ -67,6 +78,9 @@ export class StorageService implements OnModuleInit {
       ),
       [StorageTarget.Profiles]: config.getOrThrow<string>(
         'STORAGE_PROFILES_BUCKET',
+      ),
+      [StorageTarget.Verifications]: config.getOrThrow<string>(
+        'STORAGE_VERIFICATIONS_BUCKET',
       ),
     };
     const client = (url: string): S3Client =>
@@ -140,6 +154,31 @@ export class StorageService implements OnModuleInit {
     };
   }
 
+  /** A short-lived read URL for an object in a private bucket. */
+  presignDownload(
+    target: StorageTarget,
+    key: string,
+    expiresIn: number,
+  ): Promise<string> {
+    return getSignedUrl(
+      this.require().presigner,
+      new GetObjectCommand({ Bucket: this.buckets[target], Key: key }),
+      { expiresIn },
+    );
+  }
+
+  async exists(target: StorageTarget, key: string): Promise<boolean> {
+    try {
+      await this.require().internal.send(
+        new HeadObjectCommand({ Bucket: this.buckets[target], Key: key }),
+      );
+      return true;
+    } catch (error) {
+      if (error instanceof NotFound) return false;
+      throw error;
+    }
+  }
+
   publicObjectUrl(key: string): string {
     return `${this.publicUrl}/${this.buckets[StorageTarget.Profiles]}/${key}`;
   }
@@ -194,6 +233,7 @@ export class StorageService implements OnModuleInit {
         )
           throw error;
       });
+    if (target === StorageTarget.Verifications) return;
     await client.send(
       new PutBucketNotificationConfigurationCommand({
         Bucket,

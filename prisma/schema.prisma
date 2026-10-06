@@ -23,6 +23,8 @@ model User {
   avatarUrl             String?                @map("avatar_url") @db.VarChar(2048)
   coverUrl              String?                @map("cover_url") @db.VarChar(2048)
   role                  UserRole               @default(USER)
+  /// Set when an admin approves a verification request; shown as a badge.
+  isProfessional        Boolean                @default(false) @map("is_professional")
   /// Null until the user proves they own `email` (OTP code or Google).
   emailVerifiedAt       DateTime?              @map("email_verified_at")
   createdAt             DateTime               @default(now())
@@ -37,6 +39,9 @@ model User {
   following             Follow[]               @relation("Following")
   followers             Follow[]               @relation("Followers")
   profileImages         ProfileImageUpload[]
+  verificationRequests  VerificationRequest[]
+  verificationReviews   VerificationRequest[]  @relation("VerificationReviewer")
+  verificationProofs    VerificationProof[]
 
   @@map("users")
 }
@@ -65,13 +70,13 @@ enum ProfileImageStatus {
 }
 
 model ProfileImageUpload {
-  id          String             @id @default(uuid()) @db.Uuid
-  ownerId     String?            @map("owner_id") @db.Uuid
-  kind        ProfileImageKind
-  status      ProfileImageStatus @default(WAITING_UPLOAD)
-  storageKey  String             @unique @map("storage_key") @db.VarChar(512)
-  createdAt   DateTime           @default(now()) @map("created_at")
-  owner       User?              @relation(fields: [ownerId], references: [id], onDelete: SetNull)
+  id         String             @id @default(uuid()) @db.Uuid
+  ownerId    String?            @map("owner_id") @db.Uuid
+  kind       ProfileImageKind
+  status     ProfileImageStatus @default(WAITING_UPLOAD)
+  storageKey String             @unique @map("storage_key") @db.VarChar(512)
+  createdAt  DateTime           @default(now()) @map("created_at")
+  owner      User?              @relation(fields: [ownerId], references: [id], onDelete: SetNull)
 
   @@index([ownerId, status])
   @@index([status, createdAt])
@@ -312,4 +317,49 @@ model KnowledgeDocument {
 
   @@index([status, updatedAt])
   @@map("knowledge_documents")
+}
+
+enum VerificationStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+/// A user's claim to be a food professional, with a statement and proof
+/// images, for an admin to approve or reject. A user has at most one PENDING request.
+model VerificationRequest {
+  id           String              @id @default(uuid()) @db.Uuid
+  userId       String              @map("user_id") @db.Uuid
+  statement    String              @db.VarChar(2000)
+  status       VerificationStatus  @default(PENDING)
+  /// The admin's reason; required when REJECTED and shown to the user.
+  reviewNote   String?             @map("review_note") @db.VarChar(500)
+  reviewedById String?             @map("reviewed_by_id") @db.Uuid
+  reviewedAt   DateTime?           @map("reviewed_at")
+  createdAt    DateTime            @default(now()) @map("created_at")
+  updatedAt    DateTime            @updatedAt @map("updated_at")
+  user         User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  reviewedBy   User?               @relation("VerificationReviewer", fields: [reviewedById], references: [id], onDelete: SetNull)
+  proofs       VerificationProof[]
+
+  @@index([status, createdAt])
+  @@index([userId, createdAt])
+  @@map("verification_requests")
+}
+
+/// A proof image in the private verifications bucket. Rows outlive their
+/// owner and request, so the purge cron can delete the stored file first.
+model VerificationProof {
+  id         String               @id @default(uuid()) @db.Uuid
+  ownerId    String?              @map("owner_id") @db.Uuid
+  /// Null until the image is submitted with a request.
+  requestId  String?              @map("request_id") @db.Uuid
+  storageKey String               @unique @map("storage_key") @db.VarChar(512)
+  createdAt  DateTime             @default(now()) @map("created_at")
+  owner      User?                @relation(fields: [ownerId], references: [id], onDelete: SetNull)
+  request    VerificationRequest? @relation(fields: [requestId], references: [id], onDelete: SetNull)
+
+  @@index([ownerId, requestId])
+  @@index([requestId, createdAt])
+  @@map("verification_proofs")
 }
