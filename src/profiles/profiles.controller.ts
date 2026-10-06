@@ -67,7 +67,7 @@ export class ProfilesController {
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @ApiOperation({
-    summary: 'Get a scoped Vercel Blob client token for an avatar or cover',
+    summary: 'Get a presigned upload for an avatar or cover',
   })
   @ApiCreatedResponse({ type: ProfileImageUploadDto })
   createImageUpload(

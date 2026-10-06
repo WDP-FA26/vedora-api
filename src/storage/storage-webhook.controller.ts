@@ -10,6 +10,7 @@ import {
 } from '@nestjs/common';
 import { ApiExcludeController } from '@nestjs/swagger';
 import { KnowledgeService } from '../knowledge/knowledge.service';
+import { ProfilesService } from '../profiles/profiles.service';
 import { StorageWebhookGuard } from './storage-webhook.guard';
 import {
   StorageService,
@@ -29,11 +30,11 @@ export class StorageWebhookController {
   constructor(
     private readonly storage: StorageService,
     knowledge: KnowledgeService,
+    profiles: ProfilesService,
   ) {
     this.handlers = {
       [StorageTarget.Knowledge]: (key) => knowledge.markUploaded(key),
-      // Profile images still upload to Vercel Blob.
-      [StorageTarget.Profiles]: () => Promise.resolve(),
+      [StorageTarget.Profiles]: (key) => profiles.markImageUploaded(key),
     };
   }
 
