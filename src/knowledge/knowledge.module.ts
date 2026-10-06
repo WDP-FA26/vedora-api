@@ -20,6 +20,6 @@ import { ProfilesModule } from '../profiles/profiles.module';
     KnowledgeIndexService,
     KnowledgeSearchService,
   ],
-  exports: [KnowledgeSearchService],
+  exports: [KnowledgeService, KnowledgeSearchService],
 })
 export class KnowledgeModule {}

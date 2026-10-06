@@ -5,6 +5,7 @@ import Joi from 'joi';
 import { AppController } from './app.controller';
 import { AuthModule } from './auth/auth.module';
 import { StorageModule } from './storage/storage.module';
+import { StorageWebhookModule } from './storage/storage-webhook.module';
 import { HealthModule } from './health/health.module';
 import { KnowledgeModule } from './knowledge/knowledge.module';
 import { MailModule } from './mail/mail.module';
@@ -112,6 +113,7 @@ import { UsersModule } from './users/users.module';
     NutritionChatModule,
     KnowledgeModule,
     ProfilesModule,
+    StorageWebhookModule,
   ],
   controllers: [AppController],
 })
