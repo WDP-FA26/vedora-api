@@ -5,11 +5,9 @@ import {
   KnowledgeDocumentStatus,
 } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
-import { UPLOAD_TOKEN_TTL_MS } from './knowledge.service';
+import { UPLOAD_TTL_SECONDS } from '../storage/storage.service';
 
-/** Headroom past token expiry for a callback that is still on its way. */
-const CALLBACK_GRACE_MS = 10 * 60 * 1000;
-/** Extraction takes seconds; older PROCESSING rows lost their process. */
+const EVENT_GRACE_MS = 10 * 60 * 1000;
 const STALE_PROCESSING_MS = 15 * 60 * 1000;
 
 @Injectable()
@@ -18,10 +16,6 @@ export class KnowledgeMaintenanceService {
 
   constructor(private readonly prisma: PrismaService) {}
 
-  /**
-   * Fails documents that will never complete: uploads whose Vercel Blob
-   * callback never came, and extractions interrupted by a restart.
-   */
   @Cron(CronExpression.EVERY_10_MINUTES)
   async failIncomplete(): Promise<void> {
     const now = Date.now();
@@ -29,7 +23,7 @@ export class KnowledgeMaintenanceService {
       where: {
         status: KnowledgeDocumentStatus.WAITING_UPLOAD,
         createdAt: {
-          lt: new Date(now - UPLOAD_TOKEN_TTL_MS - CALLBACK_GRACE_MS),
+          lt: new Date(now - UPLOAD_TTL_SECONDS * 1000 - EVENT_GRACE_MS),
         },
       },
       data: {
@@ -49,7 +43,7 @@ export class KnowledgeMaintenanceService {
     });
     if (expired.count + stale.count > 0) {
       this.logger.log(
-        `Failed ${expired.count} uploads without a callback and ${stale.count} interrupted extractions`,
+        `Failed ${expired.count} uploads without an upload event and ${stale.count} interrupted extractions`,
       );
     }
   }

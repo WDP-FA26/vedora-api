@@ -13,7 +13,6 @@ import { BlobError } from '@vercel/blob';
 import type { HandleUploadBody } from '@vercel/blob/client';
 import type { Request } from 'express';
 import { ProfilesService } from '../profiles/profiles.service';
-import { KnowledgeService } from './knowledge.service';
 
 /**
  * Vercel Blob calls this when a client upload finishes. It is public; the
@@ -26,10 +25,7 @@ import { KnowledgeService } from './knowledge.service';
 export class VercelBlobWebhookController {
   private readonly logger = new Logger(VercelBlobWebhookController.name);
 
-  constructor(
-    private readonly knowledgeService: KnowledgeService,
-    private readonly profilesService: ProfilesService,
-  ) {}
+  constructor(private readonly profilesService: ProfilesService) {}
 
   @Post('vercel-blob')
   @HttpCode(HttpStatus.NO_CONTENT)
@@ -43,8 +39,6 @@ export class VercelBlobWebhookController {
       const pathname = body.payload?.blob?.pathname;
       if (pathname?.startsWith('profiles/'))
         await this.profilesService.handleImageCallback(body, request);
-      else if (pathname?.startsWith('knowledge/'))
-        await this.knowledgeService.handleCallback(body, request);
       else throw new BadRequestException('Unknown Blob callback pathname');
     } catch (error) {
       // signature and event-type failures; anything else is a 500 to retry
