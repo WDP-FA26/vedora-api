@@ -65,11 +65,6 @@ import { UsersModule } from './users/users.module';
         OPENROUTER_REASONING_EFFORT: Joi.string()
           .valid(...REASONING_EFFORTS)
           .default('low'),
-        // Empty: knowledge-base uploads answer 503.
-        BLOB_READ_WRITE_TOKEN: Joi.string().allow('').default(''),
-        // Public URL of POST /webhooks/vercel-blob; empty disables uploads
-        // (503). Locally, point it at a tunnel.
-        BLOB_CALLBACK_URL: Joi.string().uri().allow('').default(''),
         STORAGE_ENDPOINT: Joi.string().uri().allow('').default(''),
         STORAGE_PUBLIC_URL: Joi.string().uri().allow('').default(''),
         STORAGE_ACCESS_KEY: Joi.string().allow('').default(''),
