@@ -5,9 +5,11 @@ import { UserRole } from '@prisma/client';
 import { Test } from '@nestjs/testing';
 import request from 'supertest';
 import type { App } from 'supertest/types';
+import type { MockInstance } from 'vitest';
 import { type DeepMockProxy, mockDeep } from 'vitest-mock-extended';
 import { AppModule } from '../src/app.module';
 import { configureApp } from '../src/app.setup';
+import { KnowledgeService } from '../src/knowledge/knowledge.service';
 import { assetReady } from '../src/media/media.fixtures';
 import { PrismaService } from '../src/prisma/prisma.service';
 
@@ -204,6 +206,73 @@ describe('Vedora API (e2e)', () => {
         .set('authorization', `Bearer ${token}`)
         .send({ filename: 'anh-mon-an.jpg', sizeBytes: 1234 })
         .expect(415);
+    });
+  });
+
+  describe('POST /api/v1/webhooks/storage/:target', () => {
+    const key = 'knowledge/0b8f0c1e-3c55-4c1b-9d0e-2f7f3a9f7a10.pdf';
+    // The shape RustFS 1.0 sends, keys URL-encoded.
+    const event = (bucket: string, objectKey: string) => ({
+      EventName: 's3:ObjectCreated:Put',
+      Key: `${bucket}/${objectKey}`,
+      Records: [
+        {
+          eventVersion: '2.1',
+          eventSource: 'rustfs:s3',
+          eventName: 's3:ObjectCreated:Put',
+          s3: {
+            bucket: { name: bucket },
+            object: {
+              key: encodeURIComponent(objectKey),
+              size: 19,
+              contentType: 'application/pdf',
+            },
+          },
+        },
+      ],
+    });
+    const token = `Bearer ${process.env.STORAGE_WEBHOOK_TOKEN}`;
+
+    let markUploaded: MockInstance<KnowledgeService['markUploaded']>;
+
+    beforeEach(() => {
+      markUploaded = vi
+        .spyOn(app.get(KnowledgeService), 'markUploaded')
+        .mockResolvedValue();
+    });
+
+    afterEach(() => {
+      markUploaded.mockRestore();
+    });
+
+    it("starts ingestion for RustFS's knowledge events", async () => {
+      await request(app.getHttpServer())
+        .post('/api/v1/webhooks/storage/knowledge')
+        .set('authorization', token)
+        .send(event('vedora-knowledge', key))
+        .expect(204);
+
+      expect(markUploaded).toHaveBeenCalledWith(key);
+    });
+
+    it('rejects events without the shared token', async () => {
+      await request(app.getHttpServer())
+        .post('/api/v1/webhooks/storage/knowledge')
+        .set('authorization', 'Bearer wrong')
+        .send(event('vedora-knowledge', key))
+        .expect(401);
+
+      expect(markUploaded).not.toHaveBeenCalled();
+    });
+
+    it("ignores other buckets' objects on the knowledge endpoint", async () => {
+      await request(app.getHttpServer())
+        .post('/api/v1/webhooks/storage/knowledge')
+        .set('authorization', token)
+        .send(event('vedora-profiles', 'profiles/u/avatar/a.webp'))
+        .expect(204);
+
+      expect(markUploaded).not.toHaveBeenCalled();
     });
   });
 });
