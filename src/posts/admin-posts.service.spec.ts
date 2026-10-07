@@ -41,6 +41,7 @@ const row = {
   media: [media],
   viewCount: 7,
   reposts: [],
+  bookmarks: [],
   _count: { comments: 2, likes: 5, reposts: 1 },
 };
 const track = {

@@ -35,6 +35,7 @@ model User {
   postComments          PostComment[]
   postLikes             PostLike[]
   postReposts           PostRepost[]
+  postBookmarks         PostBookmark[]
   postReports           PostReport[]
   postReportReviews     PostReport[]            @relation("PostReportReviewer")
   media                 MediaAsset[]
@@ -162,6 +163,7 @@ model Post {
   comments    PostComment[]
   likes       PostLike[]
   reposts     PostRepost[]
+  bookmarks   PostBookmark[]
   reports     PostReport[]
   recipes     Recipe[]
 
@@ -207,6 +209,19 @@ model PostRepost {
   @@id([postId, userId])
   @@index([userId, createdAt])
   @@map("post_reposts")
+}
+
+/// A post a user saved for later. Private: no count is shown on the post.
+model PostBookmark {
+  postId    String   @map("post_id") @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at")
+  post      Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([postId, userId])
+  @@index([userId, createdAt])
+  @@map("post_bookmarks")
 }
 
 enum PostReportReason {

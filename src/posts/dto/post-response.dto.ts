@@ -68,6 +68,12 @@ export class PostResponseDto {
   isReposted!: boolean;
 
   @ApiProperty({
+    description:
+      'Whether the authenticated viewer saved this post; false for anonymous reads',
+  })
+  isBookmarked!: boolean;
+
+  @ApiProperty({
     minimum: 0,
     description: 'Times the post was on screen; a few seconds behind',
   })

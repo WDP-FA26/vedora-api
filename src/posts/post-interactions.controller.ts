@@ -33,6 +33,7 @@ import {
 } from './dto/comment.dto';
 import {
   CreatePostReportDto,
+  PostBookmarkResponseDto,
   PostReportDto,
   PostRepostResponseDto,
 } from './dto/post-interaction.dto';
@@ -152,6 +153,30 @@ export class PostInteractionsController {
     @Req() request: AuthenticatedRequest,
   ): Promise<PostRepostResponseDto> {
     return this.interactions.setRepost(postId, request.user.sub, false);
+  }
+
+  @Put('bookmark')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Save a published post for later (idempotent)' })
+  @ApiOkResponse({ type: PostBookmarkResponseDto })
+  bookmark(
+    @Param('postId', ParseUUIDPipe) postId: string,
+    @Req() request: AuthenticatedRequest,
+  ): Promise<PostBookmarkResponseDto> {
+    return this.interactions.setBookmark(postId, request.user.sub, true);
+  }
+
+  @Delete('bookmark')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Remove a post from your saved posts (idempotent)' })
+  @ApiOkResponse({ type: PostBookmarkResponseDto })
+  unbookmark(
+    @Param('postId', ParseUUIDPipe) postId: string,
+    @Req() request: AuthenticatedRequest,
+  ): Promise<PostBookmarkResponseDto> {
+    return this.interactions.setBookmark(postId, request.user.sub, false);
   }
 
   @Post('report')

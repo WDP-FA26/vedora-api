@@ -30,6 +30,11 @@ export class PostRepostResponseDto {
   @ApiProperty({ minimum: 0 }) repostCount!: number;
 }
 
+export class PostBookmarkResponseDto {
+  @ApiProperty({ format: 'uuid' }) postId!: string;
+  @ApiProperty() isBookmarked!: boolean;
+}
+
 export class RecordViewsDto {
   @ApiProperty({
     type: [String],

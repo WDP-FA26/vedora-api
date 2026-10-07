@@ -24,6 +24,7 @@ import type {
 } from '../auth/auth.types';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { OptionalJwtAuthGuard } from '../auth/optional-jwt-auth.guard';
+import { CursorPaginationQueryDto } from '../common/pagination';
 import { CreatePostDto } from './dto/create-post.dto';
 import { RecordViewsDto } from './dto/post-interaction.dto';
 import { ListPostsQueryDto } from './dto/list-posts-query.dto';
@@ -87,6 +88,20 @@ export class PostsController {
     @Req() request: OptionalAuthenticatedRequest,
   ): Promise<PostPageDto> {
     return this.postsService.list(query, request.user?.sub);
+  }
+
+  @Get('bookmarks')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'List the posts you saved, most recently saved first',
+  })
+  @ApiOkResponse({ type: PostPageDto })
+  listBookmarks(
+    @Query() query: CursorPaginationQueryDto,
+    @Req() request: AuthenticatedRequest,
+  ): Promise<PostPageDto> {
+    return this.postsService.listBookmarks(request.user.sub, query);
   }
 
   @Get(':id')

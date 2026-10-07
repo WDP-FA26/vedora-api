@@ -31,6 +31,7 @@ const post = {
   updatedAt: now,
   viewCount: 7,
   reposts: [],
+  bookmarks: [],
   _count: { comments: 0, likes: 0, reposts: 1 },
 };
 
