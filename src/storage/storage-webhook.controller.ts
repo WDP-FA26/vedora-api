@@ -14,7 +14,7 @@ import { ProfilesService } from '../profiles/profiles.service';
 import { StorageWebhookGuard } from './storage-webhook.guard';
 import {
   StorageService,
-  StorageTarget,
+  WebhookStorageTarget,
   type StorageEvent,
 } from './storage.service';
 
@@ -23,7 +23,7 @@ import {
 @UseGuards(StorageWebhookGuard)
 export class StorageWebhookController {
   private readonly handlers: Record<
-    StorageTarget,
+    WebhookStorageTarget,
     (key: string) => Promise<void>
   >;
 
@@ -33,15 +33,16 @@ export class StorageWebhookController {
     profiles: ProfilesService,
   ) {
     this.handlers = {
-      [StorageTarget.Knowledge]: (key) => knowledge.markUploaded(key),
-      [StorageTarget.Profiles]: (key) => profiles.markImageUploaded(key),
+      [WebhookStorageTarget.Knowledge]: (key) => knowledge.markUploaded(key),
+      [WebhookStorageTarget.Profiles]: (key) => profiles.markImageUploaded(key),
     };
   }
 
   @Post(':target')
   @HttpCode(HttpStatus.NO_CONTENT)
   async receive(
-    @Param('target', new ParseEnumPipe(StorageTarget)) target: StorageTarget,
+    @Param('target', new ParseEnumPipe(WebhookStorageTarget))
+    target: WebhookStorageTarget,
     @Body() body: StorageEvent,
   ): Promise<void> {
     await Promise.all(

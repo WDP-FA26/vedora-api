@@ -19,6 +19,7 @@ export class ProfileSummaryDto {
   @ApiProperty({ nullable: true, type: String }) bio!: string | null;
   @ApiProperty({ nullable: true, type: String }) avatarUrl!: string | null;
   @ApiProperty({ nullable: true, type: String }) coverUrl!: string | null;
+  @ApiProperty() isProfessional!: boolean;
 }
 
 export class ProfileDto extends ProfileSummaryDto {

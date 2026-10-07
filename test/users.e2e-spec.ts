@@ -22,6 +22,7 @@ function account(id: string, role: UserRole = UserRole.USER): User {
     bio: null,
     avatarUrl: null,
     coverUrl: null,
+    isProfessional: false,
     role,
     passwordHash: null,
     googleId: null,

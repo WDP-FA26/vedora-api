@@ -34,6 +34,7 @@ const profileSelect = {
   bio: true,
   avatarUrl: true,
   coverUrl: true,
+  isProfessional: true,
   createdAt: true,
   emailVerifiedAt: true,
 } satisfies Prisma.UserSelect;
@@ -310,6 +311,7 @@ export class ProfilesService {
       bio: user.bio,
       avatarUrl: user.avatarUrl,
       coverUrl: user.coverUrl,
+      isProfessional: user.isProfessional,
     };
   }
 

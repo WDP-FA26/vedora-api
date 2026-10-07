@@ -39,6 +39,7 @@ describe('Vedora API (e2e)', () => {
       bio: null,
       avatarUrl: null,
       coverUrl: null,
+      isProfessional: false,
       passwordHash: null,
       googleId: null,
       emailVerifiedAt: new Date(),

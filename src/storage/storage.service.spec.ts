@@ -26,6 +26,7 @@ function build(env: Record<string, unknown> = {}) {
       STORAGE_REGION: 'us-east-1',
       STORAGE_KNOWLEDGE_BUCKET: 'vedora-knowledge',
       STORAGE_PROFILES_BUCKET: 'vedora-profiles',
+      STORAGE_VERIFICATIONS_BUCKET: 'vedora-verifications',
       ...env,
     }),
   );
@@ -84,7 +85,7 @@ describe('StorageService', () => {
   });
 
   describe('onModuleInit', () => {
-    it('creates both buckets, binds their events and opens profiles for reading', async () => {
+    it('creates the buckets, binds upload events and opens only profiles for reading', async () => {
       s3.on(CreateBucketCommand)
         .rejects(
           new BucketAlreadyOwnedByYou({ message: 'exists', $metadata: {} }),
