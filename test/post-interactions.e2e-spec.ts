@@ -45,7 +45,10 @@ const post = {
   publishedAt: now,
   createdAt: now,
   updatedAt: now,
-  _count: { comments: 2, likes: 3 },
+  viewCount: 7,
+  reposts: [],
+  bookmarks: [],
+  _count: { comments: 2, likes: 3, reposts: 1 },
   likes: [{ userId: USER_ID }],
 };
 
@@ -364,6 +367,65 @@ describe('Post comments and likes (e2e)', () => {
     expect(prisma.postLike.deleteMany).toHaveBeenCalledWith({
       where: { postId: POST_ID, userId: USER_ID },
     });
+  });
+
+  it('saves a post idempotently', async () => {
+    prisma.postBookmark.createMany.mockResolvedValue({ count: 0 });
+    const response = await request(app.getHttpServer())
+      .put(`/api/v1/posts/${POST_ID}/bookmark`)
+      .auth(token, { type: 'bearer' })
+      .expect(200);
+    expect(response.body).toEqual({ postId: POST_ID, isBookmarked: true });
+    expect(prisma.postBookmark.createMany).toHaveBeenCalledWith({
+      data: [{ postId: POST_ID, userId: USER_ID }],
+      skipDuplicates: true,
+    });
+  });
+
+  it('does not save a missing or unpublished post', async () => {
+    prisma.post.findFirst.mockResolvedValue(null);
+    await request(app.getHttpServer())
+      .put(`/api/v1/posts/${POST_ID}/bookmark`)
+      .auth(token, { type: 'bearer' })
+      .expect(404);
+    expect(prisma.postBookmark.createMany).not.toHaveBeenCalled();
+  });
+
+  it('removes a saved post even after the post was unpublished', async () => {
+    prisma.post.findFirst.mockResolvedValue(null);
+    prisma.postBookmark.deleteMany.mockResolvedValue({ count: 1 });
+    const response = await request(app.getHttpServer())
+      .delete(`/api/v1/posts/${POST_ID}/bookmark`)
+      .auth(token, { type: 'bearer' })
+      .expect(200);
+    expect(response.body).toEqual({ postId: POST_ID, isBookmarked: false });
+    expect(prisma.postBookmark.deleteMany).toHaveBeenCalledWith({
+      where: { postId: POST_ID, userId: USER_ID },
+    });
+  });
+
+  it('lists only the caller’s saved posts and needs a session', async () => {
+    await request(app.getHttpServer())
+      .get('/api/v1/posts/bookmarks')
+      .expect(401);
+
+    prisma.postBookmark.findMany.mockResolvedValue([
+      { post: { ...post, bookmarks: [{ userId: USER_ID }] } },
+    ] as never);
+    const response = await request(app.getHttpServer())
+      .get('/api/v1/posts/bookmarks')
+      .auth(token, { type: 'bearer' })
+      .expect(200);
+
+    expect(response.body).toMatchObject({
+      items: [{ id: POST_ID, isBookmarked: true }],
+      nextCursor: null,
+    });
+    expect(prisma.postBookmark.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { userId: USER_ID, post: { status: 'PUBLISHED' } },
+      }),
+    );
   });
 
   it('returns personalized counts for the authenticated feed and post detail', async () => {

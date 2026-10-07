@@ -1,5 +1,10 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { MediaFailureReason, MediaStatus, MediaType } from '@prisma/client';
+import {
+  CaptionStatus,
+  MediaFailureReason,
+  MediaStatus,
+  MediaType,
+} from '@prisma/client';
 
 export class MediaResponseDto {
   @ApiProperty({ format: 'uuid' })
@@ -30,6 +35,46 @@ export class MediaResponseDto {
 
   @ApiProperty({ nullable: true, type: String, example: '16:9' })
   aspectRatio!: string | null;
+}
+
+export class CaptionTrackDto {
+  @ApiProperty({ description: 'Mux text track ID' })
+  id!: string;
+
+  @ApiProperty({ nullable: true, type: String, example: 'vi' })
+  languageCode!: string | null;
+
+  @ApiProperty({ example: 'Tiếng Việt' })
+  name!: string;
+
+  @ApiProperty({
+    description: 'The spoken language, as opposed to its translation',
+  })
+  isOriginal!: boolean;
+
+  @ApiProperty({ description: 'Public WebVTT file on Mux' })
+  url!: string;
+}
+
+export class AdminMediaDto extends MediaResponseDto {
+  @ApiProperty({ enum: CaptionStatus })
+  captionStatus!: CaptionStatus;
+
+  @ApiProperty({
+    nullable: true,
+    type: String,
+    example: 'vi',
+    description: 'Spoken language Mux detected',
+  })
+  captionLanguage!: string | null;
+}
+
+export class AdminMediaDetailDto extends AdminMediaDto {
+  @ApiProperty({
+    type: [CaptionTrackDto],
+    description: 'Ready caption tracks, spoken language first',
+  })
+  captions!: CaptionTrackDto[];
 }
 
 export class CreateUploadResponseDto {

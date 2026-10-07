@@ -57,6 +57,27 @@ export class PostResponseDto {
       'Whether the authenticated viewer likes this post; false for anonymous reads',
   })
   isLiked!: boolean;
+
+  @ApiProperty({ minimum: 0 })
+  repostCount!: number;
+
+  @ApiProperty({
+    description:
+      'Whether the authenticated viewer reposted this post; false for anonymous reads',
+  })
+  isReposted!: boolean;
+
+  @ApiProperty({
+    description:
+      'Whether the authenticated viewer saved this post; false for anonymous reads',
+  })
+  isBookmarked!: boolean;
+
+  @ApiProperty({
+    minimum: 0,
+    description: 'Times the post was on screen; a few seconds behind',
+  })
+  viewCount!: number;
 }
 
 export class PostPageDto extends CursorPaginatedResponseDto<PostResponseDto> {

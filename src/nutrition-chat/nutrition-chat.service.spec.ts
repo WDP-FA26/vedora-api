@@ -272,14 +272,14 @@ describe('NutritionChatService', () => {
     });
 
     it('forces an answer on the last step', async () => {
-      steps = Array.from({ length: 4 }, () => searchChunks);
+      steps = Array.from({ length: 2 }, () => searchChunks);
       knowledge.search.mockResolvedValue([]);
 
       await ask('Đậu phụ có bao nhiêu canxi?');
 
-      expect(knowledge.search).toHaveBeenCalledTimes(4);
-      expect(model.doStreamCalls).toHaveLength(5);
-      expect(model.doStreamCalls[4].toolChoice).toEqual({ type: 'none' });
+      expect(knowledge.search).toHaveBeenCalledTimes(2);
+      expect(model.doStreamCalls).toHaveLength(3);
+      expect(model.doStreamCalls[2].toolChoice).toEqual({ type: 'none' });
     });
   });
 

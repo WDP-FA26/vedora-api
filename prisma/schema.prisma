@@ -13,35 +13,43 @@ enum UserRole {
 }
 
 model User {
-  id                    String                 @id @default(uuid()) @db.Uuid
-  username              String                 @unique @db.VarChar(30)
-  passwordHash          String?                @map("password_hash") @db.VarChar(60)
-  googleId              String?                @unique @map("google_id") @db.VarChar(255)
-  fullName              String                 @map("full_name") @db.VarChar(100)
-  email                 String                 @unique @db.VarChar(320)
-  bio                   String?                @db.VarChar(500)
-  avatarUrl             String?                @map("avatar_url") @db.VarChar(2048)
-  coverUrl              String?                @map("cover_url") @db.VarChar(2048)
-  role                  UserRole               @default(USER)
+  id                    String                  @id @default(uuid()) @db.Uuid
+  username              String                  @unique @db.VarChar(30)
+  passwordHash          String?                 @map("password_hash") @db.VarChar(60)
+  googleId              String?                 @unique @map("google_id") @db.VarChar(255)
+  fullName              String                  @map("full_name") @db.VarChar(100)
+  email                 String                  @unique @db.VarChar(320)
+  bio                   String?                 @db.VarChar(500)
+  avatarUrl             String?                 @map("avatar_url") @db.VarChar(2048)
+  coverUrl              String?                 @map("cover_url") @db.VarChar(2048)
+  role                  UserRole                @default(USER)
   /// Set when an admin approves a verification request; shown as a badge.
-  isProfessional        Boolean                @default(false) @map("is_professional")
+  isProfessional        Boolean                 @default(false) @map("is_professional")
   /// Null until the user proves they own `email` (OTP code or Google).
-  emailVerifiedAt       DateTime?              @map("email_verified_at")
-  createdAt             DateTime               @default(now())
-  updatedAt             DateTime               @updatedAt
+  emailVerifiedAt       DateTime?               @map("email_verified_at")
+  createdAt             DateTime                @default(now())
+  updatedAt             DateTime                @updatedAt
   refreshTokens         RefreshToken[]
   emailVerificationCode EmailVerificationCode?
   posts                 Post[]
   postComments          PostComment[]
   postLikes             PostLike[]
+  postReposts           PostRepost[]
+  postBookmarks         PostBookmark[]
+  postReports           PostReport[]
+  postReportReviews     PostReport[]            @relation("PostReportReviewer")
   media                 MediaAsset[]
   knowledgeDocuments    KnowledgeDocument[]
-  following             Follow[]               @relation("Following")
-  followers             Follow[]               @relation("Followers")
+  following             Follow[]                @relation("Following")
+  followers             Follow[]                @relation("Followers")
   profileImages         ProfileImageUpload[]
   verificationRequests  VerificationRequest[]
-  verificationReviews   VerificationRequest[]  @relation("VerificationReviewer")
+  verificationReviews   VerificationRequest[]   @relation("VerificationReviewer")
   verificationProofs    VerificationProof[]
+  recipes               Recipe[]
+  avoidedIngredients    UserAvoidedIngredient[]
+  avoidedGroups         UserAvoidedGroup[]
+  mealPlan              MealPlanEntry[]
 
   @@map("users")
 }
@@ -140,18 +148,24 @@ enum PostStatus {
 }
 
 model Post {
-  id          String        @id @default(uuid()) @db.Uuid
-  authorId    String        @map("author_id") @db.Uuid
-  type        PostType      @default(POST)
-  status      PostStatus    @default(PROCESSING)
-  body        String?       @db.VarChar(280)
-  publishedAt DateTime?     @map("published_at")
-  createdAt   DateTime      @default(now()) @map("created_at")
-  updatedAt   DateTime      @updatedAt @map("updated_at")
-  author      User          @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  id          String         @id @default(uuid()) @db.Uuid
+  authorId    String         @map("author_id") @db.Uuid
+  type        PostType       @default(POST)
+  status      PostStatus     @default(PROCESSING)
+  body        String?        @db.VarChar(280)
+  /// Viewable impressions, added in batches by `PostViewsService`.
+  viewCount   Int            @default(0) @map("view_count")
+  publishedAt DateTime?      @map("published_at")
+  createdAt   DateTime       @default(now()) @map("created_at")
+  updatedAt   DateTime       @updatedAt @map("updated_at")
+  author      User           @relation(fields: [authorId], references: [id], onDelete: Cascade)
   media       MediaAsset[]
   comments    PostComment[]
   likes       PostLike[]
+  reposts     PostRepost[]
+  bookmarks   PostBookmark[]
+  reports     PostReport[]
+  recipes     Recipe[]
 
   @@index([status, publishedAt])
   @@index([authorId, createdAt])
@@ -183,6 +197,69 @@ model PostLike {
   @@id([postId, userId])
   @@index([userId])
   @@map("post_likes")
+}
+
+model PostRepost {
+  postId    String   @map("post_id") @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at")
+  post      Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([postId, userId])
+  @@index([userId, createdAt])
+  @@map("post_reposts")
+}
+
+/// A post a user saved for later. Private: no count is shown on the post.
+model PostBookmark {
+  postId    String   @map("post_id") @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at")
+  post      Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([postId, userId])
+  @@index([userId, createdAt])
+  @@map("post_bookmarks")
+}
+
+enum PostReportReason {
+  SPAM
+  HARASSMENT
+  MISINFORMATION
+  /// Diet or health advice that could hurt someone who follows it.
+  HARMFUL_ADVICE
+  INAPPROPRIATE
+  OTHER
+}
+
+enum PostReportStatus {
+  PENDING
+  /// An admin acted on the post.
+  RESOLVED
+  /// An admin found nothing wrong.
+  DISMISSED
+}
+
+model PostReport {
+  id           String           @id @default(uuid()) @db.Uuid
+  postId       String           @map("post_id") @db.Uuid
+  reporterId   String           @map("reporter_id") @db.Uuid
+  reason       PostReportReason
+  details      String?          @db.VarChar(500)
+  status       PostReportStatus @default(PENDING)
+  reviewedById String?          @map("reviewed_by_id") @db.Uuid
+  reviewedAt   DateTime?        @map("reviewed_at")
+  createdAt    DateTime         @default(now()) @map("created_at")
+  post         Post             @relation(fields: [postId], references: [id], onDelete: Cascade)
+  reporter     User             @relation(fields: [reporterId], references: [id], onDelete: Cascade)
+  reviewedBy   User?            @relation("PostReportReviewer", fields: [reviewedById], references: [id], onDelete: SetNull)
+
+  /// One report per person per post.
+  @@unique([postId, reporterId])
+  @@index([status, createdAt])
+  @@map("post_reports")
 }
 
 enum MediaType {
@@ -362,4 +439,169 @@ model VerificationProof {
   @@index([ownerId, requestId])
   @@index([requestId, createdAt])
   @@map("verification_proofs")
+}
+
+/// One canonical food item; recipes and incompatibility rules point here.
+model Ingredient {
+  id        String                  @id @default(uuid()) @db.Uuid
+  name      String                  @unique @db.VarChar(100)
+  /// Other names for the same item, e.g. "đậu phụ" for "đậu hũ".
+  aliases   String[]                @db.VarChar(100)
+  createdAt DateTime                @default(now()) @map("created_at")
+  updatedAt DateTime                @updatedAt @map("updated_at")
+  groups    IngredientGroupMember[]
+  recipes   RecipeIngredient[]
+  rulesAsA  IncompatibilityRule[]   @relation("RuleIngredientA")
+  rulesAsB  IncompatibilityRule[]   @relation("RuleIngredientB")
+  avoidedBy UserAvoidedIngredient[]
+
+  @@map("ingredients")
+}
+
+/// Ingredients that share incompatibility rules. Groups are flat: no group inside a group.
+model IngredientGroup {
+  id          String                  @id @default(uuid()) @db.Uuid
+  name        String                  @unique @db.VarChar(100)
+  description String?                 @db.VarChar(500)
+  /// Offered to users as a food category they can avoid, e.g. dairy.
+  dietary     Boolean                 @default(false)
+  createdAt   DateTime                @default(now()) @map("created_at")
+  updatedAt   DateTime                @updatedAt @map("updated_at")
+  members     IngredientGroupMember[]
+  rulesAsA    IncompatibilityRule[]   @relation("RuleGroupA")
+  rulesAsB    IncompatibilityRule[]   @relation("RuleGroupB")
+  avoidedBy   UserAvoidedGroup[]
+
+  @@map("ingredient_groups")
+}
+
+model IngredientGroupMember {
+  groupId      String          @map("group_id") @db.Uuid
+  ingredientId String          @map("ingredient_id") @db.Uuid
+  group        IngredientGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  ingredient   Ingredient      @relation(fields: [ingredientId], references: [id], onDelete: Cascade)
+
+  @@id([groupId, ingredientId])
+  @@index([ingredientId])
+  @@map("ingredient_group_members")
+}
+
+/// "A should not be eaten with B". Each side is one ingredient or one group,
+/// which the migration enforces with CHECK constraints.
+model IncompatibilityRule {
+  id            String           @id @default(uuid()) @db.Uuid
+  aIngredientId String?          @map("a_ingredient_id") @db.Uuid
+  aGroupId      String?          @map("a_group_id") @db.Uuid
+  bIngredientId String?          @map("b_ingredient_id") @db.Uuid
+  bGroupId      String?          @map("b_group_id") @db.Uuid
+  reason        String           @db.VarChar(500)
+  /// Where the claim comes from.
+  source        String?          @db.VarChar(500)
+  createdAt     DateTime         @default(now()) @map("created_at")
+  updatedAt     DateTime         @updatedAt @map("updated_at")
+  aIngredient   Ingredient?      @relation("RuleIngredientA", fields: [aIngredientId], references: [id], onDelete: Cascade)
+  aGroup        IngredientGroup? @relation("RuleGroupA", fields: [aGroupId], references: [id], onDelete: Cascade)
+  bIngredient   Ingredient?      @relation("RuleIngredientB", fields: [bIngredientId], references: [id], onDelete: Cascade)
+  bGroup        IngredientGroup? @relation("RuleGroupB", fields: [bGroupId], references: [id], onDelete: Cascade)
+
+  @@index([aIngredientId])
+  @@index([aGroupId])
+  @@index([bIngredientId])
+  @@index([bGroupId])
+  @@map("incompatibility_rules")
+}
+
+model Recipe {
+  id          String             @id @default(uuid()) @db.Uuid
+  /// The video post an admin wrote this recipe from.
+  postId      String?            @map("post_id") @db.Uuid
+  createdById String?            @map("created_by_id") @db.Uuid
+  title       String             @db.VarChar(150)
+  description String?            @db.VarChar(1000)
+  servings    Int
+  prepMinutes Int?               @map("prep_minutes")
+  cookMinutes Int?               @map("cook_minutes")
+  steps       String[]
+  createdAt   DateTime           @default(now()) @map("created_at")
+  updatedAt   DateTime           @updatedAt @map("updated_at")
+  post        Post?              @relation(fields: [postId], references: [id], onDelete: SetNull)
+  createdBy   User?              @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  ingredients RecipeIngredient[]
+  mealPlans   MealPlanEntry[]
+
+  @@index([postId])
+  @@map("recipes")
+}
+
+model RecipeIngredient {
+  recipeId     String     @map("recipe_id") @db.Uuid
+  ingredientId String     @map("ingredient_id") @db.Uuid
+  position     Int
+  quantity     Decimal?   @db.Decimal(8, 2)
+  unit         String?    @db.VarChar(30)
+  note         String?    @db.VarChar(200)
+  recipe       Recipe     @relation(fields: [recipeId], references: [id], onDelete: Cascade)
+  ingredient   Ingredient @relation(fields: [ingredientId], references: [id], onDelete: Restrict)
+
+  @@id([recipeId, ingredientId])
+  @@index([ingredientId])
+  @@map("recipe_ingredients")
+}
+
+/// An ingredient a user does not eat (allergy, religion, preference). Private to the user.
+model UserAvoidedIngredient {
+  userId       String     @map("user_id") @db.Uuid
+  ingredientId String     @map("ingredient_id") @db.Uuid
+  user         User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  ingredient   Ingredient @relation(fields: [ingredientId], references: [id], onDelete: Cascade)
+
+  @@id([userId, ingredientId])
+  @@index([ingredientId])
+  @@map("user_avoided_ingredients")
+}
+
+/// A whole ingredient group a user does not eat, e.g. dairy.
+model UserAvoidedGroup {
+  userId  String          @map("user_id") @db.Uuid
+  groupId String          @map("group_id") @db.Uuid
+  user    User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  group   IngredientGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+
+  @@id([userId, groupId])
+  @@index([groupId])
+  @@map("user_avoided_groups")
+}
+
+enum Weekday {
+  MON
+  TUE
+  WED
+  THU
+  FRI
+  SAT
+  SUN
+}
+
+/// Where a dish sits in a day. `OTHER` holds everything outside the three meals.
+enum MealSection {
+  BREAKFAST
+  LUNCH
+  DINNER
+  OTHER
+}
+
+/// One dish in one section of one day of a user's weekly timetable. The week repeats: no dates.
+model MealPlanEntry {
+  userId   String      @map("user_id") @db.Uuid
+  day      Weekday
+  section  MealSection
+  recipeId String      @map("recipe_id") @db.Uuid
+  /// Order within the section.
+  position Int
+  user     User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  recipe   Recipe      @relation(fields: [recipeId], references: [id], onDelete: Cascade)
+
+  @@id([userId, day, section, recipeId])
+  @@index([recipeId])
+  @@map("meal_plan_entries")
 }

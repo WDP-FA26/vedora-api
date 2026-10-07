@@ -14,7 +14,9 @@ export const REASONING_EFFORTS = [
 ] as const;
 export type ReasoningEffort = (typeof REASONING_EFFORTS)[number];
 
-const MAX_STEPS = 5;
+// guests get two searches and an answer, and a bounded reply
+const MAX_STEPS = 3;
+const MAX_OUTPUT_TOKENS = 1000;
 
 interface NutritionAgentOptions {
   apiKey: string;
@@ -39,6 +41,7 @@ export class NutritionAgent extends ToolLoopAgent<never, NutritionTools> {
         reasoning: { effort: reasoningEffort, exclude: true },
       }),
       instructions: INSTRUCTIONS,
+      maxOutputTokens: MAX_OUTPUT_TOKENS,
       tools: { searchKnowledge: searchKnowledgeTool(knowledge) },
       stopWhen: isStepCount(MAX_STEPS),
       prepareStep: ({ stepNumber }) =>

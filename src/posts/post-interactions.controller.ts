@@ -16,6 +16,7 @@ import {
 } from '@nestjs/common';
 import {
   ApiBearerAuth,
+  ApiConflictResponse,
   ApiCreatedResponse,
   ApiNoContentResponse,
   ApiOkResponse,
@@ -30,13 +31,23 @@ import {
   CommentPageDto,
   CommentResponseDto,
 } from './dto/comment.dto';
+import {
+  CreatePostReportDto,
+  PostBookmarkResponseDto,
+  PostReportDto,
+  PostRepostResponseDto,
+} from './dto/post-interaction.dto';
 import { PostLikeResponseDto } from './dto/post-like-response.dto';
+import { PostReportsService } from './post-reports.service';
 import { PostInteractionsService } from './post-interactions.service';
 
 @ApiTags('post-interactions')
 @Controller('posts/:postId')
 export class PostInteractionsController {
-  constructor(private readonly interactions: PostInteractionsService) {}
+  constructor(
+    private readonly interactions: PostInteractionsService,
+    private readonly reports: PostReportsService,
+  ) {}
 
   @Get('comments')
   @ApiOperation({ summary: 'List comments on a published post, newest first' })
@@ -118,5 +129,70 @@ export class PostInteractionsController {
     @Req() request: AuthenticatedRequest,
   ): Promise<PostLikeResponseDto> {
     return this.interactions.setLike(postId, request.user.sub, false);
+  }
+
+  @Put('repost')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Repost a published post (idempotent)' })
+  @ApiOkResponse({ type: PostRepostResponseDto })
+  repost(
+    @Param('postId', ParseUUIDPipe) postId: string,
+    @Req() request: AuthenticatedRequest,
+  ): Promise<PostRepostResponseDto> {
+    return this.interactions.setRepost(postId, request.user.sub, true);
+  }
+
+  @Delete('repost')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Undo your repost (idempotent)' })
+  @ApiOkResponse({ type: PostRepostResponseDto })
+  unrepost(
+    @Param('postId', ParseUUIDPipe) postId: string,
+    @Req() request: AuthenticatedRequest,
+  ): Promise<PostRepostResponseDto> {
+    return this.interactions.setRepost(postId, request.user.sub, false);
+  }
+
+  @Put('bookmark')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Save a published post for later (idempotent)' })
+  @ApiOkResponse({ type: PostBookmarkResponseDto })
+  bookmark(
+    @Param('postId', ParseUUIDPipe) postId: string,
+    @Req() request: AuthenticatedRequest,
+  ): Promise<PostBookmarkResponseDto> {
+    return this.interactions.setBookmark(postId, request.user.sub, true);
+  }
+
+  @Delete('bookmark')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Remove a post from your saved posts (idempotent)' })
+  @ApiOkResponse({ type: PostBookmarkResponseDto })
+  unbookmark(
+    @Param('postId', ParseUUIDPipe) postId: string,
+    @Req() request: AuthenticatedRequest,
+  ): Promise<PostBookmarkResponseDto> {
+    return this.interactions.setBookmark(postId, request.user.sub, false);
+  }
+
+  @Post('report')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'Report a published post to the admins',
+    description: 'One report per account per post; not your own posts.',
+  })
+  @ApiCreatedResponse({ type: PostReportDto })
+  @ApiConflictResponse({ description: 'ALREADY_REPORTED (see `code`)' })
+  report(
+    @Param('postId', ParseUUIDPipe) postId: string,
+    @Req() request: AuthenticatedRequest,
+    @Body() dto: CreatePostReportDto,
+  ): Promise<PostReportDto> {
+    return this.reports.create(postId, request.user.sub, dto);
   }
 }
