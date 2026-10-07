@@ -1,0 +1,4 @@
+-- Up to six meals a day: a snack after each main meal.
+ALTER TYPE "MealSlot" RENAME VALUE 'SNACK' TO 'AFTERNOON_SNACK';
+ALTER TYPE "MealSlot" ADD VALUE 'MORNING_SNACK' BEFORE 'LUNCH';
+ALTER TYPE "MealSlot" ADD VALUE 'EVENING_SNACK' AFTER 'DINNER';

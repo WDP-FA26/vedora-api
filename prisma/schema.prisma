@@ -48,6 +48,7 @@ model User {
   recipes               Recipe[]
   avoidedIngredients    UserAvoidedIngredient[]
   avoidedGroups         UserAvoidedGroup[]
+  mealPlan              MealPlanEntry[]
 
   @@map("users")
 }
@@ -511,6 +512,7 @@ model Recipe {
   post        Post?              @relation(fields: [postId], references: [id], onDelete: SetNull)
   createdBy   User?              @relation(fields: [createdById], references: [id], onDelete: SetNull)
   ingredients RecipeIngredient[]
+  mealPlans   MealPlanEntry[]
 
   @@index([postId])
   @@map("recipes")
@@ -553,4 +555,38 @@ model UserAvoidedGroup {
   @@id([userId, groupId])
   @@index([groupId])
   @@map("user_avoided_groups")
+}
+
+enum Weekday {
+  MON
+  TUE
+  WED
+  THU
+  FRI
+  SAT
+  SUN
+}
+
+/// Where a dish sits in a day. `OTHER` holds everything outside the three meals.
+enum MealSection {
+  BREAKFAST
+  LUNCH
+  DINNER
+  OTHER
+}
+
+/// One dish in one section of one day of a user's weekly timetable. The week repeats: no dates.
+model MealPlanEntry {
+  userId   String      @map("user_id") @db.Uuid
+  day      Weekday
+  section  MealSection
+  recipeId String      @map("recipe_id") @db.Uuid
+  /// Order within the section.
+  position Int
+  user     User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  recipe   Recipe      @relation(fields: [recipeId], references: [id], onDelete: Cascade)
+
+  @@id([userId, day, section, recipeId])
+  @@index([recipeId])
+  @@map("meal_plan_entries")
 }

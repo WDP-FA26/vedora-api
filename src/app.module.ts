@@ -9,6 +9,7 @@ import { StorageWebhookModule } from './storage/storage-webhook.module';
 import { HealthModule } from './health/health.module';
 import { KnowledgeModule } from './knowledge/knowledge.module';
 import { MailModule } from './mail/mail.module';
+import { MealPlanModule } from './meal-plan/meal-plan.module';
 import { MediaModule } from './media/media.module';
 import { MuxModule } from './mux/mux.module';
 import { NutritionChatModule } from './nutrition-chat/nutrition-chat.module';
@@ -106,6 +107,7 @@ import { VerificationModule } from './verification/verification.module';
     StorageModule,
     QdrantModule,
     RecipesModule,
+    MealPlanModule,
     AuthModule,
     HealthModule,
     UsersModule,
