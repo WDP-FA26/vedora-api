@@ -45,6 +45,9 @@ model User {
   verificationRequests  VerificationRequest[]
   verificationReviews   VerificationRequest[]   @relation("VerificationReviewer")
   verificationProofs    VerificationProof[]
+  recipes               Recipe[]
+  avoidedIngredients    UserAvoidedIngredient[]
+  avoidedGroups         UserAvoidedGroup[]
 
   @@map("users")
 }
@@ -159,6 +162,7 @@ model Post {
   likes       PostLike[]
   reposts     PostRepost[]
   reports     PostReport[]
+  recipes     Recipe[]
 
   @@index([status, publishedAt])
   @@index([authorId, createdAt])
@@ -419,4 +423,134 @@ model VerificationProof {
   @@index([ownerId, requestId])
   @@index([requestId, createdAt])
   @@map("verification_proofs")
+}
+
+/// One canonical food item; recipes and incompatibility rules point here.
+model Ingredient {
+  id        String                  @id @default(uuid()) @db.Uuid
+  name      String                  @unique @db.VarChar(100)
+  /// Other names for the same item, e.g. "đậu phụ" for "đậu hũ".
+  aliases   String[]                @db.VarChar(100)
+  createdAt DateTime                @default(now()) @map("created_at")
+  updatedAt DateTime                @updatedAt @map("updated_at")
+  groups    IngredientGroupMember[]
+  recipes   RecipeIngredient[]
+  rulesAsA  IncompatibilityRule[]   @relation("RuleIngredientA")
+  rulesAsB  IncompatibilityRule[]   @relation("RuleIngredientB")
+  avoidedBy UserAvoidedIngredient[]
+
+  @@map("ingredients")
+}
+
+/// Ingredients that share incompatibility rules. Groups are flat: no group inside a group.
+model IngredientGroup {
+  id          String                  @id @default(uuid()) @db.Uuid
+  name        String                  @unique @db.VarChar(100)
+  description String?                 @db.VarChar(500)
+  /// Offered to users as a food category they can avoid, e.g. dairy.
+  dietary     Boolean                 @default(false)
+  createdAt   DateTime                @default(now()) @map("created_at")
+  updatedAt   DateTime                @updatedAt @map("updated_at")
+  members     IngredientGroupMember[]
+  rulesAsA    IncompatibilityRule[]   @relation("RuleGroupA")
+  rulesAsB    IncompatibilityRule[]   @relation("RuleGroupB")
+  avoidedBy   UserAvoidedGroup[]
+
+  @@map("ingredient_groups")
+}
+
+model IngredientGroupMember {
+  groupId      String          @map("group_id") @db.Uuid
+  ingredientId String          @map("ingredient_id") @db.Uuid
+  group        IngredientGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  ingredient   Ingredient      @relation(fields: [ingredientId], references: [id], onDelete: Cascade)
+
+  @@id([groupId, ingredientId])
+  @@index([ingredientId])
+  @@map("ingredient_group_members")
+}
+
+/// "A should not be eaten with B". Each side is one ingredient or one group,
+/// which the migration enforces with CHECK constraints.
+model IncompatibilityRule {
+  id            String           @id @default(uuid()) @db.Uuid
+  aIngredientId String?          @map("a_ingredient_id") @db.Uuid
+  aGroupId      String?          @map("a_group_id") @db.Uuid
+  bIngredientId String?          @map("b_ingredient_id") @db.Uuid
+  bGroupId      String?          @map("b_group_id") @db.Uuid
+  reason        String           @db.VarChar(500)
+  /// Where the claim comes from.
+  source        String?          @db.VarChar(500)
+  createdAt     DateTime         @default(now()) @map("created_at")
+  updatedAt     DateTime         @updatedAt @map("updated_at")
+  aIngredient   Ingredient?      @relation("RuleIngredientA", fields: [aIngredientId], references: [id], onDelete: Cascade)
+  aGroup        IngredientGroup? @relation("RuleGroupA", fields: [aGroupId], references: [id], onDelete: Cascade)
+  bIngredient   Ingredient?      @relation("RuleIngredientB", fields: [bIngredientId], references: [id], onDelete: Cascade)
+  bGroup        IngredientGroup? @relation("RuleGroupB", fields: [bGroupId], references: [id], onDelete: Cascade)
+
+  @@index([aIngredientId])
+  @@index([aGroupId])
+  @@index([bIngredientId])
+  @@index([bGroupId])
+  @@map("incompatibility_rules")
+}
+
+model Recipe {
+  id          String             @id @default(uuid()) @db.Uuid
+  /// The video post an admin wrote this recipe from.
+  postId      String?            @map("post_id") @db.Uuid
+  createdById String?            @map("created_by_id") @db.Uuid
+  title       String             @db.VarChar(150)
+  description String?            @db.VarChar(1000)
+  servings    Int
+  prepMinutes Int?               @map("prep_minutes")
+  cookMinutes Int?               @map("cook_minutes")
+  steps       String[]
+  createdAt   DateTime           @default(now()) @map("created_at")
+  updatedAt   DateTime           @updatedAt @map("updated_at")
+  post        Post?              @relation(fields: [postId], references: [id], onDelete: SetNull)
+  createdBy   User?              @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  ingredients RecipeIngredient[]
+
+  @@index([postId])
+  @@map("recipes")
+}
+
+model RecipeIngredient {
+  recipeId     String     @map("recipe_id") @db.Uuid
+  ingredientId String     @map("ingredient_id") @db.Uuid
+  position     Int
+  quantity     Decimal?   @db.Decimal(8, 2)
+  unit         String?    @db.VarChar(30)
+  note         String?    @db.VarChar(200)
+  recipe       Recipe     @relation(fields: [recipeId], references: [id], onDelete: Cascade)
+  ingredient   Ingredient @relation(fields: [ingredientId], references: [id], onDelete: Restrict)
+
+  @@id([recipeId, ingredientId])
+  @@index([ingredientId])
+  @@map("recipe_ingredients")
+}
+
+/// An ingredient a user does not eat (allergy, religion, preference). Private to the user.
+model UserAvoidedIngredient {
+  userId       String     @map("user_id") @db.Uuid
+  ingredientId String     @map("ingredient_id") @db.Uuid
+  user         User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  ingredient   Ingredient @relation(fields: [ingredientId], references: [id], onDelete: Cascade)
+
+  @@id([userId, ingredientId])
+  @@index([ingredientId])
+  @@map("user_avoided_ingredients")
+}
+
+/// A whole ingredient group a user does not eat, e.g. dairy.
+model UserAvoidedGroup {
+  userId  String          @map("user_id") @db.Uuid
+  groupId String          @map("group_id") @db.Uuid
+  user    User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  group   IngredientGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+
+  @@id([userId, groupId])
+  @@index([groupId])
+  @@map("user_avoided_groups")
 }

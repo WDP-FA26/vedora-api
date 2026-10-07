@@ -17,6 +17,7 @@ import { PostsModule } from './posts/posts.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { ProfilesModule } from './profiles/profiles.module';
 import { QdrantModule } from './qdrant/qdrant.module';
+import { RecipesModule } from './recipes/recipes.module';
 import { UsersModule } from './users/users.module';
 import { VerificationModule } from './verification/verification.module';
 
@@ -104,6 +105,7 @@ import { VerificationModule } from './verification/verification.module';
     MuxModule,
     StorageModule,
     QdrantModule,
+    RecipesModule,
     AuthModule,
     HealthModule,
     UsersModule,

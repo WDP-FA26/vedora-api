@@ -20,6 +20,7 @@
     "prisma:migrate:deploy": "prisma migrate deploy",
     "prisma:studio": "prisma studio",
     "prisma:seed": "prisma db seed",
+    "prisma:seed:recipes": "tsx prisma/seed-recipes.ts",
     "prisma:seed:prod": "node dist/database/seed-cli.js",
     "postinstall": "prisma generate",
     "test:debug": "vitest --inspect-brk --no-file-parallelism",

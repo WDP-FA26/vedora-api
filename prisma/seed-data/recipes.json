@@ -1,0 +1,3157 @@
+{
+  "ingredients": [
+    {
+      "name": "Rau bina",
+      "aliases": [
+        "cải bó xôi",
+        "rau chân vịt",
+        "spinach"
+      ]
+    },
+    {
+      "name": "Rau muống",
+      "aliases": []
+    },
+    {
+      "name": "Cải ngọt",
+      "aliases": []
+    },
+    {
+      "name": "Cải thìa",
+      "aliases": [
+        "cải chíp",
+        "bok choy"
+      ]
+    },
+    {
+      "name": "Bắp cải",
+      "aliases": [
+        "cải bắp"
+      ]
+    },
+    {
+      "name": "Xà lách",
+      "aliases": [
+        "rau diếp",
+        "xà lách xoăn"
+      ]
+    },
+    {
+      "name": "Rau dền",
+      "aliases": [
+        "rau dền đỏ"
+      ]
+    },
+    {
+      "name": "Mồng tơi",
+      "aliases": []
+    },
+    {
+      "name": "Bông cải xanh",
+      "aliases": [
+        "súp lơ xanh",
+        "broccoli"
+      ]
+    },
+    {
+      "name": "Cần tây",
+      "aliases": [
+        "celery"
+      ]
+    },
+    {
+      "name": "Giá đỗ",
+      "aliases": [
+        "giá"
+      ]
+    },
+    {
+      "name": "Ngó sen",
+      "aliases": []
+    },
+    {
+      "name": "Hành lá",
+      "aliases": [
+        "hành hoa"
+      ]
+    },
+    {
+      "name": "Hành tây",
+      "aliases": []
+    },
+    {
+      "name": "Hành tím",
+      "aliases": [
+        "hành khô"
+      ]
+    },
+    {
+      "name": "Tỏi",
+      "aliases": []
+    },
+    {
+      "name": "Hẹ",
+      "aliases": [
+        "lá hẹ"
+      ]
+    },
+    {
+      "name": "Kiệu",
+      "aliases": [
+        "củ kiệu"
+      ]
+    },
+    {
+      "name": "Hành tăm",
+      "aliases": [
+        "nén",
+        "hành hương"
+      ]
+    },
+    {
+      "name": "Cà chua",
+      "aliases": []
+    },
+    {
+      "name": "Cà rốt",
+      "aliases": []
+    },
+    {
+      "name": "Khoai tây",
+      "aliases": []
+    },
+    {
+      "name": "Khoai lang",
+      "aliases": []
+    },
+    {
+      "name": "Khoai môn",
+      "aliases": [
+        "khoai sọ"
+      ]
+    },
+    {
+      "name": "Củ cải trắng",
+      "aliases": [
+        "củ cải"
+      ]
+    },
+    {
+      "name": "Củ dền",
+      "aliases": [
+        "củ cải đường",
+        "beetroot"
+      ]
+    },
+    {
+      "name": "Su su",
+      "aliases": []
+    },
+    {
+      "name": "Bí đỏ",
+      "aliases": [
+        "bí ngô"
+      ]
+    },
+    {
+      "name": "Bí đao",
+      "aliases": [
+        "bí xanh"
+      ]
+    },
+    {
+      "name": "Mướp",
+      "aliases": [
+        "mướp hương"
+      ]
+    },
+    {
+      "name": "Khổ qua",
+      "aliases": [
+        "mướp đắng"
+      ]
+    },
+    {
+      "name": "Dưa leo",
+      "aliases": [
+        "dưa chuột"
+      ]
+    },
+    {
+      "name": "Cà tím",
+      "aliases": []
+    },
+    {
+      "name": "Đậu bắp",
+      "aliases": []
+    },
+    {
+      "name": "Đậu que",
+      "aliases": [
+        "đậu cô ve"
+      ]
+    },
+    {
+      "name": "Đậu Hà Lan",
+      "aliases": []
+    },
+    {
+      "name": "Bắp ngô",
+      "aliases": [
+        "bắp",
+        "ngô"
+      ]
+    },
+    {
+      "name": "Củ năng",
+      "aliases": [
+        "củ mã thầy"
+      ]
+    },
+    {
+      "name": "Củ đậu",
+      "aliases": [
+        "củ sắn"
+      ]
+    },
+    {
+      "name": "Ớt chuông",
+      "aliases": []
+    },
+    {
+      "name": "Mít non",
+      "aliases": [
+        "mít xanh"
+      ]
+    },
+    {
+      "name": "Nấm rơm",
+      "aliases": []
+    },
+    {
+      "name": "Nấm hương",
+      "aliases": [
+        "nấm đông cô",
+        "nấm shiitake"
+      ]
+    },
+    {
+      "name": "Nấm mèo",
+      "aliases": [
+        "mộc nhĩ"
+      ]
+    },
+    {
+      "name": "Nấm kim châm",
+      "aliases": [
+        "nấm kim"
+      ]
+    },
+    {
+      "name": "Nấm đùi gà",
+      "aliases": [
+        "nấm king oyster"
+      ]
+    },
+    {
+      "name": "Nấm bào ngư",
+      "aliases": [
+        "nấm sò"
+      ]
+    },
+    {
+      "name": "Nấm mỡ",
+      "aliases": [
+        "nấm champignon"
+      ]
+    },
+    {
+      "name": "Đậu hũ",
+      "aliases": [
+        "đậu phụ",
+        "tofu"
+      ]
+    },
+    {
+      "name": "Đậu hũ non",
+      "aliases": [
+        "tàu hũ non"
+      ]
+    },
+    {
+      "name": "Đậu hũ chiên",
+      "aliases": [
+        "đậu phụ chiên"
+      ]
+    },
+    {
+      "name": "Tàu hũ ky",
+      "aliases": [
+        "phù trúc",
+        "váng đậu"
+      ]
+    },
+    {
+      "name": "Tempeh",
+      "aliases": []
+    },
+    {
+      "name": "Đậu nành",
+      "aliases": [
+        "đậu tương"
+      ]
+    },
+    {
+      "name": "Sữa đậu nành",
+      "aliases": [
+        "sữa nành"
+      ]
+    },
+    {
+      "name": "Đậu xanh",
+      "aliases": []
+    },
+    {
+      "name": "Đậu đen",
+      "aliases": []
+    },
+    {
+      "name": "Đậu đỏ",
+      "aliases": []
+    },
+    {
+      "name": "Đậu lăng",
+      "aliases": [
+        "lentil"
+      ]
+    },
+    {
+      "name": "Đậu gà",
+      "aliases": [
+        "đậu hummus",
+        "chickpea"
+      ]
+    },
+    {
+      "name": "Đậu phộng",
+      "aliases": [
+        "lạc"
+      ]
+    },
+    {
+      "name": "Bơ đậu phộng",
+      "aliases": []
+    },
+    {
+      "name": "Seitan",
+      "aliases": [
+        "đạm lúa mì",
+        "gluten lúa mì"
+      ]
+    },
+    {
+      "name": "Hạt điều",
+      "aliases": [
+        "hạt đào lộn hột"
+      ]
+    },
+    {
+      "name": "Hạnh nhân",
+      "aliases": []
+    },
+    {
+      "name": "Óc chó",
+      "aliases": []
+    },
+    {
+      "name": "Hạt mè",
+      "aliases": [
+        "mè trắng",
+        "vừng"
+      ]
+    },
+    {
+      "name": "Mè đen",
+      "aliases": [
+        "vừng đen"
+      ]
+    },
+    {
+      "name": "Hạt bí",
+      "aliases": [
+        "hạt bí đỏ"
+      ]
+    },
+    {
+      "name": "Hạt sen",
+      "aliases": []
+    },
+    {
+      "name": "Nước cốt dừa",
+      "aliases": [
+        "cốt dừa"
+      ]
+    },
+    {
+      "name": "Gạo tẻ",
+      "aliases": [
+        "gạo trắng"
+      ]
+    },
+    {
+      "name": "Gạo lứt",
+      "aliases": []
+    },
+    {
+      "name": "Gạo nếp",
+      "aliases": [
+        "nếp"
+      ]
+    },
+    {
+      "name": "Bún tươi",
+      "aliases": [
+        "bún"
+      ]
+    },
+    {
+      "name": "Bánh phở",
+      "aliases": [
+        "phở tươi"
+      ]
+    },
+    {
+      "name": "Hủ tiếu",
+      "aliases": []
+    },
+    {
+      "name": "Mì sợi",
+      "aliases": [
+        "mì"
+      ]
+    },
+    {
+      "name": "Miến",
+      "aliases": [
+        "miến dong"
+      ]
+    },
+    {
+      "name": "Bánh tráng",
+      "aliases": [
+        "bánh đa nem",
+        "rice paper"
+      ]
+    },
+    {
+      "name": "Bột mì",
+      "aliases": []
+    },
+    {
+      "name": "Bột gạo",
+      "aliases": []
+    },
+    {
+      "name": "Bột năng",
+      "aliases": [
+        "bột sắn"
+      ]
+    },
+    {
+      "name": "Bột bắp",
+      "aliases": [
+        "bột ngô"
+      ]
+    },
+    {
+      "name": "Yến mạch",
+      "aliases": [
+        "oat"
+      ]
+    },
+    {
+      "name": "Bánh mì",
+      "aliases": [
+        "bánh mì baguette"
+      ]
+    },
+    {
+      "name": "Rong biển",
+      "aliases": [
+        "nori"
+      ]
+    },
+    {
+      "name": "Chanh",
+      "aliases": [
+        "chanh ta"
+      ]
+    },
+    {
+      "name": "Chanh dây",
+      "aliases": [
+        "chanh leo"
+      ]
+    },
+    {
+      "name": "Cam",
+      "aliases": []
+    },
+    {
+      "name": "Dứa",
+      "aliases": [
+        "thơm",
+        "khóm"
+      ]
+    },
+    {
+      "name": "Chuối",
+      "aliases": []
+    },
+    {
+      "name": "Me",
+      "aliases": [
+        "me chua"
+      ]
+    },
+    {
+      "name": "Bơ",
+      "aliases": [
+        "trái bơ",
+        "avocado"
+      ]
+    },
+    {
+      "name": "Rau mùi",
+      "aliases": [
+        "ngò rí",
+        "ngò"
+      ]
+    },
+    {
+      "name": "Ngò gai",
+      "aliases": [
+        "mùi tàu"
+      ]
+    },
+    {
+      "name": "Húng quế",
+      "aliases": [
+        "rau quế"
+      ]
+    },
+    {
+      "name": "Húng lủi",
+      "aliases": [
+        "bạc hà"
+      ]
+    },
+    {
+      "name": "Tía tô",
+      "aliases": []
+    },
+    {
+      "name": "Rau răm",
+      "aliases": []
+    },
+    {
+      "name": "Diếp cá",
+      "aliases": [
+        "rau giấp cá"
+      ]
+    },
+    {
+      "name": "Kinh giới",
+      "aliases": []
+    },
+    {
+      "name": "Lá lốt",
+      "aliases": []
+    },
+    {
+      "name": "Ngò om",
+      "aliases": [
+        "rau om"
+      ]
+    },
+    {
+      "name": "Sả",
+      "aliases": []
+    },
+    {
+      "name": "Gừng",
+      "aliases": []
+    },
+    {
+      "name": "Nghệ",
+      "aliases": [
+        "củ nghệ"
+      ]
+    },
+    {
+      "name": "Lá dứa",
+      "aliases": [
+        "lá nếp"
+      ]
+    },
+    {
+      "name": "Ớt",
+      "aliases": []
+    },
+    {
+      "name": "Tiêu",
+      "aliases": [
+        "hạt tiêu"
+      ]
+    },
+    {
+      "name": "Hoa hồi",
+      "aliases": [
+        "đại hồi",
+        "bát giác"
+      ]
+    },
+    {
+      "name": "Quế",
+      "aliases": []
+    },
+    {
+      "name": "Bột cà ri",
+      "aliases": [
+        "curry"
+      ]
+    },
+    {
+      "name": "Hạt điều màu",
+      "aliases": [
+        "điều màu",
+        "annatto"
+      ]
+    },
+    {
+      "name": "Muối",
+      "aliases": []
+    },
+    {
+      "name": "Đường cát",
+      "aliases": []
+    },
+    {
+      "name": "Đường phèn",
+      "aliases": []
+    },
+    {
+      "name": "Đường thốt nốt",
+      "aliases": []
+    },
+    {
+      "name": "Mật mía",
+      "aliases": []
+    },
+    {
+      "name": "Mật ong",
+      "aliases": []
+    },
+    {
+      "name": "Nước tương",
+      "aliases": [
+        "xì dầu"
+      ]
+    },
+    {
+      "name": "Nước mắm chay",
+      "aliases": []
+    },
+    {
+      "name": "Tương hột",
+      "aliases": [
+        "tương xay"
+      ]
+    },
+    {
+      "name": "Miso",
+      "aliases": []
+    },
+    {
+      "name": "Dầu hào chay",
+      "aliases": []
+    },
+    {
+      "name": "Chao",
+      "aliases": [
+        "đậu hũ lên men"
+      ]
+    },
+    {
+      "name": "Giấm",
+      "aliases": [
+        "giấm gạo"
+      ]
+    },
+    {
+      "name": "Dầu mè",
+      "aliases": [
+        "dầu vừng"
+      ]
+    },
+    {
+      "name": "Dầu ăn",
+      "aliases": [
+        "dầu thực vật"
+      ]
+    },
+    {
+      "name": "Sa tế",
+      "aliases": []
+    },
+    {
+      "name": "Bột nêm nấm",
+      "aliases": [
+        "bột nêm chay"
+      ]
+    },
+    {
+      "name": "Sữa hạnh nhân",
+      "aliases": []
+    },
+    {
+      "name": "Sữa yến mạch",
+      "aliases": []
+    },
+    {
+      "name": "Trà xanh",
+      "aliases": [
+        "trà"
+      ]
+    },
+    {
+      "name": "Cà phê",
+      "aliases": []
+    },
+    {
+      "name": "Sữa bò",
+      "aliases": []
+    },
+    {
+      "name": "Phô mai",
+      "aliases": [
+        "pho mát",
+        "cheese"
+      ]
+    },
+    {
+      "name": "Bơ động vật",
+      "aliases": [
+        "butter"
+      ]
+    },
+    {
+      "name": "Sữa chua",
+      "aliases": [
+        "yaourt",
+        "yogurt"
+      ]
+    },
+    {
+      "name": "Kem tươi",
+      "aliases": [
+        "whipping cream"
+      ]
+    },
+    {
+      "name": "Trứng gà",
+      "aliases": []
+    },
+    {
+      "name": "Trứng vịt",
+      "aliases": []
+    }
+  ],
+  "groups": [
+    {
+      "name": "Sản phẩm từ sữa",
+      "description": "Sữa và các chế phẩm làm từ sữa động vật, dành cho người dị ứng sữa, không dung nạp lactose hoặc ăn thuần chay.",
+      "dietary": true,
+      "ingredients": [
+        "Sữa bò",
+        "Phô mai",
+        "Bơ động vật",
+        "Sữa chua",
+        "Kem tươi"
+      ]
+    },
+    {
+      "name": "Ngũ vị tân",
+      "description": "Năm loại rau họ hành tỏi có mùi nồng mà người ăn chay theo Phật giáo thường kiêng: hành, tỏi, hẹ, kiệu và hành tăm.",
+      "dietary": true,
+      "ingredients": [
+        "Hành lá",
+        "Hành tây",
+        "Hành tím",
+        "Tỏi",
+        "Hẹ",
+        "Kiệu",
+        "Hành tăm"
+      ]
+    },
+    {
+      "name": "Các loại hạt cây",
+      "description": "Những loại hạt mọc trên cây như hạt điều, hạnh nhân, óc chó, nhóm dị ứng phổ biến cần lưu ý.",
+      "dietary": true,
+      "ingredients": [
+        "Hạt điều",
+        "Hạnh nhân",
+        "Óc chó",
+        "Sữa hạnh nhân"
+      ]
+    },
+    {
+      "name": "Đậu phộng",
+      "description": "Đậu phộng (lạc) và sản phẩm từ đậu phộng, thuộc nhóm thực phẩm gây dị ứng thường gặp.",
+      "dietary": true,
+      "ingredients": [
+        "Đậu phộng",
+        "Bơ đậu phộng"
+      ]
+    },
+    {
+      "name": "Sản phẩm từ đậu nành",
+      "description": "Đậu nành và các món chế biến từ đậu nành như đậu hũ, tàu hũ ky, sữa đậu nành, tương và miso.",
+      "dietary": true,
+      "ingredients": [
+        "Đậu nành",
+        "Đậu hũ",
+        "Đậu hũ non",
+        "Đậu hũ chiên",
+        "Tàu hũ ky",
+        "Tempeh",
+        "Sữa đậu nành",
+        "Nước tương",
+        "Tương hột",
+        "Miso",
+        "Chao",
+        "Dầu hào chay"
+      ]
+    },
+    {
+      "name": "Thực phẩm chứa gluten",
+      "description": "Các nguyên liệu làm từ lúa mì hoặc có thể chứa gluten, không phù hợp với người bệnh celiac hay nhạy cảm gluten.",
+      "dietary": true,
+      "ingredients": [
+        "Bột mì",
+        "Seitan",
+        "Mì sợi",
+        "Bánh mì",
+        "Yến mạch"
+      ]
+    },
+    {
+      "name": "Các loại nấm",
+      "description": "Tất cả các loại nấm ăn, dành cho người dị ứng nấm hoặc không muốn dùng nấm trong bữa ăn.",
+      "dietary": true,
+      "ingredients": [
+        "Nấm rơm",
+        "Nấm hương",
+        "Nấm mèo",
+        "Nấm kim châm",
+        "Nấm đùi gà",
+        "Nấm bào ngư",
+        "Nấm mỡ"
+      ]
+    },
+    {
+      "name": "Trứng",
+      "description": "Trứng gia cầm như trứng gà, trứng vịt, nhóm cần tránh với người dị ứng trứng hoặc ăn thuần chay.",
+      "dietary": true,
+      "ingredients": [
+        "Trứng gà",
+        "Trứng vịt"
+      ]
+    },
+    {
+      "name": "Sản phẩm từ ong",
+      "description": "Mật ong và các sản phẩm lấy từ ong, người ăn thuần chay thường không dùng.",
+      "dietary": true,
+      "ingredients": [
+        "Mật ong"
+      ]
+    },
+    {
+      "name": "Hạt mè",
+      "description": "Hạt mè trắng, mè đen và dầu mè, một nguyên nhân dị ứng thực phẩm ngày càng được ghi nhận.",
+      "dietary": true,
+      "ingredients": [
+        "Hạt mè",
+        "Mè đen",
+        "Dầu mè"
+      ]
+    },
+    {
+      "name": "Rau giàu oxalat",
+      "description": "Nhóm rau củ chứa nhiều oxalat, chất có thể gắn với canxi trong ruột và làm giảm lượng canxi được hấp thu.",
+      "dietary": false,
+      "ingredients": [
+        "Rau bina",
+        "Rau dền",
+        "Mồng tơi",
+        "Củ dền",
+        "Khoai môn",
+        "Đậu bắp"
+      ]
+    },
+    {
+      "name": "Nguồn sắt thực vật",
+      "description": "Nhóm thực phẩm thực vật giàu sắt không heme, loại sắt dễ bị các chất trong trà, cà phê hay canxi cản trở hấp thu.",
+      "dietary": false,
+      "ingredients": [
+        "Đậu lăng",
+        "Đậu đen",
+        "Đậu đỏ",
+        "Đậu gà",
+        "Mè đen",
+        "Rau bina",
+        "Nấm mèo",
+        "Hạt bí",
+        "Tempeh"
+      ]
+    }
+  ],
+  "rules": [
+    {
+      "a": {
+        "kind": "INGREDIENT",
+        "name": "Đậu hũ"
+      },
+      "b": {
+        "kind": "GROUP",
+        "name": "Rau giàu oxalat"
+      },
+      "reason": "Oxalat trong các loại rau này có thể gắn với canxi trong đậu hũ (thường được làm đông bằng muối canxi) và làm giảm lượng canxi hấp thu từ bữa ăn.",
+      "source": "Viện Y tế Quốc gia Hoa Kỳ (NIH), Văn phòng Thực phẩm bổ sung: Calcium Fact Sheet for Health Professionals, https://ods.od.nih.gov/factsheets/Calcium-HealthProfessional/ ; Tufts Health & Nutrition Letter về canxi trong rau bina, https://www.nutritionletter.tufts.edu/?p=430"
+    },
+    {
+      "a": {
+        "kind": "GROUP",
+        "name": "Sản phẩm từ sữa"
+      },
+      "b": {
+        "kind": "GROUP",
+        "name": "Rau giàu oxalat"
+      },
+      "reason": "Oxalat có thể gắn với canxi từ sữa và chế phẩm sữa nên có thể làm giảm hấp thu canxi khi ăn cùng bữa với lượng lớn rau giàu oxalat.",
+      "source": "Viện Y tế Quốc gia Hoa Kỳ (NIH), Văn phòng Thực phẩm bổ sung: Calcium Fact Sheet for Health Professionals, https://ods.od.nih.gov/factsheets/Calcium-HealthProfessional/ ; Tufts Health & Nutrition Letter về canxi trong rau bina, https://www.nutritionletter.tufts.edu/?p=430"
+    },
+    {
+      "a": {
+        "kind": "GROUP",
+        "name": "Nguồn sắt thực vật"
+      },
+      "b": {
+        "kind": "INGREDIENT",
+        "name": "Trà xanh"
+      },
+      "reason": "Polyphenol và tannin trong trà có thể làm giảm hấp thu sắt không heme, nên tránh uống trà ngay trong hoặc sau bữa ăn giàu sắt thực vật.",
+      "source": "NIH Văn phòng Thực phẩm bổ sung: Iron Fact Sheet for Health Professionals, https://ods.od.nih.gov/factsheets/Iron-HealthProfessional/ ; Hurrell và cs., Br J Nutr 1999, Inhibition of non-haem iron absorption in man by polyphenolic-containing beverages; Cook và cs., Crit Rev Food Sci Nutr 2000, https://pubmed.ncbi.nlm.nih.gov/11029010/"
+    },
+    {
+      "a": {
+        "kind": "GROUP",
+        "name": "Nguồn sắt thực vật"
+      },
+      "b": {
+        "kind": "INGREDIENT",
+        "name": "Cà phê"
+      },
+      "reason": "Các hợp chất polyphenol trong cà phê có thể làm giảm hấp thu sắt không heme khi uống cùng bữa ăn, tác động phụ thuộc vào lượng uống.",
+      "source": "NIH Văn phòng Thực phẩm bổ sung: Iron Fact Sheet for Health Professionals, https://ods.od.nih.gov/factsheets/Iron-HealthProfessional/ ; Hurrell và cs., Br J Nutr 1999, Inhibition of non-haem iron absorption in man by polyphenolic-containing beverages; Cook và cs., Crit Rev Food Sci Nutr 2000, https://pubmed.ncbi.nlm.nih.gov/11029010/"
+    },
+    {
+      "a": {
+        "kind": "GROUP",
+        "name": "Nguồn sắt thực vật"
+      },
+      "b": {
+        "kind": "INGREDIENT",
+        "name": "Sữa bò"
+      },
+      "reason": "Canxi trong sữa có thể làm giảm phần nào hấp thu sắt khi dùng cùng bữa; ảnh hưởng lâu dài lên người ăn uống đủ chất còn chưa rõ ràng.",
+      "source": "NIH Văn phòng Thực phẩm bổ sung: Iron Fact Sheet for Health Professionals, https://ods.od.nih.gov/factsheets/Iron-HealthProfessional/ ; Hurrell và cs., Br J Nutr 1999, Inhibition of non-haem iron absorption in man by polyphenolic-containing beverages; Cook và cs., Crit Rev Food Sci Nutr 2000, https://pubmed.ncbi.nlm.nih.gov/11029010/"
+    },
+    {
+      "a": {
+        "kind": "INGREDIENT",
+        "name": "Đậu hũ"
+      },
+      "b": {
+        "kind": "INGREDIENT",
+        "name": "Mật ong"
+      },
+      "reason": "Dân gian cho rằng ăn đậu hũ cùng mật ong có thể gây khó tiêu hoặc ù tai; đây là quan niệm truyền miệng, nên xem như lưu ý tham khảo.",
+      "source": "Kinh nghiệm dân gian, chưa có bằng chứng khoa học rõ ràng"
+    },
+    {
+      "a": {
+        "kind": "INGREDIENT",
+        "name": "Cà rốt"
+      },
+      "b": {
+        "kind": "INGREDIENT",
+        "name": "Dưa leo"
+      },
+      "reason": "Dân gian cho rằng enzym trong dưa leo có thể làm giảm vitamin C của rau củ trộn chung; bằng chứng cho lượng ăn thông thường còn hạn chế.",
+      "source": "Kinh nghiệm dân gian, chưa có bằng chứng khoa học rõ ràng (một số nghiên cứu phòng thí nghiệm về enzym ascorbate oxidase trong dưa leo, chưa chứng minh ảnh hưởng rõ ở bữa ăn thực tế)"
+    },
+    {
+      "a": {
+        "kind": "INGREDIENT",
+        "name": "Củ cải trắng"
+      },
+      "b": {
+        "kind": "INGREDIENT",
+        "name": "Cà rốt"
+      },
+      "reason": "Dân gian cho rằng nấu hoặc trộn sống củ cải trắng cùng cà rốt có thể làm mất vitamin C; đây là quan niệm lâu đời nhưng chưa được kiểm chứng rõ ràng.",
+      "source": "Kinh nghiệm dân gian, chưa có bằng chứng khoa học rõ ràng"
+    }
+  ],
+  "recipes": [
+    {
+      "title": "Canh đậu hũ rau bina",
+      "description": "Món canh thanh nhẹ, nước trong ngọt từ cà rốt và nấm hương, hợp bữa cơm chay hằng ngày. Rau bina chỉ cần chần sơ để giữ màu xanh.",
+      "servings": 3,
+      "prepMinutes": 10,
+      "cookMinutes": 15,
+      "ingredients": [
+        {
+          "name": "Đậu hũ",
+          "quantity": 300,
+          "unit": "g",
+          "note": "cắt miếng vuông nhỏ"
+        },
+        {
+          "name": "Rau bina",
+          "quantity": 200,
+          "unit": "g",
+          "note": "nhặt, rửa sạch"
+        },
+        {
+          "name": "Cà rốt",
+          "quantity": 1,
+          "unit": "củ",
+          "note": "tỉa hoa hoặc cắt lát"
+        },
+        {
+          "name": "Nấm hương",
+          "quantity": 5,
+          "unit": "cái",
+          "note": "ngâm mềm, cắt đôi"
+        },
+        {
+          "name": "Nước tương",
+          "quantity": 1,
+          "unit": "muỗng canh"
+        },
+        {
+          "name": "Bột nêm nấm",
+          "quantity": 1,
+          "unit": "muỗng cà phê"
+        },
+        {
+          "name": "Tiêu",
+          "note": "một chút"
+        },
+        {
+          "name": "Gừng",
+          "quantity": 1,
+          "unit": "lát",
+          "note": "đập dập"
+        }
+      ],
+      "steps": [
+        "Đun 1 lít nước cùng gừng và nấm hương đã ngâm, nấu sôi nhỏ lửa khoảng 8 phút để nước có vị ngọt.",
+        "Cho cà rốt vào nấu thêm 4 phút cho mềm vừa.",
+        "Thả đậu hũ vào, nêm nước tương và bột nêm nấm rồi nấu thêm 3 phút.",
+        "Cuối cùng cho rau bina vào, nhấc nồi khỏi bếp khi rau vừa xẹp lá.",
+        "Múc ra tô, rắc chút tiêu và dùng nóng."
+      ]
+    },
+    {
+      "title": "Canh mồng tơi nấm nấu đậu hũ",
+      "description": "Canh mồng tơi mát, nhớt nhẹ tự nhiên, kết hợp đậu hũ mềm và nấm rơm béo ngọt. Món ăn dễ nấu cho những ngày nóng.",
+      "servings": 4,
+      "prepMinutes": 10,
+      "cookMinutes": 15,
+      "ingredients": [
+        {
+          "name": "Mồng tơi",
+          "quantity": 300,
+          "unit": "g",
+          "note": "tuốt lá, bỏ cọng già"
+        },
+        {
+          "name": "Đậu hũ",
+          "quantity": 200,
+          "unit": "g",
+          "note": "cắt hạt lựu"
+        },
+        {
+          "name": "Nấm rơm",
+          "quantity": 150,
+          "unit": "g",
+          "note": "cắt đôi"
+        },
+        {
+          "name": "Cà chua",
+          "quantity": 1,
+          "unit": "quả",
+          "note": "cắt múi cau"
+        },
+        {
+          "name": "Bột nêm nấm",
+          "quantity": 1,
+          "unit": "muỗng cà phê"
+        },
+        {
+          "name": "Muối",
+          "note": "nêm vừa ăn"
+        },
+        {
+          "name": "Dầu ăn",
+          "quantity": 1,
+          "unit": "muỗng canh"
+        }
+      ],
+      "steps": [
+        "Phi cà chua với dầu ăn đến khi mềm ra nước.",
+        "Đổ khoảng 1,2 lít nước vào, đun sôi rồi cho nấm rơm vào nấu 5 phút.",
+        "Thêm đậu hũ, nêm bột nêm nấm và chút muối.",
+        "Khi nước sôi lại, cho mồng tơi vào, đun thêm 2 phút rồi tắt bếp để rau không bị nát."
+      ]
+    },
+    {
+      "title": "Khoai môn kho đậu hũ",
+      "description": "Khoai môn bở thấm nước tương ngọt, kết hợp đậu hũ chiên vàng cho món kho đậm đà ăn với cơm trắng. Kho lửa nhỏ để khoai không bị nát.",
+      "servings": 4,
+      "prepMinutes": 15,
+      "cookMinutes": 35,
+      "ingredients": [
+        {
+          "name": "Khoai môn",
+          "quantity": 400,
+          "unit": "g",
+          "note": "gọt, cắt khối vừa"
+        },
+        {
+          "name": "Đậu hũ",
+          "quantity": 300,
+          "unit": "g",
+          "note": "cắt khối, chiên vàng"
+        },
+        {
+          "name": "Hành tím",
+          "quantity": 2,
+          "unit": "củ",
+          "note": "băm"
+        },
+        {
+          "name": "Nước tương",
+          "quantity": 3,
+          "unit": "muỗng canh"
+        },
+        {
+          "name": "Đường cát",
+          "quantity": 1,
+          "unit": "muỗng canh"
+        },
+        {
+          "name": "Tiêu",
+          "note": "xay"
+        },
+        {
+          "name": "Dầu ăn",
+          "quantity": 2,
+          "unit": "muỗng canh"
+        },
+        {
+          "name": "Hành lá",
+          "quantity": 2,
+          "unit": "nhánh",
+          "note": "cắt khúc"
+        }
+      ],
+      "steps": [
+        "Chiên đậu hũ trong dầu nóng đến khi vàng đều các mặt rồi vớt ra để ráo.",
+        "Phi hành tím thơm, cho khoai môn vào xào 3 phút.",
+        "Thêm nước tương, đường và nước xâm xấp mặt khoai, đun sôi rồi hạ lửa nhỏ.",
+        "Sau 15 phút, cho đậu hũ vào, kho thêm 10 phút đến khi nước sệt lại.",
+        "Rắc tiêu và hành lá, tắt bếp."
+      ]
+    },
+    {
+      "title": "Canh chua chay đậu bắp",
+      "description": "Canh chua chay với vị chua thanh của me và dứa, đậu bắp giòn nhẹ và đậu hũ hấp thụ nước canh. Ăn kèm cơm nóng rất đưa miệng.",
+      "servings": 4,
+      "prepMinutes": 15,
+      "cookMinutes": 15,
+      "ingredients": [
+        {
+          "name": "Đậu bắp",
+          "quantity": 150,
+          "unit": "g",
+          "note": "xẻ chéo"
+        },
+        {
+          "name": "Đậu hũ",
+          "quantity": 250,
+          "unit": "g",
+          "note": "cắt miếng"
+        },
+        {
+          "name": "Dứa",
+          "quantity": 150,
+          "unit": "g",
+          "note": "cắt miếng mỏng"
+        },
+        {
+          "name": "Cà chua",
+          "quantity": 2,
+          "unit": "quả",
+          "note": "cắt múi cau"
+        },
+        {
+          "name": "Giá đỗ",
+          "quantity": 100,
+          "unit": "g"
+        },
+        {
+          "name": "Me",
+          "quantity": 2,
+          "unit": "muỗng canh",
+          "note": "hòa với nước nóng, lọc lấy nước"
+        },
+        {
+          "name": "Ngò om",
+          "note": "cắt nhỏ"
+        },
+        {
+          "name": "Ngò gai",
+          "note": "cắt nhỏ"
+        },
+        {
+          "name": "Đường cát",
+          "quantity": 1,
+          "unit": "muỗng cà phê"
+        },
+        {
+          "name": "Muối",
+          "note": "nêm vừa ăn"
+        }
+      ],
+      "steps": [
+        "Đun sôi 1,2 lít nước, cho nước me vào cùng cà chua và dứa.",
+        "Nêm đường, muối rồi nấu 5 phút cho các vị hòa vào nhau.",
+        "Cho đậu hũ và đậu bắp vào, nấu thêm 4 phút.",
+        "Thêm giá đỗ, tắt bếp ngay rồi rắc ngò om và ngò gai."
+      ]
+    },
+    {
+      "title": "Đậu hũ sốt cà chua",
+      "description": "Món đậu hũ chiên vàng giòn nhẹ ngoài, sốt cà chua sánh chua ngọt. Đơn giản nhưng luôn hết sạch trong bữa cơm gia đình.",
+      "servings": 3,
+      "prepMinutes": 10,
+      "cookMinutes": 15,
+      "ingredients": [
+        {
+          "name": "Đậu hũ chiên",
+          "quantity": 300,
+          "unit": "g",
+          "note": "cắt đôi theo đường chéo"
+        },
+        {
+          "name": "Cà chua",
+          "quantity": 3,
+          "unit": "quả",
+          "note": "cắt hạt lựu"
+        },
+        {
+          "name": "Hành tím",
+          "quantity": 1,
+          "unit": "củ",
+          "note": "băm"
+        },
+        {
+          "name": "Nước tương",
+          "quantity": 1,
+          "unit": "muỗng canh"
+        },
+        {
+          "name": "Đường cát",
+          "quantity": 1,
+          "unit": "muỗng cà phê"
+        },
+        {
+          "name": "Hành lá",
+          "quantity": 1,
+          "unit": "nhánh",
+          "note": "cắt nhỏ"
+        },
+        {
+          "name": "Dầu ăn",
+          "quantity": 1,
+          "unit": "muỗng canh"
+        }
+      ],
+      "steps": [
+        "Phi hành tím với dầu cho thơm rồi cho cà chua vào xào đến khi nhuyễn.",
+        "Thêm nước tương, đường và nửa chén nước, đun sôi nhỏ lửa 5 phút.",
+        "Cho đậu hũ chiên vào, đảo nhẹ để sốt bám đều.",
+        "Rắc hành lá và tắt bếp."
+      ]
+    },
+    {
+      "title": "Đậu hũ chiên sả ớt",
+      "description": "Đậu hũ chiên giòn lăn qua sả ớt phi thơm, cay nhẹ và thơm nức mũi. Có thể ăn với cơm hoặc làm món nhậu chay.",
+      "servings": 3,
+      "prepMinutes": 15,
+      "cookMinutes": 15,
+      "ingredients": [
+        {
+          "name": "Đậu hũ",
+          "quantity": 400,
+          "unit": "g",
+          "note": "cắt khối, thấm khô"
+        },
+        {
+          "name": "Sả",
+          "quantity": 3,
+          "unit": "cây",
+          "note": "băm nhuyễn"
+        },
+        {
+          "name": "Ớt",
+          "quantity": 2,
+          "unit": "trái",
+          "note": "băm"
+        },
+        {
+          "name": "Nước tương",
+          "quantity": 1,
+          "unit": "muỗng canh"
+        },
+        {
+          "name": "Đường cát",
+          "quantity": 1,
+          "unit": "muỗng cà phê"
+        },
+        {
+          "name": "Bột bắp",
+          "quantity": 2,
+          "unit": "muỗng canh"
+        },
+        {
+          "name": "Dầu ăn",
+          "quantity": 100,
+          "unit": "ml",
+          "note": "để chiên"
+        }
+      ],
+      "steps": [
+        "Lăn đậu hũ qua bột bắp cho một lớp mỏng.",
+        "Chiên đậu hũ trong dầu nóng đến vàng giòn rồi vớt ra giấy thấm dầu.",
+        "Phi sả và ớt trong một ít dầu, nêm nước tương và đường.",
+        "Cho đậu hũ vào, đảo đều 1 phút cho sả ớt bám quanh miếng đậu."
+      ]
+    },
+    {
+      "title": "Rau muống xào tỏi",
+      "description": "Rau muống xào lửa lớn giữ độ giòn, thơm mùi tỏi phi. Món rau quen thuộc nhất trong mâm cơm Việt.",
+      "servings": 3,
+      "prepMinutes": 5,
+      "cookMinutes": 5,
+      "ingredients": [
+        {
+          "name": "Rau muống",
+          "quantity": 400,
+          "unit": "g",
+          "note": "nhặt, cắt khúc"
+        },
+        {
+          "name": "Tỏi",
+          "quantity": 4,
+          "unit": "tép",
+          "note": "băm"
+        },
+        {
+          "name": "Dầu ăn",
+          "quantity": 2,
+          "unit": "muỗng canh"
+        },
+        {
+          "name": "Nước tương",
+          "quantity": 1,
+          "unit": "muỗng cà phê"
+        },
+        {
+          "name": "Bột nêm nấm",
+          "quantity": 1,
+          "unit": "muỗng cà phê"
+        }
+      ],
+      "steps": [
+        "Rửa rau muống thật sạch và để ráo nước.",
+        "Làm nóng dầu, phi tỏi vàng thơm.",
+        "Tăng lửa lớn, cho rau vào xào nhanh tay khoảng 2 phút.",
+        "Nêm nước tương và bột nêm nấm, đảo đều rồi dọn ngay."
+      ]
+    },
+    {
+      "title": "Cải ngọt xào nấm hương",
+      "description": "Cải ngọt xanh giòn xào cùng nấm hương thơm, nêm nhẹ để giữ vị ngọt tự nhiên của rau.",
+      "servings": 3,
+      "prepMinutes": 10,
+      "cookMinutes": 8,
+      "ingredients": [
+        {
+          "name": "Cải ngọt",
+          "quantity": 300,
+          "unit": "g",
+          "note": "cắt khúc"
+        },
+        {
+          "name": "Nấm hương",
+          "quantity": 6,
+          "unit": "cái",
+          "note": "ngâm mềm, cắt sợi"
+        },
+        {
+          "name": "Gừng",
+          "quantity": 1,
+          "unit": "lát",
+          "note": "thái chỉ"
+        },
+        {
+          "name": "Dầu ăn",
+          "quantity": 1,
+          "unit": "muỗng canh"
+        },
+        {
+          "name": "Nước tương",
+          "quantity": 1,
+          "unit": "muỗng cà phê"
+        },
+        {
+          "name": "Bột nêm nấm",
+          "quantity": 1,
+          "unit": "muỗng cà phê"
+        },
+        {
+          "name": "Tiêu",
+          "note": "một chút"
+        }
+      ],
+      "steps": [
+        "Phi gừng với dầu, cho nấm hương vào xào 2 phút.",
+        "Thêm cải ngọt, tăng lửa và xào nhanh.",
+        "Nêm nước tương, bột nêm nấm, rắc tiêu, xào thêm 1 phút rồi tắt bếp."
+      ]
+    },
+    {
+      "title": "Canh khổ qua nhồi nấm",
+      "description": "Khổ qua nhồi nhân nấm và miến, hầm trong nước dùng ngọt thanh. Món truyền thống ngày Tết miền Nam, vị đắng nhẹ rất dễ nghiền.",
+      "servings": 4,
+      "prepMinutes": 30,
+      "cookMinutes": 30,
+      "ingredients": [
+        {
+          "name": "Khổ qua",
+          "quantity": 2,
+          "unit": "trái",
+          "note": "bổ khoanh, bỏ ruột"
+        },
+        {
+          "name": "Nấm mèo",
+          "quantity": 20,
+          "unit": "g",
+          "note": "ngâm mềm, băm"
+        },
+        {
+          "name": "Nấm rơm",
+          "quantity": 100,
+          "unit": "g",
+          "note": "băm nhỏ"
+        },
+        {
+          "name": "Miến",
+          "quantity": 30,
+          "unit": "g",
+          "note": "ngâm mềm, cắt ngắn"
+        },
+        {
+          "name": "Cà rốt",
+          "quantity": 0.5,
+          "unit": "củ",
+          "note": "bào sợi"
+        },
+        {
+          "name": "Hành tím",
+          "quantity": 1,
+          "unit": "củ",
+          "note": "băm"
+        },
+        {
+          "name": "Tiêu",
+          "note": "xay"
+        },
+        {
+          "name": "Bột nêm nấm",
+          "quantity": 1,
+          "unit": "muỗng cà phê"
+        },
+        {
+          "name": "Muối",
+          "note": "nêm vừa ăn"
+        }
+      ],
+      "steps": [
+        "Trộn nấm mèo, nấm rơm, miến, cà rốt, hành tím với tiêu, muối và bột nêm nấm.",
+        "Nhồi hỗn hợp vào từng khoanh khổ qua, nén chặt tay.",
+        "Đun sôi 1,2 lít nước với chút muối, thả khổ qua nhồi vào.",
+        "Hạ lửa nhỏ nấu 25 phút đến khi khổ qua mềm, nếm lại cho vừa ăn."
+      ]
+    },
+    {
+      "title": "Canh bí đao hạt sen",
+      "description": "Canh bí đao thanh mát nấu cùng hạt sen bùi và nấm mèo, thích hợp giải nhiệt cho ngày hè.",
+      "servings": 4,
+      "prepMinutes": 15,
+      "cookMinutes": 25,
+      "ingredients": [
+        {
+          "name": "Bí đao",
+          "quantity": 500,
+          "unit": "g",
+          "note": "gọt, cắt miếng"
+        },
+        {
+          "name": "Hạt sen",
+          "quantity": 80,
+          "unit": "g",
+          "note": "ngâm mềm"
+        },
+        {
+          "name": "Nấm mèo",
+          "quantity": 10,
+          "unit": "g",
+          "note": "ngâm mềm, cắt sợi"
+        },
+        {
+          "name": "Gừng",
+          "quantity": 2,
+          "unit": "lát"
+        },
+        {
+          "name": "Bột nêm nấm",
+          "quantity": 1,
+          "unit": "muỗng cà phê"
+        },
+        {
+          "name": "Muối",
+          "note": "nêm vừa ăn"
+        },
+        {
+          "name": "Rau mùi",
+          "note": "cắt nhỏ"
+        },
+        {
+          "name": "Mướp",
+          "quantity": 1,
+          "unit": "trái",
+          "note": "gọt, cắt khoanh"
+        }
+      ],
+      "steps": [
+        "Đun 1,2 lít nước cùng hạt sen và gừng, nấu nhỏ lửa 10 phút.",
+        "Cho bí đao và nấm mèo vào nấu thêm 10 phút đến khi bí trong.",
+        "Nêm bột nêm nấm, muối cho vừa ăn rồi rắc rau mùi."
+      ]
+    },
+    {
+      "title": "Canh củ cải cà rốt nấm hương",
+      "description": "Canh củ cải trắng và cà rốt hầm mềm trong nước nấm hương ngọt, ấm bụng, rất hợp những ngày se lạnh.",
+      "servings": 4,
+      "prepMinutes": 10,
+      "cookMinutes": 30,
+      "ingredients": [
+        {
+          "name": "Củ cải trắng",
+          "quantity": 400,
+          "unit": "g",
+          "note": "cắt khúc"
+        },
+        {
+          "name": "Cà rốt",
+          "quantity": 1,
+          "unit": "củ",
+          "note": "cắt khúc"
+        },
+        {
+          "name": "Nấm hương",
+          "quantity": 6,
+          "unit": "cái",
+          "note": "ngâm mềm"
+        },
+        {
+          "name": "Gừng",
+          "quantity": 2,
+          "unit": "lát"
+        },
+        {
+          "name": "Bột nêm nấm",
+          "quantity": 1,
+          "unit": "muỗng cà phê"
+        },
+        {
+          "name": "Hành lá",
+          "quantity": 1,
+          "unit": "nhánh",
+          "note": "cắt nhỏ"
+        },
+        {
+          "name": "Tiêu",
+          "note": "một chút"
+        },
+        {
+          "name": "Su su",
+          "quantity": 1,
+          "unit": "trái",
+          "note": "cắt khúc"
+        }
+      ],
+      "steps": [
+        "Cho nấm hương cùng nước ngâm lọc cặn và 1 lít nước vào nồi, nấu sôi.",
+        "Thêm củ cải, cà rốt và gừng, hạ lửa nhỏ nấu 25 phút đến khi mềm.",
+        "Nêm bột nêm nấm, rắc hành lá và tiêu."
+      ]
+    },
+    {
+      "title": "Cà tím kho tộ chay",
+      "description": "Cà tím mềm béo kho với tương hột, thơm vị miền Tây, ăn với cơm trắng và chút ớt xanh là hết ý.",
+      "servings": 3,
+      "prepMinutes": 10,
+      "cookMinutes": 25,
+      "ingredients": [
+        {
+          "name": "Cà tím",
+          "quantity": 3,
+          "unit": "trái",
+          "note": "cắt khúc dài"
+        },
+        {
+          "name": "Tương hột",
+          "quantity": 2,
+          "unit": "muỗng canh",
+          "note": "dằm nhuyễn"
+        },
+        {
+          "name": "Hành tím",
+          "quantity": 2,
+          "unit": "củ",
+          "note": "băm"
+        },
+        {
+          "name": "Đường thốt nốt",
+          "quantity": 1,
+          "unit": "muỗng canh"
+        },
+        {
+          "name": "Ớt",
+          "quantity": 1,
+          "unit": "trái",
+          "note": "cắt lát"
+        },
+        {
+          "name": "Tiêu",
+          "note": "xay"
+        },
+        {
+          "name": "Dầu ăn",
+          "quantity": 1,
+          "unit": "muỗng canh"
+        }
+      ],
+      "steps": [
+        "Phi hành tím với dầu, cho tương hột và đường thốt nốt vào xào cho sánh.",
+        "Thêm cà tím, đảo đều rồi đổ nước xâm xấp.",
+        "Kho lửa nhỏ 15 phút, đừng khuấy nhiều để cà không nát.",
+        "Cho ớt và tiêu, kho thêm 3 phút đến khi nước sệt."
+      ]
+    },
+    {
+      "title": "Nấm kho tiêu",
+      "description": "Nấm rơm và nấm bào ngư kho khô với nước tương, tiêu và sả, vị đậm đà gợi nhớ món kho thịt.",
+      "servings": 4,
+      "prepMinutes": 15,
+      "cookMinutes": 25,
+      "ingredients": [
+        {
+          "name": "Nấm rơm",
+          "quantity": 200,
+          "unit": "g",
+          "note": "cắt đôi"
+        },
+        {
+          "name": "Nấm bào ngư",
+          "quantity": 200,
+          "unit": "g",
+          "note": "xé miếng"
+        },
+        {
+          "name": "Nước tương",
+          "quantity": 2,
+          "unit": "muỗng canh"
+        },
+        {
+          "name": "Đường thốt nốt",
+          "quantity": 1,
+          "unit": "muỗng canh"
+        },
+        {
+          "name": "Tiêu",
+          "quantity": 1,
+          "unit": "muỗng cà phê",
+          "note": "giã thô"
+        },
+        {
+          "name": "Sả",
+          "quantity": 1,
+          "unit": "cây",
+          "note": "băm"
+        },
+        {
+          "name": "Hành tím",
+          "quantity": 1,
+          "unit": "củ",
+          "note": "băm"
+        },
+        {
+          "name": "Dầu ăn",
+          "quantity": 2,
+          "unit": "muỗng canh"
+        }
+      ],
+      "steps": [
+        "Phi hành tím và sả với dầu đến thơm.",
+        "Cho các loại nấm vào xào 4 phút cho bớt nước.",
+        "Thêm nước tương, đường thốt nốt và nửa chén nước, đun nhỏ lửa.",
+        "Khi nước cạn sệt, rắc nhiều tiêu, đảo đều rồi tắt bếp."
+      ]
+    },
+    {
+      "title": "Mít non kho nước tương",
+      "description": "Mít non xé sợi kho với nước tương, gừng và nghệ cho món chay giống thịt xé thớ, ăn nóng cùng cơm trắng rất ngon.",
+      "servings": 4,
+      "prepMinutes": 25,
+      "cookMinutes": 35,
+      "ingredients": [
+        {
+          "name": "Mít non",
+          "quantity": 500,
+          "unit": "g",
+          "note": "gọt, luộc, xé sợi"
+        },
+        {
+          "name": "Nước tương",
+          "quantity": 3,
+          "unit": "muỗng canh"
+        },
+        {
+          "name": "Gừng",
+          "quantity": 1,
+          "unit": "củ",
+          "note": "băm"
+        },
+        {
+          "name": "Hành tím",
+          "quantity": 2,
+          "unit": "củ",
+          "note": "băm"
+        },
+        {
+          "name": "Nghệ",
+          "quantity": 1,
+          "unit": "lát",
+          "note": "băm nhỏ"
+        },
+        {
+          "name": "Đường cát",
+          "quantity": 1,
+          "unit": "muỗng canh"
+        },
+        {
+          "name": "Tiêu",
+          "note": "xay"
+        },
+        {
+          "name": "Dầu ăn",
+          "quantity": 2,
+          "unit": "muỗng canh"
+        }
+      ],
+      "steps": [
+        "Luộc mít non 15 phút, vớt ra để nguội rồi xé thành sợi, bóp nhẹ cho ráo nước.",
+        "Phi hành, gừng, nghệ trong dầu cho thơm.",
+        "Cho mít vào xào, nêm nước tương, đường và một ít nước.",
+        "Kho lửa nhỏ 20 phút đến khi mít thấm và nước cạn, rắc tiêu."
+      ]
+    },
+    {
+      "title": "Chả giò chay",
+      "description": "Chả giò chay nhân khoai môn, cà rốt, nấm mèo và miến cuốn bánh tráng, chiên vàng giòn. Chấm nước mắm chay chua ngọt rất hấp dẫn.",
+      "servings": 6,
+      "prepMinutes": 40,
+      "cookMinutes": 20,
+      "ingredients": [
+        {
+          "name": "Bánh tráng",
+          "quantity": 20,
+          "unit": "tờ"
+        },
+        {
+          "name": "Khoai môn",
+          "quantity": 200,
+          "unit": "g",
+          "note": "bào sợi"
+        },
+        {
+          "name": "Cà rốt",
+          "quantity": 1,
+          "unit": "củ",
+          "note": "bào sợi"
+        },
+        {
+          "name": "Nấm mèo",
+          "quantity": 15,
+          "unit": "g",
+          "note": "ngâm mềm, cắt sợi"
+        },
+        {
+          "name": "Miến",
+          "quantity": 50,
+          "unit": "g",
+          "note": "ngâm mềm, cắt ngắn"
+        },
+        {
+          "name": "Nấm hương",
+          "quantity": 5,
+          "unit": "cái",
+          "note": "ngâm mềm, băm"
+        },
+        {
+          "name": "Tiêu",
+          "note": "xay"
+        },
+        {
+          "name": "Bột nêm nấm",
+          "quantity": 1,
+          "unit": "muỗng cà phê"
+        },
+        {
+          "name": "Dầu ăn",
+          "quantity": 300,
+          "unit": "ml",
+          "note": "để chiên"
+        },
+        {
+          "name": "Nước mắm chay",
+          "quantity": 3,
+          "unit": "muỗng canh",
+          "note": "pha nước chấm"
+        }
+      ],
+      "steps": [
+        "Trộn khoai môn, cà rốt, nấm mèo, miến, nấm hương với tiêu và bột nêm nấm.",
+        "Làm ẩm bánh tráng, cho một muỗng nhân rồi cuốn chặt tay.",
+        "Chiên chả giò trong dầu vừa nóng, lửa nhỏ đến khi vàng giòn.",
+        "Vớt ra để ráo dầu, dùng với nước mắm chay và rau sống."
+      ]
+    },
+    {
+      "title": "Gỏi cuốn chay",
+      "description": "Gỏi cuốn tươi mát với bún, rau thơm, dưa leo và đậu hũ chiên, chấm tương đậu phộng béo bùi.",
+      "servings": 4,
+      "prepMinutes": 30,
+      "cookMinutes": 10,
+      "ingredients": [
+        {
+          "name": "Bánh tráng",
+          "quantity": 12,
+          "unit": "tờ"
+        },
+        {
+          "name": "Bún tươi",
+          "quantity": 150,
+          "unit": "g"
+        },
+        {
+          "name": "Xà lách",
+          "quantity": 8,
+          "unit": "lá"
+        },
+        {
+          "name": "Dưa leo",
+          "quantity": 1,
+          "unit": "trái",
+          "note": "cắt sợi"
+        },
+        {
+          "name": "Cà rốt",
+          "quantity": 1,
+          "unit": "củ",
+          "note": "cắt sợi"
+        },
+        {
+          "name": "Đậu hũ chiên",
+          "quantity": 200,
+          "unit": "g",
+          "note": "cắt dải"
+        },
+        {
+          "name": "Húng quế",
+          "note": "nhặt lá"
+        },
+        {
+          "name": "Húng lủi",
+          "note": "nhặt lá"
+        },
+        {
+          "name": "Tương hột",
+          "quantity": 2,
+          "unit": "muỗng canh",
+          "note": "pha nước chấm"
+        },
+        {
+          "name": "Bơ đậu phộng",
+          "quantity": 2,
+          "unit": "muỗng canh",
+          "note": "pha nước chấm"
+        },
+        {
+          "name": "Tía tô",
+          "note": "nhặt lá"
+        },
+        {
+          "name": "Diếp cá",
+          "note": "nhặt lá"
+        },
+        {
+          "name": "Củ đậu",
+          "quantity": 100,
+          "unit": "g",
+          "note": "cắt sợi"
+        }
+      ],
+      "steps": [
+        "Chuẩn bị bún, rau thơm, dưa leo, cà rốt và đậu hũ chiên bày sẵn.",
+        "Nhúng bánh tráng vào nước, đặt xà lách, bún, rau thơm và các nguyên liệu lên.",
+        "Cuộn chặt tay, gập hai đầu lại cho gọn.",
+        "Hòa tương hột với bơ đậu phộng và chút nước ấm làm nước chấm, dùng cùng gỏi cuốn."
+      ]
+    },
+    {
+      "title": "Gỏi dưa leo cà rốt",
+      "description": "Gỏi trộn giòn mát với dưa leo, cà rốt và đậu phộng rang, chua ngọt cân bằng, ăn kèm cơm hoặc làm món khai vị.",
+      "servings": 3,
+      "prepMinutes": 15,
+      "cookMinutes": 0,
+      "ingredients": [
+        {
+          "name": "Dưa leo",
+          "quantity": 2,
+          "unit": "trái",
+          "note": "bào sợi"
+        },
+        {
+          "name": "Cà rốt",
+          "quantity": 1,
+          "unit": "củ",
+          "note": "bào sợi"
+        },
+        {
+          "name": "Đậu phộng",
+          "quantity": 30,
+          "unit": "g",
+          "note": "rang, giã dập"
+        },
+        {
+          "name": "Rau răm",
+          "note": "cắt nhỏ"
+        },
+        {
+          "name": "Chanh",
+          "quantity": 1,
+          "unit": "quả",
+          "note": "vắt lấy nước"
+        },
+        {
+          "name": "Đường cát",
+          "quantity": 1,
+          "unit": "muỗng canh"
+        },
+        {
+          "name": "Nước mắm chay",
+          "quantity": 1,
+          "unit": "muỗng canh"
+        },
+        {
+          "name": "Ớt",
+          "quantity": 1,
+          "unit": "trái",
+          "note": "băm"
+        }
+      ],
+      "steps": [
+        "Hòa chanh, đường, nước mắm chay và ớt thành nước trộn gỏi.",
+        "Bóp dưa leo và cà rốt với chút muối, vắt ráo nước.",
+        "Trộn rau củ với nước trộn gỏi, thêm rau răm.",
+        "Rắc đậu phộng lên trên, dọn ngay để rau còn giòn."
+      ]
+    },
+    {
+      "title": "Gỏi ngó sen củ năng",
+      "description": "Ngó sen giòn trộn củ năng, nấm rơm và rau thơm, nước trộn chua ngọt thanh. Món gỏi chay đẹp mắt cho bữa tiệc.",
+      "servings": 4,
+      "prepMinutes": 20,
+      "cookMinutes": 10,
+      "ingredients": [
+        {
+          "name": "Ngó sen",
+          "quantity": 200,
+          "unit": "g",
+          "note": "cắt khúc, ngâm giấm"
+        },
+        {
+          "name": "Củ năng",
+          "quantity": 80,
+          "unit": "g",
+          "note": "gọt, cắt lát"
+        },
+        {
+          "name": "Cà rốt",
+          "quantity": 0.5,
+          "unit": "củ",
+          "note": "bào sợi"
+        },
+        {
+          "name": "Nấm rơm",
+          "quantity": 100,
+          "unit": "g",
+          "note": "luộc, xé nhỏ"
+        },
+        {
+          "name": "Húng lủi",
+          "note": "cắt nhỏ"
+        },
+        {
+          "name": "Rau răm",
+          "note": "cắt nhỏ"
+        },
+        {
+          "name": "Đậu phộng",
+          "quantity": 25,
+          "unit": "g",
+          "note": "rang, giã dập"
+        },
+        {
+          "name": "Chanh",
+          "quantity": 1,
+          "unit": "quả",
+          "note": "vắt nước"
+        },
+        {
+          "name": "Đường cát",
+          "quantity": 1,
+          "unit": "muỗng canh"
+        },
+        {
+          "name": "Nước mắm chay",
+          "quantity": 1,
+          "unit": "muỗng canh"
+        }
+      ],
+      "steps": [
+        "Ngâm ngó sen trong nước giấm loãng vài phút để giữ màu trắng, vớt ra ráo.",
+        "Luộc sơ nấm rơm, xé nhỏ và để nguội.",
+        "Trộn chanh, đường, nước mắm chay thành nước trộn gỏi.",
+        "Trộn đều ngó sen, củ năng, cà rốt, nấm và rau thơm với nước gỏi, rắc đậu phộng."
+      ]
+    },
+    {
+      "title": "Bún riêu chay",
+      "description": "Bún riêu chay với chả đậu hũ non xay nhuyễn mô phỏng riêu cua, nước dùng chua nhẹ từ cà chua và nấu từ nấm. Ăn kèm rau sống và mắm chay.",
+      "servings": 4,
+      "prepMinutes": 30,
+      "cookMinutes": 30,
+      "ingredients": [
+        {
+          "name": "Bún tươi",
+          "quantity": 400,
+          "unit": "g"
+        },
+        {
+          "name": "Đậu hũ non",
+          "quantity": 300,
+          "unit": "g",
+          "note": "dằm nhuyễn"
+        },
+        {
+          "name": "Đậu hũ chiên",
+          "quantity": 150,
+          "unit": "g",
+          "note": "cắt miếng"
+        },
+        {
+          "name": "Cà chua",
+          "quantity": 4,
+          "unit": "quả",
+          "note": "cắt múi cau"
+        },
+        {
+          "name": "Nấm rơm",
+          "quantity": 100,
+          "unit": "g"
+        },
+        {
+          "name": "Hạt điều màu",
+          "quantity": 1,
+          "unit": "muỗng cà phê",
+          "note": "phi lấy màu"
+        },
+        {
+          "name": "Hành tím",
+          "quantity": 2,
+          "unit": "củ",
+          "note": "băm"
+        },
+        {
+          "name": "Me",
+          "quantity": 1,
+          "unit": "muỗng canh",
+          "note": "lấy nước"
+        },
+        {
+          "name": "Bột nêm nấm",
+          "quantity": 1,
+          "unit": "muỗng cà phê"
+        },
+        {
+          "name": "Rau muống",
+          "quantity": 150,
+          "unit": "g",
+          "note": "chẻ sợi để ăn kèm"
+        },
+        {
+          "name": "Dầu ăn",
+          "quantity": 2,
+          "unit": "muỗng canh"
+        },
+        {
+          "name": "Kinh giới",
+          "note": "ăn kèm"
+        }
+      ],
+      "steps": [
+        "Phi hành tím với hạt điều màu, cho cà chua vào xào mềm.",
+        "Đổ 1,5 lít nước, cho nấm rơm, nước me và nêm bột nêm nấm.",
+        "Trộn đậu hũ non dằm với chút bột nêm rồi thả từng muỗng vào nồi nước sôi nhẹ để tạo riêu, không khuấy mạnh.",
+        "Cho đậu hũ chiên vào nấu thêm 5 phút.",
+        "Chần bún, xếp vào tô cùng rau muống chẻ, chan nước và riêu."
+      ]
+    },
+    {
+      "title": "Bún bò Huế chay",
+      "description": "Nước dùng sả, ớt và nấm ngọt thanh theo kiểu Huế, ăn cùng chả chay, đậu hũ chiên và rau sống đầy đủ.",
+      "servings": 4,
+      "prepMinutes": 30,
+      "cookMinutes": 50,
+      "ingredients": [
+        {
+          "name": "Bún tươi",
+          "quantity": 400,
+          "unit": "g"
+        },
+        {
+          "name": "Sả",
+          "quantity": 5,
+          "unit": "cây",
+          "note": "đập dập"
+        },
+        {
+          "name": "Nấm đùi gà",
+          "quantity": 200,
+          "unit": "g",
+          "note": "cắt khúc"
+        },
+        {
+          "name": "Củ cải trắng",
+          "quantity": 200,
+          "unit": "g",
+          "note": "cắt khúc"
+        },
+        {
+          "name": "Đậu hũ chiên",
+          "quantity": 200,
+          "unit": "g",
+          "note": "cắt dải"
+        },
+        {
+          "name": "Sa tế",
+          "quantity": 2,
+          "unit": "muỗng canh"
+        },
+        {
+          "name": "Hạt điều màu",
+          "quantity": 1,
+          "unit": "muỗng cà phê"
+        },
+        {
+          "name": "Bắp cải",
+          "quantity": 150,
+          "unit": "g",
+          "note": "thái sợi để ăn kèm"
+        },
+        {
+          "name": "Hành lá",
+          "quantity": 2,
+          "unit": "nhánh",
+          "note": "cắt nhỏ"
+        },
+        {
+          "name": "Bột nêm nấm",
+          "quantity": 1,
+          "unit": "muỗng canh"
+        },
+        {
+          "name": "Dầu ăn",
+          "quantity": 2,
+          "unit": "muỗng canh"
+        }
+      ],
+      "steps": [
+        "Hầm củ cải và nấm đùi gà với 2 lít nước cùng một nửa số sả khoảng 30 phút.",
+        "Phi sả còn lại với hạt điều màu và sa tế rồi cho vào nồi nước dùng.",
+        "Nêm bột nêm nấm cho vừa miệng, nấu thêm 10 phút.",
+        "Chần bún, xếp vào tô cùng nấm, củ cải và đậu hũ chiên, chan nước dùng và rắc hành lá, ăn kèm bắp cải thái sợi."
+      ]
+    },
+    {
+      "title": "Phở chay",
+      "description": "Nước phở chay thơm mùi hồi, quế và gừng nướng, nấu từ củ cải và nấm hương cho vị ngọt tự nhiên.",
+      "servings": 4,
+      "prepMinutes": 20,
+      "cookMinutes": 60,
+      "ingredients": [
+        {
+          "name": "Bánh phở",
+          "quantity": 500,
+          "unit": "g"
+        },
+        {
+          "name": "Củ cải trắng",
+          "quantity": 300,
+          "unit": "g",
+          "note": "cắt khúc"
+        },
+        {
+          "name": "Nấm hương",
+          "quantity": 8,
+          "unit": "cái",
+          "note": "ngâm mềm"
+        },
+        {
+          "name": "Hoa hồi",
+          "quantity": 3,
+          "unit": "cái"
+        },
+        {
+          "name": "Quế",
+          "quantity": 1,
+          "unit": "thanh nhỏ"
+        },
+        {
+          "name": "Gừng",
+          "quantity": 1,
+          "unit": "củ",
+          "note": "nướng, đập dập"
+        },
+        {
+          "name": "Hành tây",
+          "quantity": 1,
+          "unit": "củ",
+          "note": "nướng cháy cạnh"
+        },
+        {
+          "name": "Đậu hũ chiên",
+          "quantity": 200,
+          "unit": "g",
+          "note": "cắt lát"
+        },
+        {
+          "name": "Giá đỗ",
+          "quantity": 100,
+          "unit": "g"
+        },
+        {
+          "name": "Húng quế",
+          "note": "để ăn kèm"
+        },
+        {
+          "name": "Muối",
+          "note": "nêm vừa ăn"
+        },
+        {
+          "name": "Cần tây",
+          "quantity": 2,
+          "unit": "nhánh",
+          "note": "cắt khúc, cho vào nồi nước dùng"
+        }
+      ],
+      "steps": [
+        "Nướng gừng, hành tây, hoa hồi và quế trên chảo khô đến khi dậy mùi.",
+        "Cho tất cả vào nồi cùng củ cải, nấm hương và 2 lít nước, ninh nhỏ lửa 45 phút.",
+        "Lọc bỏ gia vị, nêm muối cho vừa ăn.",
+        "Chần bánh phở, xếp cùng đậu hũ chiên và giá vào tô, chan nước dùng nóng, ăn với húng quế."
+      ]
+    },
+    {
+      "title": "Hủ tiếu chay",
+      "description": "Hủ tiếu nước dùng ngọt thanh từ củ cải và nấm, ăn cùng đậu hũ chiên, giá đỗ và rau thơm.",
+      "servings": 4,
+      "prepMinutes": 20,
+      "cookMinutes": 40,
+      "ingredients": [
+        {
+          "name": "Hủ tiếu",
+          "quantity": 400,
+          "unit": "g"
+        },
+        {
+          "name": "Củ cải trắng",
+          "quantity": 250,
+          "unit": "g"
+        },
+        {
+          "name": "Nấm hương",
+          "quantity": 6,
+          "unit": "cái",
+          "note": "ngâm mềm"
+        },
+        {
+          "name": "Đậu hũ chiên",
+          "quantity": 150,
+          "unit": "g",
+          "note": "cắt miếng"
+        },
+        {
+          "name": "Giá đỗ",
+          "quantity": 100,
+          "unit": "g"
+        },
+        {
+          "name": "Hẹ",
+          "quantity": 30,
+          "unit": "g",
+          "note": "cắt khúc"
+        },
+        {
+          "name": "Hành tím",
+          "quantity": 2,
+          "unit": "củ",
+          "note": "phi giòn"
+        },
+        {
+          "name": "Nước tương",
+          "quantity": 1,
+          "unit": "muỗng canh"
+        },
+        {
+          "name": "Bột nêm nấm",
+          "quantity": 1,
+          "unit": "muỗng cà phê"
+        },
+        {
+          "name": "Tiêu",
+          "note": "một chút"
+        },
+        {
+          "name": "Cải thìa",
+          "quantity": 150,
+          "unit": "g",
+          "note": "cắt khúc, chần"
+        }
+      ],
+      "steps": [
+        "Ninh củ cải và nấm hương với 1,5 lít nước khoảng 30 phút.",
+        "Nêm nước tương, bột nêm nấm cho nước dùng vừa ăn.",
+        "Chần hủ tiếu và giá, cho vào tô cùng đậu hũ chiên và hẹ.",
+        "Chan nước dùng nóng, rắc hành tím phi và tiêu."
+      ]
+    },
+    {
+      "title": "Cơm chiên rau củ",
+      "description": "Cơm nguội chiên tơi với đậu Hà Lan, cà rốt, bắp non và nấm, nêm vừa miệng, tận dụng cơm thừa rất ngon.",
+      "servings": 2,
+      "prepMinutes": 15,
+      "cookMinutes": 10,
+      "ingredients": [
+        {
+          "name": "Gạo tẻ",
+          "quantity": 300,
+          "unit": "g",
+          "note": "nấu cơm để nguội"
+        },
+        {
+          "name": "Đậu Hà Lan",
+          "quantity": 50,
+          "unit": "g"
+        },
+        {
+          "name": "Cà rốt",
+          "quantity": 0.5,
+          "unit": "củ",
+          "note": "cắt hạt lựu"
+        },
+        {
+          "name": "Bắp ngô",
+          "quantity": 50,
+          "unit": "g",
+          "note": "tách hạt"
+        },
+        {
+          "name": "Nấm hương",
+          "quantity": 3,
+          "unit": "cái",
+          "note": "ngâm mềm, cắt hạt lựu"
+        },
+        {
+          "name": "Nước tương",
+          "quantity": 1,
+          "unit": "muỗng canh"
+        },
+        {
+          "name": "Dầu ăn",
+          "quantity": 2,
+          "unit": "muỗng canh"
+        },
+        {
+          "name": "Hành lá",
+          "quantity": 1,
+          "unit": "nhánh",
+          "note": "cắt nhỏ"
+        },
+        {
+          "name": "Tiêu",
+          "note": "xay"
+        },
+        {
+          "name": "Đậu que",
+          "quantity": 50,
+          "unit": "g",
+          "note": "cắt hạt lựu"
+        },
+        {
+          "name": "Ớt chuông",
+          "quantity": 0.5,
+          "unit": "quả",
+          "note": "cắt hạt lựu"
+        }
+      ],
+      "steps": [
+        "Xào cà rốt, nấm hương và bắp trong dầu 3 phút, thêm đậu Hà Lan.",
+        "Cho cơm nguội vào, đảo tơi trên lửa lớn.",
+        "Nêm nước tương, tiêu và hành lá, đảo thêm 2 phút rồi dọn ra."
+      ]
+    },
+    {
+      "title": "Cơm gạo lứt muối mè",
+      "description": "Gạo lứt nấu mềm dẻo ăn cùng muối mè rang thơm, món cơm đơn giản của người ăn chay giàu chất xơ.",
+      "servings": 2,
+      "prepMinutes": 10,
+      "cookMinutes": 45,
+      "ingredients": [
+        {
+          "name": "Gạo lứt",
+          "quantity": 200,
+          "unit": "g",
+          "note": "ngâm 2 giờ"
+        },
+        {
+          "name": "Hạt mè",
+          "quantity": 3,
+          "unit": "muỗng canh",
+          "note": "rang vàng"
+        },
+        {
+          "name": "Mè đen",
+          "quantity": 1,
+          "unit": "muỗng canh",
+          "note": "rang"
+        },
+        {
+          "name": "Muối",
+          "quantity": 1,
+          "unit": "muỗng cà phê"
+        },
+        {
+          "name": "Rong biển",
+          "quantity": 1,
+          "unit": "lá",
+          "note": "nướng, bóp vụn"
+        }
+      ],
+      "steps": [
+        "Vo gạo lứt, nấu với lượng nước gấp 1,5 lần trong nồi cơm hoặc nồi áp suất đến khi chín mềm.",
+        "Giã nhẹ mè trắng, mè đen với muối thành muối mè.",
+        "Xới cơm ra chén, rắc muối mè và rong biển lên trên."
+      ]
+    },
+    {
+      "title": "Xôi đậu xanh nước cốt dừa",
+      "description": "Xôi nếp dẻo thơm với đậu xanh bở, rưới nước cốt dừa béo ngọt, món sáng truyền thống rất no lâu.",
+      "servings": 4,
+      "prepMinutes": 20,
+      "cookMinutes": 30,
+      "ingredients": [
+        {
+          "name": "Gạo nếp",
+          "quantity": 300,
+          "unit": "g",
+          "note": "ngâm 4 giờ"
+        },
+        {
+          "name": "Đậu xanh",
+          "quantity": 100,
+          "unit": "g",
+          "note": "ngâm mềm"
+        },
+        {
+          "name": "Nước cốt dừa",
+          "quantity": 100,
+          "unit": "ml"
+        },
+        {
+          "name": "Muối",
+          "quantity": 0.5,
+          "unit": "muỗng cà phê"
+        },
+        {
+          "name": "Đường cát",
+          "quantity": 1,
+          "unit": "muỗng canh"
+        },
+        {
+          "name": "Hành tím",
+          "quantity": 2,
+          "unit": "củ",
+          "note": "phi giòn"
+        }
+      ],
+      "steps": [
+        "Hấp đậu xanh khoảng 15 phút rồi nghiền nhuyễn với chút muối.",
+        "Hấp gạo nếp đã ráo nước 25 phút cho chín dẻo.",
+        "Đun nước cốt dừa với đường và chút muối cho tan.",
+        "Xới xôi, cho đậu xanh lên, rưới nước cốt dừa và rắc hành phi."
+      ]
+    },
+    {
+      "title": "Cháo nấm hương",
+      "description": "Cháo gạo nhừ nấu cùng nấm hương và gừng, ăn nóng rất dễ chịu, phù hợp cho ngày ốm hay buổi sáng nhẹ nhàng.",
+      "servings": 3,
+      "prepMinutes": 10,
+      "cookMinutes": 40,
+      "ingredients": [
+        {
+          "name": "Gạo tẻ",
+          "quantity": 150,
+          "unit": "g"
+        },
+        {
+          "name": "Nấm hương",
+          "quantity": 6,
+          "unit": "cái",
+          "note": "ngâm mềm, cắt nhỏ"
+        },
+        {
+          "name": "Gừng",
+          "quantity": 3,
+          "unit": "lát",
+          "note": "thái chỉ"
+        },
+        {
+          "name": "Hành lá",
+          "quantity": 2,
+          "unit": "nhánh",
+          "note": "cắt nhỏ"
+        },
+        {
+          "name": "Bột nêm nấm",
+          "quantity": 1,
+          "unit": "muỗng cà phê"
+        },
+        {
+          "name": "Tiêu",
+          "note": "xay"
+        },
+        {
+          "name": "Dầu ăn",
+          "quantity": 1,
+          "unit": "muỗng canh"
+        }
+      ],
+      "steps": [
+        "Vo gạo, nấu với 1,5 lít nước cho nhừ khoảng 30 phút, thỉnh thoảng khuấy.",
+        "Phi gừng và nấm hương với dầu, cho vào nồi cháo.",
+        "Nêm bột nêm nấm, nấu thêm 5 phút rồi múc ra tô.",
+        "Rắc hành lá và tiêu."
+      ]
+    },
+    {
+      "title": "Bánh xèo chay",
+      "description": "Bánh xèo vàng giòn nhân nấm, giá đỗ và đậu hũ, ăn cuốn rau xanh với nước chấm chay chua ngọt.",
+      "servings": 4,
+      "prepMinutes": 30,
+      "cookMinutes": 30,
+      "ingredients": [
+        {
+          "name": "Bột gạo",
+          "quantity": 200,
+          "unit": "g"
+        },
+        {
+          "name": "Nghệ",
+          "quantity": 1,
+          "unit": "muỗng cà phê",
+          "note": "bột hoặc nghệ tươi xay"
+        },
+        {
+          "name": "Nước cốt dừa",
+          "quantity": 100,
+          "unit": "ml"
+        },
+        {
+          "name": "Nấm rơm",
+          "quantity": 150,
+          "unit": "g",
+          "note": "cắt lát"
+        },
+        {
+          "name": "Đậu hũ",
+          "quantity": 200,
+          "unit": "g",
+          "note": "cắt hạt lựu"
+        },
+        {
+          "name": "Giá đỗ",
+          "quantity": 150,
+          "unit": "g"
+        },
+        {
+          "name": "Hành lá",
+          "quantity": 2,
+          "unit": "nhánh",
+          "note": "cắt nhỏ"
+        },
+        {
+          "name": "Xà lách",
+          "quantity": 8,
+          "unit": "lá",
+          "note": "để ăn kèm"
+        },
+        {
+          "name": "Nước mắm chay",
+          "quantity": 3,
+          "unit": "muỗng canh"
+        },
+        {
+          "name": "Dầu ăn",
+          "quantity": 100,
+          "unit": "ml"
+        }
+      ],
+      "steps": [
+        "Trộn bột gạo, nghệ, nước cốt dừa, hành lá và 400 ml nước thành hỗn hợp loãng, để nghỉ 20 phút.",
+        "Xào sơ nấm rơm và đậu hũ với chút muối làm nhân.",
+        "Làm nóng chảo với dầu, đổ một vá bột, cho nhân và giá lên, đậy nắp 2 phút.",
+        "Mở nắp, chiên đến khi vỏ giòn vàng, gập đôi.",
+        "Dọn cùng xà lách và nước mắm chay pha chua ngọt."
+      ]
+    },
+    {
+      "title": "Bánh mì chay đồ chua",
+      "description": "Bánh mì giòn kẹp đậu hũ chiên, đồ chua củ cải cà rốt, dưa leo và rau mùi, một lựa chọn ăn sáng nhanh.",
+      "servings": 2,
+      "prepMinutes": 20,
+      "cookMinutes": 10,
+      "ingredients": [
+        {
+          "name": "Bánh mì",
+          "quantity": 2,
+          "unit": "ổ"
+        },
+        {
+          "name": "Đậu hũ chiên",
+          "quantity": 150,
+          "unit": "g",
+          "note": "cắt lát"
+        },
+        {
+          "name": "Củ cải trắng",
+          "quantity": 100,
+          "unit": "g",
+          "note": "bào sợi, ngâm chua ngọt"
+        },
+        {
+          "name": "Cà rốt",
+          "quantity": 1,
+          "unit": "củ",
+          "note": "bào sợi, ngâm chua ngọt"
+        },
+        {
+          "name": "Giấm",
+          "quantity": 3,
+          "unit": "muỗng canh",
+          "note": "ngâm đồ chua"
+        },
+        {
+          "name": "Đường cát",
+          "quantity": 2,
+          "unit": "muỗng canh",
+          "note": "ngâm đồ chua"
+        },
+        {
+          "name": "Rau mùi",
+          "note": "nhặt lá"
+        },
+        {
+          "name": "Nước tương",
+          "quantity": 1,
+          "unit": "muỗng canh"
+        },
+        {
+          "name": "Ớt",
+          "quantity": 1,
+          "unit": "trái",
+          "note": "cắt lát"
+        }
+      ],
+      "steps": [
+        "Ngâm củ cải và cà rốt trong hỗn hợp giấm, đường và chút muối ít nhất 30 phút.",
+        "Áp chảo đậu hũ chiên với nước tương cho thơm.",
+        "Nướng giòn bánh mì, xẻ dọc.",
+        "Nhồi đậu hũ, đồ chua, rau mùi và ớt vào bánh mì."
+      ]
+    },
+    {
+      "title": "Chè đậu đỏ nước cốt dừa",
+      "description": "Chè đậu đỏ nấu nhừ, ngọt dịu, rưới nước cốt dừa béo thơm. Món tráng miệng giải nhiệt.",
+      "servings": 4,
+      "prepMinutes": 15,
+      "cookMinutes": 60,
+      "ingredients": [
+        {
+          "name": "Đậu đỏ",
+          "quantity": 200,
+          "unit": "g",
+          "note": "ngâm qua đêm"
+        },
+        {
+          "name": "Đường phèn",
+          "quantity": 100,
+          "unit": "g"
+        },
+        {
+          "name": "Nước cốt dừa",
+          "quantity": 150,
+          "unit": "ml"
+        },
+        {
+          "name": "Lá dứa",
+          "quantity": 2,
+          "unit": "lá",
+          "note": "thắt nút"
+        },
+        {
+          "name": "Muối",
+          "quantity": 1,
+          "unit": "nhúm"
+        },
+        {
+          "name": "Bột năng",
+          "quantity": 1,
+          "unit": "muỗng cà phê",
+          "note": "hòa nước, dùng cho nước cốt dừa"
+        }
+      ],
+      "steps": [
+        "Nấu đậu đỏ với lá dứa và nước đến khi nhừ khoảng 45 phút.",
+        "Cho đường phèn vào nấu thêm 10 phút cho tan.",
+        "Đun nước cốt dừa với muối và bột năng đã hòa cho hơi sánh.",
+        "Múc chè ra chén, rưới nước cốt dừa."
+      ]
+    },
+    {
+      "title": "Chè chuối nước cốt dừa",
+      "description": "Chè chuối mềm thơm nấu cùng bột năng và đậu phộng rang, nước cốt dừa béo ngọt.",
+      "servings": 4,
+      "prepMinutes": 15,
+      "cookMinutes": 25,
+      "ingredients": [
+        {
+          "name": "Chuối",
+          "quantity": 5,
+          "unit": "quả",
+          "note": "chọn chuối chín vừa, cắt khúc"
+        },
+        {
+          "name": "Bột năng",
+          "quantity": 3,
+          "unit": "muỗng canh"
+        },
+        {
+          "name": "Nước cốt dừa",
+          "quantity": 200,
+          "unit": "ml"
+        },
+        {
+          "name": "Đường cát",
+          "quantity": 80,
+          "unit": "g"
+        },
+        {
+          "name": "Đậu phộng",
+          "quantity": 30,
+          "unit": "g",
+          "note": "rang, giã dập"
+        },
+        {
+          "name": "Lá dứa",
+          "quantity": 2,
+          "unit": "lá"
+        },
+        {
+          "name": "Muối",
+          "quantity": 1,
+          "unit": "nhúm"
+        }
+      ],
+      "steps": [
+        "Đun 800 ml nước với lá dứa, cho chuối và đường vào nấu 10 phút.",
+        "Hòa bột năng với nước lạnh, đổ từ từ vào nồi, khuấy đều cho chè sánh.",
+        "Cho nước cốt dừa và muối vào, đun sôi nhẹ rồi tắt bếp.",
+        "Múc chè ra chén, rắc đậu phộng."
+      ]
+    },
+    {
+      "title": "Sữa đậu nành nóng",
+      "description": "Sữa đậu nành nấu tại nhà, thơm béo và ít ngọt hơn loại đóng hộp, uống buổi sáng cùng bánh mì rất hợp.",
+      "servings": 4,
+      "prepMinutes": 15,
+      "cookMinutes": 20,
+      "ingredients": [
+        {
+          "name": "Đậu nành",
+          "quantity": 150,
+          "unit": "g",
+          "note": "ngâm 8 giờ"
+        },
+        {
+          "name": "Đường phèn",
+          "quantity": 3,
+          "unit": "muỗng canh"
+        },
+        {
+          "name": "Lá dứa",
+          "quantity": 1,
+          "unit": "lá"
+        },
+        {
+          "name": "Muối",
+          "quantity": 1,
+          "unit": "nhúm"
+        }
+      ],
+      "steps": [
+        "Vo sạch đậu nành đã ngâm, xay mịn với 1 lít nước rồi lọc qua vải.",
+        "Đun sữa với lá dứa và khuấy liên tục, hạ lửa khi sôi để tránh trào.",
+        "Nấu thêm 10 phút, cho đường phèn và muối vào khuấy tan.",
+        "Rót ra ly và uống nóng."
+      ]
+    },
+    {
+      "title": "Sinh tố bơ sữa dừa",
+      "description": "Sinh tố bơ béo mịn pha với nước cốt dừa và đường thốt nốt thay sữa đặc, không dùng sữa động vật.",
+      "servings": 2,
+      "prepMinutes": 10,
+      "cookMinutes": 0,
+      "ingredients": [
+        {
+          "name": "Bơ",
+          "quantity": 2,
+          "unit": "quả",
+          "note": "chín, lấy thịt"
+        },
+        {
+          "name": "Nước cốt dừa",
+          "quantity": 100,
+          "unit": "ml"
+        },
+        {
+          "name": "Đường thốt nốt",
+          "quantity": 2,
+          "unit": "muỗng canh"
+        },
+        {
+          "name": "Sữa yến mạch",
+          "quantity": 100,
+          "unit": "ml"
+        },
+        {
+          "name": "Chanh",
+          "quantity": 0.5,
+          "unit": "quả",
+          "note": "vắt vài giọt"
+        }
+      ],
+      "steps": [
+        "Cho bơ, nước cốt dừa, sữa yến mạch và đường thốt nốt vào máy xay.",
+        "Xay mịn cùng một ít đá viên, nhỏ vài giọt chanh để giữ màu.",
+        "Nếm lại độ ngọt rồi rót ra ly."
+      ]
+    },
+    {
+      "title": "Cà ri chay khoai lang",
+      "description": "Cà ri vàng thơm béo nước cốt dừa với khoai lang, cà rốt, đậu hũ và nấm, ăn với bánh mì hoặc cơm.",
+      "servings": 4,
+      "prepMinutes": 20,
+      "cookMinutes": 30,
+      "ingredients": [
+        {
+          "name": "Khoai lang",
+          "quantity": 300,
+          "unit": "g",
+          "note": "cắt khối"
+        },
+        {
+          "name": "Cà rốt",
+          "quantity": 1,
+          "unit": "củ",
+          "note": "cắt khối"
+        },
+        {
+          "name": "Đậu hũ",
+          "quantity": 250,
+          "unit": "g",
+          "note": "cắt khối, chiên sơ"
+        },
+        {
+          "name": "Nấm rơm",
+          "quantity": 100,
+          "unit": "g"
+        },
+        {
+          "name": "Bột cà ri",
+          "quantity": 2,
+          "unit": "muỗng canh"
+        },
+        {
+          "name": "Nước cốt dừa",
+          "quantity": 200,
+          "unit": "ml"
+        },
+        {
+          "name": "Sả",
+          "quantity": 2,
+          "unit": "cây",
+          "note": "đập dập"
+        },
+        {
+          "name": "Hành tím",
+          "quantity": 2,
+          "unit": "củ",
+          "note": "băm"
+        },
+        {
+          "name": "Muối",
+          "note": "nêm vừa ăn"
+        },
+        {
+          "name": "Dầu ăn",
+          "quantity": 2,
+          "unit": "muỗng canh"
+        },
+        {
+          "name": "Khoai tây",
+          "quantity": 200,
+          "unit": "g",
+          "note": "cắt khối"
+        },
+        {
+          "name": "Bí đỏ",
+          "quantity": 150,
+          "unit": "g",
+          "note": "cắt khối"
+        },
+        {
+          "name": "Bông cải xanh",
+          "quantity": 100,
+          "unit": "g",
+          "note": "tách nhỏ"
+        }
+      ],
+      "steps": [
+        "Phi hành tím, sả và bột cà ri trong dầu cho dậy mùi.",
+        "Cho khoai lang, cà rốt vào đảo đều rồi đổ 600 ml nước.",
+        "Nấu sôi nhỏ lửa 15 phút, thêm nấm rơm và đậu hũ.",
+        "Đổ nước cốt dừa vào, nêm muối, nấu thêm 8 phút rồi tắt bếp."
+      ]
+    },
+    {
+      "title": "Nấm đùi gà cuốn lá lốt",
+      "description": "Nấm đùi gà xắt hạt lựu ướp sả, cuốn lá lốt rồi chiên hoặc nướng, thơm lừng và có thể ăn cùng bún hoặc làm món nhậu chay.",
+      "servings": 4,
+      "prepMinutes": 30,
+      "cookMinutes": 15,
+      "ingredients": [
+        {
+          "name": "Nấm đùi gà",
+          "quantity": 300,
+          "unit": "g",
+          "note": "cắt hạt lựu"
+        },
+        {
+          "name": "Lá lốt",
+          "quantity": 20,
+          "unit": "lá",
+          "note": "rửa sạch, lau khô"
+        },
+        {
+          "name": "Sả",
+          "quantity": 2,
+          "unit": "cây",
+          "note": "băm nhuyễn"
+        },
+        {
+          "name": "Đậu hũ",
+          "quantity": 100,
+          "unit": "g",
+          "note": "dằm nhuyễn"
+        },
+        {
+          "name": "Nước tương",
+          "quantity": 1,
+          "unit": "muỗng canh"
+        },
+        {
+          "name": "Tiêu",
+          "note": "xay"
+        },
+        {
+          "name": "Bột bắp",
+          "quantity": 1,
+          "unit": "muỗng canh"
+        },
+        {
+          "name": "Dầu ăn",
+          "quantity": 3,
+          "unit": "muỗng canh"
+        }
+      ],
+      "steps": [
+        "Trộn nấm đùi gà, đậu hũ dằm, sả, nước tương, tiêu và bột bắp, ướp 15 phút.",
+        "Trải lá lốt, đặt một muỗng nhân lên mặt trên lá rồi cuộn chặt.",
+        "Chiên cuốn lá lốt trong chảo với dầu lửa vừa đến khi vàng hai mặt.",
+        "Dọn ra đĩa, ăn nóng với nước chấm chay."
+      ]
+    },
+    {
+      "title": "Trà xanh chanh dây mật mía",
+      "description": "Trà xanh ủ nguội pha chua nhẹ của chanh dây và vị ngọt mộc của mật mía, thức uống giải nhiệt dịp hè.",
+      "servings": 3,
+      "prepMinutes": 10,
+      "cookMinutes": 5,
+      "ingredients": [
+        {
+          "name": "Trà xanh",
+          "quantity": 10,
+          "unit": "g",
+          "note": "khoảng 2 muỗng cà phê lá trà"
+        },
+        {
+          "name": "Chanh dây",
+          "quantity": 3,
+          "unit": "quả",
+          "note": "lấy phần ruột"
+        },
+        {
+          "name": "Cam",
+          "quantity": 1,
+          "unit": "quả",
+          "note": "vắt lấy nước"
+        },
+        {
+          "name": "Mật mía",
+          "quantity": 2,
+          "unit": "muỗng canh"
+        },
+        {
+          "name": "Lá dứa",
+          "quantity": 1,
+          "unit": "lá"
+        }
+      ],
+      "steps": [
+        "Hãm trà xanh với 600 ml nước nóng khoảng 85 độ trong 4 phút rồi lọc bỏ bã.",
+        "Hòa mật mía vào trà khi còn ấm, để nguội.",
+        "Thêm ruột chanh dây và nước cam, khuấy đều.",
+        "Rót ra ly với đá và thả lá dứa cho thơm."
+      ]
+    },
+    {
+      "title": "Cà phê nước cốt dừa",
+      "description": "Cà phê pha phin rót lên lớp nước cốt dừa đánh bông và đường thốt nốt, thay cho cà phê sữa truyền thống mà không dùng sữa bò.",
+      "servings": 1,
+      "prepMinutes": 5,
+      "cookMinutes": 5,
+      "ingredients": [
+        {
+          "name": "Cà phê",
+          "quantity": 20,
+          "unit": "g",
+          "note": "xay vừa, pha phin"
+        },
+        {
+          "name": "Nước cốt dừa",
+          "quantity": 50,
+          "unit": "ml",
+          "note": "lạnh"
+        },
+        {
+          "name": "Đường thốt nốt",
+          "quantity": 1,
+          "unit": "muỗng canh",
+          "note": "bào nhỏ"
+        },
+        {
+          "name": "Sữa yến mạch",
+          "quantity": 30,
+          "unit": "ml"
+        }
+      ],
+      "steps": [
+        "Pha cà phê phin với khoảng 80 ml nước sôi, chờ nhỏ giọt hết.",
+        "Khuấy đường thốt nốt vào cà phê còn nóng cho tan.",
+        "Đánh nước cốt dừa với sữa yến mạch cho hơi bông.",
+        "Rót cà phê ra ly có đá, đổ lớp nước cốt dừa lên trên."
+      ]
+    }
+  ]
+}
