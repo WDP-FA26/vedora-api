@@ -45,7 +45,9 @@ const post = {
   publishedAt: now,
   createdAt: now,
   updatedAt: now,
-  _count: { comments: 2, likes: 3 },
+  viewCount: 7,
+  reposts: [],
+  _count: { comments: 2, likes: 3, reposts: 1 },
   likes: [{ userId: USER_ID }],
 };
 

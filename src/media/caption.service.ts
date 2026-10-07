@@ -11,6 +11,7 @@ import {
 } from '@prisma/client';
 import { MuxService } from '../mux/mux.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { CaptionTrackDto } from './dto/media-response.dto';
 
 /** Biases transcription toward these spellings (at most 5 words each). */
 const CAPTION_PHRASES = [
@@ -117,6 +118,45 @@ export class CaptionService {
       this.logger.warn(
         `Captioning media ${media.id} failed: ${String(error)}; retrying later`,
       );
+    }
+  }
+
+  /**
+   * The asset's ready caption tracks, spoken language first. The translated
+   * track's id is only known to Mux, so this asks it each time.
+   */
+  async listTracks(
+    media: Pick<
+      MediaAsset,
+      'id' | 'muxAssetId' | 'playbackId' | 'captionTrackId'
+    >,
+  ): Promise<CaptionTrackDto[]> {
+    if (!media.muxAssetId || !media.playbackId || !media.captionTrackId) {
+      return [];
+    }
+    if (!this.mux.configured) return [];
+    try {
+      const asset = await this.mux
+        .require()
+        .video.assets.retrieve(media.muxAssetId);
+      return (asset.tracks ?? [])
+        .filter(
+          (track) =>
+            track.type === 'text' && track.status === 'ready' && track.id,
+        )
+        .map((track) => ({
+          id: track.id!,
+          languageCode: track.language_code ?? null,
+          name: track.name ?? languageName(track.language_code ?? ''),
+          isOriginal: track.id === media.captionTrackId,
+          url: `https://stream.mux.com/${media.playbackId}/text/${track.id}.vtt`,
+        }))
+        .sort((a, b) => Number(b.isOriginal) - Number(a.isOriginal));
+    } catch (error) {
+      this.logger.warn(
+        `Listing caption tracks of media ${media.id} failed: ${String(error)}`,
+      );
+      return [];
     }
   }
 
@@ -362,9 +402,7 @@ export function srtHasSpeech(srt: string): boolean {
   return srt
     .split(/\r?\n/)
     .filter((line) => !/^\d+$/.test(line.trim()) && !line.includes('-->'))
-    .some((line) =>
-      /\p{L}/u.test(line.replace(/\[[^\]]*\]|\([^)]*\)/g, '')),
-    );
+    .some((line) => /\p{L}/u.test(line.replace(/\[[^\]]*\]|\([^)]*\)/g, '')));
 }
 
 /** Vietnamese videos get English captions; everything else gets Vietnamese. */

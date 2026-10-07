@@ -16,6 +16,7 @@ import {
   CommentPageDto,
   CommentResponseDto,
 } from './dto/comment.dto';
+import { PostRepostResponseDto } from './dto/post-interaction.dto';
 import { PostLikeResponseDto } from './dto/post-like-response.dto';
 
 const commentSelect = {
@@ -137,6 +138,30 @@ export class PostInteractionsService {
         }
         const likeCount = await tx.postLike.count({ where: { postId } });
         return { postId, isLiked, likeCount };
+      });
+    } catch (error: unknown) {
+      this.rethrowMissingRecord(error);
+    }
+  }
+
+  async setRepost(
+    postId: string,
+    userId: string,
+    isReposted: boolean,
+  ): Promise<PostRepostResponseDto> {
+    try {
+      return await this.prisma.$transaction(async (tx) => {
+        await this.requirePublishedPost(tx, postId);
+        if (isReposted) {
+          await tx.postRepost.createMany({
+            data: [{ postId, userId }],
+            skipDuplicates: true,
+          });
+        } else {
+          await tx.postRepost.deleteMany({ where: { postId, userId } });
+        }
+        const repostCount = await tx.postRepost.count({ where: { postId } });
+        return { postId, isReposted, repostCount };
       });
     } catch (error: unknown) {
       this.rethrowMissingRecord(error);

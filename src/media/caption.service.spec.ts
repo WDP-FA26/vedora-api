@@ -311,7 +311,8 @@ describe('CaptionService', () => {
 
       await service.advance(attaching);
 
-      const [body] = muxClient.robots.jobs.translateCaptions.create.mock.calls[0];
+      const [body] =
+        muxClient.robots.jobs.translateCaptions.create.mock.calls[0];
       expect(body.parameters).toMatchObject({
         asset_id: 'asset-1',
         track_id: 'track-1',
@@ -375,6 +376,59 @@ describe('CaptionService', () => {
         });
       },
     );
+  });
+  describe('listTracks', () => {
+    const captioned: MediaAsset = {
+      ...readyMedia,
+      captionStatus: CaptionStatus.READY,
+      captionLanguage: 'vi',
+      captionTrackId: 'track-1',
+    };
+
+    it('links each ready text track, spoken language first', async () => {
+      muxClient.video.assets.retrieve.mockResolvedValue({
+        ...assetWithTrack('ready'),
+        tracks: [
+          { id: 'video-1', type: 'video' },
+          { id: 'track-2', type: 'text', status: 'ready', language_code: 'en' },
+          {
+            id: 'track-1',
+            type: 'text',
+            status: 'ready',
+            language_code: 'vi',
+            name: 'Tiếng Việt',
+          },
+          { id: 'track-3', type: 'text', status: 'preparing' },
+        ],
+      });
+
+      await expect(service.listTracks(captioned)).resolves.toEqual([
+        {
+          id: 'track-1',
+          languageCode: 'vi',
+          name: 'Tiếng Việt',
+          isOriginal: true,
+          url: 'https://stream.mux.com/playback-1/text/track-1.vtt',
+        },
+        {
+          id: 'track-2',
+          languageCode: 'en',
+          name: 'English',
+          isOriginal: false,
+          url: 'https://stream.mux.com/playback-1/text/track-2.vtt',
+        },
+      ]);
+    });
+
+    it('skips Mux for videos without captions', async () => {
+      await expect(service.listTracks(readyMedia)).resolves.toEqual([]);
+      expect(muxClient.video.assets.retrieve).not.toHaveBeenCalled();
+    });
+
+    it('returns no tracks when Mux fails', async () => {
+      muxClient.video.assets.retrieve.mockRejectedValue(new Error('down'));
+      await expect(service.listTracks(captioned)).resolves.toEqual([]);
+    });
   });
 });
 

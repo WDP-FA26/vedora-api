@@ -8,6 +8,6 @@ import { MuxWebhookController } from './mux-webhook.controller';
 @Module({
   controllers: [MediaController, MuxWebhookController],
   providers: [MediaService, MediaMaintenanceService, CaptionService],
-  exports: [MediaService],
+  exports: [MediaService, CaptionService],
 })
 export class MediaModule {}

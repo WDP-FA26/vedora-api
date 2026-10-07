@@ -13,34 +13,37 @@ enum UserRole {
 }
 
 model User {
-  id                    String                 @id @default(uuid()) @db.Uuid
-  username              String                 @unique @db.VarChar(30)
-  passwordHash          String?                @map("password_hash") @db.VarChar(60)
-  googleId              String?                @unique @map("google_id") @db.VarChar(255)
-  fullName              String                 @map("full_name") @db.VarChar(100)
-  email                 String                 @unique @db.VarChar(320)
-  bio                   String?                @db.VarChar(500)
-  avatarUrl             String?                @map("avatar_url") @db.VarChar(2048)
-  coverUrl              String?                @map("cover_url") @db.VarChar(2048)
-  role                  UserRole               @default(USER)
+  id                    String                  @id @default(uuid()) @db.Uuid
+  username              String                  @unique @db.VarChar(30)
+  passwordHash          String?                 @map("password_hash") @db.VarChar(60)
+  googleId              String?                 @unique @map("google_id") @db.VarChar(255)
+  fullName              String                  @map("full_name") @db.VarChar(100)
+  email                 String                  @unique @db.VarChar(320)
+  bio                   String?                 @db.VarChar(500)
+  avatarUrl             String?                 @map("avatar_url") @db.VarChar(2048)
+  coverUrl              String?                 @map("cover_url") @db.VarChar(2048)
+  role                  UserRole                @default(USER)
   /// Set when an admin approves a verification request; shown as a badge.
-  isProfessional        Boolean                @default(false) @map("is_professional")
+  isProfessional        Boolean                 @default(false) @map("is_professional")
   /// Null until the user proves they own `email` (OTP code or Google).
-  emailVerifiedAt       DateTime?              @map("email_verified_at")
-  createdAt             DateTime               @default(now())
-  updatedAt             DateTime               @updatedAt
+  emailVerifiedAt       DateTime?               @map("email_verified_at")
+  createdAt             DateTime                @default(now())
+  updatedAt             DateTime                @updatedAt
   refreshTokens         RefreshToken[]
   emailVerificationCode EmailVerificationCode?
   posts                 Post[]
   postComments          PostComment[]
   postLikes             PostLike[]
+  postReposts           PostRepost[]
+  postReports           PostReport[]
+  postReportReviews     PostReport[]            @relation("PostReportReviewer")
   media                 MediaAsset[]
   knowledgeDocuments    KnowledgeDocument[]
-  following             Follow[]               @relation("Following")
-  followers             Follow[]               @relation("Followers")
+  following             Follow[]                @relation("Following")
+  followers             Follow[]                @relation("Followers")
   profileImages         ProfileImageUpload[]
   verificationRequests  VerificationRequest[]
-  verificationReviews   VerificationRequest[]  @relation("VerificationReviewer")
+  verificationReviews   VerificationRequest[]   @relation("VerificationReviewer")
   verificationProofs    VerificationProof[]
 
   @@map("users")
@@ -140,18 +143,22 @@ enum PostStatus {
 }
 
 model Post {
-  id          String        @id @default(uuid()) @db.Uuid
-  authorId    String        @map("author_id") @db.Uuid
-  type        PostType      @default(POST)
-  status      PostStatus    @default(PROCESSING)
-  body        String?       @db.VarChar(280)
-  publishedAt DateTime?     @map("published_at")
-  createdAt   DateTime      @default(now()) @map("created_at")
-  updatedAt   DateTime      @updatedAt @map("updated_at")
-  author      User          @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  id          String         @id @default(uuid()) @db.Uuid
+  authorId    String         @map("author_id") @db.Uuid
+  type        PostType       @default(POST)
+  status      PostStatus     @default(PROCESSING)
+  body        String?        @db.VarChar(280)
+  /// Viewable impressions, added in batches by `PostViewsService`.
+  viewCount   Int            @default(0) @map("view_count")
+  publishedAt DateTime?      @map("published_at")
+  createdAt   DateTime       @default(now()) @map("created_at")
+  updatedAt   DateTime       @updatedAt @map("updated_at")
+  author      User           @relation(fields: [authorId], references: [id], onDelete: Cascade)
   media       MediaAsset[]
   comments    PostComment[]
   likes       PostLike[]
+  reposts     PostRepost[]
+  reports     PostReport[]
 
   @@index([status, publishedAt])
   @@index([authorId, createdAt])
@@ -183,6 +190,56 @@ model PostLike {
   @@id([postId, userId])
   @@index([userId])
   @@map("post_likes")
+}
+
+model PostRepost {
+  postId    String   @map("post_id") @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at")
+  post      Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([postId, userId])
+  @@index([userId, createdAt])
+  @@map("post_reposts")
+}
+
+enum PostReportReason {
+  SPAM
+  HARASSMENT
+  MISINFORMATION
+  /// Diet or health advice that could hurt someone who follows it.
+  HARMFUL_ADVICE
+  INAPPROPRIATE
+  OTHER
+}
+
+enum PostReportStatus {
+  PENDING
+  /// An admin acted on the post.
+  RESOLVED
+  /// An admin found nothing wrong.
+  DISMISSED
+}
+
+model PostReport {
+  id           String           @id @default(uuid()) @db.Uuid
+  postId       String           @map("post_id") @db.Uuid
+  reporterId   String           @map("reporter_id") @db.Uuid
+  reason       PostReportReason
+  details      String?          @db.VarChar(500)
+  status       PostReportStatus @default(PENDING)
+  reviewedById String?          @map("reviewed_by_id") @db.Uuid
+  reviewedAt   DateTime?        @map("reviewed_at")
+  createdAt    DateTime         @default(now()) @map("created_at")
+  post         Post             @relation(fields: [postId], references: [id], onDelete: Cascade)
+  reporter     User             @relation(fields: [reporterId], references: [id], onDelete: Cascade)
+  reviewedBy   User?            @relation("PostReportReviewer", fields: [reviewedById], references: [id], onDelete: SetNull)
+
+  /// One report per person per post.
+  @@unique([postId, reporterId])
+  @@index([status, createdAt])
+  @@map("post_reports")
 }
 
 enum MediaType {

@@ -20,8 +20,13 @@ const postInclude = (viewerId?: string) =>
       select: { id: true, username: true, fullName: true, avatarUrl: true },
     },
     media: { orderBy: { position: 'asc' } },
-    _count: { select: { comments: true, likes: true } },
+    _count: { select: { comments: true, likes: true, reposts: true } },
     likes: {
+      where: { userId: viewerId ?? { in: [] } },
+      select: { userId: true },
+      take: 1,
+    },
+    reposts: {
       where: { userId: viewerId ?? { in: [] } },
       select: { userId: true },
       take: 1,
@@ -90,12 +95,12 @@ export class PostsService {
     };
   }
 
-  async findOne(id: string, viewerId: string): Promise<PostResponseDto> {
+  async findOne(id: string, viewerId?: string): Promise<PostResponseDto> {
     let post = await this.prisma.post.findUnique({
       where: { id },
       include: postInclude(viewerId),
     });
-    const isAuthor = post?.authorId === viewerId;
+    const isAuthor = viewerId !== undefined && post?.authorId === viewerId;
     if (!post || (post.status !== PostStatus.PUBLISHED && !isAuthor)) {
       throw new NotFoundException('Post not found');
     }
@@ -119,7 +124,7 @@ export class PostsService {
   async remove(id: string, authorId: string): Promise<void> {
     const post = await this.prisma.post.findUnique({
       where: { id },
-      include: { media: { select: { id: true } } },
+      select: { authorId: true },
     });
     if (!post) {
       throw new NotFoundException('Post not found');
@@ -127,12 +132,32 @@ export class PostsService {
     if (post.authorId !== authorId) {
       throw new ForbiddenException('Only the author can delete this post');
     }
+    await this.destroy(id);
+  }
 
-    const mediaIds = post.media.map((media) => media.id);
+  /** Deletes anyone's post; the caller has checked the account is an admin. */
+  async removeAsAdmin(id: string): Promise<void> {
+    const post = await this.prisma.post.findUnique({
+      where: { id },
+      select: { id: true },
+    });
+    if (!post) {
+      throw new NotFoundException('Post not found');
+    }
+    await this.destroy(id);
+  }
+
+  private async destroy(id: string): Promise<void> {
+    const media = await this.prisma.mediaAsset.findMany({
+      where: { postId: id },
+      select: { id: true },
+    });
     await this.prisma.post.delete({ where: { id } });
     // The media rows were detached (`onDelete: SetNull`); remove them from
     // Mux the same way as discarded uploads, retried until Mux confirms.
-    await this.mediaService.discard({ id: { in: mediaIds } });
+    await this.mediaService.discard({
+      id: { in: media.map((item) => item.id) },
+    });
   }
 
   private load(id: string, viewerId?: string): Promise<PostWithRelations> {
@@ -155,6 +180,9 @@ export class PostsService {
       commentCount: post._count.comments,
       likeCount: post._count.likes,
       isLiked: post.likes.length > 0,
+      repostCount: post._count.reposts,
+      isReposted: post.reposts.length > 0,
+      viewCount: post.viewCount,
     };
   }
 }

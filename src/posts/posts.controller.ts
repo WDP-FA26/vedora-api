@@ -25,14 +25,19 @@ import type {
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { OptionalJwtAuthGuard } from '../auth/optional-jwt-auth.guard';
 import { CreatePostDto } from './dto/create-post.dto';
+import { RecordViewsDto } from './dto/post-interaction.dto';
 import { ListPostsQueryDto } from './dto/list-posts-query.dto';
 import { PostPageDto, PostResponseDto } from './dto/post-response.dto';
+import { PostViewsService } from './post-views.service';
 import { PostsService } from './posts.service';
 
 @ApiTags('posts')
 @Controller('posts')
 export class PostsController {
-  constructor(private readonly postsService: PostsService) {}
+  constructor(
+    private readonly postsService: PostsService,
+    private readonly views: PostViewsService,
+  ) {}
 
   @Post()
   @UseGuards(JwtAuthGuard)
@@ -47,6 +52,25 @@ export class PostsController {
     @Body() dto: CreatePostDto,
   ): Promise<PostResponseDto> {
     return this.postsService.create(request.user.sub, dto);
+  }
+
+  @Post('views')
+  @UseGuards(OptionalJwtAuthGuard)
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiOperation({
+    summary: 'Record that posts were seen',
+    description:
+      'Send the posts that were at least half on screen for a second, batched every few seconds. Counts are deduplicated per viewer and saved in the background, so `viewCount` lags by a few seconds.',
+    security: [{}, { bearer: [] }],
+  })
+  recordViews(
+    @Req() request: OptionalAuthenticatedRequest & { ip?: string },
+    @Body() dto: RecordViewsDto,
+  ): void {
+    this.views.record(
+      request.user?.sub ?? `ip:${request.ip ?? 'unknown'}`,
+      dto.postIds,
+    );
   }
 
   @Get()
@@ -66,17 +90,18 @@ export class PostsController {
   }
 
   @Get(':id')
-  @UseGuards(JwtAuthGuard)
-  @ApiBearerAuth()
+  @UseGuards(OptionalJwtAuthGuard)
   @ApiOperation({
     summary: 'Get a post',
-    description: 'Poll this while your post is PROCESSING.',
+    description:
+      'Public read for published posts. Its author also sees it while PROCESSING or FAILED, and polls this until it is published.',
+    security: [{}, { bearer: [] }],
   })
   findOne(
-    @Req() request: AuthenticatedRequest,
+    @Req() request: OptionalAuthenticatedRequest,
     @Param('id', ParseUUIDPipe) id: string,
   ): Promise<PostResponseDto> {
-    return this.postsService.findOne(id, request.user.sub);
+    return this.postsService.findOne(id, request.user?.sub);
   }
 
   @Delete(':id')
