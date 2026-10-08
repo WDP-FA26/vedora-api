@@ -21,4 +21,4 @@ COPY --from=build /app/dist ./dist
 USER node
 EXPOSE 3000
 ENTRYPOINT ["dumb-init", "--"]
-CMD ["sh", "-c", "npx prisma migrate deploy && node dist/main.js"]
+CMD ["sh", "-c", "npx prisma migrate deploy && (node dist/database/seed-cli.js || echo 'Seed failed; starting the API anyway.') && node dist/main.js"]
