@@ -1,10 +1,12 @@
 import { PrismaClient } from '@prisma/client';
 import { seedDatabase } from './seed';
+import { seedCatalog } from './seed-catalog';
 
 const prisma = new PrismaClient();
 
 async function main(): Promise<void> {
   await seedDatabase(prisma);
+  await seedCatalog(prisma);
   console.log('Production seed completed successfully.');
 }
 

@@ -285,7 +285,12 @@ Khi sửa `prisma/schema.prisma`, tạo migration bằng `prisma:migrate:dev`, k
 
 ### Seed production
 
-Seed không tự chạy trong mỗi lần deploy để tránh vô tình thay đổi dữ liệu production. Sau khi deploy và migration thành công, mở **Terminal** của service `api` trên Dokploy rồi chạy:
+Container production tự chạy seed mỗi lần khởi động, ngay sau `prisma migrate deploy` (xem `CMD` trong `Dockerfile`); nếu seed lỗi, API vẫn khởi động. Seed gồm hai phần:
+
+- Tài khoản `vedora.admin` (`src/database/seed.ts`).
+- Danh mục khởi đầu từ `prisma/seed-data/recipes.json` (`src/database/seed-catalog.ts`): nguyên liệu, nhóm, quy tắc kỵ nhau và công thức kèm đường dẫn ảnh món. Phần này chỉ thêm những gì còn thiếu, so theo tên hoặc tiêu đề: không sửa hay xoá dữ liệu admin đã chỉnh, và chỉ gán ảnh cho công thức chưa có ảnh.
+
+Để chạy lại bằng tay, mở **Terminal** của service `api` trên Dokploy rồi chạy:
 
 ```bash
 npm run prisma:seed:prod
@@ -303,7 +308,7 @@ Với Compose local, dùng:
 docker compose exec api npm run prisma:seed:prod
 ```
 
-Seed có tính idempotent, vì vậy có thể chạy lại mà không tạo trùng user `vedora.admin`. Khai báo `SEED_USER_PASSWORD` trước khi seed; nếu không có biến này thì seed user sẽ được bỏ qua. Seed không đặt lại mật khẩu của user đã tồn tại, ngoại trừ user cũ được chuyển đổi từ schema trước auth và chưa có mật khẩu. Sau khi sửa nội dung seed, phải commit, deploy lại image rồi mới chạy lệnh production ở trên.
+Seed có tính idempotent, vì vậy có thể chạy lại mà không tạo trùng user `vedora.admin`. Khai báo `SEED_USER_PASSWORD` trước khi seed; nếu không có biến này thì seed user sẽ được bỏ qua. Seed không đặt lại mật khẩu của user đã tồn tại, ngoại trừ user cũ được chuyển đổi từ schema trước auth và chưa có mật khẩu. Sau khi sửa nội dung seed, commit và deploy lại image; seed mới sẽ chạy khi container khởi động.
 
 Seed tạo tài khoản với vai trò `ADMIN`, hoặc cấp quyền đó cho tài khoản seed cũ
 có username `vedora.admin`, email `admin@vedora.local` và email đã xác minh.
