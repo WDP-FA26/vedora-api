@@ -16,6 +16,7 @@ import {
 const recipeSelect = {
   id: true,
   title: true,
+  imageUrl: true,
   servings: true,
   prepMinutes: true,
   cookMinutes: true,

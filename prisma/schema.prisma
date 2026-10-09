@@ -49,6 +49,7 @@ model User {
   recipes               Recipe[]
   avoidedIngredients    UserAvoidedIngredient[]
   avoidedGroups         UserAvoidedGroup[]
+  likedIngredients      UserLikedIngredient[]
   mealPlan              MealPlanEntry[]
 
   @@map("users")
@@ -454,6 +455,7 @@ model Ingredient {
   rulesAsA  IncompatibilityRule[]   @relation("RuleIngredientA")
   rulesAsB  IncompatibilityRule[]   @relation("RuleIngredientB")
   avoidedBy UserAvoidedIngredient[]
+  likedBy   UserLikedIngredient[]
 
   @@map("ingredients")
 }
@@ -518,6 +520,8 @@ model Recipe {
   createdById String?            @map("created_by_id") @db.Uuid
   title       String             @db.VarChar(150)
   description String?            @db.VarChar(1000)
+  /// A photo of the dish, hot-linked from another site; nothing is stored here.
+  imageUrl    String?            @map("image_url") @db.VarChar(2048)
   servings    Int
   prepMinutes Int?               @map("prep_minutes")
   cookMinutes Int?               @map("cook_minutes")
@@ -548,7 +552,7 @@ model RecipeIngredient {
   @@map("recipe_ingredients")
 }
 
-/// An ingredient a user does not eat (allergy, religion, preference). Private to the user.
+/// An ingredient a user does not eat (allergy, religion, dislike). Private to the user.
 model UserAvoidedIngredient {
   userId       String     @map("user_id") @db.Uuid
   ingredientId String     @map("ingredient_id") @db.Uuid
@@ -570,6 +574,18 @@ model UserAvoidedGroup {
   @@id([userId, groupId])
   @@index([groupId])
   @@map("user_avoided_groups")
+}
+
+/// An ingredient a user likes. A taste that steers suggestions, never a rule. Private to the user.
+model UserLikedIngredient {
+  userId       String     @map("user_id") @db.Uuid
+  ingredientId String     @map("ingredient_id") @db.Uuid
+  user         User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  ingredient   Ingredient @relation(fields: [ingredientId], references: [id], onDelete: Cascade)
+
+  @@id([userId, ingredientId])
+  @@index([ingredientId])
+  @@map("user_liked_ingredients")
 }
 
 enum Weekday {

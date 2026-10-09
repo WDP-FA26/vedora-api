@@ -132,6 +132,7 @@ function toData(dto: SaveRecipeDto) {
   return {
     title: dto.title,
     description: dto.description || null,
+    imageUrl: dto.imageUrl || null,
     servings: dto.servings,
     prepMinutes: dto.prepMinutes ?? null,
     cookMinutes: dto.cookMinutes ?? null,
@@ -171,6 +172,7 @@ function toDto(row: RecipeRow, conflicts: IngredientConflict[]): RecipeDto {
   return {
     id: row.id,
     title: row.title,
+    imageUrl: row.imageUrl,
     servings: row.servings,
     prepMinutes: row.prepMinutes,
     cookMinutes: row.cookMinutes,

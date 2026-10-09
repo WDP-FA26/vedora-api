@@ -21,6 +21,7 @@ const recipe = {
   createdById: ADMIN_ID,
   title: 'Đậu hũ sốt cà',
   description: null,
+  imageUrl: null,
   servings: 2,
   prepMinutes: 10,
   cookMinutes: null,
@@ -177,6 +178,27 @@ describe('Recipes and ingredients (e2e)', () => {
       .expect(400);
   });
 
+  it('stores a dish photo link and accepts https only', async () => {
+    const imageUrl = 'https://upload.wikimedia.org/dish.jpg';
+
+    await request(app.getHttpServer())
+      .post('/api/v1/admin/recipes')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ ...body, imageUrl })
+      .expect(201);
+    expect(prisma.recipe.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ imageUrl }) as unknown,
+      }),
+    );
+
+    await request(app.getHttpServer())
+      .post('/api/v1/admin/recipes')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ ...body, imageUrl: 'http://example.com/dish.jpg' })
+      .expect(400);
+  });
+
   it('answers 409 when deleting an ingredient a recipe uses', async () => {
     prisma.ingredient.delete.mockRejectedValue(
       new Prisma.PrismaClientKnownRequestError('fk', {
@@ -208,24 +230,52 @@ describe('Recipes and ingredients (e2e)', () => {
       { ingredient: { id: TOFU_ID, name: 'Đậu hũ' } },
     ] as never);
     prisma.userAvoidedGroup.findMany.mockResolvedValue([]);
+    prisma.userLikedIngredient.findMany.mockResolvedValue([
+      { ingredient: { id: HONEY_ID, name: 'Mật ong' } },
+    ] as never);
+    const body = {
+      ingredientIds: [TOFU_ID],
+      groupIds: [],
+      likedIngredientIds: [HONEY_ID],
+    };
 
     await request(app.getHttpServer())
       .put('/api/v1/dietary/me')
-      .send({ ingredientIds: [TOFU_ID], groupIds: [] })
+      .send(body)
       .expect(401);
 
     const response = await request(app.getHttpServer())
       .put('/api/v1/dietary/me')
       .set('Authorization', `Bearer ${token}`)
-      .send({ ingredientIds: [TOFU_ID], groupIds: [] })
+      .send(body)
       .expect(200);
 
     expect(prisma.userAvoidedIngredient.createMany).toHaveBeenCalledWith({
       data: [{ userId: ADMIN_ID, ingredientId: TOFU_ID }],
     });
+    expect(prisma.userLikedIngredient.createMany).toHaveBeenCalledWith({
+      data: [{ userId: ADMIN_ID, ingredientId: HONEY_ID }],
+    });
     expect(response.body).toEqual({
       ingredients: [{ id: TOFU_ID, name: 'Đậu hũ' }],
       groups: [],
+      liked: [{ id: HONEY_ID, name: 'Mật ong' }],
     });
+  });
+
+  it('refuses an ingredient that is both liked and avoided', async () => {
+    signInAs(UserRole.USER);
+
+    const response = await request(app.getHttpServer())
+      .put('/api/v1/dietary/me')
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        ingredientIds: [TOFU_ID],
+        groupIds: [],
+        likedIngredientIds: [TOFU_ID],
+      })
+      .expect(400);
+
+    expect(response.body).toMatchObject({ code: 'CONFLICTING_PREFERENCE' });
   });
 });

@@ -9,6 +9,7 @@ import {
   IsNumber,
   IsOptional,
   IsString,
+  IsUrl,
   IsUUID,
   Max,
   MaxLength,
@@ -22,6 +23,7 @@ export const MAX_RECIPE_INGREDIENTS = 50;
 export const MAX_RECIPE_STEPS = 50;
 export const MAX_STEP_LENGTH = 1000;
 const MAX_MINUTES = 24 * 60;
+export const MAX_IMAGE_URL_LENGTH = 2048;
 
 const trim = ({ value }: { value: unknown }): unknown =>
   typeof value === 'string' ? value.trim() : value;
@@ -74,6 +76,17 @@ export class SaveRecipeDto {
   @IsString()
   @MaxLength(1000)
   description?: string;
+
+  @ApiPropertyOptional({
+    format: 'uri',
+    maxLength: MAX_IMAGE_URL_LENGTH,
+    description: 'https link to a photo of the dish, shown as is',
+  })
+  @IsOptional()
+  @Transform(trim)
+  @IsUrl({ protocols: ['https'], require_protocol: true })
+  @MaxLength(MAX_IMAGE_URL_LENGTH)
+  imageUrl?: string;
 
   @ApiProperty({ minimum: 1, maximum: 100 })
   @IsInt()
@@ -153,6 +166,8 @@ export class RecipePostDto {
 export class RecipeDto {
   @ApiProperty({ format: 'uuid' }) id!: string;
   @ApiProperty() title!: string;
+  @ApiProperty({ nullable: true, type: String, format: 'uri' })
+  imageUrl!: string | null;
   @ApiProperty() servings!: number;
   @ApiProperty({ nullable: true, type: Number }) prepMinutes!: number | null;
   @ApiProperty({ nullable: true, type: Number }) cookMinutes!: number | null;

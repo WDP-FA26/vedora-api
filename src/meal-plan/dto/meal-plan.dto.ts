@@ -83,6 +83,8 @@ export class MealIngredientDto {
 export class MealRecipeDto {
   @ApiProperty({ format: 'uuid' }) id!: string;
   @ApiProperty() title!: string;
+  @ApiProperty({ nullable: true, type: String, format: 'uri' })
+  imageUrl!: string | null;
   @ApiProperty() servings!: number;
   @ApiProperty({ nullable: true, type: Number }) prepMinutes!: number | null;
   @ApiProperty({ nullable: true, type: Number }) cookMinutes!: number | null;
