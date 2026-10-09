@@ -21,4 +21,7 @@ COPY --from=build /app/dist ./dist
 USER node
 EXPOSE 3000
 ENTRYPOINT ["dumb-init", "--"]
-CMD ["sh", "-c", "npx prisma migrate deploy && (node dist/database/seed-cli.js || echo 'Seed failed; starting the API anyway.') && node dist/main.js"]
+# Migrations take a session advisory lock, which a transaction-mode pooler
+# (PgBouncer, Neon's "-pooler" host) cannot hold: prisma then fails with P1002.
+# When DIRECT_URL is set, migrations use it and the API keeps DATABASE_URL.
+CMD ["sh", "-c", "DATABASE_URL=\"${DIRECT_URL:-$DATABASE_URL}\" npx prisma migrate deploy && (node dist/database/seed-cli.js || echo 'Seed failed; starting the API anyway.') && node dist/main.js"]

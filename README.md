@@ -281,7 +281,7 @@ npm run prisma:seed:prod
 
 Test dùng Vitest + `@nestjs/testing` theo [hướng dẫn của NestJS](https://docs.nestjs.com/fundamentals/testing): unit test (`src/**/*.spec.ts`) dựng service bằng `Test.createTestingModule` với mock `vitest-mock-extended`; e2e (`test/**/*.e2e-spec.ts`) chạy cả `AppModule` qua HTTP với `configureApp` giống production, chỉ Prisma bị mock.
 
-Khi sửa `prisma/schema.prisma`, tạo migration bằng `prisma:migrate:dev`, kiểm tra SQL trong `prisma/migrations`, rồi commit cả schema và migration. Container production chạy `prisma migrate deploy` tự động trước khi start NestJS.
+Khi sửa `prisma/schema.prisma`, tạo migration bằng `prisma:migrate:dev`, kiểm tra SQL trong `prisma/migrations`, rồi commit cả schema và migration. Container production chạy `prisma migrate deploy` tự động trước khi start NestJS. Migration cần giữ advisory lock theo phiên, nên nếu `DATABASE_URL` trỏ tới pooler ở chế độ transaction (PgBouncer, host `-pooler` của Neon) thì lệnh này lỗi `P1002`; khi đó khai báo thêm `DIRECT_URL` là kết nối trực tiếp.
 
 ### Seed production
 
@@ -417,6 +417,7 @@ Tài liệu Dokploy tham khảo:
 | Biến | Bắt buộc | Mặc định | Ý nghĩa |
 | --- | --- | --- | --- |
 | `DATABASE_URL` | Có | — | PostgreSQL connection string |
+| `DIRECT_URL` | Khi `DATABASE_URL` đi qua pooler | — | Kết nối trực tiếp tới PostgreSQL, chỉ dùng cho `prisma migrate deploy` lúc container khởi động. Với Neon: cùng chuỗi kết nối nhưng host không có `-pooler` |
 | `NODE_ENV` | Không | `development` | Môi trường chạy |
 | `PORT` | Không | `3000` | Port của NestJS |
 | `API_PREFIX` | Không | `api/v1` | Global API prefix |
