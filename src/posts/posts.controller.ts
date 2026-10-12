@@ -10,6 +10,7 @@ import {
   Post,
   Query,
   Req,
+  Res,
   UseGuards,
 } from '@nestjs/common';
 import {
@@ -18,6 +19,7 @@ import {
   ApiOperation,
   ApiTags,
 } from '@nestjs/swagger';
+import type { Response } from 'express';
 import type {
   AuthenticatedRequest,
   OptionalAuthenticatedRequest,
@@ -115,7 +117,9 @@ export class PostsController {
   findOne(
     @Req() request: OptionalAuthenticatedRequest,
     @Param('id', ParseUUIDPipe) id: string,
+    @Res({ passthrough: true }) response: Response,
   ): Promise<PostResponseDto> {
+    if (request.user) response.setHeader('Cache-Control', 'private, no-store');
     return this.postsService.findOne(id, request.user?.sub);
   }
 

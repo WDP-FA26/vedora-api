@@ -2,6 +2,7 @@ import { ApiProperty } from '@nestjs/swagger';
 import { PostStatus, PostType } from '@prisma/client';
 import { CursorPaginatedResponseDto } from '../../common/pagination';
 import { MediaResponseDto } from '../../media/dto/media-response.dto';
+import { BlogSummaryDto } from './blog-summary.dto';
 
 export class PostAuthorDto {
   @ApiProperty({ format: 'uuid' })
@@ -27,12 +28,15 @@ export class PostResponseDto {
   @ApiProperty({
     enum: PostStatus,
     description:
-      'PROCESSING until every video is ready; only the author sees non-PUBLISHED posts',
+      'Blogs start DRAFT; videos start PROCESSING. Only the author sees non-PUBLISHED posts',
   })
   status!: PostStatus;
 
   @ApiProperty({ nullable: true, type: String })
   body!: string | null;
+
+  @ApiProperty({ nullable: true, type: BlogSummaryDto })
+  blog!: BlogSummaryDto | null;
 
   @ApiProperty({ nullable: true, type: Date })
   publishedAt!: Date | null;

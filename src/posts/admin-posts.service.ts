@@ -9,6 +9,7 @@ import { CaptionService } from '../media/caption.service';
 import { AdminMediaDto } from '../media/dto/media-response.dto';
 import { MediaService } from '../media/media.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { blogSummarySelect, toBlogSummary } from './blog-query';
 import {
   AdminPostDetailDto,
   AdminPostDto,
@@ -16,6 +17,7 @@ import {
 } from './dto/admin-post.dto';
 
 const adminPostInclude = {
+  blog: { select: blogSummarySelect },
   author: {
     select: { id: true, username: true, fullName: true, avatarUrl: true },
   },
@@ -80,6 +82,7 @@ export class AdminPostsService {
       type: row.type,
       status: row.status,
       body: row.body,
+      blog: toBlogSummary(row.blog ?? null),
       publishedAt: row.publishedAt,
       createdAt: row.createdAt,
       author: row.author,

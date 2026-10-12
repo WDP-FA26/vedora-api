@@ -7,6 +7,7 @@ import {
   AdminMediaDto,
 } from '../../media/dto/media-response.dto';
 import { PostAuthorDto } from './post-response.dto';
+import { BlogSummaryDto } from './blog-summary.dto';
 
 export class AdminPostsQueryDto extends PaginationQueryDto {
   @ApiPropertyOptional({ enum: PostStatus })
@@ -20,6 +21,8 @@ export class AdminPostDto {
   @ApiProperty({ enum: PostType }) type!: PostType;
   @ApiProperty({ enum: PostStatus }) status!: PostStatus;
   @ApiProperty({ nullable: true, type: String }) body!: string | null;
+  @ApiProperty({ nullable: true, type: BlogSummaryDto })
+  blog!: BlogSummaryDto | null;
   @ApiProperty({ nullable: true, type: Date }) publishedAt!: Date | null;
   @ApiProperty() createdAt!: Date;
   @ApiProperty({ type: PostAuthorDto }) author!: PostAuthorDto;

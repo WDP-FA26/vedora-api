@@ -33,6 +33,10 @@ describe('Profiles and follows (e2e)', () => {
 
   beforeEach(() => {
     mockReset(prisma);
+    prisma.$transaction.mockImplementation(((run: unknown) =>
+      typeof run === 'function'
+        ? (run as (tx: PrismaService) => Promise<unknown>)(prisma)
+        : Promise.all(run as Promise<unknown>[])));
     prisma.user.findUnique.mockImplementation(
       ({ where }) =>
         Promise.resolve({
