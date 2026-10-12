@@ -1,13 +1,13 @@
-import { Injectable } from '@nestjs/common';
+import { ConflictException, HttpStatus, Injectable } from '@nestjs/common';
 import { MealSection, Prisma, Weekday } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { DietaryService } from '../recipes/dietary.service';
 import { IncompatibilityRulesService } from '../recipes/incompatibility-rules.service';
-import { conflict } from '../recipes/recipe-errors';
 import {
   MEAL_SECTIONS,
   MealPlanDto,
   MealPlanProblemDto,
+  MealPlanPreviewDto,
   MealRecipeDto,
   SaveMealDayDto,
   WEEKDAYS,
@@ -46,17 +46,7 @@ export interface RecipeSuggestion {
 }
 
 /** Checked new content for some days, and what is wrong with it. */
-export interface MealPlanPreview {
-  days: {
-    day: Weekday;
-    sections: {
-      section: MealSection;
-      recipes: RecipeRef[];
-      previous: RecipeRef[];
-    }[];
-  }[];
-  problems: MealPlanProblemDto[];
-}
+export type MealPlanPreview = MealPlanPreviewDto;
 
 const MAX_SUGGESTIONS = 30;
 
@@ -177,10 +167,14 @@ export class MealPlanService {
   async apply(userId: string, days: SaveMealDayDto[]): Promise<MealPlanDto> {
     const preview = await this.preview(userId, days);
     if (preview.problems.length > 0) {
-      throw conflict(
-        'MEAL_PLAN_INVALID',
-        'These dishes break a dietary restriction or an incompatibility rule',
-      );
+      throw new ConflictException({
+        statusCode: HttpStatus.CONFLICT,
+        error: 'Conflict',
+        code: 'MEAL_PLAN_INVALID',
+        message:
+          'These dishes break a dietary restriction or an incompatibility rule',
+        problems: preview.problems,
+      });
     }
     await this.prisma.$transaction([
       this.prisma.mealPlanEntry.deleteMany({

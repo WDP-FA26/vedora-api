@@ -119,11 +119,12 @@ export class IncompatibilityRulesService {
   /** Conflicts of several ingredient sets, reading groups and rules once. */
   async findConflictsForEach(
     ingredientSets: string[][],
+    db: Prisma.TransactionClient = this.prisma,
   ): Promise<IngredientConflict[][]> {
     const ingredientIds = [...new Set(ingredientSets.flat())];
     if (ingredientIds.length < 2) return ingredientSets.map(() => []);
 
-    const memberships = await this.prisma.ingredientGroupMember.findMany({
+    const memberships = await db.ingredientGroupMember.findMany({
       where: { ingredientId: { in: ingredientIds } },
     });
     const groupsByIngredient = new Map<string, Set<string>>();
@@ -134,26 +135,25 @@ export class IncompatibilityRulesService {
     }
     const groupIds = [...new Set(memberships.map(({ groupId }) => groupId))];
 
-    const rules: ConflictRule[] =
-      await this.prisma.incompatibilityRule.findMany({
-        where: {
-          AND: [
-            {
-              OR: [
-                { aIngredientId: { in: ingredientIds } },
-                { aGroupId: { in: groupIds } },
-              ],
-            },
-            {
-              OR: [
-                { bIngredientId: { in: ingredientIds } },
-                { bGroupId: { in: groupIds } },
-              ],
-            },
-          ],
-        },
-        orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
-      });
+    const rules: ConflictRule[] = await db.incompatibilityRule.findMany({
+      where: {
+        AND: [
+          {
+            OR: [
+              { aIngredientId: { in: ingredientIds } },
+              { aGroupId: { in: groupIds } },
+            ],
+          },
+          {
+            OR: [
+              { bIngredientId: { in: ingredientIds } },
+              { bGroupId: { in: groupIds } },
+            ],
+          },
+        ],
+      },
+      orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+    });
     return ingredientSets.map((ids) =>
       detectConflicts(ids, groupsByIngredient, rules),
     );

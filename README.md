@@ -200,6 +200,21 @@ Migration `20261002000000_post_comments_and_likes` tạo hai bảng, unique key 
 trùng và khóa ngoại cascade. Chạy `npm run prisma:migrate:deploy` trước khi dùng bản mới.
 Tài liệu FE: [docs/docs-for-FE/post-comments-likes.md](docs/docs-for-FE/post-comments-likes.md).
 
+## Kho công thức và chọn món vào thực đơn
+
+- `GET /api/v1/recipes`: kho công thức công khai, tìm theo `q` (món/nguyên liệu),
+  lọc tổng thời gian bằng `maxMinutes`, phân trang `page`/`limit`.
+- `suitableForMe=true` cần Bearer token: loại món chứa nguyên liệu/nhóm người dùng
+  tránh và món có xung đột nội bộ, trước khi phân trang.
+- `GET /api/v1/recipes/:id`: chi tiết nguyên liệu, bước nấu, ảnh và cảnh báo;
+  bài nguồn chưa công khai không được trả về.
+- `POST /api/v1/meal-plan/preview`: xem trước các ngày được chỉnh, trả vấn đề và
+  món cũ/mới, không lưu. Dùng `PUT /api/v1/meal-plan/days` khi người dùng áp dụng;
+  lỗi `MEAL_PLAN_INVALID` có thêm `problems` để frontend hiển thị.
+
+Không cần migration mới. API quản lý công thức vẫn thuộc admin. Hợp đồng FE và
+ví dụ: [Kho công thức và thực đơn](docs/docs-for-FE/recipe-catalog-meal-plan.md).
+
 ## Phân trang dùng chung
 
 Thành phần tại `src/common/pagination` hỗ trợ hai kiểu phân trang cho GET danh sách:

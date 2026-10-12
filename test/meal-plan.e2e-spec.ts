@@ -107,6 +107,47 @@ describe('Meal plan (e2e)', () => {
     expect(prisma.mealPlanEntry.createMany).toHaveBeenCalled();
   });
 
+  it('previews a manually selected recipe without saving', async () => {
+    const response = await request(app.getHttpServer())
+      .post('/api/v1/meal-plan/preview')
+      .set('Authorization', `Bearer ${token}`)
+      .send(body)
+      .expect(200);
+    expect(response.body).toMatchObject({
+      days: [
+        {
+          day: 'MON',
+          sections: [
+            { section: 'BREAKFAST' },
+            {
+              section: 'LUNCH',
+              recipes: [{ id: RECIPE_ID }],
+              previous: [],
+            },
+            { section: 'DINNER' },
+            { section: 'OTHER' },
+          ],
+        },
+      ],
+      problems: [],
+    });
+    expect(prisma.mealPlanEntry.createMany).not.toHaveBeenCalled();
+    expect(prisma.mealPlanEntry.deleteMany).not.toHaveBeenCalled();
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+
+  it('requires login and validates the manual preview body', async () => {
+    await request(app.getHttpServer())
+      .post('/api/v1/meal-plan/preview')
+      .send(body)
+      .expect(401);
+    await request(app.getHttpServer())
+      .post('/api/v1/meal-plan/preview')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ days: [] })
+      .expect(400);
+  });
+
   it('answers 409 for a recipe with an avoided ingredient', async () => {
     prisma.userAvoidedIngredient.findMany.mockResolvedValue([
       { ingredientId: TOFU_ID },
@@ -118,7 +159,12 @@ describe('Meal plan (e2e)', () => {
       .send(body)
       .expect(409);
 
-    expect(response.body).toMatchObject({ code: 'MEAL_PLAN_INVALID' });
+    expect(response.body).toMatchObject({
+      code: 'MEAL_PLAN_INVALID',
+      problems: [
+        { code: 'AVOIDED_INGREDIENT', day: 'MON', ingredients: ['Đậu hũ'] },
+      ],
+    });
     expect(prisma.mealPlanEntry.createMany).not.toHaveBeenCalled();
   });
 

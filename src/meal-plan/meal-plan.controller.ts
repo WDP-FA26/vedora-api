@@ -2,6 +2,8 @@ import {
   Body,
   Controller,
   Get,
+  HttpCode,
+  HttpStatus,
   Post,
   Put,
   Req,
@@ -25,6 +27,7 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { UserThrottlerGuard } from '../nutrition-chat/user-throttler.guard';
 import {
   MealPlanDto,
+  MealPlanPreviewDto,
   MealPlannerChatDto,
   SaveMealDaysDto,
 } from './dto/meal-plan.dto';
@@ -47,6 +50,21 @@ export class MealPlanController {
   @ApiOkResponse({ type: MealPlanDto })
   find(@Req() request: AuthenticatedRequest): Promise<MealPlanDto> {
     return this.mealPlan.find(request.user.sub);
+  }
+
+  @Post('preview')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Preview a manual change without saving',
+    description:
+      'Returns previous and proposed dishes and any unknown recipe, avoided ingredient or same-day conflict. Save a valid proposal with PUT /meal-plan/days.',
+  })
+  @ApiOkResponse({ type: MealPlanPreviewDto })
+  preview(
+    @Req() request: AuthenticatedRequest,
+    @Body() dto: SaveMealDaysDto,
+  ): Promise<MealPlanPreviewDto> {
+    return this.mealPlan.preview(request.user.sub, dto.days);
   }
 
   @Put('days')
