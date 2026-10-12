@@ -23,12 +23,14 @@ import {
   toRecipeDetailDto,
   toRecipeDto,
 } from './recipes.service';
+import { DietaryService } from './dietary.service';
 
 @Injectable()
 export class RecipeCatalogService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly rules: IncompatibilityRulesService,
+    private readonly dietary: DietaryService,
   ) {}
 
   async list(
@@ -44,6 +46,8 @@ export class RecipeCatalogService {
     const { skip, take } = getPaginationArgs(query);
     return this.prisma.$transaction(
       async (tx) => {
+        if (query.suitableForMe)
+          await this.dietary.assertReady(userId!, tx);
         const [ids, [count]] = await Promise.all([
           tx.$queryRaw<{ id: string }[]>(Prisma.sql`
           SELECT r.id FROM recipes r ${where}
@@ -88,20 +92,33 @@ export class RecipeCatalogService {
   }
 
   async findOne(id: string): Promise<CatalogRecipeDetailDto> {
-    const row = await this.prisma.recipe.findUnique({
-      where: { id },
-      include: recipeDetailInclude,
-    });
-    if (!row) throw new NotFoundException('Recipe not found');
-    const [conflicts] = await this.rules.findConflictsForEach([
-      row.ingredients.map(({ ingredientId }) => ingredientId),
-    ]);
-    const detail = toRecipeDetailDto(row, conflicts);
-    return {
-      ...detail,
-      post: row.post?.status === PostStatus.PUBLISHED ? detail.post : null,
-      totalMinutes: totalMinutes(row),
-    };
+    return this.prisma.$transaction(
+      async (tx) => {
+        const row = await tx.recipe.findUnique({
+          where: { id },
+          include: recipeDetailInclude,
+        });
+        if (
+          !row ||
+          row.ingredients.length === 0 ||
+          row.ingredients.some(
+            (item) => item.ingredient.vegetarianStatus !== 'ALLOWED',
+          )
+        )
+          throw new NotFoundException('Recipe not found');
+        const [conflicts] = await this.rules.findConflictsForEach(
+          [row.ingredients.map(({ ingredientId }) => ingredientId)],
+          tx,
+        );
+        const detail = toRecipeDetailDto(row, conflicts);
+        return {
+          ...detail,
+          post: row.post?.status === PostStatus.PUBLISHED ? detail.post : null,
+          totalMinutes: totalMinutes(row),
+        };
+      },
+      { isolationLevel: Prisma.TransactionIsolationLevel.RepeatableRead },
+    );
   }
 }
 

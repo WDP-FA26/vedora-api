@@ -72,6 +72,7 @@ export class MealPlannerChatService {
     messages: PlannerMessageDto[],
     abortSignal: AbortSignal,
   ) {
+    const profile = await this.dietary.assertReady(userId);
     const verdict = await moderatePlannerMessage(
       this.moderationModel,
       messages.at(-1)?.text ?? '',
@@ -95,8 +96,16 @@ export class MealPlannerChatService {
       instructions: plannerInstructions(restrictions, plan),
       tools: {
         searchKnowledge: searchKnowledgeTool(this.knowledge),
-        searchRecipes: searchRecipesTool(this.mealPlan, userId),
-        proposeMealPlan: proposeMealPlanTool(this.mealPlan, userId),
+        searchRecipes: searchRecipesTool(
+          this.mealPlan,
+          userId,
+          profile.version,
+        ),
+        proposeMealPlan: proposeMealPlanTool(
+          this.mealPlan,
+          userId,
+          profile.version,
+        ),
       },
       stopWhen: isStepCount(MAX_STEPS),
       prepareStep: ({ stepNumber }) =>

@@ -164,6 +164,8 @@ export class RecipePostDto {
 }
 
 export class RecipeDto {
+  @ApiProperty({ enum: ['VERIFIED_VEGAN', 'NON_VEGAN', 'UNKNOWN'] })
+  veganStatus!: 'VERIFIED_VEGAN' | 'NON_VEGAN' | 'UNKNOWN';
   @ApiProperty({ format: 'uuid' }) id!: string;
   @ApiProperty() title!: string;
   @ApiProperty({ nullable: true, type: String, format: 'uri' })
@@ -184,6 +186,12 @@ export class RecipeDto {
 }
 
 export class RecipeIngredientDto {
+  @ApiProperty({ type: [String] }) allergenLabels!: string[];
+  @ApiProperty({ type: [String] }) mayContainAllergens!: string[];
+  @ApiProperty() allergensComplete!: boolean;
+  @ApiProperty() compositionComplete!: boolean;
+  @ApiProperty() active!: boolean;
+  @ApiProperty() safetyVersion!: number;
   @ApiProperty({ format: 'uuid' }) ingredientId!: string;
   @ApiProperty() name!: string;
   @ApiProperty({ nullable: true, type: Number }) quantity!: number | null;

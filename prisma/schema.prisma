@@ -12,45 +12,107 @@ enum UserRole {
   ADMIN
 }
 
+enum DietMode {
+  VEGETARIAN
+  VEGAN
+}
+
+enum AllergyAcknowledgement {
+  UNCONFIRMED
+  NONE_DECLARED
+  DECLARED
+}
+
+enum ExclusionReason {
+  DIET
+  ALLERGY
+  PERSONAL
+}
+
+enum VegetarianStatus {
+  ALLOWED
+  FORBIDDEN
+  UNKNOWN
+}
+
+enum VeganStatus {
+  VEGAN
+  NON_VEGAN
+  UNKNOWN
+}
+
+enum AnimalLabel {
+  MEAT
+  FISH
+  SEAFOOD
+  SLAUGHTER_DERIVED
+  DAIRY
+  EGG
+  HONEY
+}
+
+enum AllergenLabel {
+  MILK
+  EGG
+  SOY
+  PEANUT
+  TREE_NUT
+  WHEAT
+  SESAME
+  FISH
+  SHELLFISH
+  OTHER
+}
+
+enum DietaryLabelKind {
+  ANIMAL
+  ALLERGEN
+}
+
 model User {
-  id                    String                  @id @default(uuid()) @db.Uuid
-  username              String                  @unique @db.VarChar(30)
-  passwordHash          String?                 @map("password_hash") @db.VarChar(60)
-  googleId              String?                 @unique @map("google_id") @db.VarChar(255)
-  fullName              String                  @map("full_name") @db.VarChar(100)
-  email                 String                  @unique @db.VarChar(320)
-  bio                   String?                 @db.VarChar(500)
-  avatarUrl             String?                 @map("avatar_url") @db.VarChar(2048)
-  coverUrl              String?                 @map("cover_url") @db.VarChar(2048)
-  role                  UserRole                @default(USER)
+  id                     String                  @id @default(uuid()) @db.Uuid
+  username               String                  @unique @db.VarChar(30)
+  passwordHash           String?                 @map("password_hash") @db.VarChar(60)
+  googleId               String?                 @unique @map("google_id") @db.VarChar(255)
+  fullName               String                  @map("full_name") @db.VarChar(100)
+  email                  String                  @unique @db.VarChar(320)
+  bio                    String?                 @db.VarChar(500)
+  avatarUrl              String?                 @map("avatar_url") @db.VarChar(2048)
+  coverUrl               String?                 @map("cover_url") @db.VarChar(2048)
+  role                   UserRole                @default(USER)
   /// Set when an admin approves a verification request; shown as a badge.
-  isProfessional        Boolean                 @default(false) @map("is_professional")
+  isProfessional         Boolean                 @default(false) @map("is_professional")
   /// Null until the user proves they own `email` (OTP code or Google).
-  emailVerifiedAt       DateTime?               @map("email_verified_at")
-  createdAt             DateTime                @default(now())
-  updatedAt             DateTime                @updatedAt
-  refreshTokens         RefreshToken[]
-  emailVerificationCode EmailVerificationCode?
-  posts                 Post[]
-  postComments          PostComment[]
-  postLikes             PostLike[]
-  postReposts           PostRepost[]
-  postBookmarks         PostBookmark[]
-  postReports           PostReport[]
-  postReportReviews     PostReport[]            @relation("PostReportReviewer")
-  media                 MediaAsset[]
-  knowledgeDocuments    KnowledgeDocument[]
-  following             Follow[]                @relation("Following")
-  followers             Follow[]                @relation("Followers")
-  profileImages         ProfileImageUpload[]
-  verificationRequests  VerificationRequest[]
-  verificationReviews   VerificationRequest[]   @relation("VerificationReviewer")
-  verificationProofs    VerificationProof[]
-  recipes               Recipe[]
-  avoidedIngredients    UserAvoidedIngredient[]
-  avoidedGroups         UserAvoidedGroup[]
-  likedIngredients      UserLikedIngredient[]
-  mealPlan              MealPlanEntry[]
+  emailVerifiedAt        DateTime?               @map("email_verified_at")
+  createdAt              DateTime                @default(now())
+  updatedAt              DateTime                @updatedAt
+  refreshTokens          RefreshToken[]
+  emailVerificationCode  EmailVerificationCode?
+  posts                  Post[]
+  postComments           PostComment[]
+  postLikes              PostLike[]
+  postReposts            PostRepost[]
+  postBookmarks          PostBookmark[]
+  postReports            PostReport[]
+  postReportReviews      PostReport[]            @relation("PostReportReviewer")
+  media                  MediaAsset[]
+  knowledgeDocuments     KnowledgeDocument[]
+  following              Follow[]                @relation("Following")
+  followers              Follow[]                @relation("Followers")
+  profileImages          ProfileImageUpload[]
+  verificationRequests   VerificationRequest[]
+  verificationReviews    VerificationRequest[]   @relation("VerificationReviewer")
+  verificationProofs     VerificationProof[]
+  recipes                Recipe[]
+  avoidedIngredients     UserAvoidedIngredient[]
+  avoidedGroups          UserAvoidedGroup[]
+  likedIngredients       UserLikedIngredient[]
+  mealPlan               MealPlanEntry[]
+  dietMode               DietMode                @default(VEGETARIAN) @map("diet_mode")
+  allergyAcknowledgement AllergyAcknowledgement  @default(UNCONFIRMED) @map("allergy_acknowledgement")
+  dietaryVersion         Int                     @default(0) @map("dietary_version")
+  dietaryUpdatedAt       DateTime?               @map("dietary_updated_at")
+  avoidedLabels          UserAvoidedLabel[]
 
   @@map("users")
 }
@@ -474,18 +536,29 @@ model VerificationProof {
 
 /// One canonical food item; recipes and incompatibility rules point here.
 model Ingredient {
-  id        String                  @id @default(uuid()) @db.Uuid
-  name      String                  @unique @db.VarChar(100)
+  id                   String                  @id @default(uuid()) @db.Uuid
+  name                 String                  @unique @db.VarChar(100)
   /// Other names for the same item, e.g. "đậu phụ" for "đậu hũ".
-  aliases   String[]                @db.VarChar(100)
-  createdAt DateTime                @default(now()) @map("created_at")
-  updatedAt DateTime                @updatedAt @map("updated_at")
-  groups    IngredientGroupMember[]
-  recipes   RecipeIngredient[]
-  rulesAsA  IncompatibilityRule[]   @relation("RuleIngredientA")
-  rulesAsB  IncompatibilityRule[]   @relation("RuleIngredientB")
-  avoidedBy UserAvoidedIngredient[]
-  likedBy   UserLikedIngredient[]
+  aliases              String[]                @db.VarChar(100)
+  createdAt            DateTime                @default(now()) @map("created_at")
+  updatedAt            DateTime                @updatedAt @map("updated_at")
+  groups               IngredientGroupMember[]
+  recipes              RecipeIngredient[]
+  rulesAsA             IncompatibilityRule[]   @relation("RuleIngredientA")
+  rulesAsB             IncompatibilityRule[]   @relation("RuleIngredientB")
+  avoidedBy            UserAvoidedIngredient[]
+  likedBy              UserLikedIngredient[]
+  active               Boolean                 @default(true)
+  vegetarianStatus     VegetarianStatus        @default(UNKNOWN) @map("vegetarian_status")
+  veganStatus          VeganStatus             @default(UNKNOWN) @map("vegan_status")
+  animalLabels         AnimalLabel[]           @default([]) @map("animal_labels")
+  allergenLabels       AllergenLabel[]         @default([]) @map("allergen_labels")
+  mayContainAllergens  AllergenLabel[]         @default([]) @map("may_contain_allergens")
+  compositionComplete  Boolean                 @default(false) @map("composition_complete")
+  allergensComplete    Boolean                 @default(false) @map("allergens_complete")
+  safetyVersion        Int                     @default(1) @map("safety_version")
+  classificationSource String?                 @map("classification_source") @db.VarChar(500)
+  classificationReason String?                 @map("classification_reason") @db.VarChar(500)
 
   @@map("ingredients")
 }
@@ -585,12 +658,13 @@ model RecipeIngredient {
 
 /// An ingredient a user does not eat (allergy, religion, dislike). Private to the user.
 model UserAvoidedIngredient {
-  userId       String     @map("user_id") @db.Uuid
-  ingredientId String     @map("ingredient_id") @db.Uuid
-  user         User       @relation(fields: [userId], references: [id], onDelete: Cascade)
-  ingredient   Ingredient @relation(fields: [ingredientId], references: [id], onDelete: Cascade)
+  userId       String          @map("user_id") @db.Uuid
+  ingredientId String          @map("ingredient_id") @db.Uuid
+  reason       ExclusionReason @default(PERSONAL)
+  user         User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  ingredient   Ingredient      @relation(fields: [ingredientId], references: [id], onDelete: Restrict)
 
-  @@id([userId, ingredientId])
+  @@id([userId, ingredientId, reason])
   @@index([ingredientId])
   @@map("user_avoided_ingredients")
 }
@@ -599,12 +673,25 @@ model UserAvoidedIngredient {
 model UserAvoidedGroup {
   userId  String          @map("user_id") @db.Uuid
   groupId String          @map("group_id") @db.Uuid
+  reason  ExclusionReason @default(PERSONAL)
   user    User            @relation(fields: [userId], references: [id], onDelete: Cascade)
-  group   IngredientGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  group   IngredientGroup @relation(fields: [groupId], references: [id], onDelete: Restrict)
 
-  @@id([userId, groupId])
+  @@id([userId, groupId, reason])
   @@index([groupId])
   @@map("user_avoided_groups")
+}
+
+/// A canonical animal/allergen label, including dynamic Vegan exclusions.
+model UserAvoidedLabel {
+  userId String           @map("user_id") @db.Uuid
+  kind   DietaryLabelKind
+  label  String           @db.VarChar(30)
+  reason ExclusionReason
+  user   User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([userId, kind, label, reason])
+  @@map("user_avoided_labels")
 }
 
 /// An ingredient a user likes. A taste that steers suggestions, never a rule. Private to the user.

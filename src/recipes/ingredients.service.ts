@@ -14,6 +14,7 @@ import {
   SaveIngredientGroupDto,
 } from './dto/ingredient.dto';
 import { badRequest, conflict, isPrismaError } from './recipe-errors';
+import { hasSafetyInput, safetyData } from './ingredient-safety-data';
 
 const ingredientInclude = {
   groups: {
@@ -63,6 +64,7 @@ export class IngredientsService {
         data: {
           name: dto.name,
           aliases: dto.aliases ?? [],
+          ...safetyData(dto),
           groups: {
             create: (dto.groupIds ?? []).map((groupId) => ({ groupId })),
           },
@@ -77,6 +79,38 @@ export class IngredientsService {
 
   async update(id: string, dto: SaveIngredientDto): Promise<IngredientDto> {
     try {
+      if (hasSafetyInput(dto)) {
+        if (dto.expectedSafetyVersion === undefined)
+          throw badRequest(
+            'SAFETY_VERSION_REQUIRED',
+            'Provide expectedSafetyVersion when changing safety metadata',
+          );
+        return await this.prisma.$transaction(async (tx) => {
+          await tx.$queryRaw`SELECT id FROM ingredients WHERE id = ${id}::uuid FOR UPDATE`;
+          const current = await tx.ingredient.findUnique({ where: { id } });
+          if (!current) throw new NotFoundException('Ingredient not found');
+          if (current.safetyVersion !== dto.expectedSafetyVersion)
+            throw conflict(
+              'VERSION_CONFLICT',
+              'Reload the ingredient before saving',
+            );
+          const row = await tx.ingredient.update({
+            where: { id },
+            data: {
+              name: dto.name,
+              aliases: dto.aliases ?? [],
+              ...safetyData(dto, current),
+              safetyVersion: { increment: 1 },
+              groups: {
+                deleteMany: {},
+                create: (dto.groupIds ?? []).map((groupId) => ({ groupId })),
+              },
+            },
+            include: ingredientInclude,
+          });
+          return toIngredient(row);
+        });
+      }
       const row = await this.prisma.ingredient.update({
         where: { id },
         data: {
@@ -103,7 +137,7 @@ export class IngredientsService {
       if (isPrismaError(error, 'P2003')) {
         throw conflict(
           'INGREDIENT_IN_USE',
-          'Remove the ingredient from its recipes first',
+          'A recipe or dietary profile still references this ingredient; deactivate it instead',
         );
       }
       throw translate(error, 'Ingredient') ?? error;
@@ -176,6 +210,11 @@ export class IngredientsService {
     try {
       await this.prisma.ingredientGroup.delete({ where: { id } });
     } catch (error: unknown) {
+      if (isPrismaError(error, 'P2003'))
+        throw conflict(
+          'GROUP_IN_USE',
+          'A dietary profile still references this group',
+        );
       throw translate(error, 'Ingredient group') ?? error;
     }
   }
@@ -199,6 +238,17 @@ function translate(error: unknown, subject: string): Error | undefined {
 
 function toIngredient(row: IngredientRow): IngredientDto {
   return {
+    active: row.active,
+    vegetarianStatus: row.vegetarianStatus,
+    veganStatus: row.veganStatus,
+    animalLabels: row.animalLabels,
+    allergenLabels: row.allergenLabels,
+    mayContainAllergens: row.mayContainAllergens,
+    compositionComplete: row.compositionComplete,
+    allergensComplete: row.allergensComplete,
+    safetyVersion: row.safetyVersion,
+    classificationSource: row.classificationSource,
+    classificationReason: row.classificationReason,
     id: row.id,
     name: row.name,
     aliases: row.aliases,

@@ -14,6 +14,16 @@ export function isPrismaError(error: unknown, code: PrismaErrorCode): boolean {
   );
 }
 
+/** Raw FOR UPDATE queries report PostgreSQL serialization/deadlock codes as P2010. */
+export function isSerializationConflict(error: unknown): boolean {
+  return (
+    error instanceof Prisma.PrismaClientKnownRequestError &&
+    (error.code === 'P2034' ||
+      (error.code === 'P2010' &&
+        ['40001', '40P01'].includes(String(error.meta?.code))))
+  );
+}
+
 /** A 409 the admin UI tells apart by `code`. */
 export function conflict(code: string, message: string): ConflictException {
   return new ConflictException({

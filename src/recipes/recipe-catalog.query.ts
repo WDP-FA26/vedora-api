@@ -1,12 +1,18 @@
 import { Prisma } from '@prisma/client';
 import type { RecipeCatalogQueryDto } from './dto/recipe-catalog.dto';
+import {
+  publicRecipePredicate,
+  suitableRecipePredicate,
+  veganRecipePredicate,
+} from './dietary-safety';
 
 /** Parameterized PostgreSQL predicates: all filters run before paging/counting. */
 export function catalogWhere(
   query: RecipeCatalogQueryDto,
   userId?: string,
 ): Prisma.Sql {
-  const filters: Prisma.Sql[] = [Prisma.sql`TRUE`];
+  const filters: Prisma.Sql[] = [publicRecipePredicate()];
+  if (query.veganOnly) filters.push(veganRecipePredicate());
   if (query.q !== undefined) {
     // strpos treats %, _ and backslashes as text, not LIKE wildcards.
     filters.push(Prisma.sql`(
@@ -32,22 +38,7 @@ export function catalogWhere(
     )`);
   }
   if (query.suitableForMe) {
-    filters.push(Prisma.sql`NOT EXISTS (
-      SELECT 1 FROM recipe_ingredients ri
-      WHERE ri.recipe_id = r.id AND (
-        EXISTS (
-          SELECT 1 FROM user_avoided_ingredients avoided
-          WHERE avoided.user_id = ${userId}::uuid
-            AND avoided.ingredient_id = ri.ingredient_id
-        )
-        OR EXISTS (
-          SELECT 1 FROM ingredient_group_members member
-          JOIN user_avoided_groups avoided ON avoided.group_id = member.group_id
-          WHERE avoided.user_id = ${userId}::uuid
-            AND member.ingredient_id = ri.ingredient_id
-        )
-      )
-    )`);
+    filters.push(suitableRecipePredicate(userId!));
     // Each side can name an ingredient or a group. The two ingredients must
     // differ, including when a group overlaps itself or another group.
     filters.push(Prisma.sql`NOT EXISTS (

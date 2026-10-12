@@ -8,6 +8,11 @@ import { mockDeep, mockReset } from 'vitest-mock-extended';
 import { AppModule } from '../src/app.module';
 import { configureApp } from '../src/app.setup';
 import { PrismaService } from '../src/prisma/prisma.service';
+import {
+  confirmedDietaryProfile,
+  mockDietaryReads,
+  verifiedIngredientSafety,
+} from './fixtures/dietary';
 
 const ADMIN_ID = '4a1e32e4-e18e-4dd7-8b4a-246ef2113ff2';
 const RECIPE_ID = 'd1a2d3e4-0000-4000-8000-000000000001';
@@ -37,7 +42,7 @@ const recipe = {
       quantity: new Prisma.Decimal('200.5'),
       unit: 'g',
       note: null,
-      ingredient: { name: 'Đậu hũ' },
+      ingredient: { name: 'Đậu hũ', ...verifiedIngredientSafety },
     },
     {
       recipeId: RECIPE_ID,
@@ -46,7 +51,12 @@ const recipe = {
       quantity: null,
       unit: null,
       note: null,
-      ingredient: { name: 'Mật ong' },
+      ingredient: {
+        name: 'Mật ong',
+        ...verifiedIngredientSafety,
+        veganStatus: 'NON_VEGAN',
+        animalLabels: ['HONEY'],
+      },
     },
   ],
 };
@@ -82,6 +92,7 @@ describe('Recipes and ingredients (e2e)', () => {
       id: ADMIN_ID,
       username: 'vedora.admin',
       role,
+      ...confirmedDietaryProfile,
     } as never);
   }
 
@@ -101,17 +112,20 @@ describe('Recipes and ingredients (e2e)', () => {
 
   beforeEach(() => {
     mockReset(prisma);
+    mockDietaryReads(prisma);
     signInAs(UserRole.ADMIN);
     prisma.$transaction.mockImplementation((run: unknown) =>
-      Promise.all(run as Promise<unknown>[]),
+      typeof run === 'function'
+        ? (run as (tx: PrismaService) => Promise<unknown>)(prisma)
+        : Promise.all(run as Promise<unknown>[]),
     );
     prisma.recipe.findUnique.mockResolvedValue(recipe);
     prisma.recipe.create.mockResolvedValue(recipe);
     prisma.ingredientGroupMember.findMany.mockResolvedValue([]);
     prisma.incompatibilityRule.findMany.mockResolvedValue([rule]);
     prisma.ingredient.findMany.mockResolvedValue([
-      { id: TOFU_ID, name: 'Đậu hũ' },
-      { id: HONEY_ID, name: 'Mật ong' },
+      { id: TOFU_ID, name: 'Đậu hũ', ...verifiedIngredientSafety },
+      { id: HONEY_ID, name: 'Mật ong', ...verifiedIngredientSafety },
     ] as never);
   });
 
@@ -223,17 +237,39 @@ describe('Recipes and ingredients (e2e)', () => {
     expect(response.body).toHaveLength(1);
   });
 
+  it.each([
+    { active: null },
+    { vegetarianStatus: 'MEAT' },
+    { veganStatus: null },
+    { animalLabels: ['UNKNOWN_LABEL'] },
+    { allergenLabels: ['MILK', 'MILK'] },
+    { mayContainAllergens: null },
+    { compositionComplete: 'true' },
+    { expectedSafetyVersion: 0 },
+  ])('validates Admin safety metadata: %j', async (fields) => {
+    await request(app.getHttpServer())
+      .post('/api/v1/admin/ingredients')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ name: 'Test ingredient', ...fields })
+      .expect(400);
+    expect(prisma.ingredient.create).not.toHaveBeenCalled();
+  });
+
   it('replaces what a signed-in user does not eat', async () => {
     signInAs(UserRole.USER);
-    prisma.$transaction.mockResolvedValue([]);
     prisma.userAvoidedIngredient.findMany.mockResolvedValue([
-      { ingredient: { id: TOFU_ID, name: 'Đậu hũ' } },
+      {
+        ingredientId: TOFU_ID,
+        reason: 'PERSONAL',
+        ingredient: { id: TOFU_ID, name: 'Đậu hũ' },
+      },
     ] as never);
     prisma.userAvoidedGroup.findMany.mockResolvedValue([]);
     prisma.userLikedIngredient.findMany.mockResolvedValue([
       { ingredient: { id: HONEY_ID, name: 'Mật ong' } },
     ] as never);
     const body = {
+      expectedVersion: 0,
       ingredientIds: [TOFU_ID],
       groupIds: [],
       likedIngredientIds: [HONEY_ID],
@@ -251,12 +287,12 @@ describe('Recipes and ingredients (e2e)', () => {
       .expect(200);
 
     expect(prisma.userAvoidedIngredient.createMany).toHaveBeenCalledWith({
-      data: [{ userId: ADMIN_ID, ingredientId: TOFU_ID }],
+      data: [{ userId: ADMIN_ID, ingredientId: TOFU_ID, reason: 'PERSONAL' }],
     });
     expect(prisma.userLikedIngredient.createMany).toHaveBeenCalledWith({
       data: [{ userId: ADMIN_ID, ingredientId: HONEY_ID }],
     });
-    expect(response.body).toEqual({
+    expect(response.body).toMatchObject({
       ingredients: [{ id: TOFU_ID, name: 'Đậu hũ' }],
       groups: [],
       liked: [{ id: HONEY_ID, name: 'Mật ong' }],
@@ -265,11 +301,15 @@ describe('Recipes and ingredients (e2e)', () => {
 
   it('refuses an ingredient that is both liked and avoided', async () => {
     signInAs(UserRole.USER);
+    prisma.ingredient.findMany.mockResolvedValue([
+      { id: TOFU_ID, ...verifiedIngredientSafety },
+    ] as never);
 
     const response = await request(app.getHttpServer())
       .put('/api/v1/dietary/me')
       .set('Authorization', `Bearer ${token}`)
       .send({
+        expectedVersion: 0,
         ingredientIds: [TOFU_ID],
         groupIds: [],
         likedIngredientIds: [TOFU_ID],

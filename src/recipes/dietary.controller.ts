@@ -1,6 +1,17 @@
-import { Body, Controller, Get, Put, Req, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Header,
+  Patch,
+  Put,
+  Req,
+  UseGuards,
+} from '@nestjs/common';
 import {
   ApiBearerAuth,
+  ApiBadRequestResponse,
+  ApiConflictResponse,
   ApiOkResponse,
   ApiOperation,
   ApiTags,
@@ -13,6 +24,7 @@ import {
   DietaryOptionsDto,
   DietaryRestrictionsDto,
   SaveDietaryRestrictionsDto,
+  PatchDietaryProfileDto,
 } from './dto/dietary.dto';
 
 @ApiTags('dietary')
@@ -24,6 +36,7 @@ export class DietaryController {
   constructor(private readonly dietary: DietaryService) {}
 
   @Get('options')
+  @Header('Cache-Control', 'private, no-store')
   @ApiOperation({ summary: 'List the ingredients and groups a user can avoid' })
   @ApiOkResponse({ type: DietaryOptionsDto })
   options(): Promise<DietaryOptionsDto> {
@@ -31,6 +44,7 @@ export class DietaryController {
   }
 
   @Get('me')
+  @Header('Cache-Control', 'private, no-store')
   @ApiOperation({ summary: 'Get what you do not eat' })
   @ApiOkResponse({ type: DietaryRestrictionsDto })
   find(@Req() request: AuthenticatedRequest): Promise<DietaryRestrictionsDto> {
@@ -38,6 +52,7 @@ export class DietaryController {
   }
 
   @Put('me')
+  @Header('Cache-Control', 'private, no-store')
   @ApiOperation({ summary: 'Replace what you do not eat' })
   @ApiOkResponse({ type: DietaryRestrictionsDto })
   replace(
@@ -45,5 +60,25 @@ export class DietaryController {
     @Body() dto: SaveDietaryRestrictionsDto,
   ): Promise<DietaryRestrictionsDto> {
     return this.dietary.replace(request.user.sub, dto);
+  }
+
+  @Patch('me')
+  @Header('Cache-Control', 'private, no-store')
+  @ApiOperation({
+    summary: 'Update your dietary profile with optimistic version checking',
+  })
+  @ApiOkResponse({ type: DietaryRestrictionsDto })
+  @ApiBadRequestResponse({
+    description:
+      'Invalid target, inconsistent allergy acknowledgement, conflicting preference or empty update',
+  })
+  @ApiConflictResponse({
+    description: 'VERSION_CONFLICT: reload the current profile before saving',
+  })
+  patch(
+    @Req() request: AuthenticatedRequest,
+    @Body() dto: PatchDietaryProfileDto,
+  ): Promise<DietaryRestrictionsDto> {
+    return this.dietary.patch(request.user.sub, dto);
   }
 }

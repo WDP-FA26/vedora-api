@@ -14,6 +14,11 @@ import type {
   CatalogRecipeDto,
 } from '../src/recipes/dto/recipe-catalog.dto';
 import { PrismaService } from '../src/prisma/prisma.service';
+import {
+  confirmedDietaryProfile,
+  mockDietaryReads,
+  verifiedIngredientSafety,
+} from './fixtures/dietary';
 
 const USER_ID = '4a1e32e4-e18e-4dd7-8b4a-246ef2113ff2';
 const RECIPE_ID = 'd1a2d3e4-0000-4000-8000-000000000001';
@@ -46,7 +51,7 @@ const recipe = {
       quantity: new Prisma.Decimal('200.5'),
       unit: 'g',
       note: null,
-      ingredient: { name: 'Đậu hũ' },
+      ingredient: { name: 'Đậu hũ', ...verifiedIngredientSafety },
     },
   ],
 };
@@ -71,10 +76,12 @@ describe('Public recipe catalog (e2e)', () => {
 
   beforeEach(() => {
     mockReset(prisma);
+    mockDietaryReads(prisma);
     prisma.user.findUnique.mockResolvedValue({
       id: USER_ID,
       username: 'vedora.user',
       role: UserRole.USER,
+      ...confirmedDietaryProfile,
     } as never);
     prisma.$transaction.mockImplementation((run: unknown) =>
       (run as (tx: PrismaService) => Promise<unknown>)(prisma),

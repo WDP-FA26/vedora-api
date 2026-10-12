@@ -212,8 +212,20 @@ Tài liệu FE: [docs/docs-for-FE/post-comments-likes.md](docs/docs-for-FE/post-
   món cũ/mới, không lưu. Dùng `PUT /api/v1/meal-plan/days` khi người dùng áp dụng;
   lỗi `MEAL_PLAN_INVALID` có thêm `problems` để frontend hiển thị.
 
-Không cần migration mới. API quản lý công thức vẫn thuộc admin. Hợp đồng FE và
+API quản lý công thức vẫn thuộc admin. Nhánh dietary-profile bổ sung migration
+và điều kiện phân loại công thức; xem mục Hồ sơ chế độ ăn bên dưới. Hợp đồng FE và
 ví dụ: [Kho công thức và thực đơn](docs/docs-for-FE/recipe-catalog-meal-plan.md).
+
+## Hồ sơ chế độ ăn và dị ứng
+
+Hồ sơ riêng hỗ trợ Vegetarian/Vegan, loại trừ có nhiều lý do và xác nhận dị ứng.
+`PATCH /api/v1/dietary/me` cần `expectedVersion`; catalog cá nhân và Meal Planner
+kiểm tra hồ sơ, nhãn thành phần và độ đầy đủ dữ liệu. Kế hoạch cũ giữ nguyên món,
+báo `NEEDS_REVIEW` khi không còn phù hợp.
+
+Migration `20261012010000_dietary_profile` giữ loại trừ cũ với lý do PERSONAL;
+nguyên liệu cũ giữ UNKNOWN và cần Admin phân loại trước khi xuất hiện trong catalog.
+Hợp đồng FE và lưu ý chuyển đổi: [Hồ sơ ăn uống](docs/docs-for-FE/dietary-profile.md).
 
 ## Blog công thức dài
 

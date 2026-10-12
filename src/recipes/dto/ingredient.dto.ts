@@ -1,17 +1,28 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Transform, Type } from 'class-transformer';
 import {
+  AllergenLabel,
+  AnimalLabel,
+  VeganStatus,
+  VegetarianStatus,
+} from '@prisma/client';
+import {
   ArrayMaxSize,
   ArrayUnique,
   IsArray,
   IsBoolean,
+  IsEnum,
+  IsInt,
   IsIn,
   IsOptional,
   IsString,
   IsUUID,
   MaxLength,
+  Max,
+  Min,
   MinLength,
   ValidateNested,
+  ValidateIf,
 } from 'class-validator';
 
 export const MAX_NAME_LENGTH = 100;
@@ -34,7 +45,84 @@ export class NamedRefDto {
   @ApiProperty() name!: string;
 }
 
-export class SaveIngredientDto {
+export class IngredientSafetyInputDto {
+  @ApiPropertyOptional({ type: Boolean })
+  @ValidateIf((_, value) => value !== undefined)
+  @IsBoolean()
+  active?: boolean;
+
+  @ApiPropertyOptional({ enum: VegetarianStatus })
+  @ValidateIf((_, value) => value !== undefined)
+  @IsEnum(VegetarianStatus)
+  vegetarianStatus?: VegetarianStatus;
+
+  @ApiPropertyOptional({ enum: VeganStatus })
+  @ValidateIf((_, value) => value !== undefined)
+  @IsEnum(VeganStatus)
+  veganStatus?: VeganStatus;
+
+  @ApiPropertyOptional({ enum: AnimalLabel, isArray: true })
+  @ValidateIf((_, value) => value !== undefined)
+  @IsArray()
+  @ArrayMaxSize(7)
+  @ArrayUnique()
+  @IsEnum(AnimalLabel, { each: true })
+  animalLabels?: AnimalLabel[];
+
+  @ApiPropertyOptional({ enum: AllergenLabel, isArray: true })
+  @ValidateIf((_, value) => value !== undefined)
+  @IsArray()
+  @ArrayMaxSize(10)
+  @ArrayUnique()
+  @IsEnum(AllergenLabel, { each: true })
+  allergenLabels?: AllergenLabel[];
+
+  @ApiPropertyOptional({ enum: AllergenLabel, isArray: true })
+  @ValidateIf((_, value) => value !== undefined)
+  @IsArray()
+  @ArrayMaxSize(10)
+  @ArrayUnique()
+  @IsEnum(AllergenLabel, { each: true })
+  mayContainAllergens?: AllergenLabel[];
+
+  @ApiPropertyOptional({ type: Boolean })
+  @ValidateIf((_, value) => value !== undefined)
+  @IsBoolean()
+  compositionComplete?: boolean;
+
+  @ApiPropertyOptional({ type: Boolean })
+  @ValidateIf((_, value) => value !== undefined)
+  @IsBoolean()
+  allergensComplete?: boolean;
+
+  @ApiPropertyOptional({ maxLength: 500 })
+  @ValidateIf((_, value) => value !== undefined)
+  @Transform(trim)
+  @IsString()
+  @MinLength(1)
+  @MaxLength(500)
+  classificationSource?: string;
+
+  @ApiPropertyOptional({ maxLength: 500 })
+  @ValidateIf((_, value) => value !== undefined)
+  @Transform(trim)
+  @IsString()
+  @MinLength(1)
+  @MaxLength(500)
+  classificationReason?: string;
+
+  @ApiPropertyOptional({
+    minimum: 1,
+    description: 'Required when updating safety metadata',
+  })
+  @ValidateIf((_, value) => value !== undefined)
+  @IsInt()
+  @Min(1)
+  @Max(2147483646)
+  expectedSafetyVersion?: number;
+}
+
+export class SaveIngredientDto extends IngredientSafetyInputDto {
   @ApiProperty({ maxLength: MAX_NAME_LENGTH })
   @Transform(trim)
   @IsString()
@@ -67,6 +155,22 @@ export class SaveIngredientDto {
 }
 
 export class IngredientDto {
+  @ApiProperty() active!: boolean;
+  @ApiProperty({ enum: VegetarianStatus }) vegetarianStatus!: VegetarianStatus;
+  @ApiProperty({ enum: VeganStatus }) veganStatus!: VeganStatus;
+  @ApiProperty({ enum: AnimalLabel, isArray: true })
+  animalLabels!: AnimalLabel[];
+  @ApiProperty({ enum: AllergenLabel, isArray: true })
+  allergenLabels!: AllergenLabel[];
+  @ApiProperty({ enum: AllergenLabel, isArray: true })
+  mayContainAllergens!: AllergenLabel[];
+  @ApiProperty() compositionComplete!: boolean;
+  @ApiProperty() allergensComplete!: boolean;
+  @ApiProperty() safetyVersion!: number;
+  @ApiProperty({ nullable: true, type: String }) classificationSource!:
+    string | null;
+  @ApiProperty({ nullable: true, type: String }) classificationReason!:
+    string | null;
   @ApiProperty({ format: 'uuid' }) id!: string;
   @ApiProperty() name!: string;
   @ApiProperty({ type: [String] }) aliases!: string[];

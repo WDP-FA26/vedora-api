@@ -11,6 +11,7 @@ import type { IngredientConflict } from './conflicts';
 import { RecipeDetailDto, RecipeDto, SaveRecipeDto } from './dto/recipe.dto';
 import { IncompatibilityRulesService } from './incompatibility-rules.service';
 import { badRequest, isPrismaError } from './recipe-errors';
+import { ingredientSafetySelect } from './dietary-safety';
 
 const post = {
   select: {
@@ -23,14 +24,17 @@ const post = {
 export const recipeInclude = {
   post,
   ingredients: {
-    select: { ingredientId: true, ingredient: { select: { name: true } } },
+    select: {
+      ingredientId: true,
+      ingredient: { select: ingredientSafetySelect },
+    },
   },
 } satisfies Prisma.RecipeInclude;
 
 export const recipeDetailInclude = {
   post,
   ingredients: {
-    include: { ingredient: { select: { name: true } } },
+    include: { ingredient: { select: ingredientSafetySelect } },
     orderBy: { position: 'asc' },
   },
 } satisfies Prisma.RecipeInclude;
@@ -164,6 +168,20 @@ export function toRecipeDto(
   const named = (id: string) => ({ id, name: names.get(id) ?? '' });
   return {
     id: row.id,
+    veganStatus: row.ingredients.some(
+      (item) =>
+        item.ingredient.veganStatus === 'NON_VEGAN' ||
+        item.ingredient.animalLabels.length > 0,
+    )
+      ? 'NON_VEGAN'
+      : row.ingredients.length > 0 &&
+          row.ingredients.every(
+            (item) =>
+              item.ingredient.veganStatus === 'VEGAN' &&
+              item.ingredient.vegetarianStatus === 'ALLOWED',
+          )
+        ? 'VERIFIED_VEGAN'
+        : 'UNKNOWN',
     title: row.title,
     imageUrl: row.imageUrl,
     servings: row.servings,
@@ -192,6 +210,12 @@ export function toRecipeDetailDto(
     ingredients: row.ingredients.map((item) => ({
       ingredientId: item.ingredientId,
       name: item.ingredient.name,
+      allergenLabels: item.ingredient.allergenLabels,
+      mayContainAllergens: item.ingredient.mayContainAllergens,
+      allergensComplete: item.ingredient.allergensComplete,
+      compositionComplete: item.ingredient.compositionComplete,
+      active: item.ingredient.active,
+      safetyVersion: item.ingredient.safetyVersion,
       quantity: item.quantity?.toNumber() ?? null,
       unit: item.unit,
       note: item.note,

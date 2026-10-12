@@ -38,6 +38,9 @@ export const MEAL_PLAN_PROBLEM_CODES = [
   'UNKNOWN_RECIPE',
   'AVOIDED_INGREDIENT',
   'DAY_CONFLICT',
+  'UNVERIFIED_INGREDIENT',
+  'ALLERGEN_INFORMATION_INCOMPLETE',
+  'DIETARY_PROFILE_INCOMPLETE',
 ] as const;
 
 /** The complete new content of one day; an empty list clears that section. */
@@ -130,6 +133,9 @@ export class MealPlanProblemDto {
 }
 
 export class MealPlanDto {
+  @ApiProperty() dietaryVersion!: number;
+  @ApiProperty({ enum: ['VALID', 'NEEDS_REVIEW'] }) status!:
+    'VALID' | 'NEEDS_REVIEW';
   @ApiProperty({
     type: [MealDayDto],
     description: 'All seven days, Monday first',
@@ -162,6 +168,7 @@ export class MealPlanPreviewDayDto {
 }
 
 export class MealPlanPreviewDto {
+  @ApiProperty() dietaryVersion!: number;
   @ApiProperty({ type: [MealPlanPreviewDayDto] })
   days!: MealPlanPreviewDayDto[];
   @ApiProperty({ type: [MealPlanProblemDto] }) problems!: MealPlanProblemDto[];

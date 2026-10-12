@@ -34,13 +34,22 @@ const input = z.object({
 });
 
 /** Checks new day lists and shows them to the user, who saves them. Writes nothing. */
-export function proposeMealPlanTool(mealPlan: MealPlanService, userId: string) {
+export function proposeMealPlanTool(
+  mealPlan: MealPlanService,
+  userId: string,
+  expectedVersion?: number,
+) {
   return tool({
     description:
       'Show the user a change to their weekly timetable. Nothing is saved: the user presses "Áp dụng" on the card to save it. The changes are checked first; when the result lists problems the card is not shown, so fix them with other recipes and call again.',
     inputSchema: input,
     execute: async ({ days }): Promise<MealPlanProposal> => {
-      const preview = await mealPlan.preview(userId, days);
+      const preview = await mealPlan.preview(
+        userId,
+        days,
+        undefined,
+        expectedVersion,
+      );
       return { ...preview, ok: preview.problems.length === 0 };
     },
     toModelOutput: ({ output }) => ({
@@ -62,5 +71,9 @@ function describe(problem: MealPlanProblemDto): string {
       return `- ${day}: "${recipes}" has ${problem.ingredients.join(', ')}, which the user does not eat.`;
     case 'DAY_CONFLICT':
       return `- ${day}: ${problem.ingredients.join(' and ')} must not be eaten on the same day (${problem.reason ?? 'incompatible'}); they come from: ${recipes}.`;
+    case 'UNVERIFIED_INGREDIENT':
+    case 'ALLERGEN_INFORMATION_INCOMPLETE':
+    case 'DIETARY_PROFILE_INCOMPLETE':
+      return `- ${day}: ${problem.code}; use verified recipes or ask the user to update their dietary profile.`;
   }
 }

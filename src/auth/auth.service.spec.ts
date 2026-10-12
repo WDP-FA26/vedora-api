@@ -29,6 +29,10 @@ describe('AuthService', () => {
   const verifiedUser: User = {
     ...publicUser,
     bio: null,
+    dietMode: 'VEGETARIAN',
+    allergyAcknowledgement: 'UNCONFIRMED',
+    dietaryVersion: 0,
+    dietaryUpdatedAt: null,
     avatarUrl: null,
     coverUrl: null,
     isProfessional: false,

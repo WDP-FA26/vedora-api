@@ -1,7 +1,9 @@
 # Kho công thức và chọn món vào thực đơn
 
 Base URL: `/api/v1`. Kho công thức do admin quản lý; người dùng và guest được đọc.
-Không cần migration mới. Swagger mô tả đầy đủ request/response tại `/docs`.
+Nhánh dietary-profile bổ sung migration và điều kiện phù hợp theo hồ sơ.
+Đọc [Hồ sơ chế độ ăn và dị ứng](dietary-profile.md) để áp dụng hợp đồng mới;
+Swagger mô tả đầy đủ request/response tại `/docs`.
 
 ## API
 
@@ -31,6 +33,7 @@ Authorization: Bearer <accessToken>
 | `q`             | Không lọc | 1–100 ký tự sau trim; tìm chuỗi con không phân biệt hoa/thường trong tên món, mô tả, tên và tên khác của nguyên liệu |
 | `maxMinutes`    | Không lọc | Số nguyên 0–2880, giới hạn tổng phút chuẩn bị + nấu                                                                  |
 | `suitableForMe` | `false`   | Chỉ nhận `true`/`false`; `true` cần đăng nhập và dùng hồ sơ của người gọi                                            |
+| `veganOnly` | `false` | Chỉ công thức có toàn bộ thành phần đã xác minh Vegan |
 | `page`          | `1`       | Số nguyên 1–1000000                                                                                                  |
 | `limit`         | `20`      | Số nguyên 1–50                                                                                                       |
 

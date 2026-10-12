@@ -15,6 +15,16 @@ import { RecipeDetailDto, RecipeDto } from './recipe.dto';
 
 export class RecipeCatalogQueryDto extends PaginationQueryDto {
   @ApiPropertyOptional({
+    default: false,
+    description: 'Only recipes with every ingredient verified VEGAN',
+  })
+  @IsOptional()
+  @Transform(({ value }: { value: unknown }) =>
+    value === 'true' ? true : value === 'false' ? false : value,
+  )
+  @IsBoolean()
+  veganOnly: boolean = false;
+  @ApiPropertyOptional({
     maxLength: 100,
     description: 'Search titles, descriptions, ingredient names and aliases',
   })
@@ -45,7 +55,7 @@ export class RecipeCatalogQueryDto extends PaginationQueryDto {
   @ApiPropertyOptional({
     default: false,
     description:
-      'Requires login. Excludes avoided ingredients/groups and conflicts inside a recipe; the saved day is checked when previewing or saving',
+      'Requires login and confirmed allergy information. Applies diet mode, exclusions, ingredient completeness and internal conflicts before paging; the saved day is checked when previewing or saving',
   })
   @IsOptional()
   @Transform(({ value }: { value: unknown }) =>

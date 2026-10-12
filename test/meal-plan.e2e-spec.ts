@@ -9,6 +9,11 @@ import type { MealPlanDto } from '../src/meal-plan/dto/meal-plan.dto';
 import { AppModule } from '../src/app.module';
 import { configureApp } from '../src/app.setup';
 import { PrismaService } from '../src/prisma/prisma.service';
+import {
+  confirmedDietaryProfile,
+  mockDietaryReads,
+  verifiedIngredientSafety,
+} from './fixtures/dietary';
 
 const USER_ID = '4a1e32e4-e18e-4dd7-8b4a-246ef2113ff2';
 const RECIPE_ID = 'd1a2d3e4-0000-4000-8000-000000000001';
@@ -27,7 +32,7 @@ const recipe = {
       quantity: null,
       unit: null,
       note: null,
-      ingredient: { name: 'Đậu hũ' },
+      ingredient: { name: 'Đậu hũ', ...verifiedIngredientSafety },
     },
   ],
 };
@@ -58,10 +63,12 @@ describe('Meal plan (e2e)', () => {
 
   beforeEach(() => {
     mockReset(prisma);
+    mockDietaryReads(prisma);
     prisma.user.findUnique.mockResolvedValue({
       id: USER_ID,
       username: 'vedora.user',
       role: UserRole.USER,
+      ...confirmedDietaryProfile,
     } as never);
     prisma.mealPlanEntry.findMany.mockResolvedValue([]);
     prisma.recipe.findMany.mockResolvedValue([recipe] as never);
@@ -133,7 +140,9 @@ describe('Meal plan (e2e)', () => {
     });
     expect(prisma.mealPlanEntry.createMany).not.toHaveBeenCalled();
     expect(prisma.mealPlanEntry.deleteMany).not.toHaveBeenCalled();
-    expect(prisma.$transaction).not.toHaveBeenCalled();
+    expect(prisma.$transaction).toHaveBeenCalledWith(expect.any(Function), {
+      isolationLevel: 'RepeatableRead',
+    });
   });
 
   it('requires login and validates the manual preview body', async () => {
@@ -150,7 +159,11 @@ describe('Meal plan (e2e)', () => {
 
   it('answers 409 for a recipe with an avoided ingredient', async () => {
     prisma.userAvoidedIngredient.findMany.mockResolvedValue([
-      { ingredientId: TOFU_ID },
+      {
+        ingredientId: TOFU_ID,
+        reason: 'PERSONAL',
+        ingredient: { id: TOFU_ID, name: 'Đậu hũ' },
+      },
     ] as never);
 
     const response = await request(app.getHttpServer())

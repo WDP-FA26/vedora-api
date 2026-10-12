@@ -8,6 +8,7 @@ import { RecipeCatalogService } from '../src/recipes/recipe-catalog.service';
 import { MealPlanService } from '../src/meal-plan/meal-plan.service';
 import { DietaryService } from '../src/recipes/dietary.service';
 import type { PrismaService } from '../src/prisma/prisma.service';
+import { confirmedDietaryProfile, verifiedIngredientSafety } from './fixtures/dietary';
 
 describe('Recipe catalog with PostgreSQL', () => {
   const schema = `vedora_catalog_test_${randomUUID().replaceAll('-', '')}`;
@@ -54,7 +55,7 @@ describe('Recipe catalog with PostgreSQL', () => {
     prisma = new PrismaClient({ datasourceUrl: url.toString() });
     const db = prisma as PrismaService;
     const rules = new IncompatibilityRulesService(db);
-    catalog = new RecipeCatalogService(db, rules);
+    catalog = new RecipeCatalogService(db, rules, new DietaryService(db));
     plan = new MealPlanService(db, new DietaryService(db), rules);
     ({ id: userId } = await prisma.user.create({
       data: {
@@ -62,16 +63,17 @@ describe('Recipe catalog with PostgreSQL', () => {
         fullName: 'Catalog User',
         email: 'catalog@example.test',
         emailVerifiedAt: new Date(),
+        ...confirmedDietaryProfile,
       },
     }));
     ({ id: tofuId } = await prisma.ingredient.create({
-      data: { name: 'Đậu hũ', aliases: ['ĐẬU PHỤ'] },
+      data: { name: 'Đậu hũ', aliases: ['ĐẬU PHỤ'], ...verifiedIngredientSafety },
     }));
     ({ id: spinachId } = await prisma.ingredient.create({
-      data: { name: 'Rau bina', aliases: [] },
+      data: { name: 'Rau bina', aliases: [], ...verifiedIngredientSafety },
     }));
     ({ id: riceId } = await prisma.ingredient.create({
-      data: { name: 'Gạo lứt', aliases: [] },
+      data: { name: 'Gạo lứt', aliases: [], ...verifiedIngredientSafety },
     }));
     ({ id: soyGroupId } = await prisma.ingredientGroup.create({
       data: { name: 'Đậu nành', members: { create: { ingredientId: tofuId } } },
@@ -241,6 +243,7 @@ describe('Recipe catalog with PostgreSQL', () => {
         username: 'other.user',
         fullName: 'Other',
         email: 'other@example.test',
+        ...confirmedDietaryProfile,
       },
     });
     expect(

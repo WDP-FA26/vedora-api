@@ -4,6 +4,11 @@ import { PrismaService } from '../prisma/prisma.service';
 import { DietaryService } from '../recipes/dietary.service';
 import { IncompatibilityRulesService } from '../recipes/incompatibility-rules.service';
 import { MealPlanService } from './meal-plan.service';
+import {
+  confirmedDietaryProfile,
+  mockDietaryReads,
+  verifiedIngredientSafety,
+} from '../../test/fixtures/dietary';
 
 const USER_ID = '4a1e32e4-e18e-4dd7-8b4a-246ef2113ff2';
 const TOFU_ID = 'a1a2d3e4-0000-4000-8000-000000000001';
@@ -23,7 +28,7 @@ function recipe(id: string, title: string, ingredients: [string, string][]) {
       quantity: null,
       unit: null,
       note: null,
-      ingredient: { name },
+      ingredient: { name, ...verifiedIngredientSafety },
     })),
   };
 }
@@ -63,6 +68,11 @@ describe('MealPlanService', () => {
 
   beforeEach(() => {
     prisma = mockDeep<PrismaService>();
+    mockDietaryReads(prisma);
+    prisma.user.findUnique.mockResolvedValue({
+      id: USER_ID,
+      ...confirmedDietaryProfile,
+    } as never);
     service = new MealPlanService(
       prisma,
       new DietaryService(prisma),
@@ -125,7 +135,11 @@ describe('MealPlanService', () => {
 
   it('rejects a recipe with an ingredient the user avoids', async () => {
     prisma.userAvoidedIngredient.findMany.mockResolvedValue([
-      { ingredientId: TOFU_ID },
+      {
+        ingredientId: TOFU_ID,
+        reason: 'PERSONAL',
+        ingredient: { id: TOFU_ID, name: 'Đậu hũ' },
+      },
     ] as never);
 
     const { problems } = await service.preview(USER_ID, [
@@ -160,8 +174,8 @@ describe('MealPlanService', () => {
         day: 'MON',
         breakfast: [],
         lunch: [tofuDish.id],
-        dinner: [],
-        others: [spinachSoup.id],
+        dinner: [spinachSoup.id],
+        others: [],
       },
     ]);
 
@@ -195,7 +209,7 @@ describe('MealPlanService', () => {
         },
       ]),
     ).rejects.toBeInstanceOf(ConflictException);
-    expect(prisma.$transaction).not.toHaveBeenCalled();
+    expect(prisma.mealPlanEntry.createMany).not.toHaveBeenCalled();
   });
 
   it('replaces the listed days only, keeping the order', async () => {
