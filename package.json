@@ -25,6 +25,7 @@
     "postinstall": "prisma generate",
     "test:debug": "vitest --inspect-brk --no-file-parallelism",
     "test:e2e": "vitest run --config ./vitest.config.e2e.mts",
+    "test:db": "vitest run --config ./vitest.config.db.mts",
     "redteam": "node scripts/redteam.mts"
   },
   "dependencies": {

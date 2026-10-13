@@ -144,6 +144,29 @@ export class MealPlanDto {
   problems!: MealPlanProblemDto[];
 }
 
+export class MealRecipeRefDto {
+  @ApiProperty({ format: 'uuid' }) id!: string;
+  @ApiProperty() title!: string;
+}
+
+export class MealPlanPreviewSectionDto {
+  @ApiProperty({ enum: MealSection }) section!: MealSection;
+  @ApiProperty({ type: [MealRecipeRefDto] }) recipes!: MealRecipeRefDto[];
+  @ApiProperty({ type: [MealRecipeRefDto] }) previous!: MealRecipeRefDto[];
+}
+
+export class MealPlanPreviewDayDto {
+  @ApiProperty({ enum: Weekday }) day!: Weekday;
+  @ApiProperty({ type: [MealPlanPreviewSectionDto] })
+  sections!: MealPlanPreviewSectionDto[];
+}
+
+export class MealPlanPreviewDto {
+  @ApiProperty({ type: [MealPlanPreviewDayDto] })
+  days!: MealPlanPreviewDayDto[];
+  @ApiProperty({ type: [MealPlanProblemDto] }) problems!: MealPlanProblemDto[];
+}
+
 const MAX_PLANNER_MESSAGES = 10;
 const MAX_PLANNER_MESSAGE_LENGTH = 4000;
 

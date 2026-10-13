@@ -15,18 +15,19 @@ import { badRequest, isPrismaError } from './recipe-errors';
 const post = {
   select: {
     id: true,
+    status: true,
     author: { select: { username: true, fullName: true } },
   },
 } satisfies Prisma.PostDefaultArgs;
 
-const recipeInclude = {
+export const recipeInclude = {
   post,
   ingredients: {
     select: { ingredientId: true, ingredient: { select: { name: true } } },
   },
 } satisfies Prisma.RecipeInclude;
 
-const recipeDetailInclude = {
+export const recipeDetailInclude = {
   post,
   ingredients: {
     include: { ingredient: { select: { name: true } } },
@@ -58,7 +59,7 @@ export class RecipesService {
       rows.map((row) => row.ingredients.map((item) => item.ingredientId)),
     );
     return createPaginatedResponse(
-      rows.map((row, index) => toDto(row, conflicts[index])),
+      rows.map((row, index) => toRecipeDto(row, conflicts[index])),
       totalItems,
       query,
     );
@@ -73,18 +74,7 @@ export class RecipesService {
     const [conflicts] = await this.rules.findConflictsForEach([
       row.ingredients.map((item) => item.ingredientId),
     ]);
-    return {
-      ...toDto(row, conflicts),
-      description: row.description,
-      steps: row.steps,
-      ingredients: row.ingredients.map((item) => ({
-        ingredientId: item.ingredientId,
-        name: item.ingredient.name,
-        quantity: item.quantity?.toNumber() ?? null,
-        unit: item.unit,
-        note: item.note,
-      })),
-    };
+    return toRecipeDetailDto(row, conflicts);
   }
 
   async create(userId: string, dto: SaveRecipeDto): Promise<RecipeDetailDto> {
@@ -164,7 +154,10 @@ function translate(error: unknown): Error | undefined {
   return undefined;
 }
 
-function toDto(row: RecipeRow, conflicts: IngredientConflict[]): RecipeDto {
+export function toRecipeDto(
+  row: RecipeRow,
+  conflicts: IngredientConflict[],
+): RecipeDto {
   const names = new Map(
     row.ingredients.map((item) => [item.ingredientId, item.ingredient.name]),
   );
@@ -183,7 +176,25 @@ function toDto(row: RecipeRow, conflicts: IngredientConflict[]): RecipeDto {
       a: named(ingredientAId),
       b: named(ingredientBId),
     })),
-    post: row.post,
+    post: row.post ? { id: row.post.id, author: row.post.author } : null,
     updatedAt: row.updatedAt,
+  };
+}
+
+export function toRecipeDetailDto(
+  row: Prisma.RecipeGetPayload<{ include: typeof recipeDetailInclude }>,
+  conflicts: IngredientConflict[],
+): RecipeDetailDto {
+  return {
+    ...toRecipeDto(row, conflicts),
+    description: row.description,
+    steps: row.steps,
+    ingredients: row.ingredients.map((item) => ({
+      ingredientId: item.ingredientId,
+      name: item.ingredient.name,
+      quantity: item.quantity?.toNumber() ?? null,
+      unit: item.unit,
+      note: item.note,
+    })),
   };
 }
