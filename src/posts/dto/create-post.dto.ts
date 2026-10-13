@@ -18,7 +18,7 @@ export const MAX_POST_MEDIA = 4;
 export class CreatePostDto {
   @ApiProperty({
     enum: [PostType.POST],
-    description: 'Only POST for now; BLOG will be added with the Blog model.',
+    description: 'Create short posts here; use POST /blogs for long articles.',
   })
   @IsIn([PostType.POST])
   type!: PostType;

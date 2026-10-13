@@ -75,7 +75,12 @@ describe('Shared pagination (e2e)', () => {
       username: user.username,
       role: UserRole.ADMIN,
     } as never);
-    prisma.$transaction.mockResolvedValue([[user], 23]);
+    prisma.user.findMany.mockResolvedValue([user] as never);
+    prisma.user.count.mockResolvedValue(23);
+    prisma.$transaction.mockImplementation(((run: unknown) =>
+      typeof run === 'function'
+        ? (run as (tx: PrismaService) => Promise<unknown>)(prisma)
+        : Promise.all(run as Promise<unknown>[])));
     prisma.post.findMany.mockResolvedValue(posts);
   });
 

@@ -13,12 +13,14 @@ import {
 import { MediaService } from '../media/media.service';
 import { MuxService } from '../mux/mux.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { blogSummarySelect, toBlogSummary } from './blog-query';
 import { CreatePostDto } from './dto/create-post.dto';
 import { ListPostsQueryDto } from './dto/list-posts-query.dto';
 import { PostPageDto, PostResponseDto } from './dto/post-response.dto';
 
-const postInclude = (viewerId?: string) =>
+export const postInclude = (viewerId?: string) =>
   ({
+    blog: { select: blogSummarySelect },
     author: {
       select: { id: true, username: true, fullName: true, avatarUrl: true },
     },
@@ -86,16 +88,19 @@ export class PostsService {
     viewerId?: string,
   ): Promise<PostPageDto> {
     const take = query.limit;
-    const posts = await this.prisma.post.findMany({
-      where: {
-        status: PostStatus.PUBLISHED,
-        ...(query.authorId ? { authorId: query.authorId } : {}),
-      },
-      orderBy: [{ publishedAt: 'desc' }, { id: 'desc' }],
-      take: take + 1,
-      ...(query.cursor ? { cursor: { id: query.cursor }, skip: 1 } : {}),
-      include: postInclude(viewerId),
-    });
+    const posts = await this.snapshot(
+      this.prisma.post.findMany({
+        where: {
+          status: PostStatus.PUBLISHED,
+          ...(query.authorId ? { authorId: query.authorId } : {}),
+          ...(query.type ? { type: query.type } : {}),
+        },
+        orderBy: [{ publishedAt: 'desc' }, { id: 'desc' }],
+        take: take + 1,
+        ...(query.cursor ? { cursor: { id: query.cursor }, skip: 1 } : {}),
+        include: postInclude(viewerId),
+      }),
+    );
     const page = createCursorPaginatedResponse(posts, take);
     return {
       items: page.items.map((post) => this.toResponse(post)),
@@ -108,18 +113,20 @@ export class PostsService {
     userId: string,
     query: CursorPaginationQueryDto,
   ): Promise<PostPageDto> {
-    const rows = await this.prisma.postBookmark.findMany({
-      where: { userId, post: { status: PostStatus.PUBLISHED } },
-      orderBy: [{ createdAt: 'desc' }, { postId: 'desc' }],
-      take: query.limit + 1,
-      ...(query.cursor
-        ? {
-            cursor: { postId_userId: { postId: query.cursor, userId } },
-            skip: 1,
-          }
-        : {}),
-      select: { post: { include: postInclude(userId) } },
-    });
+    const rows = await this.snapshot(
+      this.prisma.postBookmark.findMany({
+        where: { userId, post: { status: PostStatus.PUBLISHED } },
+        orderBy: [{ createdAt: 'desc' }, { postId: 'desc' }],
+        take: query.limit + 1,
+        ...(query.cursor
+          ? {
+              cursor: { postId_userId: { postId: query.cursor, userId } },
+              skip: 1,
+            }
+          : {}),
+        select: { post: { include: postInclude(userId) } },
+      }),
+    );
     const page = createCursorPaginatedResponse(
       rows.map(({ post }) => post),
       query.limit,
@@ -131,10 +138,12 @@ export class PostsService {
   }
 
   async findOne(id: string, viewerId?: string): Promise<PostResponseDto> {
-    let post = await this.prisma.post.findUnique({
-      where: { id },
-      include: postInclude(viewerId),
-    });
+    let post = await this.snapshot(
+      this.prisma.post.findUnique({
+        where: { id },
+        include: postInclude(viewerId),
+      }),
+    );
     const isAuthor = viewerId !== undefined && post?.authorId === viewerId;
     if (!post || (post.status !== PostStatus.PUBLISHED && !isAuthor)) {
       throw new NotFoundException('Post not found');
@@ -196,18 +205,30 @@ export class PostsService {
   }
 
   private load(id: string, viewerId?: string): Promise<PostWithRelations> {
-    return this.prisma.post.findUniqueOrThrow({
-      where: { id },
-      include: postInclude(viewerId),
-    });
+    return this.snapshot(
+      this.prisma.post.findUniqueOrThrow({
+        where: { id },
+        include: postInclude(viewerId),
+      }),
+    );
   }
 
-  private toResponse(post: PostWithRelations): PostResponseDto {
+  private async snapshot<T>(query: Prisma.PrismaPromise<T>): Promise<T> {
+    // Prisma may load relations with several SQL statements. Keep visibility
+    // and the blog summary in one snapshot during concurrent unpublication.
+    const [result] = await this.prisma.$transaction([query], {
+      isolationLevel: Prisma.TransactionIsolationLevel.RepeatableRead,
+    });
+    return result;
+  }
+
+  toResponse(post: PostWithRelations): PostResponseDto {
     return {
       id: post.id,
       type: post.type,
       status: post.status,
       body: post.body,
+      blog: toBlogSummary(post.blog ?? null),
       publishedAt: post.publishedAt,
       createdAt: post.createdAt,
       author: post.author,

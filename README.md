@@ -26,7 +26,7 @@ Backend starter cho Vedora, sử dụng NestJS, Prisma ORM, PostgreSQL và Docke
 │   ├── health/                # Liveness/readiness
 │   ├── media/                 # Upload video lên Mux, webhook, dọn dẹp định kỳ
 │   ├── mux/                   # Mux client dùng chung
-│   ├── posts/                 # Bài đăng, comment và like (BLOG sẽ có model riêng)
+│   ├── posts/                 # Bài ngắn, blog, comment, like và bookmark
 │   ├── prisma/                # PrismaService dùng chung
 │   ├── users/                 # CRUD mẫu
 │   ├── app.module.ts
@@ -214,6 +214,21 @@ Tài liệu FE: [docs/docs-for-FE/post-comments-likes.md](docs/docs-for-FE/post-
 
 Không cần migration mới. API quản lý công thức vẫn thuộc admin. Hợp đồng FE và
 ví dụ: [Kho công thức và thực đơn](docs/docs-for-FE/recipe-catalog-meal-plan.md).
+
+## Blog công thức dài
+
+- `POST /api/v1/blogs`: tạo bài có tiêu đề, ảnh bìa HTTPS, Markdown và công thức
+  liên kết; mặc định lưu nháp riêng tư.
+- `GET /api/v1/blogs`, `GET /api/v1/blogs/:id`: đọc bài đã xuất bản;
+  `GET /api/v1/blogs/mine` cho tác giả quản lý nháp và bài của mình.
+- `PATCH /api/v1/blogs/:id`: sửa, xuất bản hoặc chuyển về nháp;
+  `DELETE /api/v1/blogs/:id` xóa bài và tương tác.
+- Blog dùng cùng ID với Post, hiện trong feed/trang cá nhân và dùng lại
+  comment/like/bookmark. `GET /posts?type=BLOG|POST` lọc loại bài;
+  field `blog` chứa summary, nội dung đầy đủ đọc qua `/blogs/:id`.
+
+Cần migration `20261012000000_blogs`. Hợp đồng FE và quy tắc Markdown:
+[Blog công thức dài](docs/docs-for-FE/blogs.md).
 
 ## Phân trang dùng chung
 

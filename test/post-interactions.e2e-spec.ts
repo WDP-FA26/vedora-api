@@ -80,7 +80,7 @@ describe('Post comments and likes (e2e)', () => {
     } as never);
     prisma.$transaction.mockImplementation(async (callback) => {
       if (typeof callback !== 'function')
-        throw new Error('Expected a transaction callback');
+        return Promise.all(callback as Promise<unknown>[]);
       return callback(prisma);
     });
     prisma.post.findFirst.mockResolvedValue(post);

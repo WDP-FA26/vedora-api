@@ -136,12 +136,13 @@ model EmailVerificationGuesses {
 
 enum PostType {
   POST
-  /// Long-form post. Its content will live in a `Blog` row linked 1:1 to the
-  /// post; not implemented yet, so the API only accepts `POST`.
+  /// Long-form article with a Blog row linked 1:1 to the post.
   BLOG
 }
 
 enum PostStatus {
+  /// A private blog that has not been published.
+  DRAFT
   /// Waiting for attached media to finish processing; visible to its author only.
   PROCESSING
   PUBLISHED
@@ -167,10 +168,39 @@ model Post {
   bookmarks   PostBookmark[]
   reports     PostReport[]
   recipes     Recipe[]
+  blog        Blog?
 
   @@index([status, publishedAt])
   @@index([authorId, createdAt])
   @@map("posts")
+}
+
+/// Uses the post ID for feed, comments, likes and bookmarks.
+model Blog {
+  postId        String       @id @map("post_id") @db.Uuid
+  title         String       @db.VarChar(150)
+  coverImageUrl String?      @map("cover_image_url") @db.VarChar(2048)
+  /// Markdown source; clients render with raw HTML disabled.
+  content       String       @db.Text
+  /// A short source-text preview, never rendered as HTML.
+  excerpt       String       @db.VarChar(280)
+  updatedAt     DateTime     @updatedAt @map("updated_at")
+  post          Post         @relation(fields: [postId], references: [id], onDelete: Cascade)
+  recipes       BlogRecipe[]
+
+  @@map("blogs")
+}
+
+model BlogRecipe {
+  postId   String @map("post_id") @db.Uuid
+  recipeId String @map("recipe_id") @db.Uuid
+  position Int
+  blog     Blog   @relation(fields: [postId], references: [postId], onDelete: Cascade)
+  recipe   Recipe @relation(fields: [recipeId], references: [id], onDelete: Cascade)
+
+  @@id([postId, recipeId])
+  @@index([recipeId])
+  @@map("blog_recipes")
 }
 
 model PostComment {
@@ -532,6 +562,7 @@ model Recipe {
   createdBy   User?              @relation(fields: [createdById], references: [id], onDelete: SetNull)
   ingredients RecipeIngredient[]
   mealPlans   MealPlanEntry[]
+  blogs       BlogRecipe[]
 
   @@index([postId])
   @@map("recipes")

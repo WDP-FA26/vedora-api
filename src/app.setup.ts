@@ -1,5 +1,6 @@
 import { INestApplication, ValidationPipe } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import type { ExpressAdapter } from '@nestjs/platform-express';
 import helmet from 'helmet';
 
 /**
@@ -8,6 +9,11 @@ import helmet from 'helmet';
  * be created with `rawBody: true` for Mux webhook signatures.
  */
 export function configureApp(app: INestApplication): void {
+  // Long articles can exceed Express's default 100 KB when encoded as UTF-8.
+  // Keep rawBody available for signed webhooks using Nest's parser options.
+  (app.getHttpAdapter() as ExpressAdapter).useBodyParser('json', true, {
+    limit: '512kb',
+  });
   const config = app.get(ConfigService);
   const prefix = config.get<string>('API_PREFIX', 'api/v1');
   const corsOrigin = config.get<string>('CORS_ORIGIN', '*');

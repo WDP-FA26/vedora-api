@@ -9,16 +9,20 @@ import { PostReportsService } from './post-reports.service';
 import { PostViewsService } from './post-views.service';
 import { PostsController } from './posts.controller';
 import { PostsService } from './posts.service';
+import { BlogsController } from './blogs.controller';
+import { BlogsService } from './blogs.service';
 
 @Module({
   imports: [MediaModule],
   controllers: [
+    BlogsController,
     PostsController,
     PostInteractionsController,
     AdminPostsController,
     AdminReportsController,
   ],
   providers: [
+    BlogsService,
     PostsService,
     PostInteractionsService,
     AdminPostsService,
