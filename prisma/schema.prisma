@@ -31,6 +31,7 @@ model User {
   updatedAt             DateTime                @updatedAt
   refreshTokens         RefreshToken[]
   emailVerificationCode EmailVerificationCode?
+  passwordResetCode     PasswordResetCode?
   posts                 Post[]
   postComments          PostComment[]
   postLikes             PostLike[]
@@ -124,8 +125,25 @@ model EmailVerificationCode {
   @@map("email_verification_codes")
 }
 
-/// Code guesses per email address. Kept apart from users and codes, so neither
-/// new codes nor deleting and re-registering the account resets the count.
+/// The one pending password-reset code per user, emailed by "forgot password".
+/// Same rules as `EmailVerificationCode`; only its hash is stored.
+model PasswordResetCode {
+  userId      String   @id @map("user_id") @db.Uuid
+  codeHash    String   @map("code_hash") @db.Char(64)
+  attempts    Int      @default(0)
+  expiresAt   DateTime @map("expires_at")
+  sentAt      DateTime @map("sent_at")
+  /// Start of the current resend window; `resendCount` resets after it.
+  firstSentAt DateTime @map("first_sent_at")
+  resendCount Int      @default(0) @map("resend_count")
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("password_reset_codes")
+}
+
+/// Code guesses per email address, for verification and reset codes alike.
+/// Kept apart from users and codes, so neither new codes nor deleting and
+/// re-registering the account resets the count.
 model EmailVerificationGuesses {
   email       String   @id @db.VarChar(320)
   guesses     Int      @default(0)
