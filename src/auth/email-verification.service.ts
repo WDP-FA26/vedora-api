@@ -1,29 +1,25 @@
 import { Injectable } from '@nestjs/common';
-import { createHash, randomInt, timingSafeEqual } from 'node:crypto';
 import { MailService } from '../mail/mail.service';
 import { PrismaService } from '../prisma/prisma.service';
+import {
+  CODE_TTL_MS,
+  MAX_ATTEMPTS,
+  SendResult,
+  checkResend,
+  countGuess,
+  generateCode,
+  hashCode,
+  hashesMatch,
+} from './one-time-code';
 
-const CODE_TTL_MS = 10 * 60 * 1000;
-const RESEND_COOLDOWN_MS = 120 * 1000;
-/** New codes allowed after the first one, per window. */
-const MAX_RESENDS = 3;
-const RESEND_WINDOW_MS = 60 * 60 * 1000;
-const MAX_ATTEMPTS = 5;
-/** Guesses per email across all its codes, so fresh codes don't buy more. */
-const MAX_GUESSES_PER_EMAIL = 15;
-const GUESS_WINDOW_MS = 24 * 60 * 60 * 1000;
-
-/** `sent`, or why no email went out. */
-export type SendResult = 'sent' | 'cooldown' | 'limit';
+export type { SendResult } from './one-time-code';
 
 /** `locked`: the email used up its guesses for the day. */
 export type VerifyResult = 'verified' | 'invalid' | 'locked';
 
 /**
- * Six-digit email codes. Each user has at most one pending code; sending a new
- * one replaces it. Guesses are capped per code and per email per day (15 in
- * 10^6), and new codes are limited to one every two minutes and three resends
- * an hour, so neither brute-forcing a code nor flooding an inbox is practical.
+ * Six-digit email verification codes. Each user has at most one pending code;
+ * sending a new one replaces it. The limits are in `one-time-code.ts`.
  */
 @Injectable()
 export class EmailVerificationService {
@@ -42,24 +38,17 @@ export class EmailVerificationService {
     const pending = await this.prisma.emailVerificationCode.findUnique({
       where: { userId: user.id },
     });
-    const inWindow =
-      pending !== null &&
-      now.getTime() - pending.firstSentAt.getTime() < RESEND_WINDOW_MS;
-    if (inWindow) {
-      if (now.getTime() - pending.sentAt.getTime() < RESEND_COOLDOWN_MS) {
-        return 'cooldown';
-      }
-      if (pending.resendCount >= MAX_RESENDS) return 'limit';
-    }
+    const resend = checkResend(pending, now);
+    if (!resend.allowed) return resend.reason;
 
-    const code = randomInt(0, 1_000_000).toString().padStart(6, '0');
+    const code = generateCode();
     const data = {
-      codeHash: this.hashCode(user.id, code),
+      codeHash: hashCode(user.id, code),
       attempts: 0,
       expiresAt: new Date(now.getTime() + CODE_TTL_MS),
       sentAt: now,
-      firstSentAt: inWindow ? pending.firstSentAt : now,
-      resendCount: inWindow ? pending.resendCount + 1 : 0,
+      firstSentAt: resend.firstSentAt,
+      resendCount: resend.resendCount,
     };
     await this.prisma.emailVerificationCode.upsert({
       where: { userId: user.id },
@@ -86,7 +75,7 @@ export class EmailVerificationService {
     user: { id: string; email: string },
     code: string,
   ): Promise<VerifyResult> {
-    if (!(await this.countGuess(user.email))) return 'locked';
+    if (!(await countGuess(this.prisma, user.email))) return 'locked';
 
     // Count the attempt before comparing, so parallel guesses can't exceed the cap.
     const counted = await this.prisma.emailVerificationCode.updateMany({
@@ -102,12 +91,7 @@ export class EmailVerificationService {
     const pending = await this.prisma.emailVerificationCode.findUnique({
       where: { userId: user.id },
     });
-    const expected = Buffer.from(pending?.codeHash ?? '', 'hex');
-    const actual = Buffer.from(this.hashCode(user.id, code), 'hex');
-    if (
-      expected.length !== actual.length ||
-      !timingSafeEqual(expected, actual)
-    ) {
+    if (!hashesMatch(pending?.codeHash ?? '', hashCode(user.id, code))) {
       return 'invalid';
     }
 
@@ -126,33 +110,5 @@ export class EmailVerificationService {
 
   async discard(userId: string): Promise<void> {
     await this.prisma.emailVerificationCode.deleteMany({ where: { userId } });
-  }
-
-  /**
-   * Uses up one of the email's guesses for the day. Each step is a single
-   * conditional write, so parallel guesses can't slip past the cap.
-   */
-  private async countGuess(email: string): Promise<boolean> {
-    const now = new Date();
-    await this.prisma.emailVerificationGuesses.createMany({
-      data: [{ email, windowStart: now }],
-      skipDuplicates: true,
-    });
-    await this.prisma.emailVerificationGuesses.updateMany({
-      where: {
-        email,
-        windowStart: { lte: new Date(now.getTime() - GUESS_WINDOW_MS) },
-      },
-      data: { guesses: 0, windowStart: now },
-    });
-    const counted = await this.prisma.emailVerificationGuesses.updateMany({
-      where: { email, guesses: { lt: MAX_GUESSES_PER_EMAIL } },
-      data: { guesses: { increment: 1 } },
-    });
-    return counted.count === 1;
-  }
-
-  private hashCode(userId: string, code: string): string {
-    return createHash('sha256').update(`${userId}:${code}`).digest('hex');
   }
 }

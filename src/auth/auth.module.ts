@@ -9,6 +9,7 @@ import { OptionalJwtAuthGuard } from './optional-jwt-auth.guard';
 import { RefreshTokensService } from './refresh-tokens.service';
 import { GoogleOAuthService } from './google-oauth.service';
 import { EmailVerificationService } from './email-verification.service';
+import { PasswordResetService } from './password-reset.service';
 import { RolesGuard } from './roles.guard';
 
 @Global()
@@ -34,6 +35,7 @@ import { RolesGuard } from './roles.guard';
     RefreshTokensService,
     GoogleOAuthService,
     EmailVerificationService,
+    PasswordResetService,
   ],
   exports: [JwtAuthGuard, OptionalJwtAuthGuard, RolesGuard, JwtModule],
 })

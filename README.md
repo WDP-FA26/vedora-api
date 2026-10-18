@@ -86,6 +86,8 @@ Không thêm `-v` nếu muốn giữ dữ liệu PostgreSQL. `docker compose dow
 | `GET` | `/api/v1/health/ready` | Readiness + PostgreSQL |
 | `POST` | `/api/v1/auth/register` | Đăng ký và gửi mã xác minh email; chưa trả token |
 | `POST` | `/api/v1/auth/login` | Đăng nhập bằng username/password và nhận cặp AT/RT |
+| `POST` | `/api/v1/auth/password/forgot` | Gửi mã đặt lại mật khẩu tới email (luôn trả `204`) |
+| `POST` | `/api/v1/auth/password/reset` | Đặt mật khẩu mới bằng mã trong email và thu hồi mọi phiên đăng nhập |
 | `POST` | `/api/v1/auth/refresh` | Rotate refresh token và nhận cặp AT/RT mới |
 | `POST` | `/api/v1/auth/logout` | Thu hồi refresh-token family |
 | `POST` | `/api/v1/auth/google/authorize` | Bắt đầu đăng nhập Google: URL, `state`, `codeVerifier` (PKCE) |
@@ -112,6 +114,13 @@ mới sau mỗi 120 giây, tối đa 3 lần trong 1 giờ kể từ mã đầu 
 với `code: "RESEND_LIMIT_REACHED"`). Đăng nhập đúng mật khẩu nhưng email chưa xác minh trả `403`
 với `code: "EMAIL_NOT_VERIFIED"` và tự gửi mã mới. Tài khoản chưa xác minh quá 1 giờ sẽ
 nhường email và username cho người đăng ký sau.
+
+Quên mật khẩu: `POST /api/v1/auth/password/forgot` với `email` gửi mã 6 chữ số, cùng giới hạn
+gửi lại như mã xác minh, và luôn trả `204` kể cả khi email chưa đăng ký. Sau đó
+`POST /api/v1/auth/password/reset` với `email`, `code` và `password` mới đặt lại mật khẩu (`204`),
+đồng thời xác minh email nếu chưa xác minh và thu hồi mọi refresh token, nên người dùng phải
+đăng nhập lại. Mã sai trả `400`; số lần đoán sai được tính chung với mã xác minh, tối đa 15
+lần mỗi ngày cho mỗi email (quá giới hạn trả `429` với `code: "VERIFY_LIMIT_REACHED"`).
 
 Khi chạy local không có `RESEND_API_KEY`, mã được in ra log của API thay vì gửi email.
 Production bắt buộc có `RESEND_API_KEY`; `MAIL_FROM` phải thuộc domain đã xác minh trên

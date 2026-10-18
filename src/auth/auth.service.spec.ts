@@ -7,11 +7,12 @@ import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { Test } from '@nestjs/testing';
 import { User, UserRole } from '@prisma/client';
-import { hash } from 'bcryptjs';
+import { compare, hash } from 'bcryptjs';
 import { type DeepMockProxy, mockDeep } from 'vitest-mock-extended';
 import { PublicUser, UsersService } from '../users/users.service';
 import { AuthService } from './auth.service';
 import { EmailVerificationService } from './email-verification.service';
+import { PasswordResetService } from './password-reset.service';
 import { RefreshTokensService } from './refresh-tokens.service';
 
 describe('AuthService', () => {
@@ -41,11 +42,13 @@ describe('AuthService', () => {
   let users: DeepMockProxy<UsersService>;
   let refreshTokens: DeepMockProxy<RefreshTokensService>;
   let emailVerification: DeepMockProxy<EmailVerificationService>;
+  let passwordReset: DeepMockProxy<PasswordResetService>;
 
   beforeEach(async () => {
     users = mockDeep<UsersService>();
     refreshTokens = mockDeep<RefreshTokensService>();
     emailVerification = mockDeep<EmailVerificationService>();
+    passwordReset = mockDeep<PasswordResetService>();
     const jwt = mockDeep<JwtService>();
     jwt.signAsync.mockResolvedValue('signed-token');
     refreshTokens.issue.mockResolvedValue({
@@ -61,6 +64,7 @@ describe('AuthService', () => {
         { provide: JwtService, useValue: jwt },
         { provide: RefreshTokensService, useValue: refreshTokens },
         { provide: EmailVerificationService, useValue: emailVerification },
+        { provide: PasswordResetService, useValue: passwordReset },
         {
           provide: ConfigService,
           useValue: new ConfigService({ JWT_ACCESS_TTL: 3600 }),
@@ -231,6 +235,110 @@ describe('AuthService', () => {
     await service.resendVerification({ email: 'hello@vedora.vn' });
 
     expect(emailVerification.send).not.toHaveBeenCalled();
+  });
+
+  it('emails a reset code to a registered email', async () => {
+    users.findByEmail.mockResolvedValue(verifiedUser);
+    passwordReset.send.mockResolvedValue('sent');
+
+    await service.forgotPassword({ email: 'hello@vedora.vn' });
+
+    expect(passwordReset.send).toHaveBeenCalledWith(verifiedUser);
+  });
+
+  it('answers forgot-password for unknown emails without sending anything', async () => {
+    users.findByEmail.mockResolvedValue(null);
+
+    await expect(
+      service.forgotPassword({ email: 'nobody@vedora.vn' }),
+    ).resolves.toBeUndefined();
+    expect(passwordReset.send).not.toHaveBeenCalled();
+  });
+
+  it('rejects reset codes past the resend limit with 429', async () => {
+    users.findByEmail.mockResolvedValue(verifiedUser);
+    passwordReset.send.mockResolvedValue('limit');
+
+    await expect(
+      service.forgotPassword({ email: 'hello@vedora.vn' }),
+    ).rejects.toMatchObject({
+      status: 429,
+      response: { code: 'RESEND_LIMIT_REACHED' },
+    });
+  });
+
+  it('reports 503 when the reset email cannot be sent', async () => {
+    users.findByEmail.mockResolvedValue(verifiedUser);
+    passwordReset.send.mockRejectedValue(new Error('Resend is down'));
+
+    await expect(
+      service.forgotPassword({ email: 'hello@vedora.vn' }),
+    ).rejects.toMatchObject({ status: 503 });
+  });
+
+  it('sets the new password and signs out every session after a reset', async () => {
+    users.findByEmail.mockResolvedValue(verifiedUser);
+    passwordReset.reset.mockResolvedValue('reset');
+
+    await service.resetPassword({
+      email: 'hello@vedora.vn',
+      code: '123456',
+      password: 'NewStrongPassword123!',
+    });
+
+    const [user, code, passwordHash] = passwordReset.reset.mock.calls[0];
+    expect(user).toBe(verifiedUser);
+    expect(code).toBe('123456');
+    await expect(compare('NewStrongPassword123!', passwordHash)).resolves.toBe(
+      true,
+    );
+    expect(refreshTokens.revokeAllForUser).toHaveBeenCalledWith(
+      verifiedUser.id,
+    );
+  });
+
+  it('rejects a wrong reset code without touching sessions', async () => {
+    users.findByEmail.mockResolvedValue(verifiedUser);
+    passwordReset.reset.mockResolvedValue('invalid');
+
+    await expect(
+      service.resetPassword({
+        email: 'hello@vedora.vn',
+        code: '000000',
+        password: 'NewStrongPassword123!',
+      }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(refreshTokens.revokeAllForUser).not.toHaveBeenCalled();
+  });
+
+  it('rejects a reset for an unknown email like a wrong code', async () => {
+    users.findByEmail.mockResolvedValue(null);
+
+    await expect(
+      service.resetPassword({
+        email: 'nobody@vedora.vn',
+        code: '123456',
+        password: 'NewStrongPassword123!',
+      }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(passwordReset.reset).not.toHaveBeenCalled();
+  });
+
+  it('rejects resets with 429 once the email is out of guesses', async () => {
+    users.findByEmail.mockResolvedValue(verifiedUser);
+    passwordReset.reset.mockResolvedValue('locked');
+
+    await expect(
+      service.resetPassword({
+        email: 'hello@vedora.vn',
+        code: '123456',
+        password: 'NewStrongPassword123!',
+      }),
+    ).rejects.toMatchObject({
+      status: 429,
+      response: { code: 'VERIFY_LIMIT_REACHED' },
+    });
+    expect(refreshTokens.revokeAllForUser).not.toHaveBeenCalled();
   });
 
   it('takes over an unverified account when Google proves the email', async () => {

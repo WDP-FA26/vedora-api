@@ -32,6 +32,7 @@ import {
   VerifyEmailDto,
 } from './dto/email-verification.dto';
 import { LoginDto } from './dto/login.dto';
+import { ForgotPasswordDto, ResetPasswordDto } from './dto/password-reset.dto';
 import { RefreshTokenDto } from './dto/refresh-token.dto';
 import { RegisterDto } from './dto/register.dto';
 import { JwtAuthGuard } from './jwt-auth.guard';
@@ -97,6 +98,40 @@ export class AuthController {
   })
   login(@Body() dto: LoginDto): Promise<AuthResponseDto> {
     return this.authService.login(dto);
+  }
+
+  @Post('password/forgot')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiOperation({
+    summary:
+      'Email a password reset code (every 2 minutes, at most 3 resends an hour)',
+    description:
+      'Returns 204 whether or not the email is registered. Finish with POST /auth/password/reset.',
+  })
+  @ApiNoContentResponse()
+  @ApiTooManyRequestsResponse({
+    description: 'Code limit reached (`code: RESEND_LIMIT_REACHED`)',
+  })
+  @ApiServiceUnavailableResponse({ description: 'The email could not be sent' })
+  async forgotPassword(@Body() dto: ForgotPasswordDto): Promise<void> {
+    await this.authService.forgotPassword(dto);
+  }
+
+  @Post('password/reset')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiOperation({
+    summary: 'Set a new password with the emailed code',
+    description:
+      'Also verifies the email and revokes every refresh token; log in again afterwards.',
+  })
+  @ApiNoContentResponse()
+  @ApiBadRequestResponse({ description: 'Invalid or expired code' })
+  @ApiTooManyRequestsResponse({
+    description:
+      'Too many wrong codes for this email today (`code: VERIFY_LIMIT_REACHED`)',
+  })
+  async resetPassword(@Body() dto: ResetPasswordDto): Promise<void> {
+    await this.authService.resetPassword(dto);
   }
 
   @Post('refresh')

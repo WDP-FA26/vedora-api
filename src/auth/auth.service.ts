@@ -23,12 +23,14 @@ import {
   VerifyEmailDto,
 } from './dto/email-verification.dto';
 import { LoginDto } from './dto/login.dto';
+import { ForgotPasswordDto, ResetPasswordDto } from './dto/password-reset.dto';
 import { RegisterDto } from './dto/register.dto';
 import {
   EmailVerificationService,
   SendResult,
 } from './email-verification.service';
 import { hashPassword } from './password';
+import { PasswordResetService } from './password-reset.service';
 import { GoogleProfileUser } from './google-auth.types';
 import {
   IssuedRefreshToken,
@@ -51,6 +53,7 @@ export class AuthService {
     private readonly jwtService: JwtService,
     private readonly refreshTokensService: RefreshTokensService,
     private readonly emailVerificationService: EmailVerificationService,
+    private readonly passwordResetService: PasswordResetService,
     configService: ConfigService,
   ) {
     this.accessTokenTtl = configService.get<number>('JWT_ACCESS_TTL', 3600);
@@ -149,6 +152,60 @@ export class AuthService {
         HttpStatus.TOO_MANY_REQUESTS,
       );
     }
+  }
+
+  /**
+   * Emails a password reset code. Like resends, it succeeds for unknown
+   * emails, so it can't be used to probe which addresses exist.
+   */
+  async forgotPassword(dto: ForgotPasswordDto): Promise<void> {
+    const user = await this.usersService.findByEmail(dto.email);
+    if (!user) return;
+
+    let result: SendResult;
+    try {
+      result = await this.passwordResetService.send(user);
+    } catch (error) {
+      this.logger.error(`Password reset email failed: ${String(error)}`);
+      throw new ServiceUnavailableException('Could not send the email');
+    }
+    if (result === 'limit') {
+      throw new HttpException(
+        {
+          statusCode: HttpStatus.TOO_MANY_REQUESTS,
+          error: 'Too Many Requests',
+          code: 'RESEND_LIMIT_REACHED',
+          message: 'Password reset code limit reached; try again later',
+        },
+        HttpStatus.TOO_MANY_REQUESTS,
+      );
+    }
+  }
+
+  /** Sets a new password with an emailed code and signs out every session. */
+  async resetPassword(dto: ResetPasswordDto): Promise<void> {
+    // Hashed first, so an over-long password is rejected before using a guess.
+    const passwordHash = await hashPassword(dto.password);
+    const user = await this.usersService.findByEmail(dto.email);
+    const result = user
+      ? await this.passwordResetService.reset(user, dto.code, passwordHash)
+      : 'invalid';
+    if (result === 'locked') {
+      throw new HttpException(
+        {
+          statusCode: HttpStatus.TOO_MANY_REQUESTS,
+          error: 'Too Many Requests',
+          code: 'VERIFY_LIMIT_REACHED',
+          message: 'Too many wrong codes for this email; try again tomorrow',
+        },
+        HttpStatus.TOO_MANY_REQUESTS,
+      );
+    }
+    if (!user || result !== 'reset') {
+      throw new BadRequestException('Invalid or expired reset code');
+    }
+    // Whoever knew the old password is signed out everywhere.
+    await this.refreshTokensService.revokeAllForUser(user.id);
   }
 
   async getCurrentUser(userId: string): Promise<PublicUser> {
