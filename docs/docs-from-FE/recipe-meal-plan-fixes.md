@@ -79,7 +79,33 @@ FE sẽ tự xử lý các hành vi sau; chỉ cần BE xác nhận đây là th
 
 | #   | Mục                       | Mức độ   | Trạng thái |
 | --- | ------------------------- | -------- | ---------- |
-| 1   | Lưu đồng thời             | Cần sửa  | Chờ BE     |
-| 2   | `recipeIds` trong lỗi     | Nên thêm | Chờ BE     |
-| 3   | ID của `UNKNOWN_RECIPE`   | Nên thêm | Chờ BE     |
-| 4   | Xác nhận hành vi thiết kế | Ghi chú  | Chờ BE     |
+| 1   | Lưu đồng thời             | Cần sửa  | Đã sửa BE: khóa user, kiểm tra/ghi cùng transaction |
+| 2   | `recipeIds` trong lỗi     | Nên thêm | Đã bổ sung; giữ `recipes` là tên món |
+| 3   | ID của `UNKNOWN_RECIPE`   | Nên thêm | Đã bổ sung ID thiếu, loại trùng theo ngày |
+| 4   | Xác nhận hành vi thiết kế | Ghi chú  | Đã xác nhận trong tài liệu BE gửi FE |
+
+## Phản hồi BE — 19/10/2026
+
+- Nhánh: `fix/meal-plan-concurrent-save`. Trạng thái trên ghi nhận implementation;
+  merge và deployment được theo dõi riêng.
+- `PUT /meal-plan/days` dùng interactive transaction và `SELECT ... FOR UPDATE`
+  trên user trước mọi đọc/kiểm tra/lưu. Các truy vấn kiểm tra dùng transaction
+  client; response cũng được dựng trước khi nhả khóa.
+- Request cùng user được tuần tự hóa, ngày không gửi giữ nguyên. Cùng ngày thì
+  lần xử lý sau thay nguyên ngày; không gộp món giữa hai request.
+- Lỗi DB unique/FK/write conflict trả `409 MEAL_PLAN_CONFLICT` để FE tải lại và
+  preview. Lỗi nghiệp vụ tiếp tục trả `409 MEAL_PLAN_INVALID` kèm `problems`.
+- `recipeIds` có trên mọi loại problem; `UNKNOWN_RECIPE` trả ID thiếu và
+  `recipes=[]`. Các trường cũ giữ nguyên.
+- Hợp đồng và bốn hành vi ở mục 4 được ghi tại
+  [recipe-catalog-meal-plan.md](../docs-for-FE/recipe-catalog-meal-plan.md).
+- Không đổi schema và không cần migration.
+
+### Validation
+
+- `npm test`: 36 file, 252 tests passed.
+- `npm run test:e2e`: 10 file, 231 tests passed.
+- `npm run test:db`: 2 file, 27 tests passed trên PostgreSQL 17 tạm thời trong
+  Docker, schema riêng cho mỗi suite; gồm HTTP PUT đồng thời cùng món, khác món
+  cùng ngày, khác ngày và rollback khi một ngày không hợp lệ.
+- `npm run build`, `npm run lint`, `npx tsc --noEmit`, `git diff --check`: passed.
