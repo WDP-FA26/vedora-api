@@ -44,6 +44,8 @@ describe('Profiles and follows (e2e)', () => {
           username: 'vedora.user',
           fullName: 'Vedora User',
           role: UserRole.USER,
+          status: 'ACTIVE',
+          accountVersion: 0,
           emailVerifiedAt: new Date(),
           bio: null,
           avatarUrl: null,

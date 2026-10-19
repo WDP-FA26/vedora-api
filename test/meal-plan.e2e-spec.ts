@@ -59,6 +59,8 @@ describe('Meal plan (e2e)', () => {
   beforeEach(() => {
     mockReset(prisma);
     prisma.user.findUnique.mockResolvedValue({
+      status: 'ACTIVE',
+      accountVersion: 0,
       id: USER_ID,
       username: 'vedora.user',
       role: UserRole.USER,

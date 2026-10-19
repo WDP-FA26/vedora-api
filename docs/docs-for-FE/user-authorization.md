@@ -1,7 +1,11 @@
 # Phân quyền người dùng — hợp đồng API cho frontend
 
-Cập nhật: 28/09/2026. Base URL mặc định khi chạy local:
+Cập nhật: 19/10/2026. Base URL mặc định khi chạy local:
 `http://localhost:4000/api/v1`; frontend lấy từ `NEXT_PUBLIC_API_URL`.
+
+Account hiện có thêm `status` và `accountVersion`. Chỉ account ACTIVE được dùng
+API có xác thực. Xem [khóa/mở khóa tài khoản](account-suspension.md) cho status,
+reason, version conflict và bảo vệ ADMIN ACTIVE cuối cùng.
 
 ## Vai trò
 
@@ -27,6 +31,8 @@ User object có thêm `role: "USER" | "ADMIN"`. Ví dụ `GET /auth/me`:
   "fullName": "Vedora User",
   "email": "hello@vedora.vn",
   "role": "USER",
+  "status": "ACTIVE",
+  "accountVersion": 0,
   "createdAt": "2026-09-28T00:00:00.000Z",
   "updatedAt": "2026-09-28T00:00:00.000Z"
 }
@@ -77,11 +83,14 @@ PATCH /api/v1/users/4a1e32e4-e18e-4dd7-8b4a-246ef2113ff2/role
 Authorization: Bearer <adminAccessToken>
 Content-Type: application/json
 
-{"role":"ADMIN"}
+{"role":"ADMIN","expectedVersion":0,"reason":"Cấp quyền quản trị"}
 ```
 
-Body bắt buộc có `role`, chỉ nhận `USER` hoặc `ADMIN`. Response `200` là user
-object như ví dụ trên với vai trò mới. Muốn hạ quyền, gửi `{ "role": "USER" }`.
+Body bắt buộc có `role` (`USER` hoặc `ADMIN`), `expectedVersion` lấy từ
+`accountVersion` hiện tại và `reason` 1–500 ký tự sau trim. Response `200` là user
+object với vai trò/version mới. Hạ quyền gửi `role: "USER"` cùng hai field trên.
+Không cho hạ quyền hoặc xóa ADMIN ACTIVE cuối cùng; trả `409 LAST_ACTIVE_ADMIN`.
+Version cũ trả `409 ACCOUNT_VERSION_CONFLICT`; FE tải lại trước khi xác nhận lại.
 
 API cho phép admin đổi vai trò của chính mình và không bảo vệ admin cuối cùng.
 FE nên yêu cầu xác nhận cho thao tác hạ quyền hoặc xóa tài khoản admin đang dùng;

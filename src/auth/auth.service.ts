@@ -13,7 +13,8 @@ import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { compare } from 'bcryptjs';
 import { randomBytes } from 'node:crypto';
-import { User } from '@prisma/client';
+import { AccountStatus, User } from '@prisma/client';
+import { assertAccountActive } from './account-access';
 import { PublicUser, UsersService } from '../users/users.service';
 import { JwtPayload } from './auth.types';
 import { AuthResponseDto } from './dto/auth-response.dto';
@@ -87,6 +88,12 @@ export class AuthService {
     if (!user || !passwordMatches) {
       throw new UnauthorizedException('Invalid username or password');
     }
+    if (
+      user.status === AccountStatus.SUSPENDED ||
+      user.status === AccountStatus.DELETED
+    ) {
+      assertAccountActive(user.status);
+    }
     // Only reached with the right password, so it doesn't reveal the email.
     if (!user.emailVerifiedAt) {
       await this.sendCodeQuietly(user);
@@ -104,6 +111,13 @@ export class AuthService {
 
   async verifyEmail(dto: VerifyEmailDto): Promise<AuthResponseDto> {
     const user = await this.usersService.findByEmail(dto.email);
+    if (
+      user &&
+      (user.status === AccountStatus.SUSPENDED ||
+        user.status === AccountStatus.DELETED)
+    ) {
+      throw new BadRequestException('Invalid or expired verification code');
+    }
     const result =
       user && !user.emailVerifiedAt
         ? await this.emailVerificationService.verify(user, dto.code)
@@ -211,6 +225,7 @@ export class AuthService {
   async getCurrentUser(userId: string): Promise<PublicUser> {
     const user = await this.usersService.findPublicById(userId);
     if (!user) throw new NotFoundException('User not found');
+    assertAccountActive(user.status);
     return user;
   }
 
@@ -227,11 +242,18 @@ export class AuthService {
   async googleLogin(profile: GoogleProfileUser): Promise<AuthResponseDto> {
     const googleUser = await this.usersService.findByGoogleId(profile.googleId);
     if (googleUser) {
+      assertAccountActive(googleUser.status);
       return this.createAuthResponse(this.toPublicUser(googleUser));
     }
 
     const existingUser = await this.usersService.findByEmail(profile.email);
     if (existingUser) {
+      if (
+        existingUser.status === AccountStatus.SUSPENDED ||
+        existingUser.status === AccountStatus.DELETED
+      ) {
+        assertAccountActive(existingUser.status);
+      }
       const user = await this.usersService.linkGoogleAccount(
         existingUser,
         profile.googleId,
@@ -253,6 +275,7 @@ export class AuthService {
       fullName: profile.fullName,
       email: profile.email,
       emailVerifiedAt: new Date(),
+      status: AccountStatus.ACTIVE,
     });
     return this.createAuthResponse(user);
   }
@@ -271,6 +294,9 @@ export class AuthService {
     user: PublicUser,
     issuedRefreshToken?: IssuedRefreshToken,
   ): Promise<AuthResponseDto> {
+    // Verification/linking may have changed status; never issue from a stale
+    // pre-verification account snapshot.
+    user = await this.getCurrentUser(user.id);
     const payload: JwtPayload = { sub: user.id, username: user.username };
     const [accessToken, refreshToken] = await Promise.all([
       this.jwtService.signAsync(payload),
@@ -296,6 +322,8 @@ export class AuthService {
       fullName: user.fullName,
       email: user.email,
       role: user.role,
+      status: user.status,
+      accountVersion: user.accountVersion,
       createdAt: user.createdAt,
       updatedAt: user.updatedAt,
     };

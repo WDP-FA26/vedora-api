@@ -1,4 +1,4 @@
-import { PrismaClient, UserRole } from '@prisma/client';
+import { AccountStatus, PrismaClient, UserRole } from '@prisma/client';
 import { compare, hash, truncates } from 'bcryptjs';
 
 export async function seedDatabase(prisma: PrismaClient): Promise<void> {
@@ -51,6 +51,7 @@ export async function seedDatabase(prisma: PrismaClient): Promise<void> {
         role: UserRole.ADMIN,
         // admin@vedora.local can't receive mail.
         emailVerifiedAt: new Date(),
+        status: AccountStatus.ACTIVE,
       },
     });
   }

@@ -69,6 +69,8 @@ describe('Blogs (HTTP)', () => {
   beforeEach(() => {
     mockReset(prisma);
     prisma.user.findUnique.mockResolvedValue({
+      status: 'ACTIVE',
+      accountVersion: 0,
       id: AUTHOR_ID,
       username: 'chef',
       role: UserRole.USER,

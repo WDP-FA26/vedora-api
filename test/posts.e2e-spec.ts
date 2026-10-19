@@ -47,6 +47,8 @@ describe('Post reads and admin posts (e2e)', () => {
 
   function signInAs(role: UserRole) {
     prisma.user.findUnique.mockResolvedValue({
+      status: 'ACTIVE',
+      accountVersion: 0,
       id: ADMIN_ID,
       username: 'vedora.admin',
       role,
