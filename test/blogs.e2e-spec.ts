@@ -26,6 +26,7 @@ const row = {
   createdAt: now,
   updatedAt: now,
   viewCount: 0,
+  searchIndexedAt: null,
   author: {
     id: AUTHOR_ID,
     username: 'chef',

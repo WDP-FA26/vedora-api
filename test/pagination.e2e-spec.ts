@@ -45,6 +45,7 @@ describe('Shared pagination (e2e)', () => {
     },
     media: [],
     viewCount: 7,
+    searchIndexedAt: null,
     reposts: [],
     bookmarks: [],
     _count: { comments: 0, likes: 0, reposts: 1 },

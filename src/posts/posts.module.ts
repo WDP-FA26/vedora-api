@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { MediaModule } from '../media/media.module';
+import { PostSearchModule } from '../post-search/post-search.module';
 import { AdminPostsController } from './admin-posts.controller';
 import { AdminReportsController } from './admin-reports.controller';
 import { AdminPostsService } from './admin-posts.service';
@@ -13,7 +14,7 @@ import { BlogsController } from './blogs.controller';
 import { BlogsService } from './blogs.service';
 
 @Module({
-  imports: [MediaModule],
+  imports: [MediaModule, PostSearchModule],
   controllers: [
     BlogsController,
     PostsController,

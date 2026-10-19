@@ -46,6 +46,7 @@ const post = {
   createdAt: now,
   updatedAt: now,
   viewCount: 7,
+  searchIndexedAt: null,
   reposts: [],
   bookmarks: [],
   _count: { comments: 2, likes: 3, reposts: 1 },

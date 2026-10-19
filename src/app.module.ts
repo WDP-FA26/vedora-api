@@ -113,6 +113,19 @@ import { VerificationModule } from './verification/verification.module';
         // Header carrying the visitor's IP, e.g. cf-connecting-ip behind a
         // Cloudflare Tunnel. Empty: the socket address.
         CLIENT_IP_HEADER: Joi.string().allow('').default(''),
+        // Post search lives in its own collection, apart from the knowledge
+        // base. Changing the model or size needs a new QDRANT_POSTS_COLLECTION;
+        // the API reindexes every post into it.
+        QDRANT_POSTS_COLLECTION: Joi.string().default('vedora_posts'),
+        POST_SEARCH_EMBEDDING_MODEL: Joi.string().default(
+          'google/gemini-embedding-2',
+        ),
+        POST_SEARCH_EMBEDDING_DIMENSIONS: Joi.number()
+          .integer()
+          .positive()
+          .default(768),
+        // Cosine similarity a post needs to match by meaning alone.
+        POST_SEARCH_MIN_SCORE: Joi.number().min(0).max(1).default(0.65),
         OPENROUTER_RERANK_MODEL: Joi.string()
           .allow('')
           .default('cohere/rerank-v3.5'),

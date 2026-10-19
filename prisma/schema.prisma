@@ -168,25 +168,29 @@ enum PostStatus {
 }
 
 model Post {
-  id          String         @id @default(uuid()) @db.Uuid
-  authorId    String         @map("author_id") @db.Uuid
-  type        PostType       @default(POST)
-  status      PostStatus     @default(PROCESSING)
-  body        String?        @db.VarChar(280)
+  id              String         @id @default(uuid()) @db.Uuid
+  authorId        String         @map("author_id") @db.Uuid
+  type            PostType       @default(POST)
+  status          PostStatus     @default(PROCESSING)
+  /// Up to 250 words (`MAX_POST_BODY_WORDS`); the length cap only bounds very long words.
+  body            String?        @db.VarChar(2000)
+  /// When the body was embedded into the Qdrant post search collection; null
+  /// while it still needs indexing (see `PostSearchService`).
+  searchIndexedAt DateTime?      @map("search_indexed_at")
   /// Viewable impressions, added in batches by `PostViewsService`.
-  viewCount   Int            @default(0) @map("view_count")
-  publishedAt DateTime?      @map("published_at")
-  createdAt   DateTime       @default(now()) @map("created_at")
-  updatedAt   DateTime       @updatedAt @map("updated_at")
-  author      User           @relation(fields: [authorId], references: [id], onDelete: Cascade)
-  media       MediaAsset[]
-  comments    PostComment[]
-  likes       PostLike[]
-  reposts     PostRepost[]
-  bookmarks   PostBookmark[]
-  reports     PostReport[]
-  recipes     Recipe[]
-  blog        Blog?
+  viewCount       Int            @default(0) @map("view_count")
+  publishedAt     DateTime?      @map("published_at")
+  createdAt       DateTime       @default(now()) @map("created_at")
+  updatedAt       DateTime       @updatedAt @map("updated_at")
+  author          User           @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  media           MediaAsset[]
+  comments        PostComment[]
+  likes           PostLike[]
+  reposts         PostRepost[]
+  bookmarks       PostBookmark[]
+  reports         PostReport[]
+  recipes         Recipe[]
+  blog            Blog?
 
   @@index([status, publishedAt])
   @@index([authorId, createdAt])

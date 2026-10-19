@@ -31,6 +31,7 @@ import { CreatePostDto } from './dto/create-post.dto';
 import { RecordViewsDto } from './dto/post-interaction.dto';
 import { ListPostsQueryDto } from './dto/list-posts-query.dto';
 import { PostPageDto, PostResponseDto } from './dto/post-response.dto';
+import { SearchPostsQueryDto } from './dto/search-posts-query.dto';
 import { PostViewsService } from './post-views.service';
 import { PostsService } from './posts.service';
 
@@ -90,6 +91,22 @@ export class PostsController {
     @Req() request: OptionalAuthenticatedRequest,
   ): Promise<PostPageDto> {
     return this.postsService.list(query, request.user?.sub);
+  }
+
+  @Get('search')
+  @UseGuards(OptionalJwtAuthGuard)
+  @ApiOperation({
+    summary: 'Search published posts, best match first',
+    description:
+      'Matches the text of short posts by meaning and by keywords (accents optional). A new post is searchable a few seconds after it is published. Results go up to 200 deep; `nextCursor` is an opaque string.',
+    security: [{}, { bearer: [] }],
+  })
+  @ApiOkResponse({ type: PostPageDto })
+  search(
+    @Query() query: SearchPostsQueryDto,
+    @Req() request: OptionalAuthenticatedRequest,
+  ): Promise<PostPageDto> {
+    return this.postsService.search(query, request.user?.sub);
   }
 
   @Get('bookmarks')

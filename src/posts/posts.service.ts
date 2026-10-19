@@ -12,11 +12,17 @@ import {
 } from '../common/pagination';
 import { MediaService } from '../media/media.service';
 import { MuxService } from '../mux/mux.service';
+import { PostSearchIndexService } from '../post-search/post-search-index.service';
+import {
+  MAX_SEARCH_RESULTS,
+  PostSearchService,
+} from '../post-search/post-search.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { blogSummarySelect, toBlogSummary } from './blog-query';
 import { CreatePostDto } from './dto/create-post.dto';
 import { ListPostsQueryDto } from './dto/list-posts-query.dto';
 import { PostPageDto, PostResponseDto } from './dto/post-response.dto';
+import { SearchPostsQueryDto } from './dto/search-posts-query.dto';
 
 export const postInclude = (viewerId?: string) =>
   ({
@@ -53,6 +59,8 @@ export class PostsService {
     private readonly prisma: PrismaService,
     private readonly mediaService: MediaService,
     private readonly mux: MuxService,
+    private readonly searchIndex: PostSearchIndexService,
+    private readonly postSearch: PostSearchService,
   ) {}
 
   /**
@@ -79,8 +87,50 @@ export class PostsService {
       return post;
     });
     await this.mediaService.settlePosts({ id });
+    // A text-only post is published by now; one with video is indexed by the
+    // catch-up cron once Mux finishes.
+    this.searchIndex.schedule();
 
     return this.toResponse(await this.load(id, authorId));
+  }
+
+  /** Published posts matching `q`, best match first. */
+  async search(
+    query: SearchPostsQueryDto,
+    viewerId?: string,
+  ): Promise<PostPageDto> {
+    const offset = query.cursor ?? 0;
+    const limit = Math.min(query.limit, MAX_SEARCH_RESULTS - offset);
+    if (limit <= 0) return { items: [], nextCursor: null };
+
+    const { ids, hasMore } = await this.postSearch.search(
+      query.q,
+      offset,
+      limit,
+    );
+    const posts = await this.snapshot(
+      this.prisma.post.findMany({
+        where: { id: { in: ids } },
+        include: postInclude(viewerId),
+      }),
+    );
+    const found = new Map(posts.map((post) => [post.id, post]));
+    const missing = ids.filter((id) => !found.has(id));
+    if (missing.length > 0) {
+      void this.postSearch.prune(missing).catch(() => undefined);
+    }
+    return {
+      items: ids.flatMap((id) => {
+        const post = found.get(id);
+        return post?.status === PostStatus.PUBLISHED
+          ? [this.toResponse(post)]
+          : [];
+      }),
+      nextCursor:
+        hasMore && offset + limit < MAX_SEARCH_RESULTS
+          ? String(offset + limit)
+          : null,
+    };
   }
 
   async list(
@@ -197,6 +247,7 @@ export class PostsService {
       select: { id: true },
     });
     await this.prisma.post.delete({ where: { id } });
+    await this.searchIndex.remove(id);
     // The media rows were detached (`onDelete: SetNull`); remove them from
     // Mux the same way as discarded uploads, retried until Mux confirms.
     await this.mediaService.discard({

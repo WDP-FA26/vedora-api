@@ -4,6 +4,8 @@ import { join } from 'node:path';
 import { PostType, PrismaClient } from '@prisma/client';
 import { MediaService } from '../src/media/media.service';
 import { MuxService } from '../src/mux/mux.service';
+import { PostSearchIndexService } from '../src/post-search/post-search-index.service';
+import { PostSearchService } from '../src/post-search/post-search.service';
 import { PrismaService } from '../src/prisma/prisma.service';
 import { BlogsService } from '../src/posts/blogs.service';
 import { PostInteractionsService } from '../src/posts/post-interactions.service';
@@ -43,7 +45,13 @@ describe('Blog lifecycle with PostgreSQL', () => {
     prisma = new PrismaClient({ datasourceUrl: url.toString() });
     const db = prisma as PrismaService;
     // Blog posts have no attached videos; no external media operations occur.
-    posts = new PostsService(db, {} as MediaService, {} as MuxService);
+    posts = new PostsService(
+      db,
+      {} as MediaService,
+      {} as MuxService,
+      {} as PostSearchIndexService,
+      {} as PostSearchService,
+    );
     blogs = new BlogsService(db, posts);
     interactions = new PostInteractionsService(db);
     const author = await prisma.user.create({

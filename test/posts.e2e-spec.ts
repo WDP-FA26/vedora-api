@@ -7,6 +7,8 @@ import type { App } from 'supertest/types';
 import { mockDeep, mockReset } from 'vitest-mock-extended';
 import { AppModule } from '../src/app.module';
 import { configureApp } from '../src/app.setup';
+import { PostSearchIndexService } from '../src/post-search/post-search-index.service';
+import { PostSearchService } from '../src/post-search/post-search.service';
 import { PrismaService } from '../src/prisma/prisma.service';
 
 const ADMIN_ID = '4a1e32e4-e18e-4dd7-8b4a-246ef2113ff2';
@@ -30,6 +32,7 @@ const post = {
   createdAt: now,
   updatedAt: now,
   viewCount: 7,
+  searchIndexedAt: null,
   reposts: [],
   bookmarks: [],
   _count: { comments: 0, likes: 0, reposts: 1 },
@@ -37,6 +40,8 @@ const post = {
 
 describe('Post reads and admin posts (e2e)', () => {
   const prisma = mockDeep<PrismaService>();
+  const postSearch = mockDeep<PostSearchService>();
+  const searchIndex = mockDeep<PostSearchIndexService>();
   let app: INestApplication<App>;
   let token: string;
 
@@ -52,6 +57,10 @@ describe('Post reads and admin posts (e2e)', () => {
     const moduleRef = await Test.createTestingModule({ imports: [AppModule] })
       .overrideProvider(PrismaService)
       .useValue(prisma)
+      .overrideProvider(PostSearchService)
+      .useValue(postSearch)
+      .overrideProvider(PostSearchIndexService)
+      .useValue(searchIndex)
       .compile();
     app = moduleRef.createNestApplication({ rawBody: true });
     configureApp(app);
@@ -64,6 +73,8 @@ describe('Post reads and admin posts (e2e)', () => {
 
   beforeEach(() => {
     mockReset(prisma);
+    mockReset(postSearch);
+    mockReset(searchIndex);
     signInAs(UserRole.ADMIN);
     prisma.$transaction.mockImplementation((run: unknown) =>
       Promise.all(run as Promise<unknown>[]),
@@ -112,6 +123,56 @@ describe('Post reads and admin posts (e2e)', () => {
       .auth(token, { type: 'bearer' })
       .expect(204);
     expect(prisma.post.delete).toHaveBeenCalledWith({ where: { id: POST_ID } });
+    expect(searchIndex.remove).toHaveBeenCalledWith(POST_ID);
+  });
+
+  it('limits a post body to 250 words', async () => {
+    const words = (count: number) => Array(count).fill('rau').join(' ');
+    const response = await request(app.getHttpServer())
+      .post('/api/v1/posts')
+      .auth(token, { type: 'bearer' })
+      .send({ type: PostType.POST, body: words(251) })
+      .expect(400);
+    expect((response.body as { message: string[] }).message).toEqual([
+      'body must be at most 250 words',
+    ]);
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+
+  it('searches published posts in match order for guests', async () => {
+    const OTHER_ID = 'f1a2d3e4-0000-4000-8000-000000000002';
+    const published = { ...post, status: PostStatus.PUBLISHED, likes: [] };
+    postSearch.search.mockResolvedValue({
+      ids: [OTHER_ID, POST_ID],
+      hasMore: true,
+    });
+    postSearch.prune.mockResolvedValue();
+    // OTHER_ID was deleted after it was indexed.
+    prisma.post.findMany.mockResolvedValue([published] as never);
+
+    const response = await request(app.getHttpServer())
+      .get('/api/v1/posts/search')
+      .query({ q: '  dau hu  ', limit: 2, cursor: 4 })
+      .expect(200);
+
+    expect(postSearch.search).toHaveBeenCalledWith('dau hu', 4, 2);
+    expect(response.body).toMatchObject({
+      items: [{ id: POST_ID }],
+      nextCursor: '6',
+    });
+    expect(postSearch.prune).toHaveBeenCalledWith([OTHER_ID]);
+  });
+
+  it('rejects an empty search or one past the search depth', async () => {
+    await request(app.getHttpServer())
+      .get('/api/v1/posts/search')
+      .query({ q: '   ' })
+      .expect(400);
+    await request(app.getHttpServer())
+      .get('/api/v1/posts/search')
+      .query({ q: 'phở', cursor: 201 })
+      .expect(400);
+    expect(postSearch.search).not.toHaveBeenCalled();
   });
 
   it('lets guests read a published post but not one still processing', async () => {
