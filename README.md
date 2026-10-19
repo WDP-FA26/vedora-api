@@ -246,6 +246,17 @@ Tài liệu FE: [docs/docs-for-FE/post-comments-likes.md](docs/docs-for-FE/post-
 Không cần migration mới. API quản lý công thức vẫn thuộc admin. Hợp đồng FE và
 ví dụ: [Kho công thức và thực đơn](docs/docs-for-FE/recipe-catalog-meal-plan.md).
 
+## Đánh giá công thức
+
+- `GET /api/v1/recipes/:id/ratings/summary`: tổng và điểm trung bình công khai.
+- `GET /api/v1/recipes/:id/rating`: điểm của người gọi, cần đăng nhập.
+- `PUT /api/v1/recipes/:id/rating` với `{ "value": 4 }`: chấm/cập nhật từ 1–5 sao.
+- `DELETE /api/v1/recipes/:id/rating`: gỡ điểm của mình; cả PUT/DELETE idempotent.
+- Không tự chấm công thức của mình; điểm trung bình không có dữ liệu thì `null`.
+
+Cần migration `20261019130000_recipe_ratings`. Hợp đồng, quyền và phạm vi hiện tại:
+[Đánh giá công thức](docs/docs-for-FE/recipe-ratings.md).
+
 ## Blog công thức dài
 
 - `POST /api/v1/blogs`: tạo bài có tiêu đề, ảnh bìa HTTPS, Markdown và công thức
