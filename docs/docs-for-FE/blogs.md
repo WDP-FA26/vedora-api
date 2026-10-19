@@ -92,6 +92,25 @@ không dùng `dangerouslySetInnerHTML` cho chuỗi nguồn. Renderer cần chặ
 hiển thị như text, không render HTML/Markdown. Backend lưu văn bản nguồn,
 không trả HTML đã render. JSON request tối đa 512 KiB để hỗ trợ UTF-8 dài.
 
+## Ảnh và video trong bài
+
+Nội dung vẫn là Markdown; ảnh/video chỉ là URL công khai trong văn bản.
+
+| Method | Endpoint                | Quyền     | Kết quả                                       |
+| ------ | ----------------------- | --------- | --------------------------------------------- |
+| POST   | `/blogs/images/uploads` | Đăng nhập | Presigned PUT lên RustFS + `url` công khai    |
+| POST   | `/blogs/videos/uploads` | Đăng nhập | Chữ ký upload Cloudinary + `url` MP4 công khai |
+
+- Ảnh: body `{ "contentType": "image/jpeg|png|webp|gif", "sizeBytes": ≤ 5 MiB }`.
+  PUT file thô tới `upload.url` kèm `upload.headers`, không gửi Authorization.
+  Lưu bucket `STORAGE_BLOGS_BUCKET` (đọc công khai), không ghi DB; không có bước activate.
+- Video: không body. POST multipart `upload.fields` + `file` tới `upload.url`
+  (chia chunk nếu lớn hơn `chunkSize`, như `/media/uploads`). Video nằm ngoài
+  luồng media của post nên không bị dọn orphan và không qua webhook/HLS.
+- Chèn vào `content` bằng cú pháp ảnh: `![chú thích](url)`. Renderer coi URL có
+  `/video/upload/` là video (`<video controls>`), còn lại là ảnh.
+- File đã upload nhưng bị xóa khỏi bài chưa được dọn tự động.
+
 ## Liên kết món và tương tác
 
 Hiển thị `blog.recipes` thành các món liên quan. Bấm món gọi
