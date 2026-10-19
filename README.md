@@ -246,6 +246,13 @@ Tài liệu FE: [docs/docs-for-FE/post-comments-likes.md](docs/docs-for-FE/post-
 Không cần migration mới. API quản lý công thức vẫn thuộc admin. Hợp đồng FE và
 ví dụ: [Kho công thức và thực đơn](docs/docs-for-FE/recipe-catalog-meal-plan.md).
 
+## Danh sách mua sắm từ thực đơn
+
+`GET /api/v1/meal-plan/shopping-list?days=MON,TUE` tổng hợp nguyên liệu của thực
+đơn riêng, mặc định cả tuần. Cộng theo ingredientId + cùng đơn vị, mỗi lần món
+xuất hiện tính đủ định lượng gốc, giữ rõ lượng chưa biết và nguồn món/ngày/bữa.
+Không cần migration. [Hợp đồng FE](docs/docs-for-FE/meal-plan-shopping-list.md).
+
 ## Blog công thức dài
 
 - `POST /api/v1/blogs`: tạo bài có tiêu đề, ảnh bìa HTTPS, Markdown và công thức
