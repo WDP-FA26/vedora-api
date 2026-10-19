@@ -1,27 +1,22 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { MediaAsset, Prisma } from '@prisma/client';
+import { MediaAsset, MediaCaption, Prisma } from '@prisma/client';
 import {
   createPaginatedResponse,
   getPaginationArgs,
   PaginatedResponseDto,
 } from '../common/pagination';
-import { CaptionService } from '../media/caption.service';
 import { AdminMediaDto } from '../media/dto/media-response.dto';
 import { MediaService } from '../media/media.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { blogSummarySelect, toBlogSummary } from './blog-query';
-import {
-  AdminPostDetailDto,
-  AdminPostDto,
-  AdminPostsQueryDto,
-} from './dto/admin-post.dto';
+import { AdminPostDto, AdminPostsQueryDto } from './dto/admin-post.dto';
 
 const adminPostInclude = {
   blog: { select: blogSummarySelect },
   author: {
     select: { id: true, username: true, fullName: true, avatarUrl: true },
   },
-  media: { orderBy: { position: 'asc' } },
+  media: { orderBy: { position: 'asc' }, include: { captions: true } },
   _count: { select: { comments: true, likes: true, reposts: true } },
 } satisfies Prisma.PostInclude;
 
@@ -33,7 +28,6 @@ export class AdminPostsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly mediaService: MediaService,
-    private readonly captions: CaptionService,
   ) {}
 
   async findAll(
@@ -59,21 +53,13 @@ export class AdminPostsService {
     );
   }
 
-  async findOne(id: string): Promise<AdminPostDetailDto> {
+  async findOne(id: string): Promise<AdminPostDto> {
     const row = await this.prisma.post.findUnique({
       where: { id },
       include: adminPostInclude,
     });
     if (!row) throw new NotFoundException('Post not found');
-    return {
-      ...this.toDto(row),
-      media: await Promise.all(
-        row.media.map(async (media) => ({
-          ...this.toMediaDto(media),
-          captions: await this.captions.listTracks(media),
-        })),
-      ),
-    };
+    return this.toDto(row);
   }
 
   private toDto(row: AdminPostRow): AdminPostDto {
@@ -94,7 +80,9 @@ export class AdminPostsService {
     };
   }
 
-  private toMediaDto(media: MediaAsset): AdminMediaDto {
+  private toMediaDto(
+    media: MediaAsset & { captions: MediaCaption[] },
+  ): AdminMediaDto {
     return {
       ...this.mediaService.toResponse(media),
       captionStatus: media.captionStatus,

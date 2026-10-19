@@ -1,8 +1,13 @@
 import { ConfigService } from '@nestjs/config';
 import { Test } from '@nestjs/testing';
-import { CaptionStatus, MediaAsset, MediaStatus, MediaType } from '@prisma/client';
+import {
+  CaptionStatus,
+  MediaAsset,
+  MediaStatus,
+  MediaType,
+} from '@prisma/client';
 import { type DeepMockProxy, mockDeep } from 'vitest-mock-extended';
-import { MuxService } from '../mux/mux.service';
+import { CloudinaryService } from '../cloudinary/cloudinary.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { MediaMaintenanceService } from './media-maintenance.service';
 import { CaptionService } from './caption.service';
@@ -16,15 +21,11 @@ const ownerless: MediaAsset = {
   failureReason: null,
   postId: null,
   position: 0,
-  muxUploadId: 'upload-1',
-  muxAssetId: 'asset-1',
-  playbackId: 'playback-1',
+  publicId: 'vedora/videos/0b0d9c3e-3f0c-4c5e-9d0a-2b7f1f4d8a11',
   durationSec: 42,
   aspectRatio: '16:9',
   captionStatus: CaptionStatus.NONE,
   captionLanguage: null,
-  captionTrackId: null,
-  captionJobId: null,
   discardedAt: new Date('2026-09-25T00:00:00.000Z'),
   createdAt: new Date('2026-09-24T00:00:00.000Z'),
   updatedAt: new Date('2026-09-24T00:00:00.000Z'),
@@ -43,15 +44,16 @@ describe('MediaMaintenanceService', () => {
     const moduleRef = await Test.createTestingModule({
       providers: [
         MediaMaintenanceService,
-        MuxService,
+        CloudinaryService,
         { provide: PrismaService, useValue: prisma },
         { provide: MediaService, useValue: mediaService },
         { provide: CaptionService, useValue: captions },
         {
           provide: ConfigService,
           useValue: new ConfigService({
-            MUX_TOKEN_ID: 'id',
-            MUX_TOKEN_SECRET: 'secret',
+            CLOUDINARY_CLOUD_NAME: 'demo',
+            CLOUDINARY_API_KEY: 'key',
+            CLOUDINARY_API_SECRET: 'secret',
           }),
         },
       ],
@@ -59,7 +61,7 @@ describe('MediaMaintenanceService', () => {
     maintenance = moduleRef.get(MediaMaintenanceService);
   });
 
-  it('discards media of deleted accounts and purges it from Mux', async () => {
+  it('discards media of deleted accounts and purges it from Cloudinary', async () => {
     prisma.mediaAsset.findMany.mockResolvedValue([ownerless]);
 
     await maintenance.purgeDiscarded();
@@ -70,15 +72,10 @@ describe('MediaMaintenanceService', () => {
     expect(mediaService.purge).toHaveBeenCalledWith(ownerless);
   });
 
-  it('retries captions whose webhook never arrived', async () => {
-    const waiting = { ...ownerless, captionStatus: CaptionStatus.GENERATING };
-    captions.findInFlight.mockResolvedValue([waiting]);
-
+  it('releases captioning cut off by a restart and resumes it', async () => {
     await maintenance.advanceCaptions();
 
-    expect(captions.start).toHaveBeenCalledWith();
-    const [staleBefore] = captions.findInFlight.mock.calls[0];
-    expect(staleBefore.getTime()).toBeLessThan(Date.now() - 9 * 60 * 1000);
-    expect(captions.advance).toHaveBeenCalledWith(waiting);
+    expect(captions.releaseStale).toHaveBeenCalled();
+    expect(captions.schedule).toHaveBeenCalled();
   });
 });

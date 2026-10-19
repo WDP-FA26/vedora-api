@@ -1,4 +1,4 @@
-import { createHmac } from 'node:crypto';
+import { createHash } from 'node:crypto';
 import { INestApplication } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { UserRole } from '@prisma/client';
@@ -11,17 +11,17 @@ import { AppModule } from '../src/app.module';
 import { configureApp } from '../src/app.setup';
 import { GuestSessionService } from '../src/nutrition-chat/guest/guest-session.service';
 import { KnowledgeService } from '../src/knowledge/knowledge.service';
-import { assetReady } from '../src/media/media.fixtures';
+import { uploaded } from '../src/media/media.fixtures';
 import { PrismaService } from '../src/prisma/prisma.service';
 
-const WEBHOOK_SECRET = 'e2e-webhook-secret';
+const CLOUDINARY_SECRET = 'e2e-api-secret';
 
-function signWebhook(payload: string, key = WEBHOOK_SECRET) {
-  const timestamp = Math.floor(Date.now() / 1000);
-  const digest = createHmac('sha256', key)
-    .update(`${timestamp}.${payload}`)
+function signWebhook(payload: string, key = CLOUDINARY_SECRET) {
+  const timestamp = String(Math.floor(Date.now() / 1000));
+  const signature = createHash('sha1')
+    .update(payload + timestamp + key)
     .digest('hex');
-  return `t=${timestamp},v1=${digest}`;
+  return { 'x-cld-timestamp': timestamp, 'x-cld-signature': signature };
 }
 
 describe('Vedora API (e2e)', () => {
@@ -192,33 +192,37 @@ describe('Vedora API (e2e)', () => {
     });
   });
 
-  describe('POST /api/v1/webhooks/mux', () => {
-    const payload = JSON.stringify(assetReady(42));
+  describe('POST /api/v1/webhooks/cloudinary', () => {
+    const payload = JSON.stringify(uploaded(42));
 
-    it('accepts events signed over the raw body', async () => {
-      prisma.mediaAsset.findFirst.mockResolvedValue(null);
+    it('accepts notifications signed over the raw body', async () => {
+      prisma.mediaAsset.findUnique.mockResolvedValue({
+        id: '0b0d9c3e-3f0c-4c5e-9d0a-2b7f1f4d8a11',
+        status: 'READY',
+        discardedAt: null,
+      } as never);
 
       await request(app.getHttpServer())
-        .post('/api/v1/webhooks/mux')
+        .post('/api/v1/webhooks/cloudinary')
         .set('content-type', 'application/json')
-        .set('mux-signature', signWebhook(payload))
+        .set(signWebhook(payload))
         .send(payload)
         .expect(204);
 
-      expect(prisma.mediaAsset.findFirst).toHaveBeenCalled();
+      expect(prisma.mediaAsset.findUnique).toHaveBeenCalled();
     });
 
-    it('rejects events with a bad signature', async () => {
-      prisma.mediaAsset.findFirst.mockClear();
+    it('rejects notifications with a bad signature', async () => {
+      prisma.mediaAsset.findUnique.mockClear();
 
       await request(app.getHttpServer())
-        .post('/api/v1/webhooks/mux')
+        .post('/api/v1/webhooks/cloudinary')
         .set('content-type', 'application/json')
-        .set('mux-signature', signWebhook(payload, 'wrong-secret'))
+        .set(signWebhook(payload, 'wrong-secret'))
         .send(payload)
         .expect(400);
 
-      expect(prisma.mediaAsset.findFirst).not.toHaveBeenCalled();
+      expect(prisma.mediaAsset.findUnique).not.toHaveBeenCalled();
     });
   });
 

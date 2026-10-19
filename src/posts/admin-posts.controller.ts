@@ -27,11 +27,7 @@ import {
   PaginatedResponseDto,
 } from '../common/pagination';
 import { AdminPostsService } from './admin-posts.service';
-import {
-  AdminPostDetailDto,
-  AdminPostDto,
-  AdminPostsQueryDto,
-} from './dto/admin-post.dto';
+import { AdminPostDto, AdminPostsQueryDto } from './dto/admin-post.dto';
 import { PostsService } from './posts.service';
 
 @ApiTags('admin')
@@ -63,10 +59,10 @@ export class AdminPostsController {
   @ApiOperation({
     summary: 'Get a post with the caption tracks of its videos',
     description:
-      'Each track links to its WebVTT file on Mux, which holds the transcript.',
+      'Each track links to its WebVTT file on Cloudinary, which holds the transcript.',
   })
-  @ApiOkResponse({ type: AdminPostDetailDto })
-  findOne(@Param('id', ParseUUIDPipe) id: string): Promise<AdminPostDetailDto> {
+  @ApiOkResponse({ type: AdminPostDto })
+  findOne(@Param('id', ParseUUIDPipe) id: string): Promise<AdminPostDto> {
     return this.adminPosts.findOne(id);
   }
 

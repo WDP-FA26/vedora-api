@@ -8,10 +8,10 @@ import { StorageModule } from './storage/storage.module';
 import { StorageWebhookModule } from './storage/storage-webhook.module';
 import { HealthModule } from './health/health.module';
 import { KnowledgeModule } from './knowledge/knowledge.module';
+import { CloudinaryModule } from './cloudinary/cloudinary.module';
 import { MailModule } from './mail/mail.module';
 import { MealPlanModule } from './meal-plan/meal-plan.module';
 import { MediaModule } from './media/media.module';
-import { MuxModule } from './mux/mux.module';
 import { NutritionChatModule } from './nutrition-chat/nutrition-chat.module';
 import { REASONING_EFFORTS } from './nutrition-chat/nutrition-chat.agent';
 import { PostsModule } from './posts/posts.module';
@@ -52,16 +52,19 @@ import { VerificationModule } from './verification/verification.module';
           otherwise: Joi.allow('').default(''),
         }),
         MAIL_FROM: Joi.string().default('Vedora <onboarding@resend.dev>'),
-        // Origin the browser uploads videos from (Mux direct-upload CORS).
         FRONTEND_URL: Joi.string().uri().default('http://localhost:3000'),
         // Empty: video uploads answer 503.
-        MUX_TOKEN_ID: Joi.string().allow('').default(''),
-        MUX_TOKEN_SECRET: Joi.string().allow('').default(''),
-        // Empty: no webhooks; pending media is refreshed from Mux on read.
-        MUX_WEBHOOK_SECRET: Joi.string().allow('').default(''),
+        CLOUDINARY_CLOUD_NAME: Joi.string().allow('').default(''),
+        CLOUDINARY_API_KEY: Joi.string().allow('').default(''),
+        CLOUDINARY_API_SECRET: Joi.string().allow('').default(''),
+        CLOUDINARY_FOLDER: Joi.string().default('vedora'),
+        // The console's notification URL points at /webhooks/cloudinary.
+        // False: pending media is refreshed from the Admin API on read.
+        CLOUDINARY_WEBHOOKS_ENABLED: Joi.boolean().default(false),
         MAX_VIDEO_DURATION_SEC: Joi.number().integer().positive().default(180),
-        // Caption published videos with Mux Robots (billed per minute).
-        MUX_CAPTIONS_ENABLED: Joi.boolean().default(false),
+        // Transcribe published videos with Whisper and translate them.
+        CAPTIONS_ENABLED: Joi.boolean().default(true),
+        TRANSCRIPTION_MODEL: Joi.string().default('openai/whisper-large-v3'),
         OPENROUTER_API_KEY: Joi.string().required(),
         OPENROUTER_MODEL: Joi.string().default('openrouter/auto'),
         // How long reasoning models think before answering.
@@ -134,7 +137,7 @@ import { VerificationModule } from './verification/verification.module';
     ScheduleModule.forRoot(),
     PrismaModule,
     MailModule,
-    MuxModule,
+    CloudinaryModule,
     StorageModule,
     QdrantModule,
     RecipesModule,

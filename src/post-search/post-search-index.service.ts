@@ -66,7 +66,7 @@ export class PostSearchIndexService {
       });
   }
 
-  /** Catches up on posts published by Mux webhooks or during an outage. */
+  /** Catches up on posts published by Cloudinary notifications or during an outage. */
   @Cron(CronExpression.EVERY_MINUTE)
   catchUp(): void {
     this.schedule();

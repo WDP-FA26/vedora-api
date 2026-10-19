@@ -6,6 +6,22 @@ import {
   MediaType,
 } from '@prisma/client';
 
+export class CaptionTrackDto {
+  @ApiProperty({ example: 'vi' })
+  languageCode!: string;
+
+  @ApiProperty({ example: 'Tiếng Việt' })
+  name!: string;
+
+  @ApiProperty({
+    description: 'The spoken language, as opposed to its translation',
+  })
+  isOriginal!: boolean;
+
+  @ApiProperty({ description: 'Public WebVTT file on Cloudinary' })
+  url!: string;
+}
+
 export class MediaResponseDto {
   @ApiProperty({ format: 'uuid' })
   id!: string;
@@ -24,36 +40,37 @@ export class MediaResponseDto {
   failureReason!: MediaFailureReason | null;
 
   @ApiProperty({
+    example: 'vedora/videos/0b0d9c3e-3f0c-4c5e-9d0a-2b7f1f4d8a11',
+    description: 'Cloudinary public ID, for next-cloudinary components',
+  })
+  publicId!: string;
+
+  @ApiProperty({
     nullable: true,
     type: String,
-    description: 'Mux public playback ID, set once READY',
+    description: 'Adaptive HLS stream (`sp_auto`), set once READY',
   })
-  playbackId!: string | null;
+  playbackUrl!: string | null;
+
+  @ApiProperty({
+    nullable: true,
+    type: String,
+    description: 'First frame as JPEG, set once READY',
+  })
+  posterUrl!: string | null;
 
   @ApiProperty({ nullable: true, type: Number, example: 42.5 })
   durationSec!: number | null;
 
   @ApiProperty({ nullable: true, type: String, example: '16:9' })
   aspectRatio!: string | null;
-}
-
-export class CaptionTrackDto {
-  @ApiProperty({ description: 'Mux text track ID' })
-  id!: string;
-
-  @ApiProperty({ nullable: true, type: String, example: 'vi' })
-  languageCode!: string | null;
-
-  @ApiProperty({ example: 'Tiếng Việt' })
-  name!: string;
 
   @ApiProperty({
-    description: 'The spoken language, as opposed to its translation',
+    type: [CaptionTrackDto],
+    description:
+      'Caption tracks, spoken language first; empty until the post is published and transcribed',
   })
-  isOriginal!: boolean;
-
-  @ApiProperty({ description: 'Public WebVTT file on Mux' })
-  url!: string;
+  captions!: CaptionTrackDto[];
 }
 
 export class AdminMediaDto extends MediaResponseDto {
@@ -64,26 +81,38 @@ export class AdminMediaDto extends MediaResponseDto {
     nullable: true,
     type: String,
     example: 'vi',
-    description: 'Spoken language Mux detected',
+    description: 'Spoken language Whisper detected',
   })
   captionLanguage!: string | null;
 }
 
-export class AdminMediaDetailDto extends AdminMediaDto {
+export class SignedUploadDto {
   @ApiProperty({
-    type: [CaptionTrackDto],
-    description: 'Ready caption tracks, spoken language first',
+    example: 'https://api.cloudinary.com/v1_1/demo/video/upload',
+    description: 'POST the file here as multipart/form-data',
   })
-  captions!: CaptionTrackDto[];
+  url!: string;
+
+  @ApiProperty({
+    type: 'object',
+    additionalProperties: { type: 'string' },
+    description:
+      'Send every field as-is next to `file`. The signature expires after an hour.',
+  })
+  fields!: Record<string, string>;
+
+  @ApiProperty({
+    example: 20971520,
+    description:
+      'Larger files go in chunks of this many bytes, each with the same fields plus `X-Unique-Upload-Id` and `Content-Range` headers',
+  })
+  chunkSize!: number;
 }
 
 export class CreateUploadResponseDto {
   @ApiProperty({ type: MediaResponseDto })
   media!: MediaResponseDto;
 
-  @ApiProperty({
-    description:
-      'Mux direct-upload URL. PUT the file here from the browser (e.g. with UpChunk); it expires after an hour.',
-  })
-  uploadUrl!: string;
+  @ApiProperty({ type: SignedUploadDto })
+  upload!: SignedUploadDto;
 }

@@ -1,121 +1,157 @@
 import { ConfigService } from '@nestjs/config';
 import { Test } from '@nestjs/testing';
-import type Mux from '@mux/ts';
-import type { UnwrapWebhookEvent } from '@mux/ts/resources/webhooks/webhooks';
 import {
   MediaAsset,
   MediaFailureReason,
   MediaStatus,
+  MediaType,
   PostStatus,
 } from '@prisma/client';
+import type { MockInstance } from 'vitest';
 import { type DeepMockProxy, mockDeep } from 'vitest-mock-extended';
-import { MuxService } from '../mux/mux.service';
+import { CloudinaryService } from '../cloudinary/cloudinary.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { CaptionService } from './caption.service';
 import { MediaService } from './media.service';
-
 import {
-  assetReady,
-  eventBase,
   mediaId,
   ownerId,
   pendingMedia,
-  uploadAssetCreated,
+  publicId,
+  streamBuilt,
+  uploaded,
+  waitingMedia,
 } from './media.fixtures';
 
 describe('MediaService', () => {
   let service: MediaService;
   let prisma: DeepMockProxy<PrismaService>;
-  let muxClient: DeepMockProxy<Mux>;
   let captions: DeepMockProxy<CaptionService>;
+  let findVideo: MockInstance<CloudinaryService['findVideo']>;
+  let deleteMedia: MockInstance<CloudinaryService['deleteMedia']>;
 
   beforeEach(async () => {
     prisma = mockDeep<PrismaService>();
-    muxClient = mockDeep<Mux>();
     captions = mockDeep<CaptionService>();
     const moduleRef = await Test.createTestingModule({
       providers: [
         MediaService,
-        MuxService,
+        CloudinaryService,
         { provide: PrismaService, useValue: prisma },
         { provide: CaptionService, useValue: captions },
         {
           provide: ConfigService,
           useValue: new ConfigService({
-            MUX_TOKEN_ID: 'id',
-            MUX_TOKEN_SECRET: 'secret',
+            CLOUDINARY_CLOUD_NAME: 'demo',
+            CLOUDINARY_API_KEY: 'key',
+            CLOUDINARY_API_SECRET: 'secret',
             MAX_VIDEO_DURATION_SEC: 180,
           }),
         },
       ],
     }).compile();
     service = moduleRef.get(MediaService);
-    // The real MuxService reads config; only its SDK client is mocked.
-    vi.spyOn(moduleRef.get(MuxService), 'require').mockReturnValue(muxClient);
+    // The real CloudinaryService signs and builds URLs; only its API calls are mocked.
+    const cloudinary = moduleRef.get(CloudinaryService);
+    findVideo = vi.spyOn(cloudinary, 'findVideo').mockResolvedValue(null);
+    deleteMedia = vi.spyOn(cloudinary, 'deleteMedia').mockResolvedValue();
 
+    prisma.mediaAsset.findUnique.mockResolvedValue(waitingMedia);
     prisma.mediaAsset.findFirst.mockResolvedValue(pendingMedia);
+    prisma.mediaAsset.findUniqueOrThrow.mockResolvedValue(pendingMedia);
     prisma.mediaAsset.updateMany.mockResolvedValue({ count: 1 });
     prisma.post.updateMany.mockResolvedValue({ count: 1 });
   });
 
-  it('marks media READY and publishes its post when the asset is ready', async () => {
-    await service.handleWebhook(assetReady(42));
+  it('signs an upload that pins the public ID and the HLS job', async () => {
+    prisma.mediaAsset.count.mockResolvedValue(0);
+    prisma.mediaAsset.create.mockImplementation(
+      ({ data }) =>
+        ({ ...waitingMedia, ...data }) as unknown as ReturnType<
+          typeof prisma.mediaAsset.create
+        >,
+    );
 
-    expect(prisma.mediaAsset.findFirst).toHaveBeenCalledWith({
-      where: { id: mediaId },
+    const { media, upload } = await service.createUpload(
+      ownerId,
+      MediaType.VIDEO,
+    );
+
+    expect(media.publicId).toBe(`vedora/videos/${media.id}`);
+    expect(upload.url).toBe(
+      'https://api.cloudinary.com/v1_1/demo/video/upload',
+    );
+    expect(upload.fields).toMatchObject({
+      public_id: media.publicId,
+      eager: 'sp_auto/m3u8',
+      eager_async: 'true',
+      api_key: 'key',
     });
+    expect(upload.fields.signature).toMatch(/^[0-9a-f]{40}$/);
+  });
+
+  it('records the upload and waits for the stream', async () => {
+    await service.handleNotification(uploaded(42));
+
+    expect(prisma.mediaAsset.updateMany).toHaveBeenCalledWith({
+      where: { id: mediaId, status: MediaStatus.WAITING_UPLOAD },
+      data: {
+        status: MediaStatus.PROCESSING,
+        durationSec: 42,
+        aspectRatio: '9:16',
+      },
+    });
+    expect(prisma.post.updateMany).not.toHaveBeenCalled();
+  });
+
+  it('marks media READY and publishes its post once the stream is built', async () => {
+    await service.handleNotification(streamBuilt());
+
     const [update] = prisma.mediaAsset.updateMany.mock.calls[0];
-    expect(update.data).toMatchObject({
-      status: MediaStatus.READY,
-      playbackId: 'playback-1',
-      durationSec: 42,
-      aspectRatio: '9:16',
-    });
+    expect(update.data).toEqual({ status: MediaStatus.READY });
     const [publish] = prisma.post.updateMany.mock.calls[1];
     expect(publish.data).toMatchObject({ status: PostStatus.PUBLISHED });
+    expect(captions.schedule).toHaveBeenCalled();
   });
 
-  it('sends the videos of posts it publishes for captioning', async () => {
-    await service.settlePosts({ id: 'post-1' });
+  it('reads the upload details when the stream finishes first', async () => {
+    prisma.mediaAsset.findFirst.mockResolvedValue(waitingMedia);
+    findVideo.mockResolvedValue({ public_id: publicId, duration: 42 });
 
-    expect(captions.start).toHaveBeenCalledWith({ post: { id: 'post-1' } });
+    await service.handleNotification(streamBuilt());
+
+    expect(findVideo).toHaveBeenCalledWith(publicId);
+    const statuses = prisma.mediaAsset.updateMany.mock.calls.map(
+      ([call]) => call.data.status,
+    );
+    expect(statuses).toEqual([MediaStatus.PROCESSING, MediaStatus.READY]);
   });
 
-  it('reads the job ID of Robots events nested under the event type', async () => {
-    const type = 'robots.job.generate_premium_captions.completed';
-    await service.handleWebhook({
-      ...eventBase,
-      type,
-      data: { [type]: { id: 'job-1' } },
-    } as unknown as UnwrapWebhookEvent);
-
-    expect(captions.handleJobEvent).toHaveBeenCalledWith('job-1');
-  });
-
-  it('passes caption track events to CaptionService', async () => {
-    await service.handleWebhook({
-      ...eventBase,
-      type: 'video.asset.track.ready',
-      data: { id: 'track-1', type: 'text', status: 'ready' },
-    });
-
-    expect(captions.handleTrackEvent).toHaveBeenCalledWith('track-1');
-  });
-
-  it('ignores a replayed ready event for media that is already READY', async () => {
+  it('ignores a replayed stream notification for media that is already READY', async () => {
     prisma.mediaAsset.findFirst.mockResolvedValue({
       ...pendingMedia,
       status: MediaStatus.READY,
     });
 
-    await service.handleWebhook(assetReady(42));
+    await service.handleNotification(streamBuilt());
 
     expect(prisma.mediaAsset.updateMany).not.toHaveBeenCalled();
     expect(prisma.post.updateMany).not.toHaveBeenCalled();
   });
 
-  it('fails videos over the duration limit and deletes them from Mux', async () => {
-    await service.handleWebhook(assetReady(181));
+  it('ignores files outside the videos folder', async () => {
+    await service.handleNotification({
+      ...uploaded(42),
+      public_id: 'someone-else/clip',
+    });
+
+    expect(prisma.mediaAsset.findUnique).not.toHaveBeenCalled();
+  });
+
+  it('fails videos over the duration limit and deletes them', async () => {
+    prisma.mediaAsset.findFirst.mockResolvedValue(waitingMedia);
+
+    await service.handleNotification(uploaded(181));
 
     const [update] = prisma.mediaAsset.updateMany.mock.calls[0];
     expect(update.data).toEqual({
@@ -124,23 +160,13 @@ describe('MediaService', () => {
     });
     const [fail] = prisma.post.updateMany.mock.calls[0];
     expect(fail.data).toEqual({ status: PostStatus.FAILED });
-    expect(muxClient.video.assets.delete).toHaveBeenCalledWith('asset-1');
+    expect(deleteMedia).toHaveBeenCalledWith(mediaId, false);
   });
 
-  it('deletes the Mux asset of a video that failed to encode', async () => {
-    await service.handleWebhook({
-      ...eventBase,
-      type: 'video.asset.errored',
-      data: {
-        id: 'asset-1',
-        created_at: 0,
-        encoding_tier: 'baseline',
-        master_access: 'none',
-        max_resolution_tier: '1080p',
-        progress: { progress: 0, state: 'errored' },
-        status: 'errored',
-        passthrough: mediaId,
-      },
+  it('fails a video whose stream could not be built', async () => {
+    await service.handleNotification({
+      ...streamBuilt(),
+      eager: [{ status: 'failed' }],
     });
 
     const [update] = prisma.mediaAsset.updateMany.mock.calls[0];
@@ -148,83 +174,105 @@ describe('MediaService', () => {
       status: MediaStatus.FAILED,
       failureReason: MediaFailureReason.ENCODING_FAILED,
     });
-    expect(muxClient.video.assets.delete).toHaveBeenCalledWith('asset-1');
-    expect(prisma.mediaAsset.deleteMany).not.toHaveBeenCalled();
   });
 
-  it('moves an uploaded file to PROCESSING when Mux creates its asset', async () => {
-    prisma.mediaAsset.findFirst.mockResolvedValue(null);
+  it('deletes a file whose row is already gone', async () => {
+    prisma.mediaAsset.findUnique.mockResolvedValue(null);
 
-    await service.handleWebhook(uploadAssetCreated());
+    await service.handleNotification(uploaded(42));
 
-    expect(prisma.mediaAsset.updateMany).toHaveBeenCalledWith({
-      where: {
-        discardedAt: null,
-        muxUploadId: 'upload-1',
-        status: MediaStatus.WAITING_UPLOAD,
-      },
-      data: { status: MediaStatus.PROCESSING, muxAssetId: 'asset-1' },
+    expect(deleteMedia).toHaveBeenCalledWith(mediaId, false);
+    expect(prisma.mediaAsset.updateMany).not.toHaveBeenCalled();
+  });
+
+  describe('polling without notifications', () => {
+    it('publishes once the Admin API lists the HLS stream', async () => {
+      findVideo.mockResolvedValue({
+        public_id: publicId,
+        duration: 42,
+        derived: [{ transformation: 'sp_auto/pg_1/m3u8', format: 'm3u8' }],
+      });
+      prisma.mediaAsset.findUnique.mockResolvedValue(pendingMedia);
+
+      await service.refresh(pendingMedia);
+
+      const [update] = prisma.mediaAsset.updateMany.mock.calls[0];
+      expect(update.data).toEqual({ status: MediaStatus.READY });
+    });
+
+    it('asks the Admin API at most every 15 seconds per video', async () => {
+      const fresh = { ...waitingMedia, createdAt: new Date() };
+      await service.refresh(fresh);
+      await service.refresh(fresh);
+
+      expect(findVideo).toHaveBeenCalledTimes(1);
+    });
+
+    it('times out an upload whose file never arrived', async () => {
+      prisma.mediaAsset.findFirst.mockResolvedValue(waitingMedia);
+
+      await service.refresh(waitingMedia);
+
+      const [update] = prisma.mediaAsset.updateMany.mock.calls[0];
+      expect(update.data).toEqual({
+        status: MediaStatus.FAILED,
+        failureReason: MediaFailureReason.UPLOAD_TIMED_OUT,
+      });
     });
   });
 
   describe('discarding', () => {
     const discarded: MediaAsset = {
       ...pendingMedia,
-      muxAssetId: null,
       discardedAt: new Date('2026-09-25T00:00:00.000Z'),
     };
 
-    it('hides the upload, deletes its Mux asset, then drops the row', async () => {
+    it('hides the upload, deletes it from Cloudinary, then drops the row', async () => {
       prisma.mediaAsset.findMany.mockResolvedValue([pendingMedia]);
 
       await service.removeOwned(mediaId, ownerId);
 
       const [mark] = prisma.mediaAsset.updateMany.mock.calls[0];
       expect(mark.data.discardedAt).toBeInstanceOf(Date);
-      expect(muxClient.video.assets.delete).toHaveBeenCalledWith('asset-1');
+      expect(deleteMedia).toHaveBeenCalledWith(mediaId, false);
       expect(prisma.mediaAsset.deleteMany).toHaveBeenCalledWith({
         where: { id: mediaId, discardedAt: { not: null } },
       });
     });
 
-    it('cancels an upload that is still waiting for its file', async () => {
-      muxClient.video.uploads.retrieve.mockResolvedValue({
-        id: 'upload-1',
-        cors_origin: 'http://localhost:3000',
-        status: 'waiting',
-        timeout: 3600,
-      });
+    it('also deletes the captions of a transcribed video', async () => {
+      await service.purge({ ...discarded, captionStatus: 'READY' });
 
-      await service.purge(discarded);
-
-      expect(muxClient.video.uploads.cancel).toHaveBeenCalledWith('upload-1');
-      expect(prisma.mediaAsset.deleteMany).toHaveBeenCalled();
+      expect(deleteMedia).toHaveBeenCalledWith(mediaId, true);
     });
 
-    it('keeps the row for a retry when Mux deletion fails', async () => {
-      muxClient.video.assets.delete.mockRejectedValue(new Error('Mux down'));
+    it('keeps the row while its upload could still finish', async () => {
+      const gone = await service.purge({
+        ...discarded,
+        status: MediaStatus.WAITING_UPLOAD,
+        createdAt: new Date(),
+      });
 
-      await service.purge({ ...discarded, muxAssetId: 'asset-1' });
+      expect(gone).toBe(false);
+      expect(deleteMedia).toHaveBeenCalled();
+      expect(prisma.mediaAsset.deleteMany).not.toHaveBeenCalled();
+    });
+
+    it('keeps the row for a retry when deletion fails', async () => {
+      deleteMedia.mockRejectedValue(new Error('Cloudinary down'));
+
+      await service.purge(discarded);
 
       expect(prisma.mediaAsset.deleteMany).not.toHaveBeenCalled();
     });
 
-    it('deletes an asset Mux created after the upload was discarded', async () => {
-      prisma.mediaAsset.findFirst.mockResolvedValue(discarded);
+    it('deletes a file that finished uploading after the discard', async () => {
+      prisma.mediaAsset.findUnique.mockResolvedValue(discarded);
 
-      await service.handleWebhook(uploadAssetCreated());
+      await service.handleNotification(uploaded(42));
 
-      expect(muxClient.video.assets.delete).toHaveBeenCalledWith('asset-1');
+      expect(deleteMedia).toHaveBeenCalledWith(mediaId, false);
       expect(prisma.mediaAsset.deleteMany).toHaveBeenCalled();
-      expect(prisma.mediaAsset.updateMany).not.toHaveBeenCalled();
-    });
-
-    it('deletes a discarded asset when its ready event arrives', async () => {
-      prisma.mediaAsset.findFirst.mockResolvedValue(discarded);
-
-      await service.handleWebhook(assetReady(42));
-
-      expect(muxClient.video.assets.delete).toHaveBeenCalledWith('asset-1');
       expect(prisma.post.updateMany).not.toHaveBeenCalled();
     });
   });

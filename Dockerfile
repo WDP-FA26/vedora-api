@@ -13,7 +13,10 @@ RUN npx prisma generate && npm run build
 FROM node:24-alpine AS production
 WORKDIR /app
 ENV NODE_ENV=production
-RUN apk add --no-cache dumb-init
+# ffmpeg cuts the audio for video captions; the static npm build can't
+# resolve hostnames and isn't needed here.
+RUN apk add --no-cache dumb-init ffmpeg
+ENV FFMPEG_PATH=/usr/bin/ffmpeg
 COPY package*.json ./
 COPY prisma ./prisma
 RUN npm ci --omit=dev && npm cache clean --force

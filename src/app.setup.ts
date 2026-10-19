@@ -6,7 +6,7 @@ import helmet from 'helmet';
 /**
  * HTTP setup shared by `main.ts` and the e2e tests, so tests exercise the
  * same prefix, validation and security headers as production. The app must
- * be created with `rawBody: true` for Mux webhook signatures.
+ * be created with `rawBody: true` for Cloudinary notification signatures.
  */
 export function configureApp(app: INestApplication): void {
   // Long articles can exceed Express's default 100 KB when encoded as UTF-8.

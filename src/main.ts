@@ -6,7 +6,7 @@ import { configureApp } from './app.setup';
 
 async function bootstrap(): Promise<void> {
   const app = await NestFactory.create(AppModule, {
-    // Mux webhook signatures are computed over the exact request body.
+    // Cloudinary notification signatures are computed over the exact request body.
     rawBody: true,
   });
   configureApp(app);

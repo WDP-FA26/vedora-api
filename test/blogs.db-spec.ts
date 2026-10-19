@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { join } from 'node:path';
 import { PostType, PrismaClient } from '@prisma/client';
 import { MediaService } from '../src/media/media.service';
-import { MuxService } from '../src/mux/mux.service';
+import { CloudinaryService } from '../src/cloudinary/cloudinary.service';
 import { PostSearchIndexService } from '../src/post-search/post-search-index.service';
 import { PostSearchService } from '../src/post-search/post-search.service';
 import { PrismaService } from '../src/prisma/prisma.service';
@@ -48,7 +48,7 @@ describe('Blog lifecycle with PostgreSQL', () => {
     posts = new PostsService(
       db,
       {} as MediaService,
-      {} as MuxService,
+      {} as CloudinaryService,
       {} as PostSearchIndexService,
       {} as PostSearchService,
     );

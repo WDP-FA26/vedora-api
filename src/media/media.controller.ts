@@ -39,12 +39,14 @@ export class MediaController {
   @ApiOperation({
     summary: 'Start a video upload',
     description:
-      'Returns a Mux direct-upload URL for the browser, and the media ID to pass to POST /posts.',
+      'Returns signed Cloudinary upload fields for the browser, and the media ID to pass to POST /posts.',
   })
   @ApiTooManyRequestsResponse({
     description: 'UPLOAD_LIMIT_REACHED: too many uploads not yet posted',
   })
-  @ApiServiceUnavailableResponse({ description: 'Mux is not configured' })
+  @ApiServiceUnavailableResponse({
+    description: 'Cloudinary is not configured',
+  })
   createUpload(
     @Req() request: AuthenticatedRequest,
     @Body() dto: CreateUploadDto,

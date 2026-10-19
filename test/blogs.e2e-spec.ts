@@ -1,4 +1,4 @@
-import { createHmac } from 'node:crypto';
+import { createHash } from 'node:crypto';
 import { INestApplication } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { Test } from '@nestjs/testing';
@@ -179,25 +179,25 @@ describe('Blogs (HTTP)', () => {
     });
   });
 
-  it('preserves the exact request bytes for signed Mux webhooks', async () => {
+  it('preserves the exact request bytes for signed Cloudinary notifications', async () => {
     const handle = vi
-      .spyOn(app.get(MediaService), 'handleWebhook')
+      .spyOn(app.get(MediaService), 'handleNotification')
       .mockResolvedValue();
-    const payload =
-      '{ "type": "video.asset.ready", "data": { "id": "asset-1" } }';
-    const timestamp = Math.floor(Date.now() / 1000);
-    const signature = createHmac('sha256', 'e2e-webhook-secret')
-      .update(`${timestamp}.${payload}`)
+    const payload = '{ "notification_type": "eager",  "public_id": "x" }';
+    const timestamp = String(Math.floor(Date.now() / 1000));
+    const signature = createHash('sha1')
+      .update(payload + timestamp + 'e2e-api-secret')
       .digest('hex');
     try {
       await request(app.getHttpServer())
-        .post('/api/v1/webhooks/mux')
+        .post('/api/v1/webhooks/cloudinary')
         .set('Content-Type', 'application/json')
-        .set('mux-signature', `t=${timestamp},v1=${signature}`)
+        .set('x-cld-timestamp', timestamp)
+        .set('x-cld-signature', signature)
         .send(payload)
         .expect(204);
       expect(handle).toHaveBeenCalledWith(
-        expect.objectContaining({ type: 'video.asset.ready' }),
+        expect.objectContaining({ notification_type: 'eager' }),
       );
     } finally {
       handle.mockRestore();

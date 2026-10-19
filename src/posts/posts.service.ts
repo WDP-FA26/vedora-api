@@ -11,7 +11,7 @@ import {
   CursorPaginationQueryDto,
 } from '../common/pagination';
 import { MediaService } from '../media/media.service';
-import { MuxService } from '../mux/mux.service';
+import { CloudinaryService } from '../cloudinary/cloudinary.service';
 import { PostSearchIndexService } from '../post-search/post-search-index.service';
 import {
   MAX_SEARCH_RESULTS,
@@ -30,7 +30,7 @@ export const postInclude = (viewerId?: string) =>
     author: {
       select: { id: true, username: true, fullName: true, avatarUrl: true },
     },
-    media: { orderBy: { position: 'asc' } },
+    media: { orderBy: { position: 'asc' }, include: { captions: true } },
     _count: { select: { comments: true, likes: true, reposts: true } },
     likes: {
       where: { userId: viewerId ?? { in: [] } },
@@ -58,7 +58,7 @@ export class PostsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly mediaService: MediaService,
-    private readonly mux: MuxService,
+    private readonly cloudinary: CloudinaryService,
     private readonly searchIndex: PostSearchIndexService,
     private readonly postSearch: PostSearchService,
   ) {}
@@ -88,7 +88,7 @@ export class PostsService {
     });
     await this.mediaService.settlePosts({ id });
     // A text-only post is published by now; one with video is indexed by the
-    // catch-up cron once Mux finishes.
+    // catch-up cron once Cloudinary finishes.
     this.searchIndex.schedule();
 
     return this.toResponse(await this.load(id, authorId));
@@ -200,7 +200,10 @@ export class PostsService {
     }
 
     // Without webhooks, the author's polling is what moves the video along.
-    if (post.status === PostStatus.PROCESSING && !this.mux.webhooksEnabled) {
+    if (
+      post.status === PostStatus.PROCESSING &&
+      !this.cloudinary.webhooksEnabled
+    ) {
       const pending = post.media.filter(
         (media) =>
           media.status === MediaStatus.WAITING_UPLOAD ||
@@ -249,7 +252,7 @@ export class PostsService {
     await this.prisma.post.delete({ where: { id } });
     await this.searchIndex.remove(id);
     // The media rows were detached (`onDelete: SetNull`); remove them from
-    // Mux the same way as discarded uploads, retried until Mux confirms.
+    // Cloudinary the same way as discarded uploads, retried until confirmed.
     await this.mediaService.discard({
       id: { in: media.map((item) => item.id) },
     });

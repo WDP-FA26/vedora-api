@@ -31,7 +31,6 @@
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1146.0",
     "@aws-sdk/s3-request-presigner": "^3.1146.0",
-    "@mux/ts": "^15.3.0",
     "@nestjs/common": "^11.2.5",
     "@nestjs/config": "^4.0.4",
     "@nestjs/core": "^11.2.5",
@@ -48,7 +47,9 @@
     "chunkdown": "^3.5.0",
     "class-transformer": "^0.5.1",
     "class-validator": "^0.15.1",
+    "cloudinary": "^2.11.0",
     "dotenv": "^17.2.2",
+    "ffmpeg-static": "^5.3.0",
     "google-auth-library": "^11.1.0",
     "helmet": "^8.1.0",
     "joi": "^18.0.1",

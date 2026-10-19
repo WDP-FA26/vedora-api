@@ -24,8 +24,8 @@ Backend starter cho Vedora, sử dụng NestJS, Prisma ORM, PostgreSQL và Docke
 ├── src/
 │   ├── common/pagination/     # DTO, helper và Swagger cho phân trang dùng chung
 │   ├── health/                # Liveness/readiness
-│   ├── media/                 # Upload video lên Mux, webhook, dọn dẹp định kỳ
-│   ├── mux/                   # Mux client dùng chung
+│   ├── cloudinary/            # Cloudinary client dùng chung (ký upload, URL, xoá)
+│   ├── media/                 # Upload video, webhook, phụ đề Whisper, dọn dẹp định kỳ
 │   ├── posts/                 # Bài ngắn, blog, comment, like và bookmark
 │   ├── prisma/                # PrismaService dùng chung
 │   ├── users/                 # CRUD mẫu
@@ -163,34 +163,56 @@ Nếu chưa khai báo Google credentials, các route Google trả `503` nhưng c
 tài khoản mật khẩu chưa xác minh, API xoá mật khẩu và thu hồi mọi phiên của tài khoản đó
 trước khi liên kết, để người đăng ký hộ email của người khác không giữ được quyền truy cập.
 
-### Bài đăng có video (Mux)
+### Bài đăng có video (Cloudinary)
 
-File video đi thẳng từ trình duyệt lên Mux, không qua API:
+File video đi thẳng từ trình duyệt lên Cloudinary, không qua API:
 
-1. `POST /api/v1/media/uploads` với `{"type":"VIDEO"}` trả về `media.id` và `uploadUrl`
-   (Mux direct upload, hết hạn sau 1 giờ, chỉ nhận từ origin `FRONTEND_URL`).
-2. Trình duyệt `PUT` file lên `uploadUrl` (nên dùng `@mux/upchunk` để có tiến trình).
+1. `POST /api/v1/media/uploads` với `{"type":"VIDEO"}` trả về `media` (có `id`,
+   `publicId`) và `upload`: `{ url, fields, chunkSize }`. `fields` đã được API ký (cố định
+   `public_id` và job eager tạo HLS `sp_auto/m3u8`), chữ ký hết hạn sau 1 giờ.
+2. Trình duyệt `POST` multipart lên `upload.url` với mọi `fields` cộng `file`. File lớn hơn
+   `chunkSize` gửi theo từng phần, mỗi phần kèm header `X-Unique-Upload-Id` (giống nhau)
+   và `Content-Range: bytes <start>-<end>/<total>`. Gói Free giới hạn 100 MB mỗi video.
 3. `POST /api/v1/posts` với `{"type":"POST","body":"…","mediaIds":["<media.id>"]}` được
-   gọi ngay, không cần đợi Mux xử lý xong. Bài ở trạng thái `PROCESSING` (chỉ tác giả
-   thấy) rồi chuyển sang `PUBLISHED` khi video sẵn sàng, hoặc `FAILED` (ví dụ video dài
-   hơn `MAX_VIDEO_DURATION_SEC`).
+   gọi ngay. Bài ở trạng thái `PROCESSING` (chỉ tác giả thấy) rồi chuyển sang
+   `PUBLISHED` khi luồng HLS đã tạo xong, hoặc `FAILED` (ví dụ video dài hơn
+   `MAX_VIDEO_DURATION_SEC`).
 4. Frontend poll `GET /api/v1/posts/:id` tới khi hết `PROCESSING`, rồi phát video bằng
-   `playbackId` (`https://stream.mux.com/<playbackId>.m3u8`).
+   `publicId` (next-cloudinary `CldVideoPlayer`, `sourceTypes: ["hls"]`, streaming
+   profile `auto`) hoặc trực tiếp `playbackUrl` (`.m3u8`). `posterUrl` là khung hình đầu.
 
-Mux báo tiến trình qua webhook `POST /api/v1/webhooks/mux`. Ở production, tạo webhook
-trỏ tới URL đó trong Mux dashboard và điền signing secret vào `MUX_WEBHOOK_SECRET`. Khi
-để trống (local, Mux không gọi được `localhost`), API tự hỏi Mux mỗi lần media/bài đang
-chờ được đọc. Một cron 10 phút một lần cũng cập nhật media bị lỡ webhook, và cron hằng
-giờ xoá upload không được gắn vào bài nào sau 24 giờ.
+Trạng thái media: `WAITING_UPLOAD` → (thông báo `upload`, ghi `durationSec`,
+`aspectRatio`) `PROCESSING` → (thông báo `eager`, HLS đã tạo) `READY`.
 
-Khi `MUX_CAPTIONS_ENABLED=true`, video của bài vừa `PUBLISHED` được tạo phụ đề bằng Mux
-Robots: `generate-premium-captions` tự nhận diện ngôn ngữ nói, API gắn track phụ đề
-(tên theo ngôn ngữ đó, ví dụ "Tiếng Việt") rồi `translate-captions` dịch tiếng Việt sang
-tiếng Anh, ngôn ngữ khác sang tiếng Việt. Video không có lời (độ tin cậy nhận diện
-ngôn ngữ thấp, hoặc chỉ có `[beep]`, `[music]`) không được gắn phụ đề. Trạng thái nằm
-ở `MediaAsset.captionStatus`; các bước tiếp theo chạy theo webhook `robots.job.*` và
-`video.asset.track.ready`, cron 10 phút một lần chạy lại bước bị lỡ webhook.
-MuxPlayer tự hiện các track trong menu CC nên frontend không cần đổi gì.
+Cloudinary báo tiến trình qua webhook `POST /api/v1/webhooks/cloudinary`. Trong
+Cloudinary Console → Settings → Webhook Notifications, thêm URL đó với loại **Upload** và
+**Eager**, rồi đặt `CLOUDINARY_WEBHOOKS_ENABLED=true`. Chữ ký (`X-Cld-Signature`,
+`X-Cld-Timestamp`) được kiểm bằng `CLOUDINARY_API_SECRET`, chấp nhận cả SHA-1 lẫn
+SHA-256. Local có thể mở cổng bằng `cloudflared tunnel --url http://localhost:4000`
+(URL `trycloudflare.com` đổi mỗi lần chạy, nhớ cập nhật lại trong Console). Khi
+`CLOUDINARY_WEBHOOKS_ENABLED=false`, API tự hỏi Admin API (tối đa 15 giây một lần cho mỗi
+video, vì Admin API chỉ cho 500 lệnh/giờ) mỗi lần media/bài đang chờ được đọc. Một cron
+10 phút một lần cũng cập nhật media bị lỡ webhook, và cron hằng giờ xoá upload không được
+gắn vào bài nào sau 24 giờ. File tải xong sau khi upload đã bị huỷ sẽ bị xoá khi thông
+báo `upload` tới.
+
+Khi `CAPTIONS_ENABLED=true` (mặc định), video của bài vừa `PUBLISHED` được tạo phụ đề ngay
+trong API:
+
+1. Tải file gốc về thư mục tạm, ffmpeg (`ffmpeg-static`, hoặc `FFMPEG_PATH`) tách âm
+   thanh và tìm đoạn im lặng (`silencedetect`, dưới -35 dB, dài từ 0,6 giây).
+2. Cắt bỏ im lặng, chỉ gửi phần có tiếng (mono 16 kHz MP3) cho Whisper
+   (`TRANSCRIPTION_MODEL`, mặc định `openai/whisper-large-v3` qua OpenRouter
+   `/audio/transcriptions`). Video im lặng hoàn toàn không gọi Whisper và nhận
+   `NO_SPEECH`, nên Whisper không "bịa" câu cho đoạn im lặng.
+3. Mốc thời gian của Whisper được ánh xạ ngược về video gốc, nên phụ đề vẫn khớp hình.
+4. `OPENROUTER_MODEL` dịch từng dòng: tiếng Việt sang tiếng Anh, ngôn ngữ khác sang tiếng
+   Việt. Dịch lỗi thì vẫn giữ phụ đề gốc.
+5. Mỗi ngôn ngữ là một file WebVTT trên Cloudinary (`<folder>/captions/<mediaId>/<lang>.vtt`),
+   liệt kê trong bảng `media_captions` và trả về ở `media.captions` (ngôn ngữ nói trước).
+
+Trạng thái nằm ở `MediaAsset.captionStatus` (`NONE`, `TRANSCRIBING`, `READY`,
+`NO_SPEECH`, `FAILED`); cron 10 phút một lần chạy lại video bị gián đoạn do restart.
 
 ## Comment và like bài đăng
 
@@ -467,12 +489,16 @@ Tài liệu Dokploy tham khảo:
 | `GOOGLE_CLIENT_ID` | Khi dùng Google login | — | OAuth 2.0 Client ID của Google |
 | `GOOGLE_CLIENT_SECRET` | Khi dùng Google login | — | OAuth 2.0 Client Secret của Google |
 | `GOOGLE_CALLBACK_URL` | Khi dùng Google login | URL callback local | Redirect URI phải khớp Google Cloud Console |
-| `MUX_TOKEN_ID` | Khi upload video | — | Mux access token ID; trống thì route media trả `503` |
-| `MUX_TOKEN_SECRET` | Khi upload video | — | Mux access token secret |
-| `MUX_WEBHOOK_SECRET` | Production | — | Signing secret của webhook Mux; trống thì tự hỏi Mux khi đọc |
-| `MUX_CAPTIONS_ENABLED` | Không | `false` | Tạo và dịch phụ đề cho video đã đăng (Mux Robots, tính phí theo phút) |
-| `FRONTEND_URL` | Không | `http://localhost:3000` | Origin được phép upload video lên Mux |
-| `MAX_VIDEO_DURATION_SEC` | Không | `180` | Video dài hơn bị đánh dấu `FAILED` và xoá khỏi Mux |
+| `CLOUDINARY_CLOUD_NAME` | Khi upload video | — | Cloud name; trống thì route media trả `503` |
+| `CLOUDINARY_API_KEY` | Khi upload video | — | API key dùng để ký upload |
+| `CLOUDINARY_API_SECRET` | Khi upload video | — | API secret; cũng dùng để kiểm chữ ký webhook |
+| `CLOUDINARY_FOLDER` | Không | `vedora` | Thư mục gốc của video và phụ đề |
+| `CLOUDINARY_WEBHOOKS_ENABLED` | Production | `false` | `true` khi Console đã trỏ webhook Upload/Eager về API; `false` thì tự hỏi Admin API khi đọc |
+| `CAPTIONS_ENABLED` | Không | `true` | Ghi lời (Whisper) và dịch phụ đề cho video đã đăng |
+| `TRANSCRIPTION_MODEL` | Không | `openai/whisper-large-v3` | Model ghi lời trên OpenRouter |
+| `FFMPEG_PATH` | Không | ffmpeg của `ffmpeg-static` | ffmpeg dùng để tách âm thanh; image Docker dùng `/usr/bin/ffmpeg` |
+| `FRONTEND_URL` | Không | `http://localhost:3000` | Origin của frontend |
+| `MAX_VIDEO_DURATION_SEC` | Không | `180` | Video dài hơn bị đánh dấu `FAILED` và xoá khỏi Cloudinary |
 | `SEED_USER_PASSWORD` | Khi muốn seed user | — | Mật khẩu ban đầu cho `vedora.admin` |
 | `POSTGRES_DB` | Khi dùng Compose | — | Database được container PostgreSQL tạo |
 | `POSTGRES_USER` | Khi dùng Compose | — | Database user |

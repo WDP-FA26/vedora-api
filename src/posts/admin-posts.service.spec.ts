@@ -6,7 +6,6 @@ import {
   PostType,
 } from '@prisma/client';
 import { type DeepMockProxy, mockDeep } from 'vitest-mock-extended';
-import { CaptionService } from '../media/caption.service';
 import { pendingMedia } from '../media/media.fixtures';
 import { MediaService } from '../media/media.service';
 import { PrismaService } from '../prisma/prisma.service';
@@ -18,10 +17,19 @@ const media = {
   ...pendingMedia,
   postId,
   status: MediaStatus.READY,
-  playbackId: 'playback-1',
   captionStatus: CaptionStatus.READY,
   captionLanguage: 'vi',
-  captionTrackId: 'track-1',
+  captions: [
+    {
+      id: 'c1a2d3e4-0000-4000-8000-000000000001',
+      mediaId: pendingMedia.id,
+      languageCode: 'vi',
+      name: 'Tiếng Việt',
+      isOriginal: true,
+      url: 'https://res.cloudinary.com/demo/raw/upload/vi.vtt',
+      createdAt: now,
+    },
+  ],
 };
 const row = {
   id: postId,
@@ -45,33 +53,34 @@ const row = {
   bookmarks: [],
   _count: { comments: 2, likes: 5, reposts: 1 },
 };
-const track = {
-  id: 'track-1',
-  languageCode: 'vi',
-  name: 'Tiếng Việt',
-  isOriginal: true,
-  url: 'https://stream.mux.com/playback-1/text/track-1.vtt',
-};
 
 describe('AdminPostsService', () => {
   let prisma: DeepMockProxy<PrismaService>;
-  let captions: DeepMockProxy<CaptionService>;
   let service: AdminPostsService;
 
   beforeEach(() => {
     prisma = mockDeep<PrismaService>();
-    captions = mockDeep<CaptionService>();
     const mediaService = mockDeep<MediaService>();
     mediaService.toResponse.mockImplementation((item) => ({
       id: item.id,
       type: item.type,
       status: item.status,
       failureReason: item.failureReason,
-      playbackId: item.playbackId,
+      publicId: item.publicId,
+      playbackUrl: null,
+      posterUrl: null,
       durationSec: item.durationSec,
       aspectRatio: item.aspectRatio,
+      captions: (item.captions ?? []).map(
+        ({ languageCode, name, isOriginal, url }) => ({
+          languageCode,
+          name,
+          isOriginal,
+          url,
+        }),
+      ),
     }));
-    service = new AdminPostsService(prisma, mediaService, captions);
+    service = new AdminPostsService(prisma, mediaService);
     prisma.$transaction.mockImplementation((run: unknown) =>
       Promise.all(run as Promise<unknown>[]),
     );
@@ -107,14 +116,15 @@ describe('AdminPostsService', () => {
     });
   });
 
-  it("adds each video's caption tracks to a single post", async () => {
+  it("includes each video's caption tracks in a single post", async () => {
     prisma.post.findUnique.mockResolvedValue(row as never);
-    captions.listTracks.mockResolvedValue([track]);
 
     const post = await service.findOne(postId);
 
-    expect(captions.listTracks).toHaveBeenCalledWith(media);
-    expect(post.media[0].captions).toEqual([track]);
+    expect(post.media[0]).toMatchObject({
+      captionStatus: CaptionStatus.READY,
+      captions: [{ languageCode: 'vi', isOriginal: true }],
+    });
   });
 
   it('answers 404 for an unknown post', async () => {
