@@ -56,6 +56,8 @@ export class RecipeCatalogQueryDto extends PaginationQueryDto {
 }
 
 export class CatalogRecipeDto extends RecipeDto {
+  @ApiProperty({ description: 'Saved by the caller; false for guests' })
+  isFavorite!: boolean;
   @ApiProperty({
     nullable: true,
     type: Number,
@@ -65,6 +67,8 @@ export class CatalogRecipeDto extends RecipeDto {
 }
 
 export class CatalogRecipeDetailDto extends RecipeDetailDto {
+  @ApiProperty({ description: 'Saved by the caller; false for guests' })
+  isFavorite!: boolean;
   @ApiProperty({ nullable: true, type: Number })
   totalMinutes!: number | null;
 }

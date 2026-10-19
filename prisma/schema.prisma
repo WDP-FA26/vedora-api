@@ -52,6 +52,7 @@ model User {
   avoidedGroups         UserAvoidedGroup[]
   likedIngredients      UserLikedIngredient[]
   mealPlan              MealPlanEntry[]
+  recipeFavorites       RecipeFavorite[]
 
   @@map("users")
 }
@@ -596,6 +597,7 @@ model Recipe {
   ingredients RecipeIngredient[]
   mealPlans   MealPlanEntry[]
   blogs       BlogRecipe[]
+  favorites   RecipeFavorite[]
 
   @@index([postId])
   @@map("recipes")
@@ -614,6 +616,19 @@ model RecipeIngredient {
   @@id([recipeId, ingredientId])
   @@index([ingredientId])
   @@map("recipe_ingredients")
+}
+
+/// Private saved recipes, independent of post bookmarks.
+model RecipeFavorite {
+  recipeId  String   @map("recipe_id") @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at")
+  recipe    Recipe   @relation(fields: [recipeId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([recipeId, userId])
+  @@index([userId, createdAt, recipeId])
+  @@map("recipe_favorites")
 }
 
 /// An ingredient a user does not eat (allergy, religion, dislike). Private to the user.

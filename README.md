@@ -246,6 +246,14 @@ Tài liệu FE: [docs/docs-for-FE/post-comments-likes.md](docs/docs-for-FE/post-
 Không cần migration mới. API quản lý công thức vẫn thuộc admin. Hợp đồng FE và
 ví dụ: [Kho công thức và thực đơn](docs/docs-for-FE/recipe-catalog-meal-plan.md).
 
+## Công thức yêu thích
+
+`PUT/DELETE /api/v1/recipes/:id/favorite` lưu/bỏ lưu idempotent.
+`GET /api/v1/recipes/favorites` trả danh sách riêng, phân trang page/limit.
+Catalog và detail có `isFavorite` theo người gọi; response cá nhân dùng private,
+no-store. Cần migration `20261019140000_recipe_favorites`.
+[Hợp đồng FE](docs/docs-for-FE/recipe-favorites.md).
+
 ## Blog công thức dài
 
 - `POST /api/v1/blogs`: tạo bài có tiêu đề, ảnh bìa HTTPS, Markdown và công thức
