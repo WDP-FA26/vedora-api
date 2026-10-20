@@ -8,6 +8,7 @@ import {
   PayloadTooLargeException,
 } from '@nestjs/common';
 import {
+  NotificationType,
   PostStatus,
   Prisma,
   ProfileImageKind,
@@ -15,6 +16,7 @@ import {
 } from '@prisma/client';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { CursorPaginationQueryDto } from '../common/pagination';
+import { NotificationsService } from '../notifications/notifications.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { StorageService, StorageTarget } from '../storage/storage.service';
 import {
@@ -59,6 +61,7 @@ export class ProfilesService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly storage: StorageService,
+    private readonly notifications: NotificationsService,
   ) {}
 
   async findOne(id: string): Promise<ProfileDto> {
@@ -108,10 +111,17 @@ export class ProfilesService {
     if (id === followerId)
       throw new BadRequestException('You cannot follow yourself');
     await this.requirePublicUser(id);
-    await this.prisma.follow.createMany({
+    const { count } = await this.prisma.follow.createMany({
       data: [{ followerId, followingId: id }],
       skipDuplicates: true,
     });
+    if (count > 0) {
+      await this.notifications.notify({
+        recipientId: id,
+        actorId: followerId,
+        type: NotificationType.FOLLOW,
+      });
+    }
   }
 
   async unfollow(id: string, followerId: string): Promise<void> {
@@ -225,7 +235,10 @@ export class ProfilesService {
       throw new ConflictException('Image upload is not ready');
     if (image.createdAt.getTime() < Date.now() - ACTIVATE_TTL_MS)
       throw new ConflictException('Image upload has expired');
-    const url = this.storage.publicObjectUrl(image.storageKey);
+    const url = this.storage.publicObjectUrl(
+      StorageTarget.Profiles,
+      image.storageKey,
+    );
     const data =
       image.kind === ProfileImageKind.AVATAR
         ? { avatarUrl: url }
@@ -271,7 +284,10 @@ export class ProfilesService {
         take: 100,
       });
       for (const image of images) {
-        const url = this.storage.publicObjectUrl(image.storageKey);
+        const url = this.storage.publicObjectUrl(
+          StorageTarget.Profiles,
+          image.storageKey,
+        );
         const inUse = await this.prisma.user.count({
           where: { OR: [{ avatarUrl: url }, { coverUrl: url }] },
         });

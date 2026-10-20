@@ -83,6 +83,7 @@ describe('Profiles and follows (e2e)', () => {
       .put(`/api/v1/profiles/${USER_ID}/follow`)
       .auth(token, { type: 'bearer' })
       .expect(400);
+    prisma.follow.createMany.mockResolvedValue({ count: 0 });
     await request(app.getHttpServer())
       .put(`/api/v1/profiles/${OTHER_ID}/follow`)
       .auth(token, { type: 'bearer' })

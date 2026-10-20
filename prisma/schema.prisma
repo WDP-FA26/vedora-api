@@ -43,6 +43,9 @@ model User {
   knowledgeDocuments    KnowledgeDocument[]
   following             Follow[]                @relation("Following")
   followers             Follow[]                @relation("Followers")
+  followSuggestions     FollowSuggestion[]      @relation("SuggestionsFor")
+  suggestedTo           FollowSuggestion[]      @relation("SuggestedUser")
+  suggestionDismissals  SuggestionDismissal[]   @relation("DismissedBy")
   profileImages         ProfileImageUpload[]
   verificationRequests  VerificationRequest[]
   verificationReviews   VerificationRequest[]   @relation("VerificationReviewer")
@@ -52,6 +55,8 @@ model User {
   avoidedGroups         UserAvoidedGroup[]
   likedIngredients      UserLikedIngredient[]
   mealPlan              MealPlanEntry[]
+  notifications         Notification[]          @relation("NotificationRecipient")
+  sentNotifications     Notification[]          @relation("NotificationActor")
 
   @@map("users")
 }
@@ -67,6 +72,69 @@ model Follow {
   @@index([followingId, createdAt, followerId])
   @@index([followerId, createdAt, followingId])
   @@map("follows")
+}
+
+enum NotificationType {
+  LIKE
+  COMMENT
+  REPOST
+  FOLLOW
+}
+
+/// Something that happened to `recipient` because of `actor`. Pushed live over
+/// SSE and kept so it can be listed and marked read later.
+model Notification {
+  id          String           @id @default(uuid()) @db.Uuid
+  recipientId String           @map("recipient_id") @db.Uuid
+  actorId     String           @map("actor_id") @db.Uuid
+  type        NotificationType
+  /// Null for FOLLOW.
+  postId      String?          @map("post_id") @db.Uuid
+  commentId   String?          @map("comment_id") @db.Uuid
+  readAt      DateTime?        @map("read_at")
+  createdAt   DateTime         @default(now()) @map("created_at")
+  recipient   User             @relation("NotificationRecipient", fields: [recipientId], references: [id], onDelete: Cascade)
+  actor       User             @relation("NotificationActor", fields: [actorId], references: [id], onDelete: Cascade)
+  post        Post?            @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  @@index([recipientId, createdAt, id])
+  @@index([recipientId, readAt])
+  @@index([postId])
+  @@map("notifications")
+}
+
+enum FollowSuggestionReason {
+  /// The candidate already follows the user.
+  FOLLOWS_YOU
+  /// Followed by people the user follows (`mutualCount` of them).
+  MUTUAL
+}
+
+/// Rebuilt per user by `FollowSuggestionsService`; read-time filters drop
+/// people followed or dismissed since the last run.
+model FollowSuggestion {
+  userId      String                 @map("user_id") @db.Uuid
+  candidateId String                 @map("candidate_id") @db.Uuid
+  score       Int
+  reason      FollowSuggestionReason
+  mutualCount Int                    @map("mutual_count")
+  user        User                   @relation("SuggestionsFor", fields: [userId], references: [id], onDelete: Cascade)
+  candidate   User                   @relation("SuggestedUser", fields: [candidateId], references: [id], onDelete: Cascade)
+
+  @@id([userId, candidateId])
+  @@index([userId, score(sort: Desc), candidateId])
+  @@index([candidateId])
+  @@map("follow_suggestions")
+}
+
+model SuggestionDismissal {
+  userId      String   @map("user_id") @db.Uuid
+  candidateId String   @map("candidate_id") @db.Uuid
+  createdAt   DateTime @default(now()) @map("created_at")
+  user        User     @relation("DismissedBy", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([userId, candidateId])
+  @@map("suggestion_dismissals")
 }
 
 enum ProfileImageKind {
@@ -189,6 +257,7 @@ model Post {
   reposts         PostRepost[]
   bookmarks       PostBookmark[]
   reports         PostReport[]
+  notifications   Notification[]
   recipes         Recipe[]
   blog            Blog?
 
