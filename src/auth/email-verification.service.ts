@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { AccountStatus } from '@prisma/client';
 import { MailService } from '../mail/mail.service';
 import { PrismaService } from '../prisma/prisma.service';
 import {
@@ -97,8 +98,11 @@ export class EmailVerificationService {
 
     await this.prisma.$transaction([
       this.prisma.user.update({
-        where: { id: user.id },
-        data: { emailVerifiedAt: new Date() },
+        where: {
+          id: user.id,
+          status: { in: [AccountStatus.PENDING_EMAIL, AccountStatus.ACTIVE] },
+        },
+        data: { emailVerifiedAt: new Date(), status: AccountStatus.ACTIVE },
       }),
       this.prisma.emailVerificationCode.delete({ where: { userId: user.id } }),
       this.prisma.emailVerificationGuesses.deleteMany({

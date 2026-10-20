@@ -12,6 +12,20 @@ enum UserRole {
   ADMIN
 }
 
+enum AccountStatus {
+  PENDING_EMAIL
+  ACTIVE
+  SUSPENDED
+  DELETED
+}
+
+enum UserAccountAction {
+  SUSPEND
+  REACTIVATE
+  ROLE_CHANGE
+  DELETE
+}
+
 model User {
   id                    String                  @id @default(uuid()) @db.Uuid
   username              String                  @unique @db.VarChar(30)
@@ -23,6 +37,8 @@ model User {
   avatarUrl             String?                 @map("avatar_url") @db.VarChar(2048)
   coverUrl              String?                 @map("cover_url") @db.VarChar(2048)
   role                  UserRole                @default(USER)
+  status                AccountStatus           @default(PENDING_EMAIL)
+  accountVersion        Int                     @default(0) @map("account_version")
   /// Set when an admin approves a verification request; shown as a badge.
   isProfessional        Boolean                 @default(false) @map("is_professional")
   /// Null until the user proves they own `email` (OTP code or Google).
@@ -59,6 +75,25 @@ model User {
   sentNotifications     Notification[]          @relation("NotificationActor")
 
   @@map("users")
+}
+
+/// Scalar IDs deliberately retain the audit after an account is deleted.
+model UserAccountAudit {
+  id             String            @id @default(uuid()) @db.Uuid
+  actorId        String            @map("actor_id") @db.Uuid
+  userId         String            @map("user_id") @db.Uuid
+  action         UserAccountAction
+  reason         String            @db.VarChar(500)
+  previousStatus AccountStatus     @map("previous_status")
+  status         AccountStatus
+  previousRole   UserRole          @map("previous_role")
+  role           UserRole
+  accountVersion Int               @map("account_version")
+  createdAt      DateTime          @default(now()) @map("created_at")
+
+  @@index([userId, createdAt])
+  @@index([actorId, createdAt])
+  @@map("user_account_audits")
 }
 
 model Follow {
