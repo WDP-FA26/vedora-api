@@ -12,10 +12,13 @@ import { IngredientsService } from './ingredients.service';
 import { RecipesService } from './recipes.service';
 import { RecipeCatalogService } from './recipe-catalog.service';
 import { RecipesController } from './recipes.controller';
+import { RecipeRatingsController } from './recipe-ratings.controller';
+import { RecipeRatingsService } from './recipe-ratings.service';
 
 @Module({
   controllers: [
     RecipesController,
+    RecipeRatingsController,
     AdminIngredientsController,
     AdminIngredientGroupsController,
     AdminIncompatibilityRulesController,
@@ -28,6 +31,7 @@ import { RecipesController } from './recipes.controller';
     RecipesService,
     RecipeCatalogService,
     DietaryService,
+    RecipeRatingsService,
   ],
   exports: [IncompatibilityRulesService, DietaryService],
 })

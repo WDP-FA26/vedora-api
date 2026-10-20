@@ -71,6 +71,7 @@ model User {
   avoidedGroups         UserAvoidedGroup[]
   likedIngredients      UserLikedIngredient[]
   mealPlan              MealPlanEntry[]
+  recipeRatings         RecipeRating[]
   notifications         Notification[]          @relation("NotificationRecipient")
   sentNotifications     Notification[]          @relation("NotificationActor")
 
@@ -700,6 +701,7 @@ model Recipe {
   ingredients RecipeIngredient[]
   mealPlans   MealPlanEntry[]
   blogs       BlogRecipe[]
+  ratings     RecipeRating[]
 
   @@index([postId])
   @@map("recipes")
@@ -718,6 +720,21 @@ model RecipeIngredient {
   @@id([recipeId, ingredientId])
   @@index([ingredientId])
   @@map("recipe_ingredients")
+}
+
+/// One member's current score, not a history of rating attempts.
+model RecipeRating {
+  recipeId  String   @map("recipe_id") @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  value     Int      @db.SmallInt
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  recipe    Recipe   @relation(fields: [recipeId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([recipeId, userId])
+  @@index([userId])
+  @@map("recipe_ratings")
 }
 
 /// An ingredient a user does not eat (allergy, religion, dislike). Private to the user.
