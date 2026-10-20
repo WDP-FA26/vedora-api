@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   DietaryOptionsDto,
@@ -69,13 +70,16 @@ export class DietaryService {
   }
 
   /** Every ingredient the user avoids, directly or through a group. */
-  async avoidedIngredientIds(userId: string): Promise<Set<string>> {
+  async avoidedIngredientIds(
+    userId: string,
+    db: Prisma.TransactionClient = this.prisma,
+  ): Promise<Set<string>> {
     const [direct, viaGroups] = await Promise.all([
-      this.prisma.userAvoidedIngredient.findMany({
+      db.userAvoidedIngredient.findMany({
         where: { userId },
         select: { ingredientId: true },
       }),
-      this.prisma.ingredientGroupMember.findMany({
+      db.ingredientGroupMember.findMany({
         where: { group: { avoidedBy: { some: { userId } } } },
         select: { ingredientId: true },
       }),

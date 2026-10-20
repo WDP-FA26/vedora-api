@@ -1,4 +1,9 @@
-import { ConflictException, HttpStatus, Injectable } from '@nestjs/common';
+import {
+  ConflictException,
+  HttpStatus,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { MealSection, Prisma, Weekday } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { DietaryService } from '../recipes/dietary.service';
@@ -76,8 +81,11 @@ export class MealPlanService {
     private readonly rules: IncompatibilityRulesService,
   ) {}
 
-  async find(userId: string): Promise<MealPlanDto> {
-    const saved = await this.saved(userId);
+  async find(
+    userId: string,
+    db: Prisma.TransactionClient = this.prisma,
+  ): Promise<MealPlanDto> {
+    const saved = await this.saved(userId, db);
     return {
       days: WEEKDAYS.map((day) => {
         const sections = saved.get(day) ?? emptyDay();
@@ -89,7 +97,7 @@ export class MealPlanService {
           })),
         };
       }),
-      problems: await this.problems(userId, saved, WEEKDAYS),
+      problems: await this.problems(userId, saved, WEEKDAYS, db),
     };
   }
 
@@ -97,15 +105,16 @@ export class MealPlanService {
   async preview(
     userId: string,
     days: SaveMealDayDto[],
+    db: Prisma.TransactionClient = this.prisma,
   ): Promise<MealPlanPreview> {
-    const saved = await this.saved(userId);
+    const saved = await this.saved(userId, db);
     const requested = (day: SaveMealDayDto): Record<MealSection, string[]> => ({
       BREAKFAST: day.breakfast,
       LUNCH: day.lunch,
       DINNER: day.dinner,
       OTHER: day.others,
     });
-    const recipes = await this.prisma.recipe.findMany({
+    const recipes = await db.recipe.findMany({
       where: {
         id: {
           in: [
@@ -126,19 +135,20 @@ export class MealPlanService {
     for (const input of days) {
       const ids = requested(input);
       const sections = emptyDay();
-      let unknown = false;
+      const unknown = new Set<string>();
       for (const section of MEAL_SECTIONS) {
         for (const id of new Set(ids[section])) {
           const recipe = recipeById.get(id);
           if (recipe) sections[section].push(recipe);
-          else unknown = true;
+          else unknown.add(id);
         }
       }
-      if (unknown) {
+      if (unknown.size > 0) {
         problems.push({
           code: 'UNKNOWN_RECIPE',
           day: input.day,
           recipes: [],
+          recipeIds: [...unknown],
           ingredients: [],
           reason: null,
         });
@@ -150,7 +160,7 @@ export class MealPlanService {
       next.set(input.day, sections);
     }
 
-    problems.push(...(await this.problems(userId, next, daysToCheck)));
+    problems.push(...(await this.problems(userId, next, daysToCheck, db)));
     return {
       days: [...next].map(([day, sections]) => ({
         day,
@@ -165,36 +175,64 @@ export class MealPlanService {
   }
 
   async apply(userId: string, days: SaveMealDayDto[]): Promise<MealPlanDto> {
-    const preview = await this.preview(userId, days);
-    if (preview.problems.length > 0) {
-      throw new ConflictException({
-        statusCode: HttpStatus.CONFLICT,
-        error: 'Conflict',
-        code: 'MEAL_PLAN_INVALID',
-        message:
-          'These dishes break a dietary restriction or an incompatibility rule',
-        problems: preview.problems,
-      });
+    try {
+      return await this.prisma.$transaction(
+        async (tx) => {
+          // Lock an existing row even when the timetable is empty. READ COMMITTED
+          // lets the waiter read the preceding save after acquiring this lock.
+          const users = await tx.$queryRaw<{ id: string }[]>`
+          SELECT id FROM users WHERE id = ${userId}::uuid FOR UPDATE
+        `;
+          if (users.length === 0) throw new NotFoundException('User not found');
+
+          const preview = await this.preview(userId, days, tx);
+          if (preview.problems.length > 0) {
+            throw new ConflictException({
+              statusCode: HttpStatus.CONFLICT,
+              error: 'Conflict',
+              code: 'MEAL_PLAN_INVALID',
+              message:
+                'These dishes break a dietary restriction or an incompatibility rule',
+              problems: preview.problems,
+            });
+          }
+          await tx.mealPlanEntry.deleteMany({
+            where: { userId, day: { in: preview.days.map(({ day }) => day) } },
+          });
+          await tx.mealPlanEntry.createMany({
+            data: preview.days.flatMap(({ day, sections }) =>
+              sections.flatMap(({ section, recipes }) =>
+                recipes.map(({ id }, position) => ({
+                  userId,
+                  day,
+                  section,
+                  recipeId: id,
+                  position,
+                })),
+              ),
+            ),
+          });
+          // Build the response before releasing the lock, so it describes this
+          // save rather than a following request's replacement.
+          return this.find(userId, tx);
+        },
+        { isolationLevel: Prisma.TransactionIsolationLevel.ReadCommitted },
+      );
+    } catch (error) {
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        ['P2002', 'P2003', 'P2034'].includes(error.code)
+      ) {
+        throw new ConflictException({
+          statusCode: HttpStatus.CONFLICT,
+          error: 'Conflict',
+          code: 'MEAL_PLAN_CONFLICT',
+          message:
+            'The timetable or its recipes changed; preview again before saving',
+        });
+      }
+      throw error;
     }
-    await this.prisma.$transaction([
-      this.prisma.mealPlanEntry.deleteMany({
-        where: { userId, day: { in: preview.days.map(({ day }) => day) } },
-      }),
-      this.prisma.mealPlanEntry.createMany({
-        data: preview.days.flatMap(({ day, sections }) =>
-          sections.flatMap(({ section, recipes }) =>
-            recipes.map(({ id }, position) => ({
-              userId,
-              day,
-              section,
-              recipeId: id,
-              position,
-            })),
-          ),
-        ),
-      }),
-    ]);
-    return this.find(userId);
   }
 
   /** Recipes the user can eat: nothing avoided, no clash inside the recipe. */
@@ -249,8 +287,11 @@ export class MealPlanService {
       }));
   }
 
-  private async saved(userId: string): Promise<Week> {
-    const rows = await this.prisma.mealPlanEntry.findMany({
+  private async saved(
+    userId: string,
+    db: Prisma.TransactionClient,
+  ): Promise<Week> {
+    const rows = await db.mealPlanEntry.findMany({
       where: { userId },
       select: {
         day: true,
@@ -272,6 +313,7 @@ export class MealPlanService {
     userId: string,
     week: Week,
     days: readonly Weekday[],
+    db: Prisma.TransactionClient,
   ): Promise<MealPlanProblemDto[]> {
     const checked = WEEKDAYS.filter((day) => days.includes(day)).flatMap(
       (day) => {
@@ -282,7 +324,7 @@ export class MealPlanService {
     );
     if (checked.length === 0) return [];
 
-    const avoided = await this.dietary.avoidedIngredientIds(userId);
+    const avoided = await this.dietary.avoidedIngredientIds(userId, db);
     const problems: MealPlanProblemDto[] = [];
     for (const { day, recipes } of checked) {
       for (const recipe of recipes) {
@@ -294,6 +336,7 @@ export class MealPlanService {
             code: 'AVOIDED_INGREDIENT',
             day,
             recipes: [recipe.title],
+            recipeIds: [recipe.id],
             ingredients: hits.map(({ ingredient }) => ingredient.name),
             reason: null,
           });
@@ -305,6 +348,7 @@ export class MealPlanService {
       checked.map(({ recipes }) => [
         ...new Set(recipes.flatMap(ingredientIds)),
       ]),
+      db,
     );
     checked.forEach(({ day, recipes }, index) => {
       for (const { ingredientAId, ingredientBId, reason } of conflicts[index]) {
@@ -320,6 +364,7 @@ export class MealPlanService {
           code: 'DAY_CONFLICT',
           day,
           recipes: using.map(({ title }) => title),
+          recipeIds: using.map(({ id }) => id),
           ingredients: pair.map(name),
           reason,
         });

@@ -1,13 +1,27 @@
 import { execFileSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { join } from 'node:path';
+import { INestApplication } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import { JwtModule, JwtService } from '@nestjs/jwt';
+import { Test } from '@nestjs/testing';
 import { PostStatus, Prisma, PrismaClient } from '@prisma/client';
+import request from 'supertest';
+import type { App } from 'supertest/types';
+import { configureApp } from '../src/app.setup';
+import { MealPlanController } from '../src/meal-plan/meal-plan.controller';
+import { MealPlannerChatService } from '../src/meal-plan/meal-planner-chat.service';
+import { UserThrottlerGuard } from '../src/nutrition-chat/user-throttler.guard';
+import type {
+  MealPlanDto,
+  SaveMealDayDto,
+} from '../src/meal-plan/dto/meal-plan.dto';
 import { RecipeCatalogQueryDto } from '../src/recipes/dto/recipe-catalog.dto';
 import { IncompatibilityRulesService } from '../src/recipes/incompatibility-rules.service';
 import { RecipeCatalogService } from '../src/recipes/recipe-catalog.service';
 import { MealPlanService } from '../src/meal-plan/meal-plan.service';
 import { DietaryService } from '../src/recipes/dietary.service';
-import type { PrismaService } from '../src/prisma/prisma.service';
+import { PrismaService } from '../src/prisma/prisma.service';
 
 describe('Recipe catalog with PostgreSQL', () => {
   const schema = `vedora_catalog_test_${randomUUID().replaceAll('-', '')}`;
@@ -27,6 +41,8 @@ describe('Recipe catalog with PostgreSQL', () => {
   let partialRecipeId: string;
   let unknownRecipeId: string;
   let zeroRecipeId: string;
+  let app: INestApplication<App>;
+  let token: string;
 
   beforeAll(async () => {
     const base = process.env.TEST_DATABASE_URL;
@@ -131,6 +147,31 @@ describe('Recipe catalog with PostgreSQL', () => {
     await prisma.recipe.updateMany({
       data: { updatedAt: new Date('2026-10-12T00:00:00Z') },
     });
+    // Real HTTP controller, validation, JWT and PostgreSQL; no AI/provider calls.
+    const moduleRef = await Test.createTestingModule({
+      imports: [
+        JwtModule.register({ secret: 'meal-plan-database-test-secret' }),
+      ],
+      controllers: [MealPlanController],
+      providers: [
+        { provide: PrismaService, useValue: db },
+        { provide: MealPlanService, useValue: plan },
+        { provide: MealPlannerChatService, useValue: {} },
+        {
+          provide: ConfigService,
+          useValue: new ConfigService({ API_PREFIX: 'api/v1' }),
+        },
+      ],
+    })
+      .overrideGuard(UserThrottlerGuard)
+      .useValue({ canActivate: () => true })
+      .compile();
+    app = moduleRef.createNestApplication({ rawBody: true });
+    configureApp(app);
+    await app.init();
+    token = await app
+      .get(JwtService)
+      .signAsync({ sub: userId, username: 'catalog.user' });
   });
 
   beforeEach(async () => {
@@ -145,6 +186,7 @@ describe('Recipe catalog with PostgreSQL', () => {
   });
 
   afterAll(async () => {
+    if (app) await app.close();
     if (prisma) {
       await prisma.$executeRaw(
         Prisma.sql`DROP SCHEMA ${Prisma.raw(`"${schema}"`)} CASCADE`,
@@ -358,5 +400,120 @@ describe('Recipe catalog with PostgreSQL', () => {
       response: { code: 'MEAL_PLAN_INVALID' },
     });
     expect(await prisma.mealPlanEntry.count()).toBe(1);
+  });
+
+  const dayInput = (
+    day: SaveMealDayDto['day'],
+    lunch: string[],
+  ): SaveMealDayDto => ({
+    day,
+    breakfast: [],
+    lunch,
+    dinner: [],
+    others: [],
+  });
+
+  const saveHttp = (days: SaveMealDayDto[]) =>
+    request(app.getHttpServer())
+      .put('/api/v1/meal-plan/days')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ days });
+
+  const lunchIds = (body: MealPlanDto, day: string) =>
+    body.days
+      .find((item) => item.day === day)!
+      .sections.find((item) => item.section === 'LUNCH')!
+      .recipes.map(({ id }) => id);
+
+  it('handles parallel PUT retries of the same dish without duplicate-key failures', async () => {
+    const responses = await Promise.all(
+      Array.from({ length: 8 }, () =>
+        saveHttp([dayInput('MON', [riceRecipeId])]),
+      ),
+    );
+    expect(responses.map(({ status }) => status)).toEqual(Array(8).fill(200));
+    expect(await prisma.mealPlanEntry.findMany()).toMatchObject([
+      { day: 'MON', section: 'LUNCH', recipeId: riceRecipeId, position: 0 },
+    ]);
+    expect(await prisma.mealPlanEntry.count()).toBe(1);
+  });
+
+  it('replaces concurrent same-day payloads completely and returns each save, not a merged meal', async () => {
+    const first = [
+      tofuRecipeId,
+      spinachRecipeId,
+      riceRecipeId,
+      conflictRecipeId,
+      partialRecipeId,
+      unknownRecipeId,
+    ];
+    const second = [zeroRecipeId];
+    const responses = await Promise.all([
+      saveHttp([dayInput('MON', first)]),
+      saveHttp([dayInput('MON', second)]),
+    ]);
+    expect(responses.map(({ status }) => status)).toEqual([200, 200]);
+    expect(lunchIds(responses[0].body as MealPlanDto, 'MON')).toEqual(first);
+    expect(lunchIds(responses[1].body as MealPlanDto, 'MON')).toEqual(second);
+    const rows = await prisma.mealPlanEntry.findMany({
+      orderBy: { position: 'asc' },
+    });
+    expect([first, second]).toContainEqual(
+      rows.map(({ recipeId }) => recipeId),
+    );
+    expect(rows.map(({ position }) => position)).toEqual(
+      rows.map((_, index) => index),
+    );
+  });
+
+  it('keeps both changes when parallel PUTs replace different days', async () => {
+    const responses = await Promise.all([
+      saveHttp([dayInput('MON', [riceRecipeId])]),
+      saveHttp([dayInput('TUE', [tofuRecipeId])]),
+    ]);
+    expect(responses.map(({ status }) => status)).toEqual([200, 200]);
+    const saved = await plan.find(userId);
+    expect(lunchIds(saved, 'MON')).toEqual([riceRecipeId]);
+    expect(lunchIds(saved, 'TUE')).toEqual([tofuRecipeId]);
+    expect(await prisma.mealPlanEntry.count()).toBe(2);
+  });
+
+  it('rolls back every requested day when one is invalid while another PUT succeeds', async () => {
+    await plan.apply(userId, [dayInput('MON', [riceRecipeId])]);
+    await prisma.userAvoidedIngredient.create({
+      data: { userId, ingredientId: tofuId },
+    });
+    const responses = await Promise.all([
+      saveHttp([dayInput('MON', []), dayInput('TUE', [tofuRecipeId])]),
+      saveHttp([dayInput('WED', [spinachRecipeId])]),
+    ]);
+    expect(responses.map(({ status }) => status)).toEqual([409, 200]);
+    expect(responses[0].body).toMatchObject({
+      code: 'MEAL_PLAN_INVALID',
+      problems: [{ recipeIds: [tofuRecipeId], recipes: ['Đậu hũ sốt cà'] }],
+    });
+    const saved = await plan.find(userId);
+    expect(lunchIds(saved, 'MON')).toEqual([riceRecipeId]);
+    expect(lunchIds(saved, 'TUE')).toEqual([]);
+    expect(lunchIds(saved, 'WED')).toEqual([spinachRecipeId]);
+  });
+
+  it('preserves removal-only repairs but checks existing dishes when a new one is added', async () => {
+    await plan.apply(userId, [dayInput('MON', [tofuRecipeId, riceRecipeId])]);
+    await prisma.userAvoidedIngredient.create({
+      data: { userId, ingredientId: tofuId },
+    });
+    const rejected = await saveHttp([
+      dayInput('MON', [tofuRecipeId, riceRecipeId, spinachRecipeId]),
+    ]);
+    expect(rejected.status).toBe(409);
+    expect((rejected.body as { problems: unknown }).problems).toMatchObject([
+      { recipeIds: [tofuRecipeId] },
+    ]);
+    const repaired = await saveHttp([dayInput('MON', [riceRecipeId])]);
+    expect(repaired.status).toBe(200);
+    expect(lunchIds(repaired.body as MealPlanDto, 'MON')).toEqual([
+      riceRecipeId,
+    ]);
   });
 });

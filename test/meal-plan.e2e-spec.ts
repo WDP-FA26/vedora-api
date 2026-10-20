@@ -1,7 +1,7 @@
 import { INestApplication } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { Test } from '@nestjs/testing';
-import { UserRole } from '@prisma/client';
+import { Prisma, UserRole } from '@prisma/client';
 import request from 'supertest';
 import type { App } from 'supertest/types';
 import { mockDeep, mockReset } from 'vitest-mock-extended';
@@ -58,6 +58,10 @@ describe('Meal plan (e2e)', () => {
 
   beforeEach(() => {
     mockReset(prisma);
+    prisma.$transaction.mockImplementation((run: unknown) =>
+      (run as (tx: PrismaService) => Promise<unknown>)(prisma),
+    );
+    prisma.$queryRaw.mockResolvedValue([{ id: USER_ID }]);
     prisma.user.findUnique.mockResolvedValue({
       status: 'ACTIVE',
       accountVersion: 0,
@@ -164,7 +168,13 @@ describe('Meal plan (e2e)', () => {
     expect(response.body).toMatchObject({
       code: 'MEAL_PLAN_INVALID',
       problems: [
-        { code: 'AVOIDED_INGREDIENT', day: 'MON', ingredients: ['Đậu hũ'] },
+        {
+          code: 'AVOIDED_INGREDIENT',
+          day: 'MON',
+          recipes: ['Đậu hũ sốt cà'],
+          recipeIds: [RECIPE_ID],
+          ingredients: ['Đậu hũ'],
+        },
       ],
     });
     expect(prisma.mealPlanEntry.createMany).not.toHaveBeenCalled();
@@ -180,5 +190,42 @@ describe('Meal plan (e2e)', () => {
         ],
       })
       .expect(400);
+  });
+
+  it('returns missing recipe IDs in preview and save errors', async () => {
+    prisma.recipe.findMany.mockResolvedValue([]);
+    for (const method of ['post', 'put'] as const) {
+      const response = await request(app.getHttpServer())
+        [method](`/api/v1/meal-plan/${method === 'post' ? 'preview' : 'days'}`)
+        .set('Authorization', `Bearer ${token}`)
+        .send(body)
+        .expect(method === 'post' ? 200 : 409);
+      expect((response.body as { problems: unknown }).problems).toEqual([
+        {
+          code: 'UNKNOWN_RECIPE',
+          day: 'MON',
+          recipes: [],
+          recipeIds: [RECIPE_ID],
+          ingredients: [],
+          reason: null,
+        },
+      ]);
+    }
+    expect(prisma.mealPlanEntry.createMany).not.toHaveBeenCalled();
+  });
+
+  it('returns 409 instead of 500 for a database write conflict', async () => {
+    prisma.mealPlanEntry.createMany.mockRejectedValue(
+      new Prisma.PrismaClientKnownRequestError('duplicate', {
+        code: 'P2002',
+        clientVersion: '6.12.0',
+      }),
+    );
+    const response = await request(app.getHttpServer())
+      .put('/api/v1/meal-plan/days')
+      .set('Authorization', `Bearer ${token}`)
+      .send(body)
+      .expect(409);
+    expect((response.body as { code: string }).code).toBe('MEAL_PLAN_CONFLICT');
   });
 });
