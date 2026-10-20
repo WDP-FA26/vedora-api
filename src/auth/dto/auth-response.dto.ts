@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { UserRole } from '@prisma/client';
+import { AccountStatus, UserRole } from '@prisma/client';
 
 export class UserResponseDto {
   @ApiProperty({ format: 'uuid' })
@@ -16,6 +16,12 @@ export class UserResponseDto {
 
   @ApiProperty({ enum: UserRole, example: UserRole.USER })
   role!: UserRole;
+
+  @ApiProperty({ enum: AccountStatus })
+  status!: AccountStatus;
+
+  @ApiProperty({ minimum: 0 })
+  accountVersion!: number;
 
   @ApiProperty()
   createdAt!: Date;

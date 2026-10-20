@@ -2,6 +2,8 @@ import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { PrismaService } from '../prisma/prisma.service';
+import { Prisma } from '@prisma/client';
+import { assertAccountActive } from './account-access';
 
 export interface IssuedRefreshToken {
   token: string;
@@ -28,13 +30,16 @@ export class RefreshTokensService {
 
   async issue(userId: string): Promise<IssuedRefreshToken> {
     const token = this.generateToken();
-    await this.prisma.refreshToken.create({
-      data: {
-        familyId: randomUUID(),
-        tokenHash: this.hashToken(token),
-        userId,
-        expiresAt: this.expiresAt(),
-      },
+    await this.prisma.$transaction(async (tx) => {
+      await this.lockActiveAccount(tx, userId);
+      await tx.refreshToken.create({
+        data: {
+          familyId: randomUUID(),
+          tokenHash: this.hashToken(token),
+          userId,
+          expiresAt: this.expiresAt(),
+        },
+      });
     });
 
     return { token, expiresIn: this.refreshTokenTtl };
@@ -67,6 +72,7 @@ export class RefreshTokensService {
     const replacementToken = this.generateToken();
     const replacementId = randomUUID();
     const rotated = await this.prisma.$transaction(async (transaction) => {
+      await this.lockActiveAccount(transaction, storedToken.userId);
       const revoked = await transaction.refreshToken.updateMany({
         where: {
           id: storedToken.id,
@@ -131,6 +137,19 @@ export class RefreshTokensService {
 
   private generateToken(): string {
     return randomBytes(48).toString('base64url');
+  }
+
+  private async lockActiveAccount(
+    tx: Prisma.TransactionClient,
+    userId: string,
+  ): Promise<void> {
+    await tx.$queryRaw`SELECT id FROM users WHERE id = ${userId}::uuid FOR UPDATE`;
+    const user = await tx.user.findUnique({
+      where: { id: userId },
+      select: { status: true },
+    });
+    if (!user) throw new UnauthorizedException('Account no longer exists');
+    assertAccountActive(user.status);
   }
 
   private hashToken(token: string): string {

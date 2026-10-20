@@ -72,6 +72,8 @@ describe('Shared pagination (e2e)', () => {
   beforeEach(() => {
     mockReset(prisma);
     prisma.user.findUnique.mockResolvedValue({
+      status: 'ACTIVE',
+      accountVersion: 0,
       id: AUTHOR_ID,
       username: user.username,
       role: UserRole.ADMIN,

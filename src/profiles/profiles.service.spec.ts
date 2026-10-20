@@ -10,6 +10,7 @@ import {
   type ProfileImageUpload,
 } from '@prisma/client';
 import { type DeepMockProxy, mockDeep } from 'vitest-mock-extended';
+import { NotificationsService } from '../notifications/notifications.service';
 import { PrismaService } from '../prisma/prisma.service';
 import type { PresignedUploadDto } from '../storage/presigned-upload.dto';
 import { StorageService, StorageTarget } from '../storage/storage.service';
@@ -40,6 +41,7 @@ const presigned: PresignedUploadDto = {
 describe('ProfilesService', () => {
   let prisma: DeepMockProxy<PrismaService>;
   let storage: DeepMockProxy<StorageService>;
+  let notifications: DeepMockProxy<NotificationsService>;
   let service: ProfilesService;
 
   beforeEach(() => {
@@ -47,7 +49,8 @@ describe('ProfilesService', () => {
     prisma = mockDeep<PrismaService>();
     storage = mockDeep<StorageService>();
     storage.isConfigured.mockReturnValue(true);
-    service = new ProfilesService(prisma, storage);
+    notifications = mockDeep<NotificationsService>();
+    service = new ProfilesService(prisma, storage, notifications);
     prisma.user.findUnique.mockResolvedValue(user as never);
     prisma.post.count.mockResolvedValue(3);
     prisma.follow.count.mockResolvedValueOnce(5).mockResolvedValueOnce(2);
@@ -82,11 +85,21 @@ describe('ProfilesService', () => {
     await expect(service.follow(userId, userId)).rejects.toBeInstanceOf(
       BadRequestException,
     );
+    prisma.follow.createMany.mockResolvedValueOnce({ count: 1 });
     await service.follow(userId, viewerId);
     expect(prisma.follow.createMany).toHaveBeenCalledWith({
       data: [{ followerId: viewerId, followingId: userId }],
       skipDuplicates: true,
     });
+    expect(notifications.notify).toHaveBeenCalledWith({
+      recipientId: userId,
+      actorId: viewerId,
+      type: 'FOLLOW',
+    });
+    notifications.notify.mockClear();
+    prisma.follow.createMany.mockResolvedValueOnce({ count: 0 });
+    await service.follow(userId, viewerId);
+    expect(notifications.notify).not.toHaveBeenCalled();
     await service.unfollow(userId, viewerId);
     expect(prisma.follow.deleteMany).toHaveBeenCalledWith({
       where: { followerId: viewerId, followingId: userId },

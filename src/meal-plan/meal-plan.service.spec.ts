@@ -1,4 +1,5 @@
 import { ConflictException } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { type DeepMockProxy, mockDeep } from 'vitest-mock-extended';
 import { PrismaService } from '../prisma/prisma.service';
 import { DietaryService } from '../recipes/dietary.service';
@@ -63,6 +64,10 @@ describe('MealPlanService', () => {
 
   beforeEach(() => {
     prisma = mockDeep<PrismaService>();
+    prisma.$transaction.mockImplementation((run: unknown) =>
+      (run as (tx: PrismaService) => Promise<unknown>)(prisma),
+    );
+    prisma.$queryRaw.mockResolvedValue([{ id: USER_ID }]);
     service = new MealPlanService(
       prisma,
       new DietaryService(prisma),
@@ -95,6 +100,7 @@ describe('MealPlanService', () => {
         code: 'DAY_CONFLICT',
         day: 'MON',
         recipes: ['Đậu hũ sốt cà', 'Canh rau bina'],
+        recipeIds: [tofuDish.id, spinachSoup.id],
         ingredients: ['Đậu hũ', 'Rau bina'],
         reason: 'Oxalat cản hấp thu canxi',
       },
@@ -143,6 +149,7 @@ describe('MealPlanService', () => {
         code: 'AVOIDED_INGREDIENT',
         day: 'WED',
         recipes: ['Đậu hũ sốt cà'],
+        recipeIds: [tofuDish.id],
         ingredients: ['Đậu hũ'],
       }),
     ]);
@@ -175,11 +182,22 @@ describe('MealPlanService', () => {
     prisma.recipe.findMany.mockResolvedValue([]);
 
     const { problems } = await service.preview(USER_ID, [
-      { day: 'MON', breakfast: [], lunch: [rice.id], dinner: [], others: [] },
+      {
+        day: 'MON',
+        breakfast: [rice.id],
+        lunch: [rice.id, tofuDish.id],
+        dinner: [],
+        others: [],
+      },
     ]);
 
     expect(problems).toEqual([
-      expect.objectContaining({ code: 'UNKNOWN_RECIPE', day: 'MON' }),
+      expect.objectContaining({
+        code: 'UNKNOWN_RECIPE',
+        day: 'MON',
+        recipes: [],
+        recipeIds: [rice.id, tofuDish.id],
+      }),
     ]);
   });
 
@@ -195,8 +213,34 @@ describe('MealPlanService', () => {
         },
       ]),
     ).rejects.toBeInstanceOf(ConflictException);
-    expect(prisma.$transaction).not.toHaveBeenCalled();
+    expect(prisma.mealPlanEntry.deleteMany).not.toHaveBeenCalled();
+    expect(prisma.mealPlanEntry.createMany).not.toHaveBeenCalled();
   });
+
+  it.each(['P2002', 'P2003', 'P2034'])(
+    'returns a retryable conflict for %s',
+    async (code) => {
+      prisma.mealPlanEntry.createMany.mockRejectedValue(
+        new Prisma.PrismaClientKnownRequestError('conflict', {
+          code,
+          clientVersion: '6.12.0',
+        }),
+      );
+      await expect(
+        service.apply(USER_ID, [
+          {
+            day: 'MON',
+            breakfast: [],
+            lunch: [rice.id],
+            dinner: [],
+            others: [],
+          },
+        ]),
+      ).rejects.toMatchObject({
+        response: { statusCode: 409, code: 'MEAL_PLAN_CONFLICT' },
+      });
+    },
+  );
 
   it('replaces the listed days only, keeping the order', async () => {
     await service.apply(USER_ID, [

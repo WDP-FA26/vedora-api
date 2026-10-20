@@ -31,7 +31,14 @@ import type {
 } from '../auth/auth.types';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { OptionalJwtAuthGuard } from '../auth/optional-jwt-auth.guard';
+import { BlogImagesService } from './blog-images.service';
 import { BlogsService } from './blogs.service';
+import { CloudinaryService } from '../cloudinary/cloudinary.service';
+import {
+  BlogImageUploadDto,
+  BlogVideoUploadDto,
+  CreateBlogImageUploadDto,
+} from './dto/blog-image.dto';
 import {
   BlogDetailDto,
   CreateBlogDto,
@@ -50,6 +57,8 @@ export class BlogsController {
   constructor(
     private readonly blogs: BlogsService,
     private readonly posts: PostsService,
+    private readonly images: BlogImagesService,
+    private readonly cloudinary: CloudinaryService,
   ) {}
 
   @Post()
@@ -59,6 +68,29 @@ export class BlogsController {
   @ApiCreatedResponse({ type: BlogDetailDto })
   create(@Req() request: AuthenticatedRequest, @Body() dto: CreateBlogDto) {
     return this.blogs.create(request.user.sub, dto);
+  }
+
+  @Post('images/uploads')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Get a presigned upload for an image in a blog' })
+  @ApiCreatedResponse({ type: BlogImageUploadDto })
+  createImageUpload(
+    @Req() request: AuthenticatedRequest,
+    @Body() dto: CreateBlogImageUploadDto,
+  ) {
+    return this.images.createUpload(request.user.sub, dto);
+  }
+
+  @Post('videos/uploads')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'Get a signed Cloudinary upload for a video in a blog',
+  })
+  @ApiCreatedResponse({ type: BlogVideoUploadDto })
+  createVideoUpload() {
+    return this.cloudinary.signBlogVideoUpload();
   }
 
   @Get()

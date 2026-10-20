@@ -24,6 +24,8 @@ function account(id: string, role: UserRole = UserRole.USER): User {
     coverUrl: null,
     isProfessional: false,
     role,
+    status: 'ACTIVE',
+    accountVersion: 0,
     passwordHash: null,
     googleId: null,
     emailVerifiedAt: new Date(),
@@ -79,7 +81,12 @@ describe('Account permissions (e2e)', () => {
     prisma.user.delete.mockResolvedValue(account(USER_ID));
     prisma.user.create.mockResolvedValue(account(OTHER_ID));
     prisma.user.findMany.mockResolvedValue([account(USER_ID)]);
-    prisma.$transaction.mockResolvedValue([[account(USER_ID)], 1]);
+    prisma.user.count.mockResolvedValue(2);
+    prisma.$transaction.mockImplementation((operation: unknown) =>
+      typeof operation === 'function'
+        ? (operation as (tx: PrismaService) => Promise<never>)(prisma)
+        : Promise.resolve([[account(USER_ID)], 1]),
+    );
   });
 
   afterAll(async () => {
@@ -233,7 +240,7 @@ describe('Account permissions (e2e)', () => {
       const response = await request(app.getHttpServer())
         .patch(`/api/v1/users/${USER_ID}/role`)
         .auth(adminToken, { type: 'bearer' })
-        .send({ role })
+        .send({ role, expectedVersion: 0, reason: 'Role review' })
         .expect(200);
       expect(response.body).toMatchObject({ id: USER_ID, role });
     },
@@ -320,4 +327,154 @@ describe('Account permissions (e2e)', () => {
         .expect(401);
     },
   );
+
+  it('allows an admin to suspend an account with a trimmed audit reason', async () => {
+    prisma.user.update.mockResolvedValue({
+      ...account(USER_ID),
+      status: 'SUSPENDED',
+      accountVersion: 1,
+    });
+    const response = await request(app.getHttpServer())
+      .patch(`/api/v1/users/${USER_ID}/status`)
+      .auth(adminToken, { type: 'bearer' })
+      .send({
+        status: 'SUSPENDED',
+        expectedVersion: 0,
+        reason: '  Policy review  ',
+      })
+      .expect(200);
+    expect(response.body).toMatchObject({
+      status: 'SUSPENDED',
+      accountVersion: 1,
+    });
+    expect(prisma.userAccountAudit.create.mock.calls[0][0].data).toMatchObject({
+      actorId: ADMIN_ID,
+      userId: USER_ID,
+      reason: 'Policy review',
+      action: 'SUSPEND',
+    });
+  });
+
+  it('forbids ordinary accounts from suspending themselves', async () => {
+    await request(app.getHttpServer())
+      .patch(`/api/v1/users/${USER_ID}/status`)
+      .auth(userToken, { type: 'bearer' })
+      .send({ status: 'SUSPENDED', expectedVersion: 0, reason: 'Review' })
+      .expect(403);
+    expect(prisma.user.update).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    {},
+    { status: 'DELETED', expectedVersion: 0, reason: 'Review' },
+    { status: 'PENDING_EMAIL', expectedVersion: 0, reason: 'Review' },
+    { status: 'SUSPENDED', expectedVersion: '0', reason: 'Review' },
+    { status: 'SUSPENDED', expectedVersion: -1, reason: 'Review' },
+    { status: 'SUSPENDED', expectedVersion: 0.5, reason: 'Review' },
+    { status: 'SUSPENDED', expectedVersion: 0, reason: '   ' },
+    { status: 'SUSPENDED', expectedVersion: 0, reason: 'x'.repeat(501) },
+    {
+      status: 'SUSPENDED',
+      expectedVersion: 0,
+      reason: 'Review',
+      userId: OTHER_ID,
+    },
+  ])('rejects invalid status operations: %j', async (body) => {
+    await request(app.getHttpServer())
+      .patch(`/api/v1/users/${USER_ID}/status`)
+      .auth(adminToken, { type: 'bearer' })
+      .send(body)
+      .expect(400);
+    expect(prisma.user.update).not.toHaveBeenCalled();
+    expect(prisma.userAccountAudit.create).not.toHaveBeenCalled();
+  });
+
+  it('returns a conflict code for a stale target version', async () => {
+    const response = await request(app.getHttpServer())
+      .patch(`/api/v1/users/${USER_ID}/status`)
+      .auth(adminToken, { type: 'bearer' })
+      .send({ status: 'SUSPENDED', expectedVersion: 1, reason: 'Review' })
+      .expect(409);
+    expect(response.body).toMatchObject({ code: 'ACCOUNT_VERSION_CONFLICT' });
+    expect(prisma.user.update).not.toHaveBeenCalled();
+  });
+
+  it.each(['status', 'role', 'delete'])(
+    'protects the final ACTIVE admin via the %s endpoint',
+    async (endpoint) => {
+      prisma.user.count.mockResolvedValue(1);
+      const operation =
+        endpoint === 'delete'
+          ? request(app.getHttpServer()).delete(`/api/v1/users/${ADMIN_ID}`)
+          : request(app.getHttpServer())
+              .patch(`/api/v1/users/${ADMIN_ID}/${endpoint}`)
+              .send({
+                ...(endpoint === 'role'
+                  ? { role: 'USER' }
+                  : { status: 'SUSPENDED' }),
+                expectedVersion: 0,
+                reason: 'Review',
+              });
+      const response = await operation
+        .auth(adminToken, { type: 'bearer' })
+        .expect(409);
+      expect(response.body).toMatchObject({ code: 'LAST_ACTIVE_ADMIN' });
+      expect(prisma.user.update).not.toHaveBeenCalled();
+      expect(prisma.user.delete).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([
+    '/api/v1/auth/me',
+    '/api/v1/users',
+    `/api/v1/posts/${OTHER_ID}`,
+    '/api/v1/recipes',
+  ])(
+    'blocks a suspended account on %s with an unexpired token',
+    async (path) => {
+      prisma.user.findUnique.mockResolvedValue({
+        ...account(USER_ID),
+        status: 'SUSPENDED',
+      });
+      const response = await request(app.getHttpServer())
+        .get(path)
+        .auth(userToken, { type: 'bearer' })
+        .expect(401);
+      expect(response.body).toMatchObject({ code: 'ACCOUNT_SUSPENDED' });
+    },
+  );
+
+  it('rejects a pending account token', async () => {
+    prisma.user.findUnique.mockResolvedValue({
+      ...account(USER_ID),
+      status: 'PENDING_EMAIL',
+    });
+    const response = await request(app.getHttpServer())
+      .get('/api/v1/auth/me')
+      .auth(userToken, { type: 'bearer' })
+      .expect(401);
+    expect(response.body).toMatchObject({ code: 'ACCOUNT_NOT_ACTIVE' });
+  });
+
+  it('rejects status injection through profile updates', async () => {
+    await request(app.getHttpServer())
+      .patch(`/api/v1/users/${USER_ID}`)
+      .auth(userToken, { type: 'bearer' })
+      .send({ status: 'ACTIVE' })
+      .expect(400);
+  });
+
+  it('filters admin member search without allowing arbitrary includes', async () => {
+    await request(app.getHttpServer())
+      .get('/api/v1/users?q=Member&status=SUSPENDED')
+      .auth(adminToken, { type: 'bearer' })
+      .expect(200);
+    expect(prisma.user.findMany.mock.calls[0][0]?.where).toMatchObject({
+      status: 'SUSPENDED',
+    });
+    await request(app.getHttpServer())
+      .get('/api/v1/users?include=mealPlan')
+      .auth(adminToken, { type: 'bearer' })
+      .expect(400);
+  });
 });

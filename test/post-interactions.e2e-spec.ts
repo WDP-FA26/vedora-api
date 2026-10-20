@@ -75,6 +75,8 @@ describe('Post comments and likes (e2e)', () => {
   beforeEach(() => {
     mockReset(prisma);
     prisma.user.findUnique.mockResolvedValue({
+      status: 'ACTIVE',
+      accountVersion: 0,
       id: USER_ID,
       username: author.username,
       role: UserRole.USER,
@@ -190,6 +192,8 @@ describe('Post comments and likes (e2e)', () => {
     'rejects editing another author’s comment as %s',
     async (role) => {
       prisma.user.findUnique.mockResolvedValue({
+        status: 'ACTIVE',
+        accountVersion: 0,
         id: USER_ID,
         username: author.username,
         role,
@@ -219,6 +223,8 @@ describe('Post comments and likes (e2e)', () => {
         prisma.post.findFirst.mockResolvedValue({ ...post, authorId: USER_ID });
       if (actor === 'admin')
         prisma.user.findUnique.mockResolvedValue({
+          status: 'ACTIVE',
+          accountVersion: 0,
           id: USER_ID,
           username: author.username,
           role: UserRole.ADMIN,

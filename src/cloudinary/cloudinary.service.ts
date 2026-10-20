@@ -1,7 +1,7 @@
 import { Injectable, ServiceUnavailableException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { v2 as cloudinary } from 'cloudinary';
-import { createHash, timingSafeEqual } from 'node:crypto';
+import { createHash, randomUUID, timingSafeEqual } from 'node:crypto';
 
 /** Adaptive HLS, built by an eager job right after the upload. */
 export const STREAM_TRANSFORMATION = 'sp_auto/m3u8';
@@ -100,19 +100,40 @@ export class CloudinaryService {
    * public ID and the HLS eager job, so the browser can't change either.
    */
   signVideoUpload(publicId: string): SignedUpload {
-    this.require();
-    const params = {
+    return this.signUpload({
       public_id: publicId,
       asset_folder: `${this.folder}/videos`,
       eager: STREAM_TRANSFORMATION,
       eager_async: 'true',
+    });
+  }
+
+  /**
+   * Signs a direct upload of a video that a blog embeds. It lives under
+   * `<folder>/blog-videos/`, outside the post-media bookkeeping, so the media
+   * sweeps and webhooks leave it alone. Delivered as progressive MP4.
+   */
+  signBlogVideoUpload(): { upload: SignedUpload; url: string } {
+    const folder = `${this.folder}/blog-videos`;
+    const publicId = `${folder}/${randomUUID()}`;
+    return {
+      upload: this.signUpload({ public_id: publicId, asset_folder: folder }),
+      url: `https://res.cloudinary.com/${this.cloudName}/video/upload/q_auto/${publicId}.mp4`,
+    };
+  }
+
+  /** Signs `params` plus a fresh timestamp for a direct video upload. */
+  private signUpload(params: Record<string, string>): SignedUpload {
+    this.require();
+    const signed = {
+      ...params,
       overwrite: 'false',
       timestamp: String(Math.round(Date.now() / 1000)),
     };
-    const signature = cloudinary.utils.api_sign_request(params, this.apiSecret);
+    const signature = cloudinary.utils.api_sign_request(signed, this.apiSecret);
     return {
       url: `https://api.cloudinary.com/v1_1/${this.cloudName}/video/upload`,
-      fields: { ...params, api_key: this.apiKey, signature },
+      fields: { ...signed, api_key: this.apiKey, signature },
       chunkSize: UPLOAD_CHUNK_BYTES,
     };
   }

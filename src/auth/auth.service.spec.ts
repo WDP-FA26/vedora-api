@@ -23,6 +23,8 @@ describe('AuthService', () => {
     fullName: 'Vedora User',
     email: 'hello@vedora.vn',
     role: UserRole.USER,
+    status: 'ACTIVE',
+    accountVersion: 0,
     createdAt: now,
     updatedAt: now,
   };
@@ -46,6 +48,7 @@ describe('AuthService', () => {
 
   beforeEach(async () => {
     users = mockDeep<UsersService>();
+    users.findPublicById.mockResolvedValue(publicUser);
     refreshTokens = mockDeep<RefreshTokensService>();
     emailVerification = mockDeep<EmailVerificationService>();
     passwordReset = mockDeep<PasswordResetService>();

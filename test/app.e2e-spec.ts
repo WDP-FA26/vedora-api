@@ -32,6 +32,8 @@ describe('Vedora API (e2e)', () => {
   beforeAll(async () => {
     prisma = mockDeep<PrismaService>();
     prisma.user.findUnique.mockResolvedValue({
+      status: 'ACTIVE',
+      accountVersion: 0,
       id: '4a1e32e4-e18e-4dd7-8b4a-246ef2113ff2',
       username: 'vedora.user',
       role: UserRole.USER,

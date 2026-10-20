@@ -28,6 +28,10 @@ import type { AuthenticatedRequest } from '../auth/auth.types';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CursorPaginationQueryDto } from '../common/pagination';
 import {
+  FollowSuggestionListDto,
+  FollowSuggestionQueryDto,
+} from './dto/follow-suggestion.dto';
+import {
   CreateProfileImageUploadDto,
   ProfileDto,
   ProfileImageUploadDto,
@@ -35,12 +39,16 @@ import {
   ProfileRelationshipDto,
   UpdateProfileDto,
 } from './dto/profile.dto';
+import { FollowSuggestionsService } from './follow-suggestions.service';
 import { ProfilesService } from './profiles.service';
 
 @ApiTags('profiles')
 @Controller('profiles')
 export class ProfilesController {
-  constructor(private readonly profiles: ProfilesService) {}
+  constructor(
+    private readonly profiles: ProfilesService,
+    private readonly suggestions: FollowSuggestionsService,
+  ) {}
 
   @Get('me')
   @UseGuards(JwtAuthGuard)
@@ -100,6 +108,31 @@ export class ProfilesController {
     @Param('kind', new ParseEnumPipe(ProfileImageKind)) kind: ProfileImageKind,
   ): Promise<ProfileDto> {
     return this.profiles.clearImage(request.user.sub, kind);
+  }
+
+  @Get('suggestions')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Who to follow' })
+  @ApiOkResponse({ type: FollowSuggestionListDto })
+  suggestionsList(
+    @Req() request: AuthenticatedRequest,
+    @Query() query: FollowSuggestionQueryDto,
+  ): Promise<FollowSuggestionListDto> {
+    return this.suggestions.list(request.user.sub, query.limit);
+  }
+
+  @Delete('suggestions/:id')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Stop suggesting a profile (idempotent)' })
+  @ApiNoContentResponse()
+  dismissSuggestion(
+    @Req() request: AuthenticatedRequest,
+    @Param('id', ParseUUIDPipe) id: string,
+  ): Promise<void> {
+    return this.suggestions.dismiss(request.user.sub, id);
   }
 
   @Get(':id/followers')
