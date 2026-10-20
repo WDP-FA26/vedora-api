@@ -27,6 +27,7 @@ function build(env: Record<string, unknown> = {}) {
       STORAGE_KNOWLEDGE_BUCKET: 'vedora-knowledge',
       STORAGE_PROFILES_BUCKET: 'vedora-profiles',
       STORAGE_VERIFICATIONS_BUCKET: 'vedora-verifications',
+      STORAGE_BLOGS_BUCKET: 'vedora-blogs',
       ...env,
     }),
   );
@@ -79,13 +80,16 @@ describe('StorageService', () => {
   });
 
   it('serves profile images from the public bucket URL', () => {
-    expect(build().publicObjectUrl('profiles/u/avatar/a.png')).toBe(
-      'https://storage.vedora.vn/vedora-profiles/profiles/u/avatar/a.png',
-    );
+    expect(
+      build().publicObjectUrl(
+        StorageTarget.Profiles,
+        'profiles/u/avatar/a.png',
+      ),
+    ).toBe('https://storage.vedora.vn/vedora-profiles/profiles/u/avatar/a.png');
   });
 
   describe('onModuleInit', () => {
-    it('creates the buckets, binds upload events and opens only profiles for reading', async () => {
+    it('creates the buckets, binds upload events and opens only profiles and blogs for reading', async () => {
       s3.on(CreateBucketCommand)
         .rejects(
           new BucketAlreadyOwnedByYou({ message: 'exists', $metadata: {} }),
@@ -109,9 +113,15 @@ describe('StorageService', () => {
         ['vedora-knowledge', 'arn:rustfs:sqs:us-east-1:knowledge:webhook'],
         ['vedora-profiles', 'arn:rustfs:sqs:us-east-1:profiles:webhook'],
       ]);
-      const [policy] = s3.commandCalls(PutBucketPolicyCommand);
-      expect(policy.args[0].input.Bucket).toBe('vedora-profiles');
-      expect(JSON.parse(policy.args[0].input.Policy!)).toMatchObject({
+      const policies = s3.commandCalls(PutBucketPolicyCommand);
+      expect(policies.map(({ args }) => args[0].input.Bucket).sort()).toEqual([
+        'vedora-blogs',
+        'vedora-profiles',
+      ]);
+      const profiles = policies.find(
+        ({ args }) => args[0].input.Bucket === 'vedora-profiles',
+      )!;
+      expect(JSON.parse(profiles.args[0].input.Policy!)).toMatchObject({
         Statement: [
           {
             Action: ['s3:GetObject'],

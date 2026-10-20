@@ -78,6 +78,33 @@ dõi tài khoản chưa theo dõi đều thành công. Không thể Follow chín
 ID không tồn tại hoặc chưa xác minh trả `404`. Guest bấm Follow nên được dẫn tới
 đăng nhập rồi quay lại trang profile.
 
+## Gợi ý theo dõi
+
+| Method   | Endpoint                         | Auth | Thành công                       |
+| -------- | -------------------------------- | ---- | -------------------------------- |
+| `GET`    | `/profiles/suggestions?limit=5`  | Có   | `{ items: FollowSuggestion[] }`  |
+| `DELETE` | `/profiles/suggestions/:id`      | Có   | `204`, không có body             |
+
+`limit` từ 1 đến 20 (mặc định 5). Không phân trang: danh sách ngắn, mỗi lần tải
+lại là một danh sách mới. Mỗi phần tử là `ProfileSummary` kèm lý do thật:
+
+```ts
+type FollowSuggestion = ProfileSummary & {
+  reason: "FOLLOWS_YOU" | "MUTUAL" | "ACTIVE";
+  mutualCount: number; // chỉ > 0 khi reason = MUTUAL
+};
+```
+
+- `FOLLOWS_YOU`: người này đã theo dõi bạn.
+- `MUTUAL`: được `mutualCount` người bạn đang theo dõi theo dõi.
+- `ACTIVE`: đăng bài gần đây, dùng khi chưa đủ dữ liệu quan hệ (ví dụ tài khoản mới).
+
+Danh sách được server dựng lại mỗi giờ; người vừa được Follow hoặc bị ẩn sẽ không
+xuất hiện lại ngay cả khi chưa đến lần dựng tiếp theo. Sau khi Follow từ gợi ý,
+bỏ người đó khỏi danh sách đang hiển thị. `DELETE /profiles/suggestions/:id` ẩn
+vĩnh viễn một người khỏi gợi ý của bạn và idempotent. Không dùng huy hiệu xác minh
+để xếp hạng.
+
 ## Chỉnh sửa hồ sơ
 
 `PATCH /profiles/me` cần Bearer token. Body nhận một hoặc cả hai trường:

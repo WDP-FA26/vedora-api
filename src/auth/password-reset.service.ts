@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { AccountStatus } from '@prisma/client';
 import { MailService } from '../mail/mail.service';
 import { PrismaService } from '../prisma/prisma.service';
 import {
@@ -113,6 +114,11 @@ export class PasswordResetService {
           passwordHash,
           emailVerifiedAt: user.emailVerifiedAt ?? new Date(),
         },
+      });
+      // Email ownership can activate a pending signup, never a suspension.
+      await tx.user.updateMany({
+        where: { id: user.id, status: AccountStatus.PENDING_EMAIL },
+        data: { status: AccountStatus.ACTIVE },
       });
       await tx.emailVerificationCode.deleteMany({ where: { userId: user.id } });
       await tx.emailVerificationGuesses.deleteMany({

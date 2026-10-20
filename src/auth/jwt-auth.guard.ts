@@ -8,6 +8,7 @@ import { JwtService } from '@nestjs/jwt';
 import { isUUID } from 'class-validator';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuthenticatedRequest, JwtPayload } from './auth.types';
+import { assertAccountActive } from './account-access';
 
 @Injectable()
 export class JwtAuthGuard implements CanActivate {
@@ -43,11 +44,12 @@ export class JwtAuthGuard implements CanActivate {
     // role every time, and never grant access using a role supplied in a JWT.
     const user = await this.prisma.user.findUnique({
       where: { id: payload.sub },
-      select: { id: true, username: true, role: true },
+      select: { id: true, username: true, role: true, status: true },
     });
     if (!user) {
       throw new UnauthorizedException('Account no longer exists');
     }
+    assertAccountActive(user.status);
     request.user = { sub: user.id, username: user.username, role: user.role };
     return true;
   }

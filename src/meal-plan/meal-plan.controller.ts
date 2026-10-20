@@ -74,7 +74,10 @@ export class MealPlanController {
       'All or nothing. Refused when a day that gains a dish would hold an ingredient you avoid or two incompatible ingredients.',
   })
   @ApiOkResponse({ type: MealPlanDto })
-  @ApiConflictResponse({ description: '`MEAL_PLAN_INVALID`' })
+  @ApiConflictResponse({
+    description:
+      '`MEAL_PLAN_INVALID` with problems, or `MEAL_PLAN_CONFLICT`: preview again before retrying',
+  })
   apply(
     @Req() request: AuthenticatedRequest,
     @Body() dto: SaveMealDaysDto,

@@ -79,6 +79,8 @@ describe('Recipes and ingredients (e2e)', () => {
 
   function signInAs(role: UserRole) {
     prisma.user.findUnique.mockResolvedValue({
+      status: 'ACTIVE',
+      accountVersion: 0,
       id: ADMIN_ID,
       username: 'vedora.admin',
       role,

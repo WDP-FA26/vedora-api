@@ -27,7 +27,23 @@ export enum StorageTarget {
   Knowledge = 'knowledge',
   Profiles = 'profiles',
   Verifications = 'verifications',
+  Blogs = 'blogs',
 }
+
+/**
+ * How each bucket is set up at startup: whether RustFS reports its uploads to
+ * `/webhooks/storage/<target>`, and whether anyone may read its objects.
+ */
+const BUCKET_SETUP: Record<
+  StorageTarget,
+  { webhook: boolean; publicRead: boolean }
+> = {
+  [StorageTarget.Knowledge]: { webhook: true, publicRead: false },
+  [StorageTarget.Profiles]: { webhook: true, publicRead: true },
+  [StorageTarget.Verifications]: { webhook: false, publicRead: false },
+  // blog images are not tracked per upload, so nothing needs the event
+  [StorageTarget.Blogs]: { webhook: false, publicRead: true },
+};
 
 /** Targets whose uploads RustFS reports to `/webhooks/storage/<target>`. */
 export const WebhookStorageTarget = {
@@ -82,6 +98,7 @@ export class StorageService implements OnModuleInit {
       [StorageTarget.Verifications]: config.getOrThrow<string>(
         'STORAGE_VERIFICATIONS_BUCKET',
       ),
+      [StorageTarget.Blogs]: config.getOrThrow<string>('STORAGE_BLOGS_BUCKET'),
     };
     const client = (url: string): S3Client =>
       new S3Client({
@@ -179,8 +196,9 @@ export class StorageService implements OnModuleInit {
     }
   }
 
-  publicObjectUrl(key: string): string {
-    return `${this.publicUrl}/${this.buckets[StorageTarget.Profiles]}/${key}`;
+  /** Public URL of an object in a public-read bucket. */
+  publicObjectUrl(target: StorageTarget, key: string): string {
+    return `${this.publicUrl}/${this.buckets[target]}/${key}`;
   }
 
   async getBytes(target: StorageTarget, key: string): Promise<Uint8Array> {
@@ -233,38 +251,41 @@ export class StorageService implements OnModuleInit {
         )
           throw error;
       });
-    if (target === StorageTarget.Verifications) return;
-    await client.send(
-      new PutBucketNotificationConfigurationCommand({
-        Bucket,
-        NotificationConfiguration: {
-          QueueConfigurations: [
-            {
-              Id: `${target}-created`,
-              // the webhook target named <target> in RustFS's environment
-              QueueArn: `arn:rustfs:sqs:${this.region}:${target}:webhook`,
-              Events: ['s3:ObjectCreated:*'],
-            },
-          ],
-        },
-      }),
-    );
-    if (target !== StorageTarget.Profiles) return;
-    await client.send(
-      new PutBucketPolicyCommand({
-        Bucket,
-        Policy: JSON.stringify({
-          Version: '2012-10-17',
-          Statement: [
-            {
-              Effect: 'Allow',
-              Principal: { AWS: ['*'] },
-              Action: ['s3:GetObject'],
-              Resource: [`arn:aws:s3:::${Bucket}/*`],
-            },
-          ],
+    const { webhook, publicRead } = BUCKET_SETUP[target];
+    if (webhook) {
+      await client.send(
+        new PutBucketNotificationConfigurationCommand({
+          Bucket,
+          NotificationConfiguration: {
+            QueueConfigurations: [
+              {
+                Id: `${target}-created`,
+                // the webhook target named <target> in RustFS's environment
+                QueueArn: `arn:rustfs:sqs:${this.region}:${target}:webhook`,
+                Events: ['s3:ObjectCreated:*'],
+              },
+            ],
+          },
         }),
-      }),
-    );
+      );
+    }
+    if (publicRead) {
+      await client.send(
+        new PutBucketPolicyCommand({
+          Bucket,
+          Policy: JSON.stringify({
+            Version: '2012-10-17',
+            Statement: [
+              {
+                Effect: 'Allow',
+                Principal: { AWS: ['*'] },
+                Action: ['s3:GetObject'],
+                Resource: [`arn:aws:s3:::${Bucket}/*`],
+              },
+            ],
+          }),
+        }),
+      );
+    }
   }
 }

@@ -121,6 +121,14 @@ export class MealPlanProblemDto {
 
   @ApiProperty({
     type: [String],
+    format: 'uuid',
+    description:
+      'IDs of the recipes involved, including missing IDs for UNKNOWN_RECIPE',
+  })
+  recipeIds!: string[];
+
+  @ApiProperty({
+    type: [String],
     description: 'The avoided ingredients, or the two that clash',
   })
   ingredients!: string[];

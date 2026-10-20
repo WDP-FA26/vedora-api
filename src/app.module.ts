@@ -14,6 +14,7 @@ import { MealPlanModule } from './meal-plan/meal-plan.module';
 import { MediaModule } from './media/media.module';
 import { NutritionChatModule } from './nutrition-chat/nutrition-chat.module';
 import { REASONING_EFFORTS } from './nutrition-chat/nutrition-chat.agent';
+import { NotificationsModule } from './notifications/notifications.module';
 import { PostsModule } from './posts/posts.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { ProfilesModule } from './profiles/profiles.module';
@@ -78,6 +79,7 @@ import { VerificationModule } from './verification/verification.module';
         STORAGE_REGION: Joi.string().default('us-east-1'),
         STORAGE_KNOWLEDGE_BUCKET: Joi.string().default('vedora-knowledge'),
         STORAGE_PROFILES_BUCKET: Joi.string().default('vedora-profiles'),
+        STORAGE_BLOGS_BUCKET: Joi.string().default('vedora-blogs'),
         STORAGE_VERIFICATIONS_BUCKET: Joi.string().default(
           'vedora-verifications',
         ),
@@ -147,6 +149,7 @@ import { VerificationModule } from './verification/verification.module';
     UsersModule,
     MediaModule,
     PostsModule,
+    NotificationsModule,
     NutritionChatModule,
     KnowledgeModule,
     ProfilesModule,

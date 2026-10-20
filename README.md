@@ -252,6 +252,16 @@ ví dụ: [Kho công thức và thực đơn](docs/docs-for-FE/recipe-catalog-me
 đơn riêng, mặc định cả tuần. Cộng theo ingredientId + cùng đơn vị, mỗi lần món
 xuất hiện tính đủ định lượng gốc, giữ rõ lượng chưa biết và nguồn món/ngày/bữa.
 Không cần migration. [Hợp đồng FE](docs/docs-for-FE/meal-plan-shopping-list.md).
+## Đánh giá công thức
+
+- `GET /api/v1/recipes/:id/ratings/summary`: tổng và điểm trung bình công khai.
+- `GET /api/v1/recipes/:id/rating`: điểm của người gọi, cần đăng nhập.
+- `PUT /api/v1/recipes/:id/rating` với `{ "value": 4 }`: chấm/cập nhật từ 1–5 sao.
+- `DELETE /api/v1/recipes/:id/rating`: gỡ điểm của mình; cả PUT/DELETE idempotent.
+- Không tự chấm công thức của mình; điểm trung bình không có dữ liệu thì `null`.
+
+Cần migration `20261019130000_recipe_ratings`. Hợp đồng, quyền và phạm vi hiện tại:
+[Đánh giá công thức](docs/docs-for-FE/recipe-ratings.md).
 
 ## Blog công thức dài
 
