@@ -61,6 +61,14 @@ export class RecipeCatalogService {
               })
             : [];
         const byId = new Map(rows.map((row) => [row.id, row]));
+        const favorites =
+          userId && ids.length
+            ? await tx.recipeFavorite.findMany({
+                where: { userId, recipeId: { in: ids.map(({ id }) => id) } },
+                select: { recipeId: true },
+              })
+            : [];
+        const favoriteIds = new Set(favorites.map(({ recipeId }) => recipeId));
         const ordered = ids.map(({ id }) => byId.get(id)!);
         const conflicts = await this.rules.findConflictsForEach(
           ordered.map((row) =>
@@ -73,6 +81,7 @@ export class RecipeCatalogService {
             const recipe = toRecipeDto(row, conflicts[index]);
             return {
               ...recipe,
+              isFavorite: favoriteIds.has(row.id),
               // Admin-authored recipes are public, but their source post may not be.
               post:
                 row.post?.status === PostStatus.PUBLISHED ? recipe.post : null,
@@ -87,25 +96,38 @@ export class RecipeCatalogService {
     );
   }
 
-  async findOne(id: string): Promise<CatalogRecipeDetailDto> {
-    const row = await this.prisma.recipe.findUnique({
-      where: { id },
-      include: recipeDetailInclude,
-    });
-    if (!row) throw new NotFoundException('Recipe not found');
-    const [conflicts] = await this.rules.findConflictsForEach([
-      row.ingredients.map(({ ingredientId }) => ingredientId),
-    ]);
-    const detail = toRecipeDetailDto(row, conflicts);
-    return {
-      ...detail,
-      post: row.post?.status === PostStatus.PUBLISHED ? detail.post : null,
-      totalMinutes: totalMinutes(row),
-    };
+  async findOne(id: string, userId?: string): Promise<CatalogRecipeDetailDto> {
+    return this.prisma.$transaction(
+      async (tx) => {
+        const row = await tx.recipe.findUnique({
+          where: { id },
+          include: recipeDetailInclude,
+        });
+        if (!row) throw new NotFoundException('Recipe not found');
+        const [conflicts] = await this.rules.findConflictsForEach(
+          [row.ingredients.map(({ ingredientId }) => ingredientId)],
+          tx,
+        );
+        const favorite = userId
+          ? await tx.recipeFavorite.findUnique({
+              where: { recipeId_userId: { recipeId: id, userId } },
+              select: { recipeId: true },
+            })
+          : null;
+        const detail = toRecipeDetailDto(row, conflicts);
+        return {
+          ...detail,
+          isFavorite: favorite !== null,
+          post: row.post?.status === PostStatus.PUBLISHED ? detail.post : null,
+          totalMinutes: totalMinutes(row),
+        };
+      },
+      { isolationLevel: Prisma.TransactionIsolationLevel.RepeatableRead },
+    );
   }
 }
 
-function totalMinutes(recipe: {
+export function totalMinutes(recipe: {
   prepMinutes: number | null;
   cookMinutes: number | null;
 }): number | null {

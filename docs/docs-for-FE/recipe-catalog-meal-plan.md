@@ -54,6 +54,10 @@ Các item gồm `id`, `title`, `imageUrl`, `servings`, `prepMinutes`, `cookMinut
 `totalMinutes`, `ingredientCount`, `conflictCount`, `conflicts`, `post`, `updatedAt`.
 `meta` dùng [hợp đồng phân trang chung](pagination.md).
 
+Catalog/detail bổ sung `isFavorite` theo người gọi (guest=false). Mọi response
+có token hợp lệ dùng `Cache-Control: private, no-store` và phân biệt cache theo
+`Vary: Authorization`. Xem [Công thức yêu thích](recipe-favorites.md).
+
 ## Chi tiết công thức
 
 `GET /recipes/:id` trả các trường của item và thêm:
