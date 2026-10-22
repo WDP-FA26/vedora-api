@@ -78,7 +78,9 @@ export class AuthService {
     return { email: user.email };
   }
 
-  async login(dto: LoginDto): Promise<AuthResponseDto> {
+  async login(
+    dto: Pick<LoginDto, 'username' | 'password'>,
+  ): Promise<AuthResponseDto> {
     const user = await this.usersService.findByUsername(dto.username);
     const passwordMatches = await compare(
       dto.password,

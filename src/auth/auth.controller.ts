@@ -1,5 +1,6 @@
 import {
   Body,
+  ForbiddenException,
   Controller,
   Get,
   HttpCode,
@@ -22,6 +23,7 @@ import {
   ApiTooManyRequestsResponse,
   ApiUnauthorizedResponse,
 } from '@nestjs/swagger';
+import { TurnstileService } from '../nutrition-chat/guest/turnstile.service';
 import { PublicUser } from '../users/users.service';
 import { AuthService } from './auth.service';
 import { AuthenticatedRequest } from './auth.types';
@@ -45,6 +47,7 @@ export class AuthController {
   constructor(
     private readonly authService: AuthService,
     private readonly googleOAuthService: GoogleOAuthService,
+    private readonly turnstile: TurnstileService,
   ) {}
 
   @Post('register')
@@ -94,9 +97,22 @@ export class AuthController {
   @ApiUnauthorizedResponse({ description: 'Invalid username or password' })
   @ApiForbiddenResponse({
     description:
-      'Right password but unverified email (`code: EMAIL_NOT_VERIFIED`); a code was sent to `email`',
+      'CAPTCHA_FAILED, or right password but unverified email (EMAIL_NOT_VERIFIED); a code was sent to email',
   })
-  login(@Body() dto: LoginDto): Promise<AuthResponseDto> {
+  @ApiBadRequestResponse({
+    description: 'Missing/invalid login fields or turnstileToken',
+  })
+  async login(@Body() dto: LoginDto): Promise<AuthResponseDto> {
+    // Login is forwarded by the FE Server Action. Do not send the FE server's
+    // socket IP as the visitor's remoteip; Cloudflare makes that field optional.
+    if (!(await this.turnstile.verify(dto.turnstileToken, undefined))) {
+      throw new ForbiddenException({
+        statusCode: 403,
+        error: 'Forbidden',
+        code: 'CAPTCHA_FAILED',
+        message: 'Security verification failed; complete the challenge again',
+      });
+    }
     return this.authService.login(dto);
   }
 

@@ -11,6 +11,7 @@ import { GoogleOAuthService } from './google-oauth.service';
 import { EmailVerificationService } from './email-verification.service';
 import { PasswordResetService } from './password-reset.service';
 import { RolesGuard } from './roles.guard';
+import { TurnstileService } from '../nutrition-chat/guest/turnstile.service';
 
 @Global()
 @Module({
@@ -28,6 +29,7 @@ import { RolesGuard } from './roles.guard';
   ],
   controllers: [AuthController],
   providers: [
+    TurnstileService,
     AuthService,
     JwtAuthGuard,
     OptionalJwtAuthGuard,

@@ -101,13 +101,15 @@ import { VerificationModule } from './verification/verification.module';
           'openai/gpt-oss-safeguard-20b',
         ),
         // Cloudflare's always-pass test secret outside production.
-        TURNSTILE_SECRET_KEY: Joi.string().when('NODE_ENV', {
-          is: 'production',
-          then: Joi.required(),
-          otherwise: Joi.string().default(
-            '1x0000000000000000000000000000000AA',
-          ),
-        }),
+        TURNSTILE_SECRET_KEY: Joi.string()
+          .empty('')
+          .when('NODE_ENV', {
+            is: 'production',
+            then: Joi.required(),
+            otherwise: Joi.string().default(
+              '1x0000000000000000000000000000000AA',
+            ),
+          }),
         // Guest chat caps per day: per session, per IP, and for all guests.
         GUEST_DAILY_MESSAGES: Joi.number().integer().positive().default(5),
         GUEST_DAILY_MESSAGES_PER_IP: Joi.number()
