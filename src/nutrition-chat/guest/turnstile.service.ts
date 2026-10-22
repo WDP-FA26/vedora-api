@@ -26,6 +26,7 @@ export class TurnstileService {
         }),
         signal: AbortSignal.timeout(TIMEOUT_MS),
       });
+      if (!response.ok) return false;
       const result = (await response.json()) as { success?: boolean };
       return result.success === true;
     } catch (error) {

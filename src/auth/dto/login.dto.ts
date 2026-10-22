@@ -18,4 +18,16 @@ export class LoginDto {
   @MinLength(8)
   @MaxLength(72)
   password!: string;
+
+  @ApiProperty({
+    description: 'Single-use token from the Cloudflare Turnstile widget',
+    maxLength: 2048,
+  })
+  @Transform(({ value }: { value: unknown }) =>
+    typeof value === 'string' ? value.trim() : value,
+  )
+  @IsString()
+  @MinLength(1)
+  @MaxLength(2048)
+  turnstileToken!: string;
 }
