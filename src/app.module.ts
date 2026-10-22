@@ -3,6 +3,7 @@ import { ConfigModule } from '@nestjs/config';
 import { ScheduleModule } from '@nestjs/schedule';
 import Joi from 'joi';
 import { AppController } from './app.controller';
+import { AdminDashboardModule } from './admin-dashboard/admin-dashboard.module';
 import { AuthModule } from './auth/auth.module';
 import { StorageModule } from './storage/storage.module';
 import { StorageWebhookModule } from './storage/storage-webhook.module';
@@ -149,6 +150,7 @@ import { VerificationModule } from './verification/verification.module';
     AuthModule,
     HealthModule,
     UsersModule,
+    AdminDashboardModule,
     MediaModule,
     PostsModule,
     NotificationsModule,
