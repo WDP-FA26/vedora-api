@@ -12,6 +12,7 @@ import { IngredientsService } from './ingredients.service';
 import { RecipesService } from './recipes.service';
 import { RecipeCatalogService } from './recipe-catalog.service';
 import { RecipesController } from './recipes.controller';
+import { RecipeFavoritesService } from './recipe-favorites.service';
 import { RecipeRatingsController } from './recipe-ratings.controller';
 import { RecipeRatingsService } from './recipe-ratings.service';
 
@@ -30,6 +31,7 @@ import { RecipeRatingsService } from './recipe-ratings.service';
     IncompatibilityRulesService,
     RecipesService,
     RecipeCatalogService,
+    RecipeFavoritesService,
     DietaryService,
     RecipeRatingsService,
   ],

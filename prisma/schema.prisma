@@ -71,6 +71,7 @@ model User {
   avoidedGroups         UserAvoidedGroup[]
   likedIngredients      UserLikedIngredient[]
   mealPlan              MealPlanEntry[]
+  recipeFavorites       RecipeFavorite[]
   recipeRatings         RecipeRating[]
   notifications         Notification[]          @relation("NotificationRecipient")
   sentNotifications     Notification[]          @relation("NotificationActor")
@@ -701,6 +702,7 @@ model Recipe {
   ingredients RecipeIngredient[]
   mealPlans   MealPlanEntry[]
   blogs       BlogRecipe[]
+  favorites   RecipeFavorite[]
   ratings     RecipeRating[]
 
   @@index([postId])
@@ -722,6 +724,11 @@ model RecipeIngredient {
   @@map("recipe_ingredients")
 }
 
+/// Private saved recipes, independent of post bookmarks.
+model RecipeFavorite {
+  recipeId  String   @map("recipe_id") @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at")
 /// One member's current score, not a history of rating attempts.
 model RecipeRating {
   recipeId  String   @map("recipe_id") @db.Uuid
@@ -733,6 +740,8 @@ model RecipeRating {
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@id([recipeId, userId])
+  @@index([userId, createdAt, recipeId])
+  @@map("recipe_favorites")
   @@index([userId])
   @@map("recipe_ratings")
 }

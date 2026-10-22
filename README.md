@@ -252,6 +252,14 @@ ví dụ: [Kho công thức và thực đơn](docs/docs-for-FE/recipe-catalog-me
 đơn riêng, mặc định cả tuần. Cộng theo ingredientId + cùng đơn vị, mỗi lần món
 xuất hiện tính đủ định lượng gốc, giữ rõ lượng chưa biết và nguồn món/ngày/bữa.
 Không cần migration. [Hợp đồng FE](docs/docs-for-FE/meal-plan-shopping-list.md).
+## Công thức yêu thích
+
+`PUT/DELETE /api/v1/recipes/:id/favorite` lưu/bỏ lưu idempotent.
+`GET /api/v1/recipes/favorites` trả danh sách riêng, phân trang page/limit.
+Catalog và detail có `isFavorite` theo người gọi; response cá nhân dùng private,
+no-store. Cần migration `20261019140000_recipe_favorites`.
+[Hợp đồng FE](docs/docs-for-FE/recipe-favorites.md).
+
 ## Đánh giá công thức
 
 - `GET /api/v1/recipes/:id/ratings/summary`: tổng và điểm trung bình công khai.

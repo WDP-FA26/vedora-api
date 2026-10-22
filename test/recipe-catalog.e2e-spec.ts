@@ -91,6 +91,8 @@ describe('Public recipe catalog (e2e)', () => {
     );
     prisma.recipe.findMany.mockResolvedValue([recipe]);
     prisma.recipe.findUnique.mockResolvedValue(recipe);
+    prisma.recipeFavorite.findMany.mockResolvedValue([]);
+    prisma.recipeFavorite.findUnique.mockResolvedValue(null);
   });
 
   afterAll(async () => {
