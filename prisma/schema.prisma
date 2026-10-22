@@ -12,6 +12,20 @@ enum UserRole {
   ADMIN
 }
 
+enum AccountStatus {
+  PENDING_EMAIL
+  ACTIVE
+  SUSPENDED
+  DELETED
+}
+
+enum UserAccountAction {
+  SUSPEND
+  REACTIVATE
+  ROLE_CHANGE
+  DELETE
+}
+
 model User {
   id                    String                  @id @default(uuid()) @db.Uuid
   username              String                  @unique @db.VarChar(30)
@@ -23,6 +37,8 @@ model User {
   avatarUrl             String?                 @map("avatar_url") @db.VarChar(2048)
   coverUrl              String?                 @map("cover_url") @db.VarChar(2048)
   role                  UserRole                @default(USER)
+  status                AccountStatus           @default(PENDING_EMAIL)
+  accountVersion        Int                     @default(0) @map("account_version")
   /// Set when an admin approves a verification request; shown as a badge.
   isProfessional        Boolean                 @default(false) @map("is_professional")
   /// Null until the user proves they own `email` (OTP code or Google).
@@ -43,6 +59,9 @@ model User {
   knowledgeDocuments    KnowledgeDocument[]
   following             Follow[]                @relation("Following")
   followers             Follow[]                @relation("Followers")
+  followSuggestions     FollowSuggestion[]      @relation("SuggestionsFor")
+  suggestedTo           FollowSuggestion[]      @relation("SuggestedUser")
+  suggestionDismissals  SuggestionDismissal[]   @relation("DismissedBy")
   profileImages         ProfileImageUpload[]
   verificationRequests  VerificationRequest[]
   verificationReviews   VerificationRequest[]   @relation("VerificationReviewer")
@@ -53,8 +72,30 @@ model User {
   likedIngredients      UserLikedIngredient[]
   mealPlan              MealPlanEntry[]
   recipeFavorites       RecipeFavorite[]
+  recipeRatings         RecipeRating[]
+  notifications         Notification[]          @relation("NotificationRecipient")
+  sentNotifications     Notification[]          @relation("NotificationActor")
 
   @@map("users")
+}
+
+/// Scalar IDs deliberately retain the audit after an account is deleted.
+model UserAccountAudit {
+  id             String            @id @default(uuid()) @db.Uuid
+  actorId        String            @map("actor_id") @db.Uuid
+  userId         String            @map("user_id") @db.Uuid
+  action         UserAccountAction
+  reason         String            @db.VarChar(500)
+  previousStatus AccountStatus     @map("previous_status")
+  status         AccountStatus
+  previousRole   UserRole          @map("previous_role")
+  role           UserRole
+  accountVersion Int               @map("account_version")
+  createdAt      DateTime          @default(now()) @map("created_at")
+
+  @@index([userId, createdAt])
+  @@index([actorId, createdAt])
+  @@map("user_account_audits")
 }
 
 model Follow {
@@ -68,6 +109,69 @@ model Follow {
   @@index([followingId, createdAt, followerId])
   @@index([followerId, createdAt, followingId])
   @@map("follows")
+}
+
+enum NotificationType {
+  LIKE
+  COMMENT
+  REPOST
+  FOLLOW
+}
+
+/// Something that happened to `recipient` because of `actor`. Pushed live over
+/// SSE and kept so it can be listed and marked read later.
+model Notification {
+  id          String           @id @default(uuid()) @db.Uuid
+  recipientId String           @map("recipient_id") @db.Uuid
+  actorId     String           @map("actor_id") @db.Uuid
+  type        NotificationType
+  /// Null for FOLLOW.
+  postId      String?          @map("post_id") @db.Uuid
+  commentId   String?          @map("comment_id") @db.Uuid
+  readAt      DateTime?        @map("read_at")
+  createdAt   DateTime         @default(now()) @map("created_at")
+  recipient   User             @relation("NotificationRecipient", fields: [recipientId], references: [id], onDelete: Cascade)
+  actor       User             @relation("NotificationActor", fields: [actorId], references: [id], onDelete: Cascade)
+  post        Post?            @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  @@index([recipientId, createdAt, id])
+  @@index([recipientId, readAt])
+  @@index([postId])
+  @@map("notifications")
+}
+
+enum FollowSuggestionReason {
+  /// The candidate already follows the user.
+  FOLLOWS_YOU
+  /// Followed by people the user follows (`mutualCount` of them).
+  MUTUAL
+}
+
+/// Rebuilt per user by `FollowSuggestionsService`; read-time filters drop
+/// people followed or dismissed since the last run.
+model FollowSuggestion {
+  userId      String                 @map("user_id") @db.Uuid
+  candidateId String                 @map("candidate_id") @db.Uuid
+  score       Int
+  reason      FollowSuggestionReason
+  mutualCount Int                    @map("mutual_count")
+  user        User                   @relation("SuggestionsFor", fields: [userId], references: [id], onDelete: Cascade)
+  candidate   User                   @relation("SuggestedUser", fields: [candidateId], references: [id], onDelete: Cascade)
+
+  @@id([userId, candidateId])
+  @@index([userId, score(sort: Desc), candidateId])
+  @@index([candidateId])
+  @@map("follow_suggestions")
+}
+
+model SuggestionDismissal {
+  userId      String   @map("user_id") @db.Uuid
+  candidateId String   @map("candidate_id") @db.Uuid
+  createdAt   DateTime @default(now()) @map("created_at")
+  user        User     @relation("DismissedBy", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([userId, candidateId])
+  @@map("suggestion_dismissals")
 }
 
 enum ProfileImageKind {
@@ -190,6 +294,7 @@ model Post {
   reposts         PostRepost[]
   bookmarks       PostBookmark[]
   reports         PostReport[]
+  notifications   Notification[]
   recipes         Recipe[]
   blog            Blog?
 
@@ -598,6 +703,7 @@ model Recipe {
   mealPlans   MealPlanEntry[]
   blogs       BlogRecipe[]
   favorites   RecipeFavorite[]
+  ratings     RecipeRating[]
 
   @@index([postId])
   @@map("recipes")
@@ -623,12 +729,21 @@ model RecipeFavorite {
   recipeId  String   @map("recipe_id") @db.Uuid
   userId    String   @map("user_id") @db.Uuid
   createdAt DateTime @default(now()) @map("created_at")
+/// One member's current score, not a history of rating attempts.
+model RecipeRating {
+  recipeId  String   @map("recipe_id") @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  value     Int      @db.SmallInt
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
   recipe    Recipe   @relation(fields: [recipeId], references: [id], onDelete: Cascade)
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@id([recipeId, userId])
   @@index([userId, createdAt, recipeId])
   @@map("recipe_favorites")
+  @@index([userId])
+  @@map("recipe_ratings")
 }
 
 /// An ingredient a user does not eat (allergy, religion, dislike). Private to the user.

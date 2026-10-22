@@ -19,6 +19,8 @@ describe('Admin bootstrap', () => {
     coverUrl: null,
     isProfessional: false,
     role: UserRole.USER,
+    status: 'ACTIVE',
+    accountVersion: 0,
     passwordHash: 'existing-password-hash',
     googleId: null,
     emailVerifiedAt: new Date(),
@@ -39,6 +41,19 @@ describe('Admin bootstrap', () => {
       username: 'vedora.admin',
       role: UserRole.ADMIN,
     });
+  });
+
+  it('does not reactivate an existing suspended seed admin', async () => {
+    const prisma = mockDeep<PrismaClient>();
+    prisma.user.findUnique.mockResolvedValue({
+      ...legacyAdmin,
+      role: UserRole.ADMIN,
+      status: 'SUSPENDED',
+    });
+    await seedDatabase(prisma);
+    expect(prisma.user.update.mock.calls[0][0].data).not.toHaveProperty(
+      'status',
+    );
   });
 
   it('promotes the legacy seed account without resetting its password', async () => {

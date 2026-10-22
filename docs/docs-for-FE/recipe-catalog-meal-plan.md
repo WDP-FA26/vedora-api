@@ -131,7 +131,8 @@ type Preview = {
   problems: {
     code: 'UNKNOWN_RECIPE' | 'AVOIDED_INGREDIENT' | 'DAY_CONFLICT';
     day: string;
-    recipes: string[];
+    recipes: string[]; // Tên món để hiển thị; không dùng làm định danh.
+    recipeIds: string[]; // ID các món liên quan; UNKNOWN_RECIPE trả ID không tồn tại.
     ingredients: string[];
     reason: string | null;
   }[];
@@ -148,6 +149,24 @@ có trong cùng ngày vẫn được phép để người dùng chỉnh thực �
 ID công thức không tồn tại luôn được báo lỗi. Xem trước không giữ chỗ hay khóa
 dữ liệu; API lưu là nơi kiểm tra cuối cùng.
 
+Mỗi `PUT /meal-plan/days` khóa theo user trước khi đọc/kiểm tra, rồi thay các ngày
+và dựng response trong cùng transaction. Hai request cùng user được xử lý tuần tự:
+cùng ngày thì request được xử lý sau thay toàn bộ ngày, không gộp hai danh sách;
+khác ngày thì giữ cả hai thay đổi. FE vẫn cần gửi đầy đủ bốn phần của ngày.
+Chưa có `expectedVersion`: đây không phải cơ chế phát hiện bản nháp cũ giữa hai tab.
+
+`recipeIds` có ở cả response GET, preview và lỗi lưu `MEAL_PLAN_INVALID`:
+
+- `AVOIDED_INGREDIENT`: ID công thức chứa nguyên liệu tránh.
+- `DAY_CONFLICT`: ID các công thức tham gia xung đột, tương ứng với tên trong `recipes`.
+- `UNKNOWN_RECIPE`: các ID không tồn tại, không lặp trong cùng ngày; `recipes=[]`
+  vì backend không có tên để trả. ID thiếu không xuất hiện trong món preview.
+
+Nếu database phát hiện xung đột ghi/tham chiếu, API trả `409 MEAL_PLAN_CONFLICT`;
+FE tải lại thực đơn và preview trước khi thử lưu lại. Không dựa vào trường
+`problems` cho mã lỗi này. Các lỗi validation nghiệp vụ vẫn trả
+`409 MEAL_PLAN_INVALID` với `problems`.
+
 ## Lỗi cần xử lý
 
 | HTTP  | Trường hợp                                                |
@@ -155,7 +174,15 @@ dữ liệu; API lưu là nơi kiểm tra cuối cùng.
 | `400` | Query/body/UUID sai hoặc tham số không hỗ trợ             |
 | `401` | Token sai, thiếu token trên API thực đơn hoặc lọc cá nhân |
 | `404` | Công thức không tồn tại                                   |
-| `409` | Lưu thực đơn không hợp lệ; đọc `code` và `problems`       |
+| `409` | `MEAL_PLAN_INVALID` kèm `problems`; `MEAL_PLAN_CONFLICT` cần tải lại và preview |
+
+Xác nhận hành vi FE hỏi ngày 19/10/2026:
+
+- Có header `Authorization` thì token luôn được kiểm, kể cả header rỗng hoặc
+  `Bearer undefined`; sai trả `401` trên API công thức công khai.
+- `q` chỉ có khoảng trắng trở thành chuỗi rỗng sau trim và trả `400`.
+- Thêm món phải kiểm tra lại **cả ngày**, bao gồm món cũ vi phạm sau đổi hồ sơ.
+- Preview chỉ trả `{ id, title }` cho món; FE lấy ảnh/thời gian từ catalog/detail.
 
 ## Kiểm tra backend
 
@@ -166,7 +193,8 @@ npm run build
 npm run lint
 ```
 
-Test PostgreSQL thực cho tìm kiếm, tổng thời gian, phân trang và xung đột nhóm:
+Test PostgreSQL thực cho tìm kiếm, tổng thời gian, phân trang, xung đột nhóm và
+các request HTTP lưu thực đơn đồng thời:
 
 ```powershell
 $env:TEST_DATABASE_URL = "postgresql://postgres:password@localhost:5432/vedora_test"

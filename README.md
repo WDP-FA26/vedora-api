@@ -253,6 +253,16 @@ ví dụ: [Kho công thức và thực đơn](docs/docs-for-FE/recipe-catalog-me
 Catalog và detail có `isFavorite` theo người gọi; response cá nhân dùng private,
 no-store. Cần migration `20261019140000_recipe_favorites`.
 [Hợp đồng FE](docs/docs-for-FE/recipe-favorites.md).
+## Đánh giá công thức
+
+- `GET /api/v1/recipes/:id/ratings/summary`: tổng và điểm trung bình công khai.
+- `GET /api/v1/recipes/:id/rating`: điểm của người gọi, cần đăng nhập.
+- `PUT /api/v1/recipes/:id/rating` với `{ "value": 4 }`: chấm/cập nhật từ 1–5 sao.
+- `DELETE /api/v1/recipes/:id/rating`: gỡ điểm của mình; cả PUT/DELETE idempotent.
+- Không tự chấm công thức của mình; điểm trung bình không có dữ liệu thì `null`.
+
+Cần migration `20261019130000_recipe_ratings`. Hợp đồng, quyền và phạm vi hiện tại:
+[Đánh giá công thức](docs/docs-for-FE/recipe-ratings.md).
 
 ## Blog công thức dài
 

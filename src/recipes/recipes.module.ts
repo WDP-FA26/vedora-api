@@ -13,10 +13,13 @@ import { RecipesService } from './recipes.service';
 import { RecipeCatalogService } from './recipe-catalog.service';
 import { RecipesController } from './recipes.controller';
 import { RecipeFavoritesService } from './recipe-favorites.service';
+import { RecipeRatingsController } from './recipe-ratings.controller';
+import { RecipeRatingsService } from './recipe-ratings.service';
 
 @Module({
   controllers: [
     RecipesController,
+    RecipeRatingsController,
     AdminIngredientsController,
     AdminIngredientGroupsController,
     AdminIncompatibilityRulesController,
@@ -30,6 +33,7 @@ import { RecipeFavoritesService } from './recipe-favorites.service';
     RecipeCatalogService,
     RecipeFavoritesService,
     DietaryService,
+    RecipeRatingsService,
   ],
   exports: [IncompatibilityRulesService, DietaryService],
 })

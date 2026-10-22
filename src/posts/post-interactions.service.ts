@@ -4,12 +4,13 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { PostStatus, Prisma, UserRole } from '@prisma/client';
+import { NotificationType, PostStatus, Prisma, UserRole } from '@prisma/client';
 import type { AuthenticatedUser } from '../auth/auth.types';
 import {
   createCursorPaginatedResponse,
   CursorPaginationQueryDto,
 } from '../common/pagination';
+import { NotificationsService } from '../notifications/notifications.service';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   CommentBodyDto,
@@ -35,7 +36,10 @@ const commentSelect = {
 
 @Injectable()
 export class PostInteractionsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly notifications: NotificationsService,
+  ) {}
 
   async listComments(
     postId: string,
@@ -66,13 +70,24 @@ export class PostInteractionsService {
     dto: CommentBodyDto,
   ): Promise<CommentResponseDto> {
     try {
-      return await this.prisma.$transaction(async (tx) => {
-        await this.requirePublishedPost(tx, postId);
-        return tx.postComment.create({
-          data: { postId, authorId, body: dto.body },
-          select: commentSelect,
-        });
+      const { comment, postAuthorId } = await this.prisma.$transaction(
+        async (tx) => {
+          const post = await this.requirePublishedPost(tx, postId);
+          const comment = await tx.postComment.create({
+            data: { postId, authorId, body: dto.body },
+            select: commentSelect,
+          });
+          return { comment, postAuthorId: post.authorId };
+        },
+      );
+      await this.notifications.notify({
+        recipientId: postAuthorId,
+        actorId: authorId,
+        type: NotificationType.COMMENT,
+        postId,
+        commentId: comment.id,
       });
+      return comment;
     } catch (error: unknown) {
       this.rethrowMissingRecord(error);
     }
@@ -127,21 +142,37 @@ export class PostInteractionsService {
     isLiked: boolean,
   ): Promise<PostLikeResponseDto> {
     try {
-      return await this.prisma.$transaction(async (tx) => {
-        await this.requirePublishedPost(tx, postId);
-        if (isLiked) {
-          // The composite primary key and ON CONFLICT prevent duplicate likes,
-          // including simultaneous retries from the same account.
-          await tx.postLike.createMany({
-            data: [{ postId, userId }],
-            skipDuplicates: true,
-          });
-        } else {
-          await tx.postLike.deleteMany({ where: { postId, userId } });
-        }
-        const likeCount = await tx.postLike.count({ where: { postId } });
-        return { postId, isLiked, likeCount };
-      });
+      const { result, notifyAuthorId } = await this.prisma.$transaction(
+        async (tx) => {
+          const post = await this.requirePublishedPost(tx, postId);
+          let created = false;
+          if (isLiked) {
+            // The composite primary key and ON CONFLICT prevent duplicate
+            // likes, including simultaneous retries from the same account.
+            const { count } = await tx.postLike.createMany({
+              data: [{ postId, userId }],
+              skipDuplicates: true,
+            });
+            created = count > 0;
+          } else {
+            await tx.postLike.deleteMany({ where: { postId, userId } });
+          }
+          const likeCount = await tx.postLike.count({ where: { postId } });
+          return {
+            result: { postId, isLiked, likeCount },
+            notifyAuthorId: created ? post.authorId : null,
+          };
+        },
+      );
+      if (notifyAuthorId) {
+        await this.notifications.notify({
+          recipientId: notifyAuthorId,
+          actorId: userId,
+          type: NotificationType.LIKE,
+          postId,
+        });
+      }
+      return result;
     } catch (error: unknown) {
       this.rethrowMissingRecord(error);
     }
@@ -153,19 +184,35 @@ export class PostInteractionsService {
     isReposted: boolean,
   ): Promise<PostRepostResponseDto> {
     try {
-      return await this.prisma.$transaction(async (tx) => {
-        await this.requirePublishedPost(tx, postId);
-        if (isReposted) {
-          await tx.postRepost.createMany({
-            data: [{ postId, userId }],
-            skipDuplicates: true,
-          });
-        } else {
-          await tx.postRepost.deleteMany({ where: { postId, userId } });
-        }
-        const repostCount = await tx.postRepost.count({ where: { postId } });
-        return { postId, isReposted, repostCount };
-      });
+      const { result, notifyAuthorId } = await this.prisma.$transaction(
+        async (tx) => {
+          const post = await this.requirePublishedPost(tx, postId);
+          let created = false;
+          if (isReposted) {
+            const { count } = await tx.postRepost.createMany({
+              data: [{ postId, userId }],
+              skipDuplicates: true,
+            });
+            created = count > 0;
+          } else {
+            await tx.postRepost.deleteMany({ where: { postId, userId } });
+          }
+          const repostCount = await tx.postRepost.count({ where: { postId } });
+          return {
+            result: { postId, isReposted, repostCount },
+            notifyAuthorId: created ? post.authorId : null,
+          };
+        },
+      );
+      if (notifyAuthorId) {
+        await this.notifications.notify({
+          recipientId: notifyAuthorId,
+          actorId: userId,
+          type: NotificationType.REPOST,
+          postId,
+        });
+      }
+      return result;
     } catch (error: unknown) {
       this.rethrowMissingRecord(error);
     }
