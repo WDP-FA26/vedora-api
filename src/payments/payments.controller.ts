@@ -89,7 +89,10 @@ export class PaymentsController {
   @ApiConflictResponse({
     description: 'Key/body conflict or a different pending purchase exists',
   })
-  @ApiServiceUnavailableResponse({ description: 'SePay payments disabled' })
+  @ApiServiceUnavailableResponse({
+    description:
+      'Payments disabled or temporary payment-code allocation exhaustion; retain Idempotency-Key when retrying',
+  })
   create(
     @Req() request: AuthenticatedRequest,
     @Body() dto: CreatePaymentDto,
@@ -163,13 +166,6 @@ export class SePayWebhookController {
         accountNumber: { type: 'string' },
         subAccount: { type: 'string', nullable: true },
         code: { type: 'string', nullable: true },
-        content: {
-          type: 'string',
-          nullable: true,
-          maxLength: 4096,
-          description:
-            'Fallback only when code is absent/blank: exactly one complete configured-prefix code, allowing bounded ASCII spaces/tabs in its 20-hex suffix',
-        },
         transferType: { type: 'string', enum: ['in', 'out'] },
         transferAmount: { type: 'integer' },
         referenceCode: { type: 'string', nullable: true },

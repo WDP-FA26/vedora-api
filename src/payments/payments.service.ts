@@ -5,6 +5,7 @@ import {
   Injectable,
   Logger,
   NotFoundException,
+  ServiceUnavailableException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { BillingPlan, PaymentIntent, Prisma } from '@prisma/client';
@@ -16,7 +17,7 @@ import {
 } from './payment.dto';
 import { SePayProvider } from './sepay.provider';
 import { parseBankWebhook } from './sepay-payload';
-import { paymentCodesFromContent } from './payment-code';
+import { generatePaymentCode } from './payment-code';
 import { PaymentChanged, PaymentEventsService } from './payment-events.service';
 
 type Tx = Prisma.TransactionClient;
@@ -137,72 +138,94 @@ export class PaymentsService {
     if (!key || !/^[A-Za-z0-9._:-]{8,200}$/.test(key))
       throw new BadRequestException('A valid Idempotency-Key is required');
     const payloadHash = hash({ planCode });
-    const result = await this.db.$transaction(async (tx) => {
-      await this.lock(tx, `payer:${userId}`);
-      const prior = await tx.paymentRequest.findUnique({
-        where: { actorId_requestKey: { actorId: userId, requestKey: key } },
-        include: { intent: true },
-      });
-      if (prior) {
-        if (prior.payloadHash !== payloadHash)
+    const attemptCreate = () =>
+      this.db.$transaction(async (tx) => {
+        await this.lock(tx, `payer:${userId}`);
+        const prior = await tx.paymentRequest.findUnique({
+          where: { actorId_requestKey: { actorId: userId, requestKey: key } },
+          include: { intent: true },
+        });
+        if (prior) {
+          if (prior.payloadHash !== payloadHash)
+            conflict(
+              'IDEMPOTENCY_CONFLICT',
+              'This key was used with another request',
+            );
+          return prior.intent;
+        }
+        const user = await tx.user.findUnique({ where: { id: userId } });
+        if (!user || user.status !== 'ACTIVE' || !user.emailVerifiedAt)
           conflict(
-            'IDEMPOTENCY_CONFLICT',
-            'This key was used with another request',
+            'ACCOUNT_NOT_PAYABLE',
+            'A verified active account is required',
           );
-        return prior.intent;
-      }
-      const user = await tx.user.findUnique({ where: { id: userId } });
-      if (!user || user.status !== 'ACTIVE' || !user.emailVerifiedAt)
-        conflict(
-          'ACCOUNT_NOT_PAYABLE',
-          'A verified active account is required',
+        const plan = this.catalog().plans.find(
+          (item) => item.code === planCode,
         );
-      const plan = this.catalog().plans.find((item) => item.code === planCode);
-      if (!plan) throw new BadRequestException('Unknown billing plan');
-      let intent = await tx.paymentIntent.findUnique({
-        where: { activeIntentKey: userId },
-      });
-      if (
-        intent &&
-        (intent.planCode !== planCode ||
-          intent.amount.toFixed(0) !== plan.priceVnd ||
-          intent.durationDays !== plan.durationDays)
-      )
-        conflict(
-          'PENDING_PAYMENT_CONFLICT',
-          'Continue or cancel the pending payment before creating a different purchase',
-        );
-      if (!intent) {
-        const paymentCode =
-          this.config.get<string>('SEPAY_PAYMENT_CODE_PREFIX', 'VED') +
-          randomBytes(10).toString('hex').toUpperCase();
-        intent = await tx.paymentIntent.create({
+        if (!plan) throw new BadRequestException('Unknown billing plan');
+        let intent = await tx.paymentIntent.findUnique({
+          where: { activeIntentKey: userId },
+        });
+        if (
+          intent &&
+          (intent.planCode !== planCode ||
+            intent.amount.toFixed(0) !== plan.priceVnd ||
+            intent.durationDays !== plan.durationDays)
+        )
+          conflict(
+            'PENDING_PAYMENT_CONFLICT',
+            'Continue or cancel the pending payment before creating a different purchase',
+          );
+        if (!intent) {
+          const paymentCode = generatePaymentCode(
+            this.config.get<string>('SEPAY_PAYMENT_CODE_PREFIX', 'VED'),
+          );
+          intent = await tx.paymentIntent.create({
+            data: {
+              userId,
+              planCode,
+              amount: plan.priceVnd,
+              durationDays: plan.durationDays,
+              activeIntentKey: userId,
+              paymentCode,
+              invoiceNumber: `VED-${randomBytes(16).toString('hex').toUpperCase()}`,
+              ...this.provider.snapshot(paymentCode),
+            },
+          });
+          await tx.paymentAudit.create({
+            data: { intentId: intent.id, actorId: userId, action: 'CREATED' },
+          });
+        }
+        await tx.paymentRequest.create({
           data: {
-            userId,
-            planCode,
-            amount: plan.priceVnd,
-            durationDays: plan.durationDays,
-            activeIntentKey: userId,
-            paymentCode,
-            invoiceNumber: `VED-${randomBytes(16).toString('hex').toUpperCase()}`,
-            ...this.provider.snapshot(paymentCode),
+            actorId: userId,
+            requestKey: key,
+            payloadHash,
+            intentId: intent.id,
           },
         });
-        await tx.paymentAudit.create({
-          data: { intentId: intent.id, actorId: userId, action: 'CREATED' },
-        });
-      }
-      await tx.paymentRequest.create({
-        data: {
-          actorId: userId,
-          requestKey: key,
-          payloadHash,
-          intentId: intent.id,
-        },
+        return intent;
       });
-      return intent;
+    for (let attempt = 0; attempt < 5; attempt++) {
+      try {
+        return this.serialize(await attemptCreate());
+      } catch (error) {
+        // PostgreSQL aborts on a unique violation: retry the whole transaction,
+        // not another insert inside the failed transaction. Other errors escape.
+        if (
+          !(error instanceof Prisma.PrismaClientKnownRequestError) ||
+          error.code !== 'P2002' ||
+          !Array.isArray(error.meta?.target) ||
+          !error.meta.target.includes('payment_code')
+        )
+          throw error;
+      }
+    }
+    throw new ServiceUnavailableException({
+      code: 'PAYMENT_CODE_UNAVAILABLE',
+      message:
+        'Could not allocate a payment code; retry with the same Idempotency-Key',
     });
-    return this.serialize(result);
   }
 
   async cancel(id: string, userId: string): Promise<PaymentDto> {
@@ -255,17 +278,8 @@ export class PaymentsService {
         });
       };
       if (event.transferType !== 'in') return record('NOT_INCOMING');
-      let paymentCode = event.code?.trim().toUpperCase();
-      const fromContent = !paymentCode;
-      if (!paymentCode) {
-        const candidates = paymentCodesFromContent(
-          event.content,
-          this.config.get<string>('SEPAY_PAYMENT_CODE_PREFIX', 'VED'),
-        );
-        if (candidates.length > 1) return record('PAYMENT_CODE_AMBIGUOUS');
-        if (!candidates.length) return record('PAYMENT_CODE_MISSING');
-        paymentCode = candidates[0];
-      }
+      const paymentCode = event.code?.trim().toUpperCase();
+      if (!paymentCode) return record('PAYMENT_CODE_MISSING');
       const found = await tx.paymentIntent.findUnique({
         where: { paymentCode },
       });
@@ -344,10 +358,7 @@ export class PaymentsService {
       await tx.paymentAudit.create({
         data: { intentId: intent.id, action: 'CAPTURED' },
       });
-      await record(
-        fromContent ? 'CAPTURED_FROM_CONTENT' : 'CAPTURED',
-        intent.id,
-      );
+      await record('CAPTURED', intent.id);
       changed = { userId: intent.userId, intentId: intent.id };
     });
     if (changed) await this.notifyCommitted(changed);

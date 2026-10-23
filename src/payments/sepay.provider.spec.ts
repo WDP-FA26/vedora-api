@@ -19,7 +19,7 @@ const event = {
   gateway: 'Vietcombank',
   accountNumber: '0012345678',
   transactionDate: '2026-10-23 00:00:00',
-  code: 'VEDABC',
+  code: 'VED7K9P2X',
   transferType: 'in',
   transferAmount: 49000,
 };
@@ -27,11 +27,11 @@ const event = {
 describe('SePay provider boundary', () => {
   const provider = new SePayProvider(new ConfigService(config));
   it('encodes server snapshot and preserves leading zeroes in QR account', () => {
-    const qr = provider.qr(provider.snapshot('VEDABC'), '49000');
+    const qr = provider.qr(provider.snapshot('VED7K9P2X'), '49000');
     const url = new URL(qr.imageUrl);
     expect(url.origin).toBe('https://vietqr.app');
     expect(url.searchParams.get('acc')).toBe('0012345678');
-    expect(url.searchParams.get('des')).toBe('VEDORA VEDABC');
+    expect(url.searchParams.get('des')).toBe('VEDORA VED7K9P2X');
     expect(url.searchParams.get('amount')).toBe('49000');
     expect(new URL(qr.downloadUrl).searchParams.get('download')).toBe('true');
   });
@@ -75,7 +75,7 @@ describe('SePay provider boundary', () => {
     });
     expect(parsed.paidAt.toISOString()).toBe('2026-10-22T17:00:00.000Z');
     expect(parsed.providerTransactionId).toBe('BANK-123');
-    expect(parsed.content).toBe('Private sender details');
+    expect(parsed).not.toHaveProperty('content');
     expect(parsed).not.toHaveProperty('accumulated');
   });
   it.each([
@@ -92,7 +92,7 @@ describe('SePay provider boundary', () => {
       expect(() => parseBankWebhook({ ...event, transferAmount })).toThrow();
     },
   );
-  it('leaves an absent provider code for application-level content recovery', () => {
+  it('does not extract a code from content when provider code is absent', () => {
     expect(
       parseBankWebhook({ ...event, code: null, content: 'VEDABC' }).code,
     ).toBeNull();
