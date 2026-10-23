@@ -29,6 +29,7 @@ khác qua API người dùng. Không có API cho FE tự đánh dấu đã trả
 | GET | `/billing/me` | `{membership:{planCode,startsAt,expiresAt},pendingPayment,recentPayments}` |
 | POST | `/billing/payment-intents` | Header `Idempotency-Key`; body **chỉ** `{planCode:"PRO"}` hoặc PREMIUM |
 | GET | `/payment-intents/:id` | Payment thuộc tài khoản, 404 cho ID không thuộc quyền |
+| GET | `/payment-intents/:id/events` | SSE thuộc đúng người mua; dùng Authorization header, không token trong URL |
 | POST | `/payment-intents/:id/cancel` | Hủy PENDING, lặp CANCELLED trả cùng kết quả; SUCCEEDED trả 409 |
 | POST | `/payments/sepay/bank-transfer-webhook` | Banking callback, `Authorization: Apikey <key>`, không JWT |
 | GET | `/admin/payments/webhook-receipts` | ADMIN: 50 receipt đã che dữ liệu gần nhất để đối soát |
@@ -107,12 +108,54 @@ tài khoản SePay/ngân hàng thật chỉ từ các test bên dưới.
 ## FE
 
 `/billing` xem gói hiện tại, giá server, giao dịch chờ và lịch sử. Liên kết từ
-menu chính. `/payment/:intentId` hiện QR và thông tin do BE trả, poll 4 giây
-khi PENDING; dừng khi terminal/rời trang. “Tôi đã thanh toán” chỉ GET. Chỉ
+menu chính. `/payment/:intentId` hiện QR và thông tin do BE trả, kết nối SSE
+khi PENDING; dừng khi terminal/rời trang. SSE là kênh chính, GET dự phòng 4s
+khi mất kết nối và GET đối soát 30s để phục hồi sự kiện bị mất. “Tôi đã thanh toán” chỉ GET. Chỉ
 SUCCEEDED mới hiện thành công và refetch membership; không tin query success.
 Token là một phần SWR key. Đổi token remount màn hình, hủy request ghi đang
 chạy, không để response cũ điều hướng tài khoản mới. Retry key lưu session
 storage theo user + plan và giữ sau lỗi mạng; xóa sau response tạo thành công.
+
+## Realtime và khả năng chuyển MongoDB
+
+`PaymentEventsService` dùng Redis Pub/Sub, độc lập Prisma/PostgreSQL. Cùng
+`PAYMENT_REDIS_URL` và `PAYMENT_EVENTS_CHANNEL` cho các API instance của cùng
+một môi trường. Hai connection Redis mỗi instance được mở khi có stream hoặc
+publish, tự reconnect; không ghi key, không dùng Redis để giữ token/tiền/job.
+URL trống thì SSE báo unavailable và FE dùng GET. Compose kèm Redis, không mở
+cổng Redis ra Internet; bản development chỉ bind loopback cho API chạy host.
+Local API chạy host: `PAYMENT_REDIS_URL=redis://127.0.0.1:6379`.
+Dokploy API chạy container: URL mặc định `redis://redis:6379`.
+Nếu dùng Redis ngoài, cấu hình URL với credentials/TLS và quyền Pub/Sub phù hợp.
+
+Publish sau khi capture/cancel transaction resolve thành công; rollback,
+ignored và duplicate không phát thay đổi. Lỗi publish không làm webhook của
+payment đã commit trả thất bại. Redis Pub/Sub không lưu/replay sự kiện
+([at-most-once](https://redis.io/docs/latest/develop/pubsub/#delivery-semantics)),
+nên kết nối/reconnect luôn GET đối soát; thêm GET 30s khi đang chờ để bù crash
+giữa commit và publish. GET là nguồn trạng thái cuối cùng, không có client paid mutation.
+
+Các SSE event:
+
+- `stream.ready`: Redis subscriber sẵn sàng, GET để bù sự kiện đã bỏ lỡ.
+- `stream.unavailable`: Redis/DB kiểm tra session lỗi, bật GET dự phòng.
+- `payment.changed`: `{intentId}`, chỉ gửi đúng owner + intent; GET payment và membership.
+- `ping`: mỗi 15s, `{connected:boolean}`; cũng xác thực lại JWT và ACTIVE account.
+- `session.expired`: đóng stream, FE refresh session; tối đa 15s sau expiry/status change.
+
+FE dùng fetch-event-source có Bearer header, không native EventSource với JWT
+trong URL. Heartbeat không tới trong 35s thì chuyển fallback và reconnect.
+Proxy phải hỗ trợ streaming, không buffering (`X-Accel-Buffering: no`) và giữ
+idle timeout lớn hơn heartbeat. Không phát amount/email/raw bank payload qua SSE.
+Môi trường staging/production dùng channel khác nhau nếu chung Redis: Pub/Sub
+không cách ly theo Redis database index.
+
+Khi đổi MongoDB, giữ transport Redis/SSE và hợp đồng invalidation. Riêng
+`PaymentsService` hiện vẫn dùng Prisma PostgreSQL, advisory lock, CAS, Decimal,
+unique/CHECK constraints. Chuyển database cần thay repository/transaction và
+chiến lược chống trùng tương ứng (Mongo transaction cần replica set/sharded
+cluster), cùng mapping ID nếu thay UUID bằng ObjectId; chưa có migration Mongo
+trong thay đổi realtime này.
 
 ## Kiểm thử
 

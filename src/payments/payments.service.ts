@@ -3,6 +3,7 @@ import {
   BadRequestException,
   ConflictException,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
@@ -15,6 +16,7 @@ import {
 } from './payment.dto';
 import { SePayProvider } from './sepay.provider';
 import { parseBankWebhook } from './sepay-payload';
+import { PaymentChanged, PaymentEventsService } from './payment-events.service';
 
 type Tx = Prisma.TransactionClient;
 const hash = (value: unknown) =>
@@ -25,10 +27,12 @@ const conflict = (code: string, message: string): never => {
 
 @Injectable()
 export class PaymentsService {
+  private readonly logger = new Logger(PaymentsService.name);
   constructor(
     private readonly db: PrismaService,
     private readonly config: ConfigService,
     private readonly provider: SePayProvider,
+    private readonly events: PaymentEventsService,
   ) {}
 
   catalog(): BillingCatalogDto {
@@ -50,6 +54,16 @@ export class PaymentsService {
 
   private async lock(tx: Tx, key: string) {
     await tx.$queryRaw`SELECT 1 AS locked FROM pg_advisory_xact_lock(hashtextextended(${key}, 0))`;
+  }
+
+  private async notifyCommitted(change: PaymentChanged): Promise<void> {
+    try {
+      await this.events.publish(change);
+    } catch {
+      this.logger.warn(
+        'Payment committed; realtime notification failed. Reconcile via GET.',
+      );
+    }
   }
 
   serialize(intent: PaymentIntent): PaymentDto {
@@ -191,6 +205,7 @@ export class PaymentsService {
   }
 
   async cancel(id: string, userId: string): Promise<PaymentDto> {
+    let changed = false;
     const intent = await this.db.$transaction(async (tx) => {
       await this.lock(tx, `payer:${userId}`);
       const current = await tx.paymentIntent.findFirst({
@@ -214,14 +229,17 @@ export class PaymentsService {
       await tx.paymentAudit.create({
         data: { intentId: id, actorId: userId, action: 'CANCELLED' },
       });
+      changed = true;
       return updated;
     });
+    if (changed) await this.notifyCommitted({ userId, intentId: id });
     return this.serialize(intent);
   }
 
   async bankWebhook(body: unknown): Promise<void> {
     const event = parseBankWebhook(body);
     const payloadHash = hash(event);
+    let changed: PaymentChanged | undefined;
     await this.db.$transaction(async (tx) => {
       // Event lock precedes payer lock consistently. Unique DB keys are the final guard.
       await this.lock(tx, `transaction:${event.providerTransactionId}`);
@@ -316,6 +334,8 @@ export class PaymentsService {
         data: { intentId: intent.id, action: 'CAPTURED' },
       });
       await record('CAPTURED', intent.id);
+      changed = { userId: intent.userId, intentId: intent.id };
     });
+    if (changed) await this.notifyCommitted(changed);
   }
 }

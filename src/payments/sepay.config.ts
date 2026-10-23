@@ -1,6 +1,13 @@
 import Joi from 'joi';
 
 export const sepayEnvironmentSchema = {
+  PAYMENT_REDIS_URL: Joi.string()
+    .uri({ scheme: ['redis', 'rediss'] })
+    .allow('')
+    .default(''),
+  PAYMENT_EVENTS_CHANNEL: Joi.string()
+    .pattern(/^[A-Za-z0-9:_-]{1,100}$/)
+    .default('vedora:payments:v1'),
   BILLING_PRO_PRICE_VND: Joi.number()
     .integer()
     .min(1)
