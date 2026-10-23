@@ -52,6 +52,14 @@ Khác body cùng key trả `409 IDEMPOTENCY_CONFLICT`. Key lưu bền cùng giao
 không TTL 24h như blueprint nguồn; replay trả **trạng thái hiện tại** của intent
 cũ kể cả đã hủy/thành công, không tạo purchase mới.
 
+Mã thanh toán mới = `SEPAY_PAYMENT_CODE_PREFIX` từ env (hiện tại `VED`) +
+**6 ký tự ngẫu nhiên `0-9`, `A-Z`**, ví dụ `VED7K9P2X`. Hậu tố giữ cả số 0
+đầu, dùng random mật mã đồng đều. Unique constraint kiểm tra với toàn bộ mã
+đã lưu, kể cả đơn đã hủy/thành công. Trùng mã thì rollback và thử lại toàn bộ
+transaction, tối đa 5 lần; hết lượt trả `503 PAYMENT_CODE_UNAVAILABLE`, client
+giữ cùng Idempotency-Key để thử lại. Không retry các lỗi unique khác. Không
+sửa/xóa lịch sử thanh toán; không có migration dữ liệu mã dài sang mã ngắn.
+
 ## Webhook và tính đúng đắn
 
 Xác thực constant-time trước parse/capture. Banking payload theo
@@ -60,8 +68,10 @@ Xác thực constant-time trước parse/capture. Banking payload theo
 `subAccount`, `code`, `transferType`, `transferAmount`, `referenceCode`.
 Chỉ `in`, tiền nguyên dương safe integer, amount bằng **đúng** snapshot.
 `gateway` so không phân biệt hoa/thường; account hoặc VA khớp chính xác, giữ
-số 0 đầu. Chỉ dùng `code`, không tự dò trong `content`; cấu hình SePay trích
-đúng prefix VED (hoặc prefix do BE cấu hình).
+số 0 đầu. **Chỉ dùng `code` SePay cung cấp**, sau trim/uppercase và đối chiếu
+toàn bộ mã trong DB. Thiếu/null/trống ghi `PAYMENT_CODE_MISSING`, không tự
+tìm mã trong `content`/`description`, không cắt mã dài hoặc đoán theo số tiền.
+SePay phải nhận diện được mã ngắn trước khi gửi qua bộ lọc của webhook.
 
 Advisory transaction lock theo provider transaction rồi payer, CAS PENDING,
 unique provider transaction/intent/ledger/active key và CHECK ở DB bảo vệ
@@ -95,8 +105,15 @@ hai giá trị là cùng chuỗi. Secret chỉ nằm ở BE, không đưa vào N
 
 1. Apply migration `20261023030000_sepay_memberships` qua migrate deploy.
 2. Cấu hình tài khoản nhận tiền, bank/gateway, prefix và webhook API key ở BE.
-3. Cấu hình webhook SePay Có tiền vào, JSON, API Key, prefix code, HTTPS URL
-   cuối cùng `/api/v1/payments/sepay/bank-transfer-webhook`, không redirect/WAF.
+3. Cấu hình webhook **Vedora** trên SePay: Có tiền vào, đúng tài khoản nhận,
+   JSON, API Key, HTTPS URL cuối cùng
+   `/api/v1/payments/sepay/bank-transfer-webhook`, không redirect/WAF.
+   **Giữ bật “Chỉ gửi khi có mã thanh toán”, lọc prefix VED** (hoặc prefix
+   hiện tại trong env), xác thực API Key và lọc tài khoản/chiều tiền vào.
+   Trong Cấu trúc mã thanh toán của SePay, sửa riêng mẫu Vedora: prefix tương
+   ứng env, **hậu tố tối thiểu = tối đa = 6, loại Số và chữ**. Không đổi
+   mẫu/bộ lọc của các dự án khác. Người dùng xác nhận không còn đơn cũ chờ;
+   không cần giữ mẫu hậu tố 20. Xem [bộ lọc mã của SePay](https://developer.sepay.vn/vi/sepay-webhooks/cau-hinh-ma-thanh-toan).
 4. FE trỏ NEXT_PUBLIC_API_URL tới BE và rebuild. CSP cho ảnh `https://vietqr.app`.
 5. Kiểm tra bằng chức năng gửi thử của SePay rồi đối soát trạng thái server.
 
@@ -104,6 +121,11 @@ hai giá trị là cùng chuỗi. Secret chỉ nằm ở BE, không đưa vào N
 `SEPAY_ENVIRONMENT=sandbox` cho nhánh này: QR có thể nhận tiền thật. Dùng tài
 khoản/callback fixture riêng khi kiểm thử; chưa có bằng chứng end-to-end với
 tài khoản SePay/ngân hàng thật chỉ từ các test bên dưới.
+
+Khi bật bộ lọc có mã, SePay bỏ qua callback `code=null` trước khi gọi BE. Mã
+ngắn nhằm giảm nguy cơ MoMo tách nội dung; cần xác nhận qua một giao dịch MoMo
+thật sau deploy. Kiểm thử fixture không chứng minh mọi ứng dụng/ngân hàng
+đều giữ nguyên mã. Thay cấu hình không tự xử lý lại callback cũ.
 
 ## FE
 
@@ -170,3 +192,6 @@ npm run test:db -- test/payments.db-spec.ts
 DB suite tạo/drop schema ngẫu nhiên trong DB test: idempotency đồng thời,
 duplicate/reused event, cancel-vs-capture, rollback có chủ đích, ownership,
 snapshots, UTC+7, ledger, thay thế gói và expiry. Không reset DB ứng dụng.
+Mã ngắn: prefix từ env/QR, ép trùng mã đã hủy, hết lượt retry và dùng lại key,
+hai payer trùng mã đồng thời, không retry unique constraint khác; thiếu mã
+provider vẫn không capture dù nội dung chứa đúng mã. Không gửi tiền thật.

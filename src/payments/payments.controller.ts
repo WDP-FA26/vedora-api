@@ -89,7 +89,10 @@ export class PaymentsController {
   @ApiConflictResponse({
     description: 'Key/body conflict or a different pending purchase exists',
   })
-  @ApiServiceUnavailableResponse({ description: 'SePay payments disabled' })
+  @ApiServiceUnavailableResponse({
+    description:
+      'Payments disabled or temporary payment-code allocation exhaustion; retain Idempotency-Key when retrying',
+  })
   create(
     @Req() request: AuthenticatedRequest,
     @Body() dto: CreatePaymentDto,
