@@ -2,6 +2,123 @@ generator client {
   provider = "prisma-client-js"
 }
 
+enum BillingPlan {
+  PRO
+  PREMIUM
+}
+
+enum PaymentStatus {
+  PENDING
+  SUCCEEDED
+  CANCELLED
+}
+
+/// Scalar account IDs retain financial history when an account is deleted.
+model PaymentIntent {
+  id                    String                  @id @default(uuid()) @db.Uuid
+  userId                String                  @map("user_id") @db.Uuid
+  planCode              BillingPlan             @map("plan_code")
+  durationDays          Int                     @map("duration_days")
+  amount                Decimal                 @db.Decimal(19, 0)
+  currency              String                  @default("VND") @db.VarChar(3)
+  status                PaymentStatus           @default(PENDING)
+  invoiceNumber         String                  @unique @map("invoice_number") @db.VarChar(80)
+  paymentCode           String                  @unique @map("payment_code") @db.VarChar(50)
+  activeIntentKey       String?                 @unique @map("active_intent_key") @db.Uuid
+  bankCode              String                  @map("bank_code") @db.VarChar(50)
+  bankGateway           String                  @map("bank_gateway") @db.VarChar(100)
+  accountNumber         String                  @map("account_number") @db.VarChar(100)
+  accountHolder         String                  @map("account_holder") @db.VarChar(150)
+  storeName             String                  @map("store_name") @db.VarChar(100)
+  transferContent       String                  @map("transfer_content") @db.VarChar(100)
+  providerTransactionId String?                 @unique @map("provider_transaction_id") @db.VarChar(100)
+  providerReference     String?                 @map("provider_reference") @db.VarChar(255)
+  paidAt                DateTime?               @map("paid_at")
+  capturedAt            DateTime?               @map("captured_at")
+  cancelledAt           DateTime?               @map("cancelled_at")
+  createdAt             DateTime                @default(now()) @map("created_at")
+  updatedAt             DateTime                @updatedAt @map("updated_at")
+  requests              PaymentRequest[]
+  ledger                PaymentLedger?
+  membership            Membership?
+  audits                PaymentAudit[]
+  receipts              PaymentWebhookReceipt[]
+
+  @@index([userId, createdAt])
+  @@map("payment_intents")
+}
+
+/// Permanent idempotency aliases: retries never create another purchase.
+model PaymentRequest {
+  id          String        @id @default(uuid()) @db.Uuid
+  actorId     String        @map("actor_id") @db.Uuid
+  requestKey  String        @map("request_key") @db.VarChar(200)
+  payloadHash String        @map("payload_hash") @db.Char(64)
+  intentId    String        @map("intent_id") @db.Uuid
+  createdAt   DateTime      @default(now()) @map("created_at")
+  intent      PaymentIntent @relation(fields: [intentId], references: [id], onDelete: Restrict)
+
+  @@unique([actorId, requestKey])
+  @@map("payment_requests")
+}
+
+/// Current membership is evaluated on read; expiry never requires a worker.
+model Membership {
+  userId    String        @id @map("user_id") @db.Uuid
+  planCode  BillingPlan   @map("plan_code")
+  startsAt  DateTime      @map("starts_at")
+  expiresAt DateTime      @map("expires_at")
+  paymentId String        @unique @map("payment_id") @db.Uuid
+  payment   PaymentIntent @relation(fields: [paymentId], references: [id], onDelete: Restrict)
+
+  @@map("memberships")
+}
+
+/// Immutable incoming-payment/purchase ledger; not a spendable wallet.
+model PaymentLedger {
+  id                    String        @id @default(uuid()) @db.Uuid
+  intentId              String        @unique @map("intent_id") @db.Uuid
+  userId                String        @map("user_id") @db.Uuid
+  providerTransactionId String        @unique @map("provider_transaction_id") @db.VarChar(100)
+  amount                Decimal       @db.Decimal(19, 0)
+  currency              String        @default("VND") @db.VarChar(3)
+  planCode              BillingPlan   @map("plan_code")
+  startsAt              DateTime      @map("starts_at")
+  expiresAt             DateTime      @map("expires_at")
+  createdAt             DateTime      @default(now()) @map("created_at")
+  intent                PaymentIntent @relation(fields: [intentId], references: [id], onDelete: Restrict)
+
+  @@index([userId, createdAt])
+  @@map("payment_ledger")
+}
+
+model PaymentAudit {
+  id        String        @id @default(uuid()) @db.Uuid
+  intentId  String        @map("intent_id") @db.Uuid
+  actorId   String?       @map("actor_id") @db.Uuid
+  action    String        @db.VarChar(40)
+  createdAt DateTime      @default(now()) @map("created_at")
+  intent    PaymentIntent @relation(fields: [intentId], references: [id], onDelete: Restrict)
+
+  @@index([intentId, createdAt])
+  @@map("payment_audits")
+}
+
+/// One sanitized receipt per authenticated delivery. No raw payload/secret/PII.
+model PaymentWebhookReceipt {
+  id                    String         @id @default(uuid()) @db.Uuid
+  providerTransactionId String         @map("provider_transaction_id") @db.VarChar(100)
+  payloadHash           String         @map("payload_hash") @db.Char(64)
+  outcome               String         @db.VarChar(50)
+  intentId              String?        @map("intent_id") @db.Uuid
+  createdAt             DateTime       @default(now()) @map("created_at")
+  intent                PaymentIntent? @relation(fields: [intentId], references: [id], onDelete: Restrict)
+
+  @@index([providerTransactionId, createdAt])
+  @@index([intentId, createdAt])
+  @@map("payment_webhook_receipts")
+}
+
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
