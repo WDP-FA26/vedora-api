@@ -16,6 +16,7 @@ import {
 } from './payment.dto';
 import { SePayProvider } from './sepay.provider';
 import { parseBankWebhook } from './sepay-payload';
+import { paymentCodesFromContent } from './payment-code';
 import { PaymentChanged, PaymentEventsService } from './payment-events.service';
 
 type Tx = Prisma.TransactionClient;
@@ -254,9 +255,19 @@ export class PaymentsService {
         });
       };
       if (event.transferType !== 'in') return record('NOT_INCOMING');
-      if (!event.code?.trim()) return record('PAYMENT_CODE_MISSING');
+      let paymentCode = event.code?.trim().toUpperCase();
+      const fromContent = !paymentCode;
+      if (!paymentCode) {
+        const candidates = paymentCodesFromContent(
+          event.content,
+          this.config.get<string>('SEPAY_PAYMENT_CODE_PREFIX', 'VED'),
+        );
+        if (candidates.length > 1) return record('PAYMENT_CODE_AMBIGUOUS');
+        if (!candidates.length) return record('PAYMENT_CODE_MISSING');
+        paymentCode = candidates[0];
+      }
       const found = await tx.paymentIntent.findUnique({
-        where: { paymentCode: event.code.trim().toUpperCase() },
+        where: { paymentCode },
       });
       if (!found) return record('PAYMENT_INTENT_NOT_FOUND');
       await this.lock(tx, `payer:${found.userId}`);
@@ -333,7 +344,10 @@ export class PaymentsService {
       await tx.paymentAudit.create({
         data: { intentId: intent.id, action: 'CAPTURED' },
       });
-      await record('CAPTURED', intent.id);
+      await record(
+        fromContent ? 'CAPTURED_FROM_CONTENT' : 'CAPTURED',
+        intent.id,
+      );
       changed = { userId: intent.userId, intentId: intent.id };
     });
     if (changed) await this.notifyCommitted(changed);

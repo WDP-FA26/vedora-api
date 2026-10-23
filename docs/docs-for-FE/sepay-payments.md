@@ -57,11 +57,25 @@ cũ kể cả đã hủy/thành công, không tạo purchase mới.
 Xác thực constant-time trước parse/capture. Banking payload theo
 [SePay](https://docs.sepay.vn/tich-hop-webhooks.html): `id`, `gateway`,
 `transactionDate` dạng `YYYY-MM-DD HH:mm:ss` (UTC+7), `accountNumber`,
-`subAccount`, `code`, `transferType`, `transferAmount`, `referenceCode`.
+`subAccount`, `code`, `content`, `transferType`, `transferAmount`, `referenceCode`.
 Chỉ `in`, tiền nguyên dương safe integer, amount bằng **đúng** snapshot.
 `gateway` so không phân biệt hoa/thường; account hoặc VA khớp chính xác, giữ
-số 0 đầu. Chỉ dùng `code`, không tự dò trong `content`; cấu hình SePay trích
-đúng prefix VED (hoặc prefix do BE cấu hình).
+số 0 đầu. Nếu `code` có giá trị sau trim, luôn dùng mã đó; không lấy mã khác
+trong `content` để thay thế khi mã provider không khớp.
+
+Khi `code` thiếu/null/trống, BE tìm trong `content` tối đa 4096 ký tự đúng một
+mã đầy đủ: prefix cấu hình viết liền + đúng 20 ký tự hex. Chấp nhận hoa/thường
+và tối đa 3 dấu cách/tab ASCII giữa các ký tự suffix (kể cả ngay sau prefix),
+phù hợp nội dung MoMo chèn khoảng trắng. Không xóa khoảng trắng toàn bộ memo,
+không đoán mã thiếu, không dùng `description`, newline, NBSP hoặc dấu gạch thay
+khoảng trắng. Mã phải có ranh giới riêng, không lấy 20 ký tự đầu của mã dài
+hơn. Hai mã đầy đủ khác nhau thì bỏ qua, kể cả chỉ một mã có trong DB;
+lặp lại cùng mã không gây mơ hồ. Mã khôi phục vẫn phải khớp chính xác intent,
+bank/account/VA, số tiền và trạng thái như mã provider.
+
+Fallback dùng `SEPAY_PAYMENT_CODE_PREFIX` hiện tại; đổi prefix có thể khiến
+callback không có `code` của intent cũ cần đối soát thủ công. Giữ prefix ổn
+định trong khi còn intent chờ. Không thay đổi độ dài mã ngẫu nhiên hoặc QR.
 
 Advisory transaction lock theo provider transaction rồi payer, CAS PENDING,
 unique provider transaction/intent/ledger/active key và CHECK ở DB bảo vệ
@@ -70,8 +84,8 @@ receipt; bất kỳ bước nào lỗi thì rollback tất cả. Callback lỗi 
 để provider retry. Không gọi external notification trong capture transaction.
 
 `{success:true}` là acknowledgement, **không đồng nghĩa đã capture**. Receipt
-lưu outcome: CAPTURED, DUPLICATE, NOT_INCOMING, ACCOUNT_MISMATCH,
-PAYMENT_CODE_MISSING, PAYMENT_INTENT_NOT_FOUND, AMOUNT_MISMATCH,
+lưu outcome: CAPTURED, CAPTURED_FROM_CONTENT, DUPLICATE, NOT_INCOMING, ACCOUNT_MISMATCH,
+PAYMENT_CODE_MISSING, PAYMENT_CODE_AMBIGUOUS, PAYMENT_INTENT_NOT_FOUND, AMOUNT_MISMATCH,
 TRANSACTION_ALREADY_USED, PAYMENT_INTENT_ALREADY_SUCCEEDED,
 PAYMENT_CANCELLED, ACCOUNT_UNAVAILABLE. Receipt không lưu raw body, sender,
 content, account hay secret; chỉ ID provider, hash, outcome, intent và giờ nhận.
@@ -95,8 +109,14 @@ hai giá trị là cùng chuỗi. Secret chỉ nằm ở BE, không đưa vào N
 
 1. Apply migration `20261023030000_sepay_memberships` qua migrate deploy.
 2. Cấu hình tài khoản nhận tiền, bank/gateway, prefix và webhook API key ở BE.
-3. Cấu hình webhook SePay Có tiền vào, JSON, API Key, prefix code, HTTPS URL
-   cuối cùng `/api/v1/payments/sepay/bank-transfer-webhook`, không redirect/WAF.
+3. Cấu hình webhook **Vedora** trên SePay: Có tiền vào, đúng tài khoản nhận,
+   JSON, API Key, HTTPS URL cuối cùng
+   `/api/v1/payments/sepay/bank-transfer-webhook`, không redirect/WAF.
+   **Tắt “Chỉ gửi khi có mã thanh toán” và bỏ bộ lọc prefix VED của webhook này**
+   để callback `code=null` từ MoMo tới được BE. Giữ xác thực API Key và lọc
+   tài khoản/chiều tiền vào. Cấu hình nhận diện mã chung của SePay vẫn dùng
+   prefix tương ứng và suffix 20 ký tự để nhận mã viết liền; không sửa các
+   webhook ứng dụng khác. Xem [bộ lọc mã của SePay](https://developer.sepay.vn/vi/sepay-webhooks/cau-hinh-ma-thanh-toan).
 4. FE trỏ NEXT_PUBLIC_API_URL tới BE và rebuild. CSP cho ảnh `https://vietqr.app`.
 5. Kiểm tra bằng chức năng gửi thử của SePay rồi đối soát trạng thái server.
 
@@ -104,6 +124,12 @@ hai giá trị là cùng chuỗi. Secret chỉ nằm ở BE, không đưa vào N
 `SEPAY_ENVIRONMENT=sandbox` cho nhánh này: QR có thể nhận tiền thật. Dùng tài
 khoản/callback fixture riêng khi kiểm thử; chưa có bằng chứng end-to-end với
 tài khoản SePay/ngân hàng thật chỉ từ các test bên dưới.
+
+Fallback BE không điền lại cột “Mã thanh toán” trên dashboard SePay. Những
+callback cũ chưa từng gửi tới Vedora cũng không tự được xử lý sau deploy;
+đối soát intent/receipt trước khi gửi lại webhook gốc từ SePay. Intent đã hủy,
+sai số tiền hoặc tài khoản vẫn không được capture. Không tự sửa số tiền trong
+callback hay tạo callback giả để ghi nhận tiền thật.
 
 ## FE
 
@@ -170,3 +196,6 @@ npm run test:db -- test/payments.db-spec.ts
 DB suite tạo/drop schema ngẫu nhiên trong DB test: idempotency đồng thời,
 duplicate/reused event, cancel-vs-capture, rollback có chủ đích, ownership,
 snapshots, UTC+7, ledger, thay thế gói và expiry. Không reset DB ứng dụng.
+Thêm fixture `code=null` có khoảng trắng kiểu MoMo: capture, explicit code
+ưu tiên, sai/thừa/thiếu tiền, sai bank/account/chiều tiền, mã mơ hồ/thiếu/không
+tồn tại, hủy và callback đồng thời. Không gửi tiền thật khi chạy suite.

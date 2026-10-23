@@ -145,6 +145,153 @@ describe('SePay payments with PostgreSQL and HTTP', () => {
     vi.restoreAllMocks();
   });
 
+  const walletContent = (payment: PaymentDto) =>
+    `123456-0000000000-${payment.paymentCode.slice(0, 9)} ${payment.paymentCode.slice(9)} CKN 123456 - VI DIEN TU`;
+
+  it('captures a whitespace-split wallet code with a null provider code and preserves privacy', async () => {
+    const user = await makeUser(),
+      payment = await create(user);
+    const body = event(payment, {
+      code: null,
+      content: walletContent(payment),
+    });
+    await callback(body).expect(200);
+    expect((await service.get(payment.id, user.id)).status).toBe('SUCCEEDED');
+    expect((await service.overview(user.id)).membership.planCode).toBe('PRO');
+    expect(
+      await db.paymentLedger.count({ where: { intentId: payment.id } }),
+    ).toBe(1);
+    const receipt = await db.paymentWebhookReceipt.findFirstOrThrow({
+      where: { providerTransactionId: `BANK-${body.id}` },
+    });
+    expect(receipt.outcome).toBe('CAPTURED_FROM_CONTENT');
+    expect(JSON.stringify(receipt)).not.toContain('VI DIEN TU');
+    expect(
+      JSON.stringify(await service.get(payment.id, user.id)),
+    ).not.toContain('VI DIEN TU');
+  });
+
+  it('accepts a blank provider code, but never overrides a nonempty unknown provider code', async () => {
+    const user = await makeUser(),
+      payment = await create(user);
+    await callback(
+      event(payment, { code: 'VEDUNKNOWN', content: walletContent(payment) }),
+    ).expect(200);
+    expect((await service.get(payment.id, user.id)).status).toBe('PENDING');
+    await callback(
+      event(payment, { code: '   ', content: walletContent(payment) }),
+    ).expect(200);
+    expect((await service.get(payment.id, user.id)).status).toBe('SUCCEEDED');
+  });
+
+  it.each([-1, 1])(
+    'does not capture a wallet code when amount differs by %d VND',
+    async (delta) => {
+      const user = await makeUser(),
+        payment = await create(user);
+      const body = event(payment, {
+        code: null,
+        content: walletContent(payment),
+        transferAmount: Number(payment.amount) + delta,
+      });
+      await callback(body).expect(200);
+      expect((await service.get(payment.id, user.id)).status).toBe('PENDING');
+      expect(
+        await db.paymentLedger.count({ where: { intentId: payment.id } }),
+      ).toBe(0);
+      expect((await service.overview(user.id)).membership.planCode).toBe(
+        'FREE',
+      );
+      expect(
+        (
+          await db.paymentWebhookReceipt.findFirstOrThrow({
+            where: { providerTransactionId: `BANK-${body.id}` },
+          })
+        ).outcome,
+      ).toBe('AMOUNT_MISMATCH');
+    },
+  );
+
+  it.each([
+    { gateway: 'WrongBank' },
+    { accountNumber: 'WRONGACCOUNT' },
+    { transferType: 'out' },
+  ])(
+    'keeps bank/account/direction validation for fallback: %s',
+    async (change) => {
+      const user = await makeUser(),
+        payment = await create(user);
+      await callback(
+        event(payment, {
+          ...change,
+          code: null,
+          content: walletContent(payment),
+        }),
+      ).expect(200);
+      expect((await service.get(payment.id, user.id)).status).toBe('PENDING');
+      expect(
+        await db.paymentLedger.count({ where: { intentId: payment.id } }),
+      ).toBe(0);
+    },
+  );
+
+  it('ignores two complete codes even if only one exists in DB', async () => {
+    const user = await makeUser(),
+      payment = await create(user);
+    const body = event(payment, {
+      code: null,
+      content: `${walletContent(payment)} / VED0123456789ABCDEF0123`,
+    });
+    await callback(body).expect(200);
+    expect((await service.get(payment.id, user.id)).status).toBe('PENDING');
+    expect(
+      (
+        await db.paymentWebhookReceipt.findFirstOrThrow({
+          where: { providerTransactionId: `BANK-${body.id}` },
+        })
+      ).outcome,
+    ).toBe('PAYMENT_CODE_AMBIGUOUS');
+  });
+
+  it('does not use a full unknown code, incomplete code or description field as a fallback', async () => {
+    const user = await makeUser(),
+      payment = await create(user);
+    for (const body of [
+      { code: null, content: 'VED0123456789ABCDEF0123' },
+      { code: null, content: payment.paymentCode.slice(0, -1) },
+      { code: null, content: null, description: walletContent(payment) },
+    ])
+      await callback(event(payment, body)).expect(200);
+    expect((await service.get(payment.id, user.id)).status).toBe('PENDING');
+    expect(
+      await db.paymentLedger.count({ where: { intentId: payment.id } }),
+    ).toBe(0);
+  });
+
+  it('does not resurrect canceled wallet intents or double-capture concurrent fallback callbacks', async () => {
+    const user = await makeUser(),
+      canceled = await create(user);
+    await service.cancel(canceled.id, user.id);
+    await callback(
+      event(canceled, { code: null, content: walletContent(canceled) }),
+    ).expect(200);
+    expect((await service.get(canceled.id, user.id)).status).toBe('CANCELLED');
+    const pending = await create(user),
+      body = event(pending, { code: null, content: walletContent(pending) });
+    const replies = await Promise.all(
+      Array.from({ length: 5 }, () => callback(body)),
+    );
+    expect(replies.every((reply) => reply.status === 200)).toBe(true);
+    expect(await db.paymentLedger.count({ where: { userId: user.id } })).toBe(
+      1,
+    );
+    expect(
+      await db.paymentAudit.count({
+        where: { intentId: pending.id, action: 'CAPTURED' },
+      }),
+    ).toBe(1);
+  });
+
   it('publishes capture only after committed payment, ledger and membership are visible', async () => {
     const user = await makeUser(),
       payment = await create(user);
@@ -638,44 +785,52 @@ describe('SePay payments with PostgreSQL and HTTP', () => {
     ).toBe('ACCOUNT_UNAVAILABLE');
     expect(await db.paymentIntent.count({ where: { id: payment.id } })).toBe(1);
   });
-  it('rolls back payment, ledger, audit and receipt if membership write fails', async () => {
-    const publish = vi
-      .spyOn(app.get(PaymentEventsService), 'publish')
-      .mockResolvedValue();
-    const user = await makeUser(),
-      payment = await create(user, 'PREMIUM'),
-      body = event(payment);
-    await db.$executeRawUnsafe(
-      `ALTER TABLE memberships ADD CONSTRAINT reject_test_premium CHECK (plan_code <> 'PREMIUM') NOT VALID`,
-    );
-    try {
-      await callback(body).expect(500);
-      expect(publish).not.toHaveBeenCalled();
-      expect((await service.get(payment.id, user.id)).status).toBe('PENDING');
+  it.each(['provider', 'content'])(
+    'rolls back payment, ledger, audit and receipt if membership write fails (%s code)',
+    async (source) => {
+      const publish = vi
+        .spyOn(app.get(PaymentEventsService), 'publish')
+        .mockResolvedValue();
+      const user = await makeUser(),
+        payment = await create(user, 'PREMIUM'),
+        body = event(
+          payment,
+          source === 'content'
+            ? { code: null, content: walletContent(payment) }
+            : {},
+        );
+      await db.$executeRawUnsafe(
+        `ALTER TABLE memberships ADD CONSTRAINT reject_test_premium CHECK (plan_code <> 'PREMIUM') NOT VALID`,
+      );
+      try {
+        await callback(body).expect(500);
+        expect(publish).not.toHaveBeenCalled();
+        expect((await service.get(payment.id, user.id)).status).toBe('PENDING');
+        expect(
+          await db.paymentLedger.count({ where: { intentId: payment.id } }),
+        ).toBe(0);
+        expect(
+          await db.paymentAudit.count({
+            where: { intentId: payment.id, action: 'CAPTURED' },
+          }),
+        ).toBe(0);
+        expect(
+          await db.paymentWebhookReceipt.count({
+            where: { providerTransactionId: `BANK-${body.id}` },
+          }),
+        ).toBe(0);
+      } finally {
+        await db.$executeRawUnsafe(
+          'ALTER TABLE memberships DROP CONSTRAINT reject_test_premium',
+        );
+      }
+      await callback(body).expect(200);
+      expect(publish).toHaveBeenCalledOnce();
       expect(
         await db.paymentLedger.count({ where: { intentId: payment.id } }),
-      ).toBe(0);
-      expect(
-        await db.paymentAudit.count({
-          where: { intentId: payment.id, action: 'CAPTURED' },
-        }),
-      ).toBe(0);
-      expect(
-        await db.paymentWebhookReceipt.count({
-          where: { providerTransactionId: `BANK-${body.id}` },
-        }),
-      ).toBe(0);
-    } finally {
-      await db.$executeRawUnsafe(
-        'ALTER TABLE memberships DROP CONSTRAINT reject_test_premium',
-      );
-    }
-    await callback(body).expect(200);
-    expect(publish).toHaveBeenCalledOnce();
-    expect(
-      await db.paymentLedger.count({ where: { intentId: payment.id } }),
-    ).toBe(1);
-  });
+      ).toBe(1);
+    },
+  );
   it('restricts sanitized receipt reconciliation to admins', async () => {
     const user = await makeUser(),
       admin = await makeUser('ADMIN');

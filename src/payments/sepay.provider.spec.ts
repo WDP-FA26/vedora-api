@@ -75,7 +75,8 @@ describe('SePay provider boundary', () => {
     });
     expect(parsed.paidAt.toISOString()).toBe('2026-10-22T17:00:00.000Z');
     expect(parsed.providerTransactionId).toBe('BANK-123');
-    expect(parsed).not.toHaveProperty('content');
+    expect(parsed.content).toBe('Private sender details');
+    expect(parsed).not.toHaveProperty('accumulated');
   });
   it.each([
     '2026-02-30 12:00:00',
@@ -91,7 +92,7 @@ describe('SePay provider boundary', () => {
       expect(() => parseBankWebhook({ ...event, transferAmount })).toThrow();
     },
   );
-  it('does not extract a code from content when provider code is absent', () => {
+  it('leaves an absent provider code for application-level content recovery', () => {
     expect(
       parseBankWebhook({ ...event, code: null, content: 'VEDABC' }).code,
     ).toBeNull();

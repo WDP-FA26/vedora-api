@@ -11,6 +11,7 @@ const payloadSchema = z.object({
   accountNumber: z.string().min(1).max(100),
   subAccount: z.string().max(100).nullish(),
   code: z.string().max(100).nullish(),
+  content: z.string().max(4096).nullish(),
   transferType: z.enum(['in', 'out']),
   transferAmount: z.number().int().positive().max(Number.MAX_SAFE_INTEGER),
   referenceCode: z.string().max(255).nullish(),
