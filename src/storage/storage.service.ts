@@ -209,6 +209,39 @@ export class StorageService implements OnModuleInit {
     return Body.transformToByteArray();
   }
 
+  /** Writes an object the API produced itself, e.g. a generated image. */
+  async putBytes(
+    target: StorageTarget,
+    key: string,
+    bytes: Uint8Array,
+    contentType: string,
+  ): Promise<void> {
+    await this.require().internal.send(
+      new PutObjectCommand({
+        Bucket: this.buckets[target],
+        Key: key,
+        Body: bytes,
+        ContentType: contentType,
+      }),
+    );
+  }
+
+  /**
+   * The key of an object in `target` that `url` points at, or null when the
+   * URL belongs to another host or bucket.
+   */
+  keyFromPublicUrl(target: StorageTarget, url: string): string | null {
+    const prefix = `${this.publicUrl}/${this.buckets[target]}/`;
+    if (!url.startsWith(prefix)) return null;
+    let key: string;
+    try {
+      key = decodeURIComponent(url.slice(prefix.length).split(/[?#]/)[0]);
+    } catch {
+      return null;
+    }
+    return key && !key.split('/').includes('..') ? key : null;
+  }
+
   async delete(target: StorageTarget, key: string): Promise<void> {
     await this.require().internal.send(
       new DeleteObjectCommand({ Bucket: this.buckets[target], Key: key }),

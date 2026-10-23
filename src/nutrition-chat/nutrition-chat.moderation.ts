@@ -54,14 +54,16 @@ Answer: {"verdict": "allow"}
 ## OUTPUT
 Return only {"verdict": "<verdict>"} with one of: allow, off_topic, unsupported_language, self_harm, injection, harmful.`;
 
+/** Classifies `message` against `policy`, the nutrition chat's by default. */
 export async function moderate(
   model: LanguageModel,
   message: string,
   abortSignal: AbortSignal,
+  policy = POLICY,
 ): Promise<ModerationVerdict> {
   const { output } = await generateText({
     model,
-    instructions: POLICY,
+    instructions: policy,
     prompt: message,
     output: Output.object({ schema: moderationOutput }),
     maxRetries: 0,

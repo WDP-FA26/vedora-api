@@ -137,6 +137,16 @@ import { VerificationModule } from './verification/verification.module';
         OPENROUTER_RERANK_MODEL: Joi.string()
           .allow('')
           .default('cohere/rerank-v3.5'),
+        // Blog writing assistant. Empty BLOG_AI_MODEL: OPENROUTER_MODEL; pin
+        // a model that calls tools reliably.
+        BLOG_AI_MODEL: Joi.string().allow('').default(''),
+        OPENROUTER_IMAGE_MODEL: Joi.string().default(
+          'qwen/qwen-image-2.1-turbo',
+        ),
+        // Daily caps per user (Asia/Bangkok days): assistant requests,
+        // including each resume after an editor tool, and generated images.
+        BLOG_AI_DAILY_MESSAGES: Joi.number().integer().positive().default(100),
+        BLOG_AI_DAILY_IMAGES: Joi.number().integer().positive().default(10),
       }),
     }),
     ScheduleModule.forRoot(),
