@@ -19,11 +19,14 @@ import { PaymentsService } from '../src/payments/payments.service';
 import { SePayProvider } from '../src/payments/sepay.provider';
 import { SePayWebhookGuard } from '../src/payments/sepay-webhook.guard';
 import type { PaymentDto } from '../src/payments/payment.dto';
+import { PaymentEventsService } from '../src/payments/payment-events.service';
+import { PaymentStreamController } from '../src/payments/payment-stream.controller';
 
 describe('SePay payments with PostgreSQL and HTTP', () => {
   const schema = `vedora_payment_test_${randomUUID().replaceAll('-', '')}`;
   const secret = 'sepay-integration-webhook-secret';
   const settings = {
+    PAYMENT_REDIS_URL: '',
     API_PREFIX: 'api/v1',
     SEPAY_PAYMENT_ENABLED: true,
     SEPAY_BANK_WEBHOOK_API_KEY: secret,
@@ -110,6 +113,7 @@ describe('SePay payments with PostgreSQL and HTTP', () => {
     const moduleRef = await Test.createTestingModule({
       imports: [JwtModule.register({ secret: 'sepay-db-test-jwt-secret' })],
       controllers: [
+        PaymentStreamController,
         PaymentsController,
         SePayWebhookController,
         PaymentReconciliationController,
@@ -118,6 +122,7 @@ describe('SePay payments with PostgreSQL and HTTP', () => {
         PaymentsService,
         SePayProvider,
         SePayWebhookGuard,
+        PaymentEventsService,
         { provide: PrismaService, useValue: db },
         { provide: ConfigService, useValue: new ConfigService(settings) },
       ],
@@ -125,6 +130,7 @@ describe('SePay payments with PostgreSQL and HTTP', () => {
     app = moduleRef.createNestApplication({ rawBody: true });
     configureApp(app);
     await app.init();
+    await app.listen(0, '127.0.0.1');
     service = app.get(PaymentsService);
     jwt = app.get(JwtService);
   });
@@ -133,6 +139,140 @@ describe('SePay payments with PostgreSQL and HTTP', () => {
     if (db) {
       await db.$executeRawUnsafe(`DROP SCHEMA IF EXISTS "${schema}" CASCADE`);
       await db.$disconnect();
+    }
+  });
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('publishes capture only after committed payment, ledger and membership are visible', async () => {
+    const user = await makeUser(),
+      payment = await create(user);
+    let visible: unknown;
+    const publish = vi
+      .spyOn(app.get(PaymentEventsService), 'publish')
+      .mockImplementation(async (change) => {
+        visible = {
+          change,
+          status: (
+            await db.paymentIntent.findUniqueOrThrow({
+              where: { id: payment.id },
+            })
+          ).status,
+          ledgerCount: await db.paymentLedger.count({
+            where: { intentId: payment.id },
+          }),
+          paymentId: (
+            await db.membership.findUniqueOrThrow({
+              where: { userId: user.id },
+            })
+          ).paymentId,
+        };
+      });
+    await callback(event(payment)).expect(200);
+    expect(publish).toHaveBeenCalledOnce();
+    expect(visible).toEqual({
+      change: { userId: user.id, intentId: payment.id },
+      status: 'SUCCEEDED',
+      ledgerCount: 1,
+      paymentId: payment.id,
+    });
+  });
+
+  it('does not publish ignored or duplicate callbacks', async () => {
+    const user = await makeUser(),
+      payment = await create(user),
+      body = event(payment);
+    const publish = vi
+      .spyOn(app.get(PaymentEventsService), 'publish')
+      .mockResolvedValue();
+    await callback({ ...body, transferAmount: 1 }).expect(200);
+    expect(publish).not.toHaveBeenCalled();
+    await callback(body).expect(200);
+    await callback(body).expect(200);
+    expect(publish).toHaveBeenCalledOnce();
+  });
+
+  it('publishes cancellation after commit and never republishes idempotent cancellation', async () => {
+    const user = await makeUser(),
+      payment = await create(user);
+    let visible: unknown;
+    const publish = vi
+      .spyOn(app.get(PaymentEventsService), 'publish')
+      .mockImplementation(async () => {
+        visible = (
+          await db.paymentIntent.findUniqueOrThrow({
+            where: { id: payment.id },
+          })
+        ).status;
+      });
+    await service.cancel(payment.id, user.id);
+    await service.cancel(payment.id, user.id);
+    expect(publish).toHaveBeenCalledOnce();
+    expect(visible).toBe('CANCELLED');
+  });
+
+  it('does not fail a committed capture if the realtime service throws', async () => {
+    const user = await makeUser(),
+      payment = await create(user);
+    vi.spyOn(app.get(PaymentEventsService), 'publish').mockRejectedValue(
+      new Error('Redis unavailable'),
+    );
+    await callback(event(payment)).expect(200, { success: true });
+    expect((await service.get(payment.id, user.id)).status).toBe('SUCCEEDED');
+    expect(
+      await db.paymentLedger.count({ where: { intentId: payment.id } }),
+    ).toBe(1);
+  });
+
+  it('rejects anonymous and non-owner streams before sending SSE headers', async () => {
+    const user = await makeUser(),
+      other = await makeUser('ADMIN'),
+      payment = await create(user);
+    await request(app.getHttpServer())
+      .get(`${path}/payment-intents/${payment.id}/events`)
+      .expect(401);
+    await request(app.getHttpServer())
+      .get(`${path}/payment-intents/${payment.id}/events`)
+      .auth(other.token, { type: 'bearer' })
+      .expect(404);
+    await request(app.getHttpServer())
+      .get(`${path}/payment-intents/${randomUUID()}/events`)
+      .auth(user.token, { type: 'bearer' })
+      .expect(404);
+  });
+
+  it('opens an authenticated private stream and declares fallback when Redis is disabled', async () => {
+    const user = await makeUser(),
+      payment = await create(user);
+    const abort = new AbortController();
+    try {
+      const response = await fetch(
+        `${await app.getUrl()}${path}/payment-intents/${payment.id}/events`,
+        {
+          headers: { Authorization: `Bearer ${user.token}` },
+          signal: AbortSignal.any([abort.signal, AbortSignal.timeout(3000)]),
+        },
+      );
+      expect(response.status).toBe(200);
+      expect(response.headers.get('content-type')).toContain(
+        'text/event-stream',
+      );
+      expect(response.headers.get('cache-control')).toContain('no-store');
+      expect(response.headers.get('x-accel-buffering')).toBe('no');
+      const reader = response.body!.getReader(),
+        decoder = new TextDecoder();
+      let text = '';
+      while (!text.includes('event: stream.unavailable')) {
+        const chunk = await reader.read();
+        if (chunk.done) break;
+        text += decoder.decode(chunk.value, { stream: true });
+      }
+      expect(text).toContain('event: stream.unavailable');
+      expect(text).not.toContain(user.email);
+      expect(text).not.toContain(user.token);
+    } finally {
+      abort.abort();
     }
   });
 
@@ -499,6 +639,9 @@ describe('SePay payments with PostgreSQL and HTTP', () => {
     expect(await db.paymentIntent.count({ where: { id: payment.id } })).toBe(1);
   });
   it('rolls back payment, ledger, audit and receipt if membership write fails', async () => {
+    const publish = vi
+      .spyOn(app.get(PaymentEventsService), 'publish')
+      .mockResolvedValue();
     const user = await makeUser(),
       payment = await create(user, 'PREMIUM'),
       body = event(payment);
@@ -507,6 +650,7 @@ describe('SePay payments with PostgreSQL and HTTP', () => {
     );
     try {
       await callback(body).expect(500);
+      expect(publish).not.toHaveBeenCalled();
       expect((await service.get(payment.id, user.id)).status).toBe('PENDING');
       expect(
         await db.paymentLedger.count({ where: { intentId: payment.id } }),
@@ -527,6 +671,7 @@ describe('SePay payments with PostgreSQL and HTTP', () => {
       );
     }
     await callback(body).expect(200);
+    expect(publish).toHaveBeenCalledOnce();
     expect(
       await db.paymentLedger.count({ where: { intentId: payment.id } }),
     ).toBe(1);

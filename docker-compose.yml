@@ -37,6 +37,21 @@ services:
       KNOWLEDGE_EMBEDDING_DIMENSIONS: ${KNOWLEDGE_EMBEDDING_DIMENSIONS:-1536}
       OPENROUTER_RERANK_MODEL: ${OPENROUTER_RERANK_MODEL-cohere/rerank-v3.5}
       DATABASE_URL: postgresql://${POSTGRES_USER:-vedora}:${POSTGRES_PASSWORD:-vedora_local_password}@postgres:5432/${POSTGRES_DB:-vedora}?schema=public
+      PAYMENT_REDIS_URL: ${PAYMENT_REDIS_URL:-redis://redis:6379}
+      PAYMENT_EVENTS_CHANNEL: ${PAYMENT_EVENTS_CHANNEL:-vedora:payments:v1}
+      SEPAY_PAYMENT_ENABLED: ${SEPAY_PAYMENT_ENABLED:-false}
+      SEPAY_PAYMENT_FLOW: ${SEPAY_PAYMENT_FLOW:-bank_transfer_qr}
+      SEPAY_QR_BANK_CODE: ${SEPAY_QR_BANK_CODE:-}
+      SEPAY_BANK_GATEWAY: ${SEPAY_BANK_GATEWAY:-}
+      SEPAY_QR_ACCOUNT_NUMBER: ${SEPAY_QR_ACCOUNT_NUMBER:-}
+      SEPAY_QR_ACCOUNT_HOLDER: ${SEPAY_QR_ACCOUNT_HOLDER:-}
+      SEPAY_QR_STORE_NAME: ${SEPAY_QR_STORE_NAME:-Vedora}
+      SEPAY_QR_TRANSFER_PREFIX: ${SEPAY_QR_TRANSFER_PREFIX:-}
+      SEPAY_PAYMENT_CODE_PREFIX: ${SEPAY_PAYMENT_CODE_PREFIX:-VED}
+      SEPAY_BANK_WEBHOOK_API_KEY: ${SEPAY_BANK_WEBHOOK_API_KEY:-}
+      BILLING_PRO_PRICE_VND: ${BILLING_PRO_PRICE_VND:-49000}
+      BILLING_PREMIUM_PRICE_VND: ${BILLING_PREMIUM_PRICE_VND:-99000}
+      BILLING_DURATION_DAYS: ${BILLING_DURATION_DAYS:-30}
     ports:
       - "${PORT:-3000}:3000"
     depends_on:
@@ -58,6 +73,18 @@ services:
       timeout: 5s
       retries: 3
       start_period: 30s
+
+  redis:
+    image: redis:7.4-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    ports:
+      - "127.0.0.1:6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
 
   postgres:
     image: postgres:17-alpine
