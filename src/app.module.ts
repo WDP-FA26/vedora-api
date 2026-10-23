@@ -2,6 +2,8 @@ import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { ScheduleModule } from '@nestjs/schedule';
 import Joi from 'joi';
+import { PaymentsModule } from './payments/payments.module';
+import { sepayEnvironmentSchema } from './payments/sepay.config';
 import { AppController } from './app.controller';
 import { AdminDashboardModule } from './admin-dashboard/admin-dashboard.module';
 import { AuthModule } from './auth/auth.module';
@@ -30,6 +32,7 @@ import { VerificationModule } from './verification/verification.module';
       isGlobal: true,
       cache: true,
       validationSchema: Joi.object({
+        ...sepayEnvironmentSchema,
         NODE_ENV: Joi.string()
           .valid('development', 'test', 'production')
           .default('development'),
@@ -151,6 +154,7 @@ import { VerificationModule } from './verification/verification.module';
     HealthModule,
     UsersModule,
     AdminDashboardModule,
+    PaymentsModule,
     MediaModule,
     PostsModule,
     NotificationsModule,
