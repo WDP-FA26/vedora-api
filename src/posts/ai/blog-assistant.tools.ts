@@ -69,9 +69,10 @@ export const editorTools = {
   }),
   insertImage: tool({
     description:
-      'Insert an image into the draft. Only use a URL returned by generateImage or editImage, or one already in <draft>.',
+      'Insert an image into the draft, or swap one already there for it (`replaces`). The only way to add or change an image: never put image Markdown in the other editor tools. Only use a URL returned by generateImage or editImage, copied exactly: never change its scheme, host or path.',
     inputSchema: z.object({
-      url: z.url({ protocol: /^https$/ }),
+      // storage serves plain http outside production, e.g. localhost:9000
+      url: z.url({ protocol: /^https?$/ }),
       alt: z
         .string()
         .min(1)
@@ -79,6 +80,13 @@ export const editorTools = {
         .describe('Short description, in the language of the draft'),
       position: z.enum(['cursor', 'end', 'after']),
       after: z.string().max(MAX_EDIT_MARKDOWN).optional(),
+      replaces: z
+        .string()
+        .max(2048)
+        .optional()
+        .describe(
+          'URL of an image in <draft> that this one takes the place of, copied exactly; position is then ignored',
+        ),
     }),
     outputSchema: editorOutput,
   }),
@@ -110,7 +118,7 @@ export function blogAssistantTools(
     }),
     editImage: tool({
       description:
-        "Edit an image already in the draft (one of the user's blog images) following an instruction, e.g. brighter, remove the spoon, change the background. Costs one daily image. Returns the edited image's URL; the original is kept, so use replaceText to swap the Markdown image.",
+        "Edit an image already in the draft (one of the user's blog images) following an instruction, e.g. brighter, remove the spoon, change the background. Costs one daily image. Returns the edited image's URL; the original is kept, so call insertImage with `replaces` set to the original URL to swap them.",
       inputSchema: z.object({
         imageUrl: z.url(),
         instruction: z.string().min(1).max(1000).describe('In English'),

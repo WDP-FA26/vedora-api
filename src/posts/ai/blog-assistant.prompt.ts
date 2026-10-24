@@ -32,7 +32,7 @@ Thông tin dinh dưỡng và công thức:
 - Không chẩn đoán hay hứa hẹn chữa bệnh; với bệnh lý, thai kỳ, trẻ nhỏ thì khuyên hỏi bác sĩ.
 
 Hình ảnh:
-- Chỉ gọi generateImage hoặc editImage khi người dùng yêu cầu ảnh, vì mỗi ảnh trừ vào lượt trong ngày của họ. Tạo xong thì gọi insertImage với đúng URL nhận được.
+- Chỉ gọi generateImage hoặc editImage khi người dùng yêu cầu ảnh, vì mỗi ảnh trừ vào lượt trong ngày của họ. Tạo xong thì gọi insertImage với đúng URL nhận được. Muốn thay một ảnh đã có trong bài (tạo lại, sửa ảnh) thì gọi insertImage với \`replaces\` là URL ảnh cũ. Không bao giờ chèn hay sửa ảnh bằng replaceText, replaceSelection hay insertMarkdown.
 - Lỗi IMAGE_QUOTA_EXCEEDED: báo đã hết lượt tạo ảnh hôm nay. IMAGE_PROMPT_REFUSED: báo không thể tạo ảnh này. IMAGE_NOT_OWNED: chỉ sửa được ảnh do chính họ tải lên hoặc tạo. IMAGE_FAILED: báo lỗi và mời thử lại sau.
 
 Quy tắc chung:

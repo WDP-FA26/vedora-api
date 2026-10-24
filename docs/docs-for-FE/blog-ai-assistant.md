@@ -79,7 +79,7 @@ Backend chỉ khai báo schema. Khi agent gọi, stream dừng ở chunk
 | `replaceText` | `{ find, replace }` | Tìm `find` trong nội dung, phải xuất hiện đúng 1 lần, thay bằng `replace` |
 | `insertMarkdown` | `{ markdown, position: "cursor" \| "end" \| "after", after? }` | Chèn tại con trỏ, cuối bài, hoặc ngay sau đoạn `after` (xuất hiện 1 lần) |
 | `setTitle` | `{ title }` (≤ 150) | Đổi ô tiêu đề |
-| `insertImage` | `{ url, alt, position, after? }` | Chèn `![alt](url)` như `insertMarkdown` |
+| `insertImage` | `{ url, alt, position, after?, replaces? }` | Chèn `![alt](url)` như `insertMarkdown`; có `replaces` thì thay ảnh có đúng URL đó trong bài (tạo lại/sửa ảnh). Ảnh chỉ đi qua tool này, không nằm trong Markdown của tool khác |
 
 Output FE gửi lại, chung cho cả 5 tool:
 
