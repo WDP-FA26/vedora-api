@@ -4,8 +4,10 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { PostStatus, PostType, Prisma } from '@prisma/client';
+import { isURL } from 'class-validator';
 import { createCursorPaginatedResponse } from '../common/pagination';
 import { PrismaService } from '../prisma/prisma.service';
+import { StorageService, StorageTarget } from '../storage/storage.service';
 import { blogSummarySelect } from './blog-query';
 import {
   BlogDetailDto,
@@ -28,9 +30,11 @@ export class BlogsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly posts: PostsService,
+    private readonly storage: StorageService,
   ) {}
 
   async create(authorId: string, dto: CreateBlogDto): Promise<BlogDetailDto> {
+    this.validateCover(dto.coverImageUrl);
     return this.write(async (tx) => {
       const status = dto.status ?? PostStatus.DRAFT;
       const content = dto.content ?? '';
@@ -117,6 +121,7 @@ export class BlogsService {
   ): Promise<BlogDetailDto> {
     if (Object.values(dto).every((value) => value === undefined))
       throw new BadRequestException('Provide at least one blog field');
+    this.validateCover(dto.coverImageUrl);
     return this.write(async (tx) => {
       await this.lockOwned(tx, id, authorId);
       const current = await tx.post.findUniqueOrThrow({
@@ -194,6 +199,23 @@ export class BlogsService {
         error: 'Bad Request',
       });
     }
+  }
+
+  /**
+   * A cover is any https image on a public host, or an image in Vedora's own
+   * blog storage, which serves plain http outside production. The first image
+   * of the article becomes the cover, whether uploaded or AI-generated.
+   */
+  private validateCover(url: string | null | undefined) {
+    if (!url) return;
+    if (isURL(url, { protocols: ['https'], require_protocol: true })) return;
+    if (this.storage.keyFromPublicUrl(StorageTarget.Blogs, url)) return;
+    throw new BadRequestException({
+      code: 'BLOG_COVER_NOT_ALLOWED',
+      message: 'A cover must be an https link or an image in blog storage',
+      statusCode: 400,
+      error: 'Bad Request',
+    });
   }
 
   private async validateRecipes(tx: Prisma.TransactionClient, ids?: string[]) {
