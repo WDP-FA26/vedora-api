@@ -39,12 +39,23 @@ export class CreateBlogDto {
   @MaxLength(MAX_BLOG_CONTENT)
   content?: string;
 
-  @ApiPropertyOptional({ nullable: true, maxLength: 2048, format: 'uri' })
+  @ApiPropertyOptional({
+    nullable: true,
+    maxLength: 2048,
+    format: 'uri',
+    description:
+      "An https image link, or an image in Vedora's blog storage (plain http outside production)",
+  })
   @ValidateIf(
     (_object, value: unknown) => value !== undefined && value !== null,
   )
   @Transform(trim)
-  @IsUrl({ protocols: ['https'], require_protocol: true })
+  // narrowed in BlogsService: http only for Vedora's own storage
+  @IsUrl({
+    protocols: ['http', 'https'],
+    require_protocol: true,
+    require_tld: false,
+  })
   @MaxLength(2048)
   coverImageUrl?: string | null;
 

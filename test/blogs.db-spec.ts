@@ -10,6 +10,7 @@ import { PrismaService } from '../src/prisma/prisma.service';
 import { BlogsService } from '../src/posts/blogs.service';
 import { PostInteractionsService } from '../src/posts/post-interactions.service';
 import { PostsService } from '../src/posts/posts.service';
+import type { StorageService } from '../src/storage/storage.service';
 
 describe('Blog lifecycle with PostgreSQL', () => {
   const schema = `vedora_blog_test_${randomUUID().replaceAll('-', '')}`;
@@ -52,7 +53,9 @@ describe('Blog lifecycle with PostgreSQL', () => {
       {} as PostSearchIndexService,
       {} as PostSearchService,
     );
-    blogs = new BlogsService(db, posts);
+    blogs = new BlogsService(db, posts, {
+      keyFromPublicUrl: () => null,
+    } as unknown as StorageService);
     interactions = new PostInteractionsService(db);
     const author = await prisma.user.create({
       data: {
