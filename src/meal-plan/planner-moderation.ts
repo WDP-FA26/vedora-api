@@ -26,19 +26,21 @@ export const PLANNER_REFUSALS: Record<
 };
 
 /**
- * The nutrition chat's classifier, with the same short backoff (the provider
- * sometimes answers 429). Throws when no verdict arrives in time.
+ * The nutrition chat's classifier (or another `policy`), with the same short
+ * backoff (the provider sometimes answers 429). Throws when no verdict
+ * arrives in time.
  */
 export async function moderatePlannerMessage(
   model: LanguageModel,
   text: string,
   abortSignal: AbortSignal,
+  policy?: string,
 ): Promise<ModerationVerdict> {
   const timeout = AbortSignal.timeout(TIMEOUT_MS);
   const signal = AbortSignal.any([abortSignal, timeout]);
   for (let attempt = 1; ; attempt++) {
     try {
-      return await moderate(model, text, signal);
+      return await moderate(model, text, signal, policy);
     } catch (error) {
       if (attempt >= ATTEMPTS || signal.aborted) throw error;
       await sleep(RETRY_DELAY_MS * attempt, undefined, { signal }).catch(

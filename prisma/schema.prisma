@@ -192,6 +192,7 @@ model User {
   recipeRatings         RecipeRating[]
   notifications         Notification[]          @relation("NotificationRecipient")
   sentNotifications     Notification[]          @relation("NotificationActor")
+  aiUsage               AiUsage[]
 
   @@map("users")
 }
@@ -937,4 +938,22 @@ model MealPlanEntry {
   @@id([userId, day, section, recipeId])
   @@index([recipeId])
   @@map("meal_plan_entries")
+}
+
+/// A paid AI feature counted against a daily allowance.
+enum AiFeature {
+  BLOG_CHAT
+  BLOG_IMAGE
+}
+
+/// How many times a user used an AI feature on one day (Asia/Bangkok).
+model AiUsage {
+  userId  String    @map("user_id") @db.Uuid
+  day     DateTime  @db.Date
+  feature AiFeature
+  count   Int       @default(0)
+  user    User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([userId, day, feature])
+  @@map("ai_usage")
 }
