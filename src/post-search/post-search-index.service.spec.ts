@@ -10,6 +10,7 @@ const POST = {
   authorId: '0b8f0c1e-3c55-4c1b-9d0e-2f7f3a9f7a10',
   body: 'Đậu hũ sốt cà',
   publishedAt: new Date('2026-10-20T00:00:00.000Z'),
+  updatedAt: new Date('2026-10-20T00:00:05.000Z'),
   media: [] as { transcript: string | null }[],
 };
 
@@ -71,8 +72,9 @@ describe('PostSearchIndexService', () => {
       bm25_folded: { text: POST.body },
     });
     const update = prisma.post.updateMany.mock.calls[0][0];
-    expect(update?.where).toEqual({ id: { in: [POST.id] } });
+    expect(update?.where).toEqual({ id: POST.id, updatedAt: POST.updatedAt });
     expect(update?.data.searchIndexedAt).toBeInstanceOf(Date);
+    expect(prisma.$transaction).toHaveBeenCalledTimes(1);
   });
 
   it("embeds what a post's videos say after its body", async () => {
@@ -118,7 +120,7 @@ describe('PostSearchIndexService', () => {
     expect(embeddings.embedPosts).not.toHaveBeenCalled();
     expect(qdrant.upsert).not.toHaveBeenCalled();
     const update = prisma.post.updateMany.mock.calls[0][0];
-    expect(update?.where).toEqual({ id: { in: [POST.id] } });
+    expect(update?.where).toEqual({ id: POST.id, updatedAt: POST.updatedAt });
   });
 
   it('leaves posts unindexed when embedding fails, for the next run', async () => {

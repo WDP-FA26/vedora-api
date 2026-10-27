@@ -41,7 +41,7 @@ export class PostFeedService {
   /** The first `count` post ids of the viewer's feed as of `asOf`. */
   async feed(viewerId: string, asOf: Date, count: number): Promise<string[]> {
     const [similar, latest] = await Promise.all([
-      this.tastePosts(viewerId).then((liked) =>
+      this.tastePosts(viewerId, asOf).then((liked) =>
         this.similar(liked, viewerId, asOf, count).catch((error: unknown) => {
           this.logger.warn(`Feed similarity failed: ${String(error)}`);
           return [];
@@ -52,8 +52,15 @@ export class PostFeedService {
     return interleave(similar, latest, EXPLORE_EVERY).slice(0, count);
   }
 
-  private async tastePosts(viewerId: string): Promise<string[]> {
-    const where = { userId: viewerId, post: { status: PostStatus.PUBLISHED } };
+  /**
+   * Interactions up to `asOf` only, so every page of one scroll ranks
+   * against the same taste: a like made mid-scroll neither reorders nor
+   * hides the posts of later pages.
+   */
+  private async tastePosts(viewerId: string, asOf: Date): Promise<string[]> {
+    const until = { createdAt: { lte: asOf } };
+    const post = { status: PostStatus.PUBLISHED };
+    const where = { userId: viewerId, post, ...until };
     const recent = {
       orderBy: { createdAt: 'desc' },
       take: TASTE_POSTS,
@@ -63,10 +70,7 @@ export class PostFeedService {
       this.prisma.postLike.findMany({ where, select, ...recent }),
       this.prisma.postBookmark.findMany({ where, select, ...recent }),
       this.prisma.postComment.findMany({
-        where: {
-          authorId: viewerId,
-          post: { status: PostStatus.PUBLISHED },
-        },
+        where: { authorId: viewerId, post, ...until },
         select,
         ...recent,
       }),

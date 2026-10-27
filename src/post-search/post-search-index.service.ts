@@ -127,6 +127,7 @@ export class PostSearchIndexService {
         authorId: true,
         body: true,
         publishedAt: true,
+        updatedAt: true,
         media: {
           where: { transcript: { not: null } },
           orderBy: { position: 'asc' },
@@ -168,10 +169,17 @@ export class PostSearchIndexService {
         })),
       });
     }
-    await this.prisma.post.updateMany({
-      where: { id: { in: posts.map(({ id }) => id) } },
-      data: { searchIndexedAt: new Date() },
-    });
+    // Only posts unchanged since they were read: one whose captioning
+    // finished meanwhile was marked for indexing again, with its transcript.
+    const indexedAt = new Date();
+    await this.prisma.$transaction(
+      posts.map(({ id, updatedAt }) =>
+        this.prisma.post.updateMany({
+          where: { id, updatedAt },
+          data: { searchIndexedAt: indexedAt },
+        }),
+      ),
+    );
     return posts.length;
   }
 

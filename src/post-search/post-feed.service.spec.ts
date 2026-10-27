@@ -142,6 +142,19 @@ describe('PostFeedService', () => {
     );
   });
 
+  it('reads taste from interactions up to asOf, so later pages rank alike', async () => {
+    await service.feed(VIEWER, AS_OF, 10);
+
+    const wheres = [
+      prisma.postLike.findMany.mock.calls[0][0]?.where,
+      prisma.postBookmark.findMany.mock.calls[0][0]?.where,
+      prisma.postComment.findMany.mock.calls[0][0]?.where,
+    ];
+    for (const where of wheres) {
+      expect(where?.createdAt).toEqual({ lte: AS_OF });
+    }
+  });
+
   it('serves the newest posts to a viewer with no interactions', async () => {
     prisma.postLike.findMany.mockResolvedValue([]);
     prisma.postBookmark.findMany.mockResolvedValue([]);
