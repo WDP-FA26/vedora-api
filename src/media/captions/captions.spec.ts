@@ -5,7 +5,7 @@ import {
   splitLongCue,
   translationTarget,
 } from './transcription.service';
-import { toVtt } from './vtt';
+import { toVtt, vttText } from './vtt';
 
 describe('silence removal', () => {
   const log = [
@@ -82,6 +82,17 @@ describe('cues', () => {
   it('writes WebVTT', () => {
     expect(toVtt([{ start: 61.5, end: 63, text: 'a --> b' }])).toBe(
       'WEBVTT\n\n00:01:01.500 --> 00:01:03.000\na → b\n',
+    );
+  });
+
+  it('reads the text back out of WebVTT, cue by cue', () => {
+    const vtt = toVtt([
+      { start: 0, end: 2, text: 'Xin chào' },
+      { start: 2, end: 4, text: 'hôm nay nấu nấm' },
+    ]);
+    expect(vttText(vtt)).toBe('Xin chào hôm nay nấu nấm');
+    expect(vttText(vtt.replace(/\n/g, '\r\n'))).toBe(
+      'Xin chào hôm nay nấu nấm',
     );
   });
 });

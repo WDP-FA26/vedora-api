@@ -48,6 +48,12 @@ export class MediaMaintenanceService {
     this.captions.schedule();
   }
 
+  /** Gives videos captioned before transcripts were stored theirs. */
+  @Cron(CronExpression.EVERY_10_MINUTES)
+  backfillTranscripts(): Promise<void> {
+    return this.captions.backfillTranscripts();
+  }
+
   /** Discards uploads that were never posted, so Cloudinary stops storing them. */
   @Cron(CronExpression.EVERY_HOUR)
   async deleteOrphans(): Promise<void> {

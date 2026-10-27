@@ -15,11 +15,12 @@ import {
   TranscriptionService,
   translationTarget,
 } from './captions/transcription.service';
-import { type Cue, toVtt } from './captions/vtt';
+import { type Cue, toVtt, vttText } from './captions/vtt';
 
 const BATCH_SIZE = 10;
 /** A TRANSCRIBING row untouched this long was cut off by a restart. */
 const STALE_AFTER_MS = 30 * 60 * 1000;
+const TRACK_TIMEOUT_MS = 15_000;
 
 /**
  * Captions published videos inside this process: ffmpeg extracts the audio
@@ -97,6 +98,51 @@ export class CaptionService {
       },
       data: { captionStatus: CaptionStatus.NONE },
     });
+  }
+
+  /**
+   * Fills `transcript` for videos captioned before it existed, from their
+   * stored spoken-language track, and marks their posts for embedding again.
+   * A track that fails to download is retried on the next run.
+   */
+  async backfillTranscripts(): Promise<void> {
+    const media = await this.prisma.mediaAsset.findMany({
+      where: {
+        captionStatus: CaptionStatus.READY,
+        transcript: null,
+        captions: { some: { isOriginal: true } },
+      },
+      orderBy: { updatedAt: 'asc' },
+      take: BATCH_SIZE,
+      select: {
+        id: true,
+        postId: true,
+        captions: { where: { isOriginal: true }, select: { url: true } },
+      },
+    });
+    for (const { id, postId, captions } of media) {
+      try {
+        const response = await fetch(captions[0].url, {
+          signal: AbortSignal.timeout(TRACK_TIMEOUT_MS),
+        });
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const transcript = vttText(await response.text());
+        await this.prisma.mediaAsset.update({
+          where: { id },
+          data: { transcript },
+        });
+        if (postId) {
+          await this.prisma.post.updateMany({
+            where: { id: postId },
+            data: { searchIndexedAt: null },
+          });
+        }
+      } catch (error) {
+        this.logger.warn(
+          `Backfilling the transcript of media ${id} failed: ${String(error)}`,
+        );
+      }
+    }
   }
 
   /** Transcribes, translates and stores the captions of one video. */

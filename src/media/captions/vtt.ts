@@ -24,3 +24,21 @@ export function toVtt(cues: Cue[]): string {
     .join('\n\n');
   return `WEBVTT\n\n${body}\n`;
 }
+
+/** The text of every cue in `vtt`, in order and joined by spaces. */
+export function vttText(vtt: string): string {
+  return vtt
+    .split(/\r?\n\r?\n/)
+    .map((block) => {
+      const lines = block.split(/\r?\n/);
+      const timing = lines.findIndex((line) => line.includes('-->'));
+      return timing === -1
+        ? ''
+        : lines
+            .slice(timing + 1)
+            .join(' ')
+            .trim();
+    })
+    .filter(Boolean)
+    .join(' ');
+}

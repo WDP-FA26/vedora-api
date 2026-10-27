@@ -128,4 +128,46 @@ describe('CaptionService', () => {
 
     expect(extract).not.toHaveBeenCalled();
   });
+
+  describe('backfillTranscripts', () => {
+    const track = { url: 'https://cdn/vi.vtt' };
+    let fetchMock: ReturnType<typeof vi.fn>;
+
+    beforeEach(() => {
+      prisma.mediaAsset.findMany.mockResolvedValue([
+        { id: mediaId, postId: 'post-1', captions: [track] },
+      ] as never);
+      fetchMock = vi.fn();
+      vi.stubGlobal('fetch', fetchMock);
+    });
+
+    afterEach(() => vi.unstubAllGlobals());
+
+    it('stores the spoken track as text and marks the post for embedding', async () => {
+      fetchMock.mockResolvedValue(
+        new Response('WEBVTT\n\n00:00:05.000 --> 00:00:08.000\nXin chào\n'),
+      );
+
+      await service.backfillTranscripts();
+
+      expect(fetchMock).toHaveBeenCalledWith(track.url, expect.anything());
+      expect(prisma.mediaAsset.update).toHaveBeenCalledWith({
+        where: { id: mediaId },
+        data: { transcript: 'Xin chào' },
+      });
+      expect(prisma.post.updateMany).toHaveBeenCalledWith({
+        where: { id: 'post-1' },
+        data: { searchIndexedAt: null },
+      });
+    });
+
+    it('leaves the transcript empty for the next run when the download fails', async () => {
+      fetchMock.mockResolvedValue(new Response('gone', { status: 404 }));
+
+      await service.backfillTranscripts();
+
+      expect(prisma.mediaAsset.update).not.toHaveBeenCalled();
+      expect(prisma.post.updateMany).not.toHaveBeenCalled();
+    });
+  });
 });
