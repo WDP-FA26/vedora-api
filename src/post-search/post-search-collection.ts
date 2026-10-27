@@ -20,4 +20,10 @@ export function bm25(text: string, folded: boolean) {
 export interface PostPointPayload {
   postId: string;
   authorId: string;
+  /** Unix seconds; the feed filters and decays on it. */
+  publishedAt: number;
+}
+
+export function toEpochSeconds(date: Date): number {
+  return Math.floor(date.getTime() / 1000);
 }

@@ -9,6 +9,8 @@ const POST = {
   id: 'f1a2d3e4-0000-4000-8000-000000000001',
   authorId: '0b8f0c1e-3c55-4c1b-9d0e-2f7f3a9f7a10',
   body: 'Đậu hũ sốt cà',
+  publishedAt: new Date('2026-10-20T00:00:00.000Z'),
+  media: [] as { transcript: string | null }[],
 };
 
 describe('PostSearchIndexService', () => {
@@ -48,7 +50,6 @@ describe('PostSearchIndexService', () => {
         where: {
           type: 'POST',
           status: 'PUBLISHED',
-          body: { not: null },
           searchIndexedAt: null,
         },
       }),
@@ -62,6 +63,7 @@ describe('PostSearchIndexService', () => {
     expect(point.payload).toEqual({
       postId: POST.id,
       authorId: POST.authorId,
+      publishedAt: 1_792_454_400,
     });
     expect(point.vector).toMatchObject({
       dense: [0.1, 0.2, 0.3, 0.4],
@@ -71,6 +73,31 @@ describe('PostSearchIndexService', () => {
     const update = prisma.post.updateMany.mock.calls[0][0];
     expect(update?.where).toEqual({ id: { in: [POST.id] } });
     expect(update?.data.searchIndexedAt).toBeInstanceOf(Date);
+  });
+
+  it("embeds what a post's videos say after its body", async () => {
+    prisma.post.findMany.mockResolvedValueOnce([
+      { ...POST, media: [{ transcript: 'Hôm nay mình nấu đậu hũ' }] },
+    ] as never);
+
+    await service.drain();
+
+    expect(embeddings.embedPosts).toHaveBeenCalledWith([
+      'Đậu hũ sốt cà\nHôm nay mình nấu đậu hũ',
+    ]);
+  });
+
+  it('marks a post with neither text nor speech indexed without a point', async () => {
+    prisma.post.findMany.mockResolvedValueOnce([
+      { ...POST, body: null },
+    ] as never);
+
+    await service.drain();
+
+    expect(embeddings.embedPosts).not.toHaveBeenCalled();
+    expect(qdrant.upsert).not.toHaveBeenCalled();
+    const update = prisma.post.updateMany.mock.calls[0][0];
+    expect(update?.where).toEqual({ id: { in: [POST.id] } });
   });
 
   it('leaves posts unindexed when embedding fails, for the next run', async () => {

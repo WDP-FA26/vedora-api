@@ -28,6 +28,7 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { OptionalJwtAuthGuard } from '../auth/optional-jwt-auth.guard';
 import { CursorPaginationQueryDto } from '../common/pagination';
 import { CreatePostDto } from './dto/create-post.dto';
+import { FeedQueryDto } from './dto/feed-query.dto';
 import { RecordViewsDto } from './dto/post-interaction.dto';
 import { ListPostsQueryDto } from './dto/list-posts-query.dto';
 import { PostPageDto, PostResponseDto } from './dto/post-response.dto';
@@ -107,6 +108,22 @@ export class PostsController {
     @Req() request: OptionalAuthenticatedRequest,
   ): Promise<PostPageDto> {
     return this.postsService.search(query, request.user?.sub);
+  }
+
+  @Get('feed')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'Your "for you" feed',
+    description:
+      "Recent posts closest in meaning to what you recently liked, saved or commented on, newer ones first among equals, with every fifth post the newest one by anyone. Without such interactions it's the newest posts. Excludes your own posts. Goes up to 200 deep; `nextCursor` is an opaque string.",
+  })
+  @ApiOkResponse({ type: PostPageDto })
+  feed(
+    @Query() query: FeedQueryDto,
+    @Req() request: AuthenticatedRequest,
+  ): Promise<PostPageDto> {
+    return this.postsService.feed(query, request.user.sub);
   }
 
   @Get('bookmarks')

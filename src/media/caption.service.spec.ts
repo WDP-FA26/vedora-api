@@ -79,6 +79,16 @@ describe('CaptionService', () => {
     expect(done.data).toEqual({
       captionStatus: CaptionStatus.READY,
       captionLanguage: 'vi',
+      transcript: 'Xin chào',
+    });
+  });
+
+  it('marks the post for embedding again once its video is captioned', async () => {
+    await service.caption({ ...pendingMedia, postId: 'post-1' });
+
+    expect(prisma.post.updateMany).toHaveBeenCalledWith({
+      where: { id: 'post-1' },
+      data: { searchIndexedAt: null },
     });
   });
 

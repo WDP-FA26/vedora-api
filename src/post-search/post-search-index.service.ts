@@ -11,15 +11,20 @@ import {
   bm25,
   DENSE_VECTOR,
   type PostPointPayload,
+  toEpochSeconds,
 } from './post-search-collection';
 
 const BATCH_SIZE = 64;
+/** Embedded characters of a post: its body, then what its videos say. */
+const MAX_TEXT_LENGTH = 2000;
 
-/** The posts search covers: published short posts with text. */
+/**
+ * The posts search covers: published short posts. One with neither text nor
+ * speech is marked indexed without a point; captioning marks it again.
+ */
 export const SEARCHABLE_POST = {
   type: PostType.POST,
   status: PostStatus.PUBLISHED,
-  body: { not: null },
 } satisfies Prisma.PostWhereInput;
 
 /**
@@ -43,7 +48,8 @@ export class PostSearchIndexService {
   ) {
     this.collection = configService.get<string>(
       'QDRANT_POSTS_COLLECTION',
-      'vedora_posts',
+      // v2 adds `publishedAt` to the payload for the feed.
+      'vedora_posts_v2',
     );
   }
 
@@ -113,24 +119,44 @@ export class PostSearchIndexService {
       where: { ...SEARCHABLE_POST, searchIndexedAt: null },
       orderBy: [{ publishedAt: 'asc' }, { id: 'asc' }],
       take: BATCH_SIZE,
-      select: { id: true, authorId: true, body: true },
+      select: {
+        id: true,
+        authorId: true,
+        body: true,
+        publishedAt: true,
+        media: {
+          where: { transcript: { not: null } },
+          orderBy: { position: 'asc' },
+          select: { transcript: true },
+        },
+      },
     });
     if (posts.length === 0) return 0;
 
-    const bodies = posts.map(({ body }) => body ?? '');
-    const vectors = await this.embeddings.embedPosts(bodies);
-    await this.qdrant.upsert(this.collection, {
-      wait: true,
-      points: posts.map(({ id, authorId }, index) => ({
-        id,
-        vector: {
-          [DENSE_VECTOR]: vectors[index],
-          [BM25_VECTOR]: bm25(bodies[index], false),
-          [BM25_FOLDED_VECTOR]: bm25(bodies[index], true),
-        },
-        payload: { postId: id, authorId } satisfies PostPointPayload,
-      })),
-    });
+    const texts = posts
+      .map((post) => ({ ...post, text: postText(post) }))
+      .filter(({ text }) => text.length > 0);
+    if (texts.length > 0) {
+      const vectors = await this.embeddings.embedPosts(
+        texts.map(({ text }) => text),
+      );
+      await this.qdrant.upsert(this.collection, {
+        wait: true,
+        points: texts.map(({ id, authorId, publishedAt, text }, index) => ({
+          id,
+          vector: {
+            [DENSE_VECTOR]: vectors[index],
+            [BM25_VECTOR]: bm25(text, false),
+            [BM25_FOLDED_VECTOR]: bm25(text, true),
+          },
+          payload: {
+            postId: id,
+            authorId,
+            publishedAt: toEpochSeconds(publishedAt ?? new Date()),
+          } satisfies PostPointPayload,
+        })),
+      });
+    }
     await this.prisma.post.updateMany({
       where: { id: { in: posts.map(({ id }) => id) } },
       data: { searchIndexedAt: new Date() },
@@ -165,6 +191,11 @@ export class PostSearchIndexService {
       field_schema: 'keyword',
       wait: true,
     });
+    await this.qdrant.createPayloadIndex(this.collection, {
+      field_name: 'publishedAt',
+      field_schema: { type: 'integer', lookup: false, range: true },
+      wait: true,
+    });
     // A new (or recreated) collection is empty: index every post again.
     const { count } = await this.prisma.post.updateMany({
       where: { searchIndexedAt: { not: null } },
@@ -174,4 +205,15 @@ export class PostSearchIndexService {
       `Created Qdrant collection ${this.collection}; reindexing ${count} posts`,
     );
   }
+}
+
+/** A post's body, then the transcripts of its videos, cut to fit. */
+function postText(post: {
+  body: string | null;
+  media: { transcript: string | null }[];
+}): string {
+  return [post.body, ...post.media.map(({ transcript }) => transcript)]
+    .filter((part): part is string => !!part?.trim())
+    .join('\n')
+    .slice(0, MAX_TEXT_LENGTH);
 }

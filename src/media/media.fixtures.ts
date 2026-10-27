@@ -25,6 +25,7 @@ export const pendingMedia: MediaAsset = {
   aspectRatio: '9:16',
   captionStatus: CaptionStatus.NONE,
   captionLanguage: null,
+  transcript: null,
   discardedAt: null,
   createdAt: new Date('2026-09-24T00:00:00.000Z'),
   updatedAt: new Date('2026-09-24T00:00:00.000Z'),

@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { PostType, PrismaClient } from '@prisma/client';
 import { MediaService } from '../src/media/media.service';
 import { CloudinaryService } from '../src/cloudinary/cloudinary.service';
+import { PostFeedService } from '../src/post-search/post-feed.service';
 import { PostSearchIndexService } from '../src/post-search/post-search-index.service';
 import { PostSearchService } from '../src/post-search/post-search.service';
 import { PrismaService } from '../src/prisma/prisma.service';
@@ -52,6 +53,7 @@ describe('Blog lifecycle with PostgreSQL', () => {
       {} as CloudinaryService,
       {} as PostSearchIndexService,
       {} as PostSearchService,
+      {} as PostFeedService,
     );
     blogs = new BlogsService(db, posts, {
       keyFromPublicUrl: () => null,

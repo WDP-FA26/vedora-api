@@ -101,7 +101,7 @@ export class CaptionService {
 
   /** Transcribes, translates and stores the captions of one video. */
   async caption(
-    media: Pick<MediaAsset, 'id' | 'publicId' | 'durationSec'>,
+    media: Pick<MediaAsset, 'id' | 'publicId' | 'durationSec' | 'postId'>,
   ): Promise<void> {
     const { count } = await this.prisma.mediaAsset.updateMany({
       where: { id: media.id, captionStatus: CaptionStatus.NONE },
@@ -132,13 +132,21 @@ export class CaptionService {
       const { language, cues } = transcript;
       await this.store(media.id, language, cues, true);
       await this.translate(media.id, language, cues);
-      await this.prisma.mediaAsset.updateMany({
+      const { count: done } = await this.prisma.mediaAsset.updateMany({
         where: current,
         data: {
           captionStatus: CaptionStatus.READY,
           captionLanguage: language,
+          transcript: cues.map((cue) => cue.text).join(' '),
         },
       });
+      // The post is embedded again, now with what the video says.
+      if (done > 0 && media.postId) {
+        await this.prisma.post.updateMany({
+          where: { id: media.postId },
+          data: { searchIndexedAt: null },
+        });
+      }
     } catch (error) {
       this.logger.warn(`Captioning media ${media.id} failed: ${String(error)}`);
       await this.prisma.mediaAsset.updateMany({
