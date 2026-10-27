@@ -599,6 +599,8 @@ model MediaAsset {
   captionStatus   CaptionStatus       @default(NONE) @map("caption_status")
   /// Spoken language Whisper detected, e.g. `vi`.
   captionLanguage String?             @map("caption_language") @db.VarChar(16)
+  /// The spoken words as plain text, for embedding the post into search.
+  transcript      String?
   /// Set when the upload was discarded; the row stays until Cloudinary
   /// confirms the files are gone, so late notifications can still clean up.
   discardedAt     DateTime?           @map("discarded_at")

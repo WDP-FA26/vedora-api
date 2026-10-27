@@ -12,6 +12,10 @@ import {
 } from '../common/pagination';
 import { MediaService } from '../media/media.service';
 import { CloudinaryService } from '../cloudinary/cloudinary.service';
+import {
+  MAX_FEED_RESULTS,
+  PostFeedService,
+} from '../post-search/post-feed.service';
 import { PostSearchIndexService } from '../post-search/post-search-index.service';
 import {
   MAX_SEARCH_RESULTS,
@@ -20,6 +24,7 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import { blogSummarySelect, toBlogSummary } from './blog-query';
 import { CreatePostDto } from './dto/create-post.dto';
+import { FEED_CURSOR, FeedQueryDto } from './dto/feed-query.dto';
 import { ListPostsQueryDto } from './dto/list-posts-query.dto';
 import { PostPageDto, PostResponseDto } from './dto/post-response.dto';
 import { SearchPostsQueryDto } from './dto/search-posts-query.dto';
@@ -61,6 +66,7 @@ export class PostsService {
     private readonly cloudinary: CloudinaryService,
     private readonly searchIndex: PostSearchIndexService,
     private readonly postSearch: PostSearchService,
+    private readonly postFeed: PostFeedService,
   ) {}
 
   /**
@@ -129,6 +135,37 @@ export class PostsService {
       nextCursor:
         hasMore && offset + limit < MAX_SEARCH_RESULTS
           ? String(offset + limit)
+          : null,
+    };
+  }
+
+  /** The viewer's "for you" feed; see `PostFeedService`. */
+  async feed(query: FeedQueryDto, viewerId: string): Promise<PostPageDto> {
+    const cursor = query.cursor ? FEED_CURSOR.exec(query.cursor) : null;
+    const offset = cursor ? Number(cursor[1]) : 0;
+    const asOf = cursor ? new Date(Number(cursor[2])) : new Date();
+    const limit = Math.min(query.limit, MAX_FEED_RESULTS - offset);
+    if (limit <= 0) return { items: [], nextCursor: null };
+
+    // One extra id tells whether another page follows.
+    const ids = await this.postFeed.feed(viewerId, asOf, offset + limit + 1);
+    const page = ids.slice(offset, offset + limit);
+    const posts = await this.snapshot(
+      this.prisma.post.findMany({
+        where: { id: { in: page }, status: PostStatus.PUBLISHED },
+        include: postInclude(viewerId),
+      }),
+    );
+    const found = new Map(posts.map((post) => [post.id, post]));
+    const next = offset + limit;
+    return {
+      items: page.flatMap((id) => {
+        const post = found.get(id);
+        return post ? [this.toResponse(post)] : [];
+      }),
+      nextCursor:
+        ids.length > next && next < MAX_FEED_RESULTS
+          ? `${next}.${asOf.getTime()}`
           : null,
     };
   }

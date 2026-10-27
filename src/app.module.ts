@@ -125,9 +125,10 @@ import { VerificationModule } from './verification/verification.module';
         // Cloudflare Tunnel. Empty: the socket address.
         CLIENT_IP_HEADER: Joi.string().allow('').default(''),
         // Post search lives in its own collection, apart from the knowledge
-        // base. Changing the model or size needs a new QDRANT_POSTS_COLLECTION;
-        // the API reindexes every post into it.
-        QDRANT_POSTS_COLLECTION: Joi.string().default('vedora_posts'),
+        // base. Changing the model, size or payload needs a new
+        // QDRANT_POSTS_COLLECTION; the API reindexes every post into it.
+        // v2 adds `publishedAt` to the payload for the feed.
+        QDRANT_POSTS_COLLECTION: Joi.string().default('vedora_posts_v2'),
         POST_SEARCH_EMBEDDING_MODEL: Joi.string().default(
           'google/gemini-embedding-2',
         ),

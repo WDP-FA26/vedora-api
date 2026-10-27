@@ -11,15 +11,23 @@ import {
   bm25,
   DENSE_VECTOR,
   type PostPointPayload,
+  toEpochSeconds,
 } from './post-search-collection';
 
 const BATCH_SIZE = 64;
+/**
+ * Characters per embedded chunk, well inside the embedding model's input
+ * limit. Every chunk of a post is embedded, so none of its text is dropped.
+ */
+const CHUNK_LENGTH = 1500;
 
-/** The posts search covers: published short posts with text. */
+/**
+ * The posts search covers: published short posts. One with neither text nor
+ * speech is marked indexed without a point; captioning marks it again.
+ */
 export const SEARCHABLE_POST = {
   type: PostType.POST,
   status: PostStatus.PUBLISHED,
-  body: { not: null },
 } satisfies Prisma.PostWhereInput;
 
 /**
@@ -43,7 +51,8 @@ export class PostSearchIndexService {
   ) {
     this.collection = configService.get<string>(
       'QDRANT_POSTS_COLLECTION',
-      'vedora_posts',
+      // v2 adds `publishedAt` to the payload for the feed.
+      'vedora_posts_v2',
     );
   }
 
@@ -113,24 +122,52 @@ export class PostSearchIndexService {
       where: { ...SEARCHABLE_POST, searchIndexedAt: null },
       orderBy: [{ publishedAt: 'asc' }, { id: 'asc' }],
       take: BATCH_SIZE,
-      select: { id: true, authorId: true, body: true },
+      select: {
+        id: true,
+        authorId: true,
+        body: true,
+        publishedAt: true,
+        media: {
+          where: { transcript: { not: null } },
+          orderBy: { position: 'asc' },
+          select: { transcript: true },
+        },
+      },
     });
     if (posts.length === 0) return 0;
 
-    const bodies = posts.map(({ body }) => body ?? '');
-    const vectors = await this.embeddings.embedPosts(bodies);
-    await this.qdrant.upsert(this.collection, {
-      wait: true,
-      points: posts.map(({ id, authorId }, index) => ({
-        id,
-        vector: {
-          [DENSE_VECTOR]: vectors[index],
-          [BM25_VECTOR]: bm25(bodies[index], false),
-          [BM25_FOLDED_VECTOR]: bm25(bodies[index], true),
-        },
-        payload: { postId: id, authorId } satisfies PostPointPayload,
-      })),
-    });
+    const texts = posts
+      .map((post) => {
+        const text = postText(post);
+        return { ...post, text, chunks: chunkText(text) };
+      })
+      .filter(({ chunks }) => chunks.length > 0);
+    if (texts.length > 0) {
+      // One request for every chunk of the batch, then one vector per post.
+      const chunkVectors = await this.embeddings.embedPosts(
+        texts.flatMap(({ chunks }) => chunks),
+      );
+      let next = 0;
+      const vectors = texts.map(({ chunks }) =>
+        meanVector(chunkVectors.slice(next, (next += chunks.length))),
+      );
+      await this.qdrant.upsert(this.collection, {
+        wait: true,
+        points: texts.map(({ id, authorId, publishedAt, text }, index) => ({
+          id,
+          vector: {
+            [DENSE_VECTOR]: vectors[index],
+            [BM25_VECTOR]: bm25(text, false),
+            [BM25_FOLDED_VECTOR]: bm25(text, true),
+          },
+          payload: {
+            postId: id,
+            authorId,
+            publishedAt: toEpochSeconds(publishedAt ?? new Date()),
+          } satisfies PostPointPayload,
+        })),
+      });
+    }
     await this.prisma.post.updateMany({
       where: { id: { in: posts.map(({ id }) => id) } },
       data: { searchIndexedAt: new Date() },
@@ -165,6 +202,11 @@ export class PostSearchIndexService {
       field_schema: 'keyword',
       wait: true,
     });
+    await this.qdrant.createPayloadIndex(this.collection, {
+      field_name: 'publishedAt',
+      field_schema: { type: 'integer', lookup: false, range: true },
+      wait: true,
+    });
     // A new (or recreated) collection is empty: index every post again.
     const { count } = await this.prisma.post.updateMany({
       where: { searchIndexedAt: { not: null } },
@@ -174,4 +216,44 @@ export class PostSearchIndexService {
       `Created Qdrant collection ${this.collection}; reindexing ${count} posts`,
     );
   }
+}
+
+/** A post's body, then the transcripts of its videos, in full. */
+function postText(post: {
+  body: string | null;
+  media: { transcript: string | null }[];
+}): string {
+  return [post.body, ...post.media.map(({ transcript }) => transcript)]
+    .filter((part): part is string => !!part?.trim())
+    .join('\n');
+}
+
+/**
+ * `text` in pieces of at most `size` characters, cut at the last space or
+ * line break before the limit (mid-word only when a piece has none).
+ */
+export function chunkText(text: string, size = CHUNK_LENGTH): string[] {
+  const chunks: string[] = [];
+  let rest = text.trim();
+  while (rest.length > size) {
+    const space = Math.max(
+      rest.lastIndexOf(' ', size),
+      rest.lastIndexOf('\n', size),
+    );
+    const end = space > size / 2 ? space : size;
+    chunks.push(rest.slice(0, end).trim());
+    rest = rest.slice(end).trim();
+  }
+  if (rest) chunks.push(rest);
+  return chunks;
+}
+
+/** The normalized mean of `vectors`: one point stands for a post's chunks. */
+export function meanVector(vectors: number[][]): number[] {
+  if (vectors.length === 1) return vectors[0];
+  const sum = vectors[0].map((_, i) =>
+    vectors.reduce((total, vector) => total + vector[i], 0),
+  );
+  const norm = Math.hypot(...sum) || 1;
+  return sum.map((value) => value / norm);
 }

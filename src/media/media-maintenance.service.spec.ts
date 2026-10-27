@@ -26,6 +26,7 @@ const ownerless: MediaAsset = {
   aspectRatio: '16:9',
   captionStatus: CaptionStatus.NONE,
   captionLanguage: null,
+  transcript: null,
   discardedAt: new Date('2026-09-25T00:00:00.000Z'),
   createdAt: new Date('2026-09-24T00:00:00.000Z'),
   updatedAt: new Date('2026-09-24T00:00:00.000Z'),
