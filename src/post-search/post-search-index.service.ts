@@ -15,8 +15,12 @@ import {
 } from './post-search-collection';
 
 const BATCH_SIZE = 64;
-/** Embedded characters of a post: its body, then what its videos say. */
-const MAX_TEXT_LENGTH = 2000;
+/** Characters per embedded chunk, well inside the embedding model's input limit. */
+const CHUNK_LENGTH = 1500;
+/** Chunks embedded per post; BM25 sees the same text. */
+const MAX_CHUNKS = 6;
+/** Indexed characters of a post: its body, then what its videos say. */
+const MAX_TEXT_LENGTH = CHUNK_LENGTH * MAX_CHUNKS;
 
 /**
  * The posts search covers: published short posts. One with neither text nor
@@ -134,11 +138,19 @@ export class PostSearchIndexService {
     if (posts.length === 0) return 0;
 
     const texts = posts
-      .map((post) => ({ ...post, text: postText(post) }))
-      .filter(({ text }) => text.length > 0);
+      .map((post) => {
+        const text = postText(post);
+        return { ...post, text, chunks: chunkText(text).slice(0, MAX_CHUNKS) };
+      })
+      .filter(({ chunks }) => chunks.length > 0);
     if (texts.length > 0) {
-      const vectors = await this.embeddings.embedPosts(
-        texts.map(({ text }) => text),
+      // One request for every chunk of the batch, then one vector per post.
+      const chunkVectors = await this.embeddings.embedPosts(
+        texts.flatMap(({ chunks }) => chunks),
+      );
+      let next = 0;
+      const vectors = texts.map(({ chunks }) =>
+        meanVector(chunkVectors.slice(next, (next += chunks.length))),
       );
       await this.qdrant.upsert(this.collection, {
         wait: true,
@@ -216,4 +228,34 @@ function postText(post: {
     .filter((part): part is string => !!part?.trim())
     .join('\n')
     .slice(0, MAX_TEXT_LENGTH);
+}
+
+/**
+ * `text` in pieces of at most `size` characters, cut at the last space or
+ * line break before the limit (mid-word only when a piece has none).
+ */
+export function chunkText(text: string, size = CHUNK_LENGTH): string[] {
+  const chunks: string[] = [];
+  let rest = text.trim();
+  while (rest.length > size) {
+    const space = Math.max(
+      rest.lastIndexOf(' ', size),
+      rest.lastIndexOf('\n', size),
+    );
+    const end = space > size / 2 ? space : size;
+    chunks.push(rest.slice(0, end).trim());
+    rest = rest.slice(end).trim();
+  }
+  if (rest) chunks.push(rest);
+  return chunks;
+}
+
+/** The normalized mean of `vectors`: one point stands for a post's chunks. */
+export function meanVector(vectors: number[][]): number[] {
+  if (vectors.length === 1) return vectors[0];
+  const sum = vectors[0].map((_, i) =>
+    vectors.reduce((total, vector) => total + vector[i], 0),
+  );
+  const norm = Math.hypot(...sum) || 1;
+  return sum.map((value) => value / norm);
 }

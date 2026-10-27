@@ -3,7 +3,7 @@ import { type DeepMockProxy, mockDeep } from 'vitest-mock-extended';
 import { PrismaService } from '../prisma/prisma.service';
 import { QdrantService } from '../qdrant/qdrant.service';
 import { PostEmbeddingsService } from './post-embeddings.service';
-import { PostSearchIndexService } from './post-search-index.service';
+import { chunkText, PostSearchIndexService } from './post-search-index.service';
 
 const POST = {
   id: 'f1a2d3e4-0000-4000-8000-000000000001',
@@ -87,6 +87,27 @@ describe('PostSearchIndexService', () => {
     ]);
   });
 
+  it('embeds a long post in chunks and keeps their mean as its vector', async () => {
+    const transcript = 'à '.repeat(1000).trim();
+    prisma.post.findMany.mockResolvedValueOnce([
+      { ...POST, media: [{ transcript }] },
+    ] as never);
+    embeddings.embedPosts.mockImplementationOnce((chunks) =>
+      Promise.resolve(chunks.map((_, i) => (i === 0 ? [1, 0] : [0, 1]))),
+    );
+
+    await service.drain();
+
+    const [chunks] = embeddings.embedPosts.mock.calls[0];
+    expect(chunks).toHaveLength(2);
+    expect(chunks.every((chunk) => chunk.length <= 1500)).toBe(true);
+    const operation = qdrant.upsert.mock.calls[0][1];
+    if (!('points' in operation)) throw new Error('expected points');
+    const vector = operation.points[0].vector as { dense: number[] };
+    expect(vector.dense[0]).toBeCloseTo(Math.SQRT1_2);
+    expect(vector.dense[1]).toBeCloseTo(Math.SQRT1_2);
+  });
+
   it('marks a post with neither text nor speech indexed without a point', async () => {
     prisma.post.findMany.mockResolvedValueOnce([
       { ...POST, body: null },
@@ -139,5 +160,19 @@ describe('PostSearchIndexService', () => {
       wait: true,
       points: [POST.id],
     });
+  });
+});
+
+describe('chunkText', () => {
+  it('cuts at the last space before the limit', () => {
+    expect(chunkText('một hai ba bốn', 8)).toEqual(['một hai', 'ba bốn']);
+  });
+
+  it('cuts mid-word only when a piece has no space', () => {
+    expect(chunkText('abcdefghij', 4)).toEqual(['abcd', 'efgh', 'ij']);
+  });
+
+  it('returns nothing for blank text', () => {
+    expect(chunkText('   ')).toEqual([]);
   });
 });
