@@ -115,7 +115,7 @@ describe('PostFeedService', () => {
             '$score',
             {
               mult: [
-                0.3,
+                0.05,
                 {
                   exp_decay: {
                     x: 'publishedAt',

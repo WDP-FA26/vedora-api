@@ -13,8 +13,12 @@ const TASTE_POSTS = 20;
 const WINDOW_SECONDS = 7 * 24 * 60 * 60;
 /** A post's freshness bonus halves every this many seconds. */
 const HALF_LIFE_SECONDS = 2 * 24 * 60 * 60;
-/** The freshness bonus at publication, next to a similarity of up to 1. */
-const FRESHNESS_WEIGHT = 0.3;
+/**
+ * The freshness bonus at publication, next to a similarity of up to 1. With
+ * gemini-embedding-2, short cooking posts on different topics score within
+ * about 0.02 of each other, so a larger bonus outranks taste with recency.
+ */
+const FRESHNESS_WEIGHT = 0.05;
 /** Every this-many-th post is the newest one, whatever the viewer's taste. */
 const EXPLORE_EVERY = 5;
 
