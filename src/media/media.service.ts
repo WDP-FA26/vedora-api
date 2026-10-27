@@ -60,15 +60,21 @@ function streamBuilt(video: CloudinaryVideo): boolean {
   );
 }
 
-/** `16:9` from the display aspect ratio, else from the pixel size. */
+/**
+ * `16:9` from the pixel size Cloudinary reports for the displayed frame, else
+ * from the display aspect ratio. The `dar` of a phone video ignores its
+ * rotation flag, so a portrait clip would read as landscape.
+ */
 function aspectRatio(video: CloudinaryVideo): string | null {
+  if (video.width && video.height) {
+    const gcd = (a: number, b: number): number => (b ? gcd(b, a % b) : a);
+    const divisor = gcd(video.width, video.height);
+    return `${video.width / divisor}:${video.height / divisor}`;
+  }
   if (video.video?.dar && /^\d+:\d+$/.test(video.video.dar)) {
     return video.video.dar;
   }
-  if (!video.width || !video.height) return null;
-  const gcd = (a: number, b: number): number => (b ? gcd(b, a % b) : a);
-  const divisor = gcd(video.width, video.height);
-  return `${video.width / divisor}:${video.height / divisor}`;
+  return null;
 }
 
 /**
