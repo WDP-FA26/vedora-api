@@ -175,4 +175,19 @@ describe('chunkText', () => {
   it('returns nothing for blank text', () => {
     expect(chunkText('   ')).toEqual([]);
   });
+
+  it('keeps every character of a long text but the whitespace it cuts at', () => {
+    // Words and line breaks, then a 3,500-character run with no space.
+    const text =
+      Array.from({ length: 4000 }, (_, i) => `từ${i}`).join(' ') +
+      '\n' +
+      'x'.repeat(3500);
+
+    const chunks = chunkText(text);
+
+    expect(chunks.length).toBeGreaterThan(10);
+    expect(chunks.every((chunk) => chunk.length <= 1500)).toBe(true);
+    const visible = (value: string) => value.replace(/\s/g, '');
+    expect(visible(chunks.join(''))).toBe(visible(text));
+  });
 });

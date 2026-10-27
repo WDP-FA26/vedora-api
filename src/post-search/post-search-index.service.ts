@@ -15,12 +15,11 @@ import {
 } from './post-search-collection';
 
 const BATCH_SIZE = 64;
-/** Characters per embedded chunk, well inside the embedding model's input limit. */
+/**
+ * Characters per embedded chunk, well inside the embedding model's input
+ * limit. Every chunk of a post is embedded, so none of its text is dropped.
+ */
 const CHUNK_LENGTH = 1500;
-/** Chunks embedded per post; BM25 sees the same text. */
-const MAX_CHUNKS = 6;
-/** Indexed characters of a post: its body, then what its videos say. */
-const MAX_TEXT_LENGTH = CHUNK_LENGTH * MAX_CHUNKS;
 
 /**
  * The posts search covers: published short posts. One with neither text nor
@@ -140,7 +139,7 @@ export class PostSearchIndexService {
     const texts = posts
       .map((post) => {
         const text = postText(post);
-        return { ...post, text, chunks: chunkText(text).slice(0, MAX_CHUNKS) };
+        return { ...post, text, chunks: chunkText(text) };
       })
       .filter(({ chunks }) => chunks.length > 0);
     if (texts.length > 0) {
@@ -219,15 +218,14 @@ export class PostSearchIndexService {
   }
 }
 
-/** A post's body, then the transcripts of its videos, cut to fit. */
+/** A post's body, then the transcripts of its videos, in full. */
 function postText(post: {
   body: string | null;
   media: { transcript: string | null }[];
 }): string {
   return [post.body, ...post.media.map(({ transcript }) => transcript)]
     .filter((part): part is string => !!part?.trim())
-    .join('\n')
-    .slice(0, MAX_TEXT_LENGTH);
+    .join('\n');
 }
 
 /**
