@@ -1,4 +1,4 @@
-FROM node:24-alpine AS dependencies
+FROM node:26.12.1-alpine AS dependencies
 WORKDIR /app
 COPY package*.json ./
 RUN npm ci
@@ -9,7 +9,7 @@ COPY nest-cli.json tsconfig*.json ./
 COPY src ./src
 RUN npm run build
 
-FROM node:24-alpine AS production
+FROM node:26.12.1-alpine AS production
 WORKDIR /app
 ENV NODE_ENV=production
 # ffmpeg cuts the audio for video captions; the static npm build can't
