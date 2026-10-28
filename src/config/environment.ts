@@ -252,7 +252,12 @@ export class EnvironmentVariables {
   // SePay banking QR: disabled until a receiving account is configured.
 
   @ValidateIf((env: EnvironmentVariables) => env.PAYMENT_REDIS_URL !== '')
-  @IsUrl({ protocols: ['redis', 'rediss'], require_protocol: true })
+  // Compose names the Redis service `redis`, a hostname without a TLD.
+  @IsUrl({
+    protocols: ['redis', 'rediss'],
+    require_protocol: true,
+    require_tld: false,
+  })
   PAYMENT_REDIS_URL = '';
 
   @Matches(/^[A-Za-z0-9:_-]{1,100}$/)
