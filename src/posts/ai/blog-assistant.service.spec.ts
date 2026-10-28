@@ -12,7 +12,7 @@ import { simulateReadableStream, type UIMessageChunk } from 'ai';
 import { convertReadableStreamToArray, MockLanguageModelV4 } from 'ai/test';
 import type { Model } from 'mongoose';
 import { type DeepMockProxy, mockDeep } from 'vitest-mock-extended';
-import { AiUsageService } from '../../ai-usage/ai-usage.service';
+import { AiUsageService } from '../../ai/usage/ai-usage.service';
 import { KnowledgeSearchService } from '../../knowledge/retrieval/knowledge-search.service';
 import {
   createIngredient,

@@ -2,7 +2,7 @@ import { ConfigService } from '@nestjs/config';
 import { AiFeature } from '../../mongo/models';
 import { MockImageModelV4, MockLanguageModelV4 } from 'ai/test';
 import { type DeepMockProxy, mockDeep } from 'vitest-mock-extended';
-import { AiUsageService } from '../../ai-usage/ai-usage.service';
+import { AiUsageService } from '../../ai/usage/ai-usage.service';
 import { StorageService, StorageTarget } from '../../storage/storage.service';
 import { BlogImageGeneratorService } from './blog-image-generator.service';
 

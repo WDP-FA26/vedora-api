@@ -1,10 +1,10 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { createOpenRouter } from '@openrouter/ai-sdk-provider';
+import { chatModel, DEFAULT_CHAT_MODEL } from '../../ai/openrouter';
+import type { ReasoningEffort } from '../../ai/reasoning';
 import { generateText, type LanguageModel, Output } from 'ai';
 import { z } from 'zod';
 import { parsePayload, validatePayload } from '../../common/validation';
-import type { ReasoningEffort } from '../../nutrition-chat/nutrition-chat.agent';
 import { type SpeechAudio, toOriginalTime } from './speech-audio';
 import {
   OpenRouterErrorBody,
@@ -72,18 +72,17 @@ export class TranscriptionService {
       'TRANSCRIPTION_MODEL',
       'openai/whisper-large-v3',
     );
-    this.translationModel = createOpenRouter({ apiKey: this.apiKey })(
-      configService.get<string>('OPENROUTER_MODEL', 'openrouter/auto'),
-      {
-        reasoning: {
-          effort: configService.get<ReasoningEffort>(
-            'OPENROUTER_REASONING_EFFORT',
-            'low',
-          ),
-          exclude: true,
-        },
-      },
-    );
+    this.translationModel = chatModel({
+      apiKey: this.apiKey,
+      modelId: configService.get<string>(
+        'OPENROUTER_MODEL',
+        DEFAULT_CHAT_MODEL,
+      ),
+      reasoningEffort: configService.get<ReasoningEffort>(
+        'OPENROUTER_REASONING_EFFORT',
+        'low',
+      ),
+    });
   }
 
   async transcribe({ audio, speech }: SpeechAudio): Promise<Transcript> {

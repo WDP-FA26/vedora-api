@@ -20,13 +20,16 @@ Backend starter cho Vedora, sử dụng NestJS, Mongoose (MongoDB, tự host b�
 ├── seed-data/
 │   └── recipes.json           # Danh mục khởi đầu (nguyên liệu, nhóm, quy tắc, công thức)
 ├── src/
+│   ├── ai/                    # Hạ tầng AI dùng chung: model OpenRouter, moderation, quota, tool tra cứu
 │   ├── common/pagination/     # DTO, helper và Swagger cho phân trang dùng chung
-│   ├── health/                # Liveness/readiness
-│   ├── cloudinary/            # Cloudinary client dùng chung (ký upload, URL, xoá)
-│   ├── media/                 # Upload video, webhook, phụ đề Whisper, dọn dẹp định kỳ
-│   ├── posts/                 # Bài ngắn, blog, comment, like và bookmark
+│   ├── config/                # Validate biến môi trường
 │   ├── mongo/                 # MongoModule, MongoService, schema và type dùng chung
-│   ├── users/                 # CRUD mẫu
+│   ├── auth/ users/ profiles/ # Tài khoản, hồ sơ và quan hệ theo dõi
+│   ├── posts/ media/          # Bài viết, blog, video và phụ đề
+│   ├── recipes/ meal-plan/    # Danh mục công thức, thực đơn và đi chợ
+│   ├── knowledge/ nutrition-chat/
+│   ├── payments/ notifications/ verification/
+│   ├── admin-dashboard/ health/ cloudinary/ storage/ qdrant/ mail/
 │   ├── app.module.ts
 │   └── main.ts
 ├── Dockerfile

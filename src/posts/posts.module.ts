@@ -1,5 +1,5 @@
 import { Module } from '@nestjs/common';
-import { AiUsageModule } from '../ai-usage/ai-usage.module';
+import { AiUsageModule } from '../ai/usage/ai-usage.module';
 import { KnowledgeModule } from '../knowledge/knowledge.module';
 import { MediaModule } from '../media/media.module';
 import { NotificationsModule } from '../notifications/notifications.module';

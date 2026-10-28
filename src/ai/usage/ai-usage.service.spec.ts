@@ -5,10 +5,10 @@ import {
   createTestMongoUrl,
   dropTestDatabase,
   prepareTestDatabase,
-} from '../../test/mongo-test-db';
-import { MongoModule } from '../mongo/mongo.module';
-import { MongoService } from '../mongo/mongo.service';
-import { AiFeature } from '../mongo/models';
+} from '../../../test/mongo-test-db';
+import { MongoModule } from '../../mongo/mongo.module';
+import { MongoService } from '../../mongo/mongo.service';
+import { AiFeature } from '../../mongo/models';
 import { AiUsageService, bangkokDay } from './ai-usage.service';
 
 const USER_ID = '4a1e32e4-e18e-4dd7-8b4a-246ef2113ff2';

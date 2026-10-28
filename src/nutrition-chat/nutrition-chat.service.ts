@@ -1,28 +1,29 @@
-import { setTimeout as sleep } from 'node:timers/promises';
 import {
   Injectable,
   Logger,
   ServiceUnavailableException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { createOpenRouter } from '@openrouter/ai-sdk-provider';
+import { type LanguageModel, toUIMessageStream } from 'ai';
+import { cannedReply } from '../ai/chat/canned-reply';
+import { chatErrorCode, failedStatus } from '../ai/chat/errors';
+import { replyFilter } from '../ai/chat/reply-filter';
 import {
-  APICallError,
-  createUIMessageStream,
-  type LanguageModel,
-  RetryError,
-  toUIMessageStream,
-} from 'ai';
+  moderateWithRetry,
+  type ModerationVerdict,
+} from '../ai/moderation/moderation';
+import { NUTRITION_POLICY } from '../ai/moderation/policies/nutrition';
+import {
+  chatModel,
+  DEFAULT_CHAT_MODEL,
+  DEFAULT_MODERATION_MODEL,
+} from '../ai/openrouter';
+import type { ReasoningEffort } from '../ai/reasoning';
 import { KnowledgeSearchService } from '../knowledge/retrieval/knowledge-search.service';
 import type { ChatMessageDto } from './dto/nutrition-chat.dto';
-import { NutritionAgent, type ReasoningEffort } from './nutrition-chat.agent';
-import { moderate, type ModerationVerdict } from './nutrition-chat.moderation';
-import { replyFilter } from './reply-filter';
+import { NutritionAgent } from './nutrition-chat.agent';
 
 const SEARCH_TIMEOUT_MS = 5000;
-const MODERATION_TIMEOUT_MS = 4000;
-const MODERATION_ATTEMPTS = 3;
-const MODERATION_RETRY_DELAY_MS = 400;
 
 const REFUSALS: Record<Exclude<ModerationVerdict, 'allow'>, string> = {
   off_topic:
@@ -37,17 +38,6 @@ const REFUSALS: Record<Exclude<ModerationVerdict, 'allow'>, string> = {
     'Mình không thể giúp yêu cầu này. Nếu bạn có câu hỏi về dinh dưỡng hay món ăn thực vật, mình sẵn sàng hỗ trợ nhé.',
 };
 
-type ChatErrorCode = 'RATE_LIMITED' | 'MODEL_ERROR';
-
-function failedCall(error: unknown): APICallError | null {
-  const cause = RetryError.isInstance(error) ? error.lastError : error;
-  return APICallError.isInstance(cause) ? cause : null;
-}
-
-export function chatErrorCode(error: unknown): ChatErrorCode {
-  return failedCall(error)?.statusCode === 429 ? 'RATE_LIMITED' : 'MODEL_ERROR';
-}
-
 @Injectable()
 export class NutritionChatService {
   private readonly logger = new Logger(NutritionChatService.name);
@@ -59,20 +49,24 @@ export class NutritionChatService {
     const apiKey = configService.getOrThrow<string>('OPENROUTER_API_KEY');
     this.agent = new NutritionAgent({
       apiKey,
-      modelId: configService.get<string>('OPENROUTER_MODEL', 'openrouter/auto'),
+      modelId: configService.get<string>(
+        'OPENROUTER_MODEL',
+        DEFAULT_CHAT_MODEL,
+      ),
       reasoningEffort: configService.get<ReasoningEffort>(
         'OPENROUTER_REASONING_EFFORT',
         'low',
       ),
       knowledge,
     });
-    this.moderationModel = createOpenRouter({ apiKey })(
-      configService.get<string>(
+    this.moderationModel = chatModel({
+      apiKey,
+      modelId: configService.get<string>(
         'OPENROUTER_MODERATION_MODEL',
-        'openai/gpt-oss-safeguard-20b',
+        DEFAULT_MODERATION_MODEL,
       ),
-      { reasoning: { effort: 'low', exclude: true } },
-    );
+      reasoningEffort: 'low',
+    });
   }
 
   async stream(messages: ChatMessageDto[], abortSignal: AbortSignal) {
@@ -96,9 +90,9 @@ export class NutritionChatService {
       stream: result.stream,
       tools: this.agent.tools,
       onError: (error) => {
-        const call = failedCall(error);
+        const status = failedStatus(error);
         this.logger.error(
-          `OpenRouter stream failed: ${call?.statusCode ?? '-'} ${
+          `OpenRouter stream failed: ${status ?? '-'} ${
             error instanceof Error ? error.message : String(error)
           }`,
         );
@@ -113,40 +107,17 @@ export class NutritionChatService {
     text: string,
     abortSignal: AbortSignal,
   ): Promise<ModerationVerdict> {
-    const timeout = AbortSignal.timeout(MODERATION_TIMEOUT_MS);
-    const signal = AbortSignal.any([abortSignal, timeout]);
-    for (let attempt = 1; ; attempt++) {
-      try {
-        return await moderate(this.moderationModel, text, signal);
-      } catch (error) {
-        if (abortSignal.aborted) throw error;
-        if (attempt < MODERATION_ATTEMPTS && !timeout.aborted) {
-          const retry = await sleep(
-            MODERATION_RETRY_DELAY_MS * attempt,
-            undefined,
-            { signal },
-          ).then(
-            () => true,
-            () => false,
-          );
-          if (abortSignal.aborted) throw error;
-          if (retry) continue;
-        }
-        this.logger.error(`Moderation failed: ${String(error)}`);
-        throw new ServiceUnavailableException('Moderation is unavailable');
-      }
+    try {
+      return await moderateWithRetry(
+        this.moderationModel,
+        text,
+        abortSignal,
+        NUTRITION_POLICY,
+      );
+    } catch (error) {
+      if (abortSignal.aborted) throw error;
+      this.logger.error(`Moderation failed: ${String(error)}`);
+      throw new ServiceUnavailableException('Moderation is unavailable');
     }
   }
-}
-
-function cannedReply(text: string) {
-  return createUIMessageStream({
-    execute: ({ writer }) => {
-      writer.write({ type: 'start', messageMetadata: { refused: true } });
-      writer.write({ type: 'text-start', id: 'reply' });
-      writer.write({ type: 'text-delta', id: 'reply', delta: text });
-      writer.write({ type: 'text-end', id: 'reply' });
-      writer.write({ type: 'finish', finishReason: 'stop' });
-    },
-  });
 }

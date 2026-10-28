@@ -1,7 +1,7 @@
 import { tool } from 'ai';
 import { z } from 'zod';
 import type { KnowledgeSearchService } from '../../knowledge/retrieval/knowledge-search.service';
-import { searchKnowledgeTool } from '../../nutrition-chat/tools/search-knowledge.tool';
+import { searchKnowledgeTool } from '../../ai/tools/search-knowledge.tool';
 import {
   type BlogImageGeneratorService,
   IMAGE_ASPECT_RATIOS,

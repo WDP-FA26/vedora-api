@@ -1,18 +1,9 @@
-import { createOpenRouter } from '@openrouter/ai-sdk-provider';
 import { isStepCount, ToolLoopAgent } from 'ai';
+import { chatModel } from '../ai/openrouter';
+import type { ReasoningEffort } from '../ai/reasoning';
+import { searchKnowledgeTool } from '../ai/tools/search-knowledge.tool';
 import type { KnowledgeSearchService } from '../knowledge/retrieval/knowledge-search.service';
 import { INSTRUCTIONS } from './nutrition-chat.prompt';
-import { searchKnowledgeTool } from './tools/search-knowledge.tool';
-
-export const REASONING_EFFORTS = [
-  'none',
-  'minimal',
-  'low',
-  'medium',
-  'high',
-  'xhigh',
-] as const;
-export type ReasoningEffort = (typeof REASONING_EFFORTS)[number];
 
 // guests get two searches and an answer, and a bounded reply
 const MAX_STEPS = 3;
@@ -37,9 +28,7 @@ export class NutritionAgent extends ToolLoopAgent<never, NutritionTools> {
     knowledge,
   }: NutritionAgentOptions) {
     super({
-      model: createOpenRouter({ apiKey })(modelId, {
-        reasoning: { effort: reasoningEffort, exclude: true },
-      }),
+      model: chatModel({ apiKey, modelId, reasoningEffort }),
       instructions: INSTRUCTIONS,
       maxOutputTokens: MAX_OUTPUT_TOKENS,
       tools: { searchKnowledge: searchKnowledgeTool(knowledge) },

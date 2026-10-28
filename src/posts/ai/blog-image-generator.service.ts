@@ -1,11 +1,16 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { createOpenRouter } from '@openrouter/ai-sdk-provider';
 import { AiFeature } from '../../mongo/models';
 import { generateImage, type ImageModel, type LanguageModel } from 'ai';
 import { randomUUID } from 'node:crypto';
-import { AiUsageService } from '../../ai-usage/ai-usage.service';
-import { moderatePlannerMessage } from '../../meal-plan/planner-moderation';
+import { moderateWithRetry } from '../../ai/moderation/moderation';
+import {
+  chatModel,
+  DEFAULT_IMAGE_MODEL,
+  DEFAULT_MODERATION_MODEL,
+  imageModel,
+} from '../../ai/openrouter';
+import { AiUsageService } from '../../ai/usage/ai-usage.service';
 import { StorageService, StorageTarget } from '../../storage/storage.service';
 import {
   BLOG_ASSISTANT_POLICY,
@@ -48,22 +53,22 @@ export class BlogImageGeneratorService {
     private readonly storage: StorageService,
     private readonly usage: AiUsageService,
   ) {
-    const openRouter = createOpenRouter({
-      apiKey: configService.getOrThrow<string>('OPENROUTER_API_KEY'),
-    });
-    this.imageModel = openRouter.imageModel(
-      configService.get<string>(
+    const apiKey = configService.getOrThrow<string>('OPENROUTER_API_KEY');
+    this.imageModel = imageModel({
+      apiKey,
+      modelId: configService.get<string>(
         'OPENROUTER_IMAGE_MODEL',
-        'qwen/qwen-image-2.1-turbo',
+        DEFAULT_IMAGE_MODEL,
       ),
-    );
-    this.moderationModel = openRouter(
-      configService.get<string>(
+    });
+    this.moderationModel = chatModel({
+      apiKey,
+      modelId: configService.get<string>(
         'OPENROUTER_MODERATION_MODEL',
-        'openai/gpt-oss-safeguard-20b',
+        DEFAULT_MODERATION_MODEL,
       ),
-      { reasoning: { effort: 'low', exclude: true } },
-    );
+      reasoningEffort: 'low',
+    });
   }
 
   generate(
@@ -115,7 +120,7 @@ export class BlogImageGeneratorService {
     if (!(await this.usage.consume(userId, AiFeature.BLOG_IMAGE)))
       return { error: 'IMAGE_QUOTA_EXCEEDED' };
     try {
-      const verdict = await moderatePlannerMessage(
+      const verdict = await moderateWithRetry(
         this.moderationModel,
         prompt,
         abortSignal ?? new AbortController().signal,

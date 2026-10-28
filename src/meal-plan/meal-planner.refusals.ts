@@ -1,14 +1,6 @@
-import { setTimeout as sleep } from 'node:timers/promises';
-import type { LanguageModel } from 'ai';
-import {
-  moderate,
-  type ModerationVerdict,
-} from '../nutrition-chat/nutrition-chat.moderation';
+import type { ModerationVerdict } from '../ai/moderation/moderation';
 
-const TIMEOUT_MS = 4000;
-const ATTEMPTS = 3;
-const RETRY_DELAY_MS = 400;
-
+/** What the meal planner says when moderation refuses a message. */
 export const PLANNER_REFUSALS: Record<
   Exclude<ModerationVerdict, 'allow'>,
   string
@@ -24,29 +16,3 @@ export const PLANNER_REFUSALS: Record<
   harmful:
     'Mình không thể giúp yêu cầu này. Nếu bạn muốn lên thực đơn hay hỏi về món ăn thực vật, mình sẵn sàng hỗ trợ nhé.',
 };
-
-/**
- * The nutrition chat's classifier (or another `policy`), with the same short
- * backoff (the provider sometimes answers 429). Throws when no verdict
- * arrives in time.
- */
-export async function moderatePlannerMessage(
-  model: LanguageModel,
-  text: string,
-  abortSignal: AbortSignal,
-  policy?: string,
-): Promise<ModerationVerdict> {
-  const timeout = AbortSignal.timeout(TIMEOUT_MS);
-  const signal = AbortSignal.any([abortSignal, timeout]);
-  for (let attempt = 1; ; attempt++) {
-    try {
-      return await moderate(model, text, signal, policy);
-    } catch (error) {
-      if (attempt >= ATTEMPTS || signal.aborted) throw error;
-      await sleep(RETRY_DELAY_MS * attempt, undefined, { signal }).catch(
-        () => undefined,
-      );
-      if (signal.aborted) throw error;
-    }
-  }
-}

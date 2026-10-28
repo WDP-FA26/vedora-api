@@ -9,20 +9,9 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectModel } from '@nestjs/mongoose';
-import { createOpenRouter } from '@openrouter/ai-sdk-provider';
 import type { Model } from 'mongoose';
 import {
-  AiFeature,
-  BlogRecipe,
-  Ingredient,
-  Post,
-  PostType,
-  Recipe,
-  RecipeIngredient,
-} from '../../mongo/models';
-import {
   convertToModelMessages,
-  createUIMessageStream,
   isStepCount,
   isTextUIPart,
   isToolUIPart,
@@ -32,11 +21,26 @@ import {
   toUIMessageStream,
   type UIMessage,
 } from 'ai';
-import { AiUsageService } from '../../ai-usage/ai-usage.service';
+import { cannedReply } from '../../ai/chat/canned-reply';
+import { chatErrorCode } from '../../ai/chat/errors';
+import { replyFilter } from '../../ai/chat/reply-filter';
+import { moderateWithRetry } from '../../ai/moderation/moderation';
+import {
+  chatModel,
+  DEFAULT_CHAT_MODEL,
+  DEFAULT_MODERATION_MODEL,
+} from '../../ai/openrouter';
+import { AiUsageService } from '../../ai/usage/ai-usage.service';
 import { KnowledgeSearchService } from '../../knowledge/retrieval/knowledge-search.service';
-import { moderatePlannerMessage } from '../../meal-plan/planner-moderation';
-import { chatErrorCode } from '../../nutrition-chat/nutrition-chat.service';
-import { replyFilter } from '../../nutrition-chat/reply-filter';
+import {
+  AiFeature,
+  BlogRecipe,
+  Ingredient,
+  Post,
+  PostType,
+  Recipe,
+  RecipeIngredient,
+} from '../../mongo/models';
 import {
   type BlogAssistantChatDto,
   type BlogAssistantQuotaDto,
@@ -91,28 +95,24 @@ export class BlogAssistantService {
     @InjectModel(Ingredient.name)
     private readonly ingredients: Model<Ingredient>,
   ) {
-    const openRouter = createOpenRouter({
-      apiKey: configService.getOrThrow<string>('OPENROUTER_API_KEY'),
-    });
-    this.moderationModel = openRouter(
-      configService.get<string>(
+    const apiKey = configService.getOrThrow<string>('OPENROUTER_API_KEY');
+    this.moderationModel = chatModel({
+      apiKey,
+      modelId: configService.get<string>(
         'OPENROUTER_MODERATION_MODEL',
-        'openai/gpt-oss-safeguard-20b',
+        DEFAULT_MODERATION_MODEL,
       ),
-      { reasoning: { effort: 'low', exclude: true } },
-    );
+      reasoningEffort: 'low',
+    });
     // `openrouter/auto` may route to a model that calls tools poorly; pin one
     // for this agent with BLOG_AI_MODEL
-    this.model = openRouter(
-      configService.get<string>('BLOG_AI_MODEL') ||
-        configService.get<string>('OPENROUTER_MODEL', 'openrouter/auto'),
-      {
-        reasoning: {
-          effort: configService.get('OPENROUTER_REASONING_EFFORT', 'low'),
-          exclude: true,
-        },
-      },
-    );
+    this.model = chatModel({
+      apiKey,
+      modelId:
+        configService.get<string>('BLOG_AI_MODEL') ||
+        configService.get<string>('OPENROUTER_MODEL', DEFAULT_CHAT_MODEL),
+      reasoningEffort: configService.get('OPENROUTER_REASONING_EFFORT', 'low'),
+    });
   }
 
   async quota(userId: string): Promise<BlogAssistantQuotaDto> {
@@ -149,7 +149,7 @@ export class BlogAssistantService {
 
     // a resumed turn only carries editor tool outputs, checked by schema
     if (last.role === 'user') {
-      const verdict = await moderatePlannerMessage(
+      const verdict = await moderateWithRetry(
         this.moderationModel,
         textOf(last),
         abortSignal,
@@ -320,16 +320,4 @@ function textOf(message: UIMessage): string {
     .filter(isTextUIPart)
     .map(({ text }) => text)
     .join('\n');
-}
-
-function cannedReply(text: string) {
-  return createUIMessageStream({
-    execute: ({ writer }) => {
-      writer.write({ type: 'start', messageMetadata: { refused: true } });
-      writer.write({ type: 'text-start', id: 'reply' });
-      writer.write({ type: 'text-delta', id: 'reply', delta: text });
-      writer.write({ type: 'text-end', id: 'reply' });
-      writer.write({ type: 'finish', finishReason: 'stop' });
-    },
-  });
 }

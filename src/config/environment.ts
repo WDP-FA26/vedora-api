@@ -15,7 +15,7 @@ import {
   ValidateIf,
   validateSync,
 } from 'class-validator';
-import { REASONING_EFFORTS } from '../nutrition-chat/nutrition-chat.agent';
+import { REASONING_EFFORTS } from '../ai/reasoning';
 
 const toBoolean = ({ value }: { value: unknown }): unknown => {
   if (typeof value === 'boolean') return value;
