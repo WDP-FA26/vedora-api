@@ -14,6 +14,7 @@ import { PostSearchService } from '../src/posts/search/post-search.service';
 import { BlogsService } from '../src/posts/blogs/blogs.service';
 import { PostInteractionsService } from '../src/posts/interactions/post-interactions.service';
 import { PostsService } from '../src/posts/posts.service';
+import { PostRelationsService } from '../src/posts/post-relations.service';
 import { NotificationsService } from '../src/notifications/notifications.service';
 import { StorageService } from '../src/storage/storage.service';
 import {
@@ -46,6 +47,7 @@ describe('Blog lifecycle with MongoDB', () => {
       imports: [MongoModule.forTest(createTestMongoUrl('blog'))],
       providers: [
         PostsService,
+        PostRelationsService,
         BlogsService,
         PostInteractionsService,
         { provide: MediaService, useValue: mockDeep<MediaService>() },

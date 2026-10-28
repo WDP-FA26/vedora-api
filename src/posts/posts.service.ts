@@ -17,17 +17,10 @@ import { MediaService } from '../media/media.service';
 import { CloudinaryService } from '../cloudinary/cloudinary.service';
 import {
   MediaStatus,
-  Blog,
-  BlogRecipe,
   MediaAsset,
   Post,
   PostBookmark,
-  PostComment,
-  PostLike,
-  PostRepost,
   PostStatus,
-  Recipe,
-  User,
 } from '../mongo/models';
 import { MongoService } from '../mongo/mongo.service';
 import { deleteWithReferences } from '../mongo/relations';
@@ -42,7 +35,7 @@ import { FEED_CURSOR, FeedQueryDto } from './dto/feed-query.dto';
 import { ListPostsQueryDto } from './dto/list-posts-query.dto';
 import { PostPageDto, PostResponseDto } from './dto/post-response.dto';
 import { SearchPostsQueryDto } from './dto/search-posts-query.dto';
-import { loadPostRelations, type PostRelationModels } from './post-relations';
+import { PostRelationsService } from './post-relations.service';
 
 @Injectable()
 export class PostsService {
@@ -53,36 +46,12 @@ export class PostsService {
     private readonly searchIndex: PostSearchIndexService,
     private readonly postSearch: PostSearchService,
     private readonly postFeed: PostFeedService,
+    private readonly relations: PostRelationsService,
     @InjectModel(Post.name) private readonly posts: Model<Post>,
     @InjectModel(MediaAsset.name) private readonly media: Model<MediaAsset>,
-    @InjectModel(PostComment.name)
-    private readonly comments: Model<PostComment>,
-    @InjectModel(PostLike.name) private readonly likes: Model<PostLike>,
-    @InjectModel(PostRepost.name)
-    private readonly reposts: Model<PostRepost>,
     @InjectModel(PostBookmark.name)
     private readonly bookmarks: Model<PostBookmark>,
-    @InjectModel(User.name) private readonly users: Model<User>,
-    @InjectModel(Blog.name) private readonly blogs: Model<Blog>,
-    @InjectModel(BlogRecipe.name)
-    private readonly blogRecipes: Model<BlogRecipe>,
-    @InjectModel(Recipe.name) private readonly recipes: Model<Recipe>,
   ) {}
-
-  /** The collections `loadPostRelations` joins against. */
-  private get relationModels(): PostRelationModels {
-    return {
-      users: this.users,
-      media: this.media,
-      comments: this.comments,
-      likes: this.likes,
-      reposts: this.reposts,
-      bookmarks: this.bookmarks,
-      blogs: this.blogs,
-      blogRecipes: this.blogRecipes,
-      recipes: this.recipes,
-    };
-  }
 
   /**
    * Creates the post right away, even while its video is still processing:
@@ -343,11 +312,7 @@ export class PostsService {
     posts: readonly Post[],
     viewerId?: string,
   ): Promise<PostResponseDto[]> {
-    const relations = await loadPostRelations(
-      this.relationModels,
-      posts,
-      viewerId,
-    );
+    const relations = await this.relations.hydrate(posts, viewerId);
     return posts.flatMap((post) => {
       const related = relations.get(post.id);
       if (!related) return [];

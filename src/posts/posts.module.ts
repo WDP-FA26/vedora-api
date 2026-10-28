@@ -16,6 +16,7 @@ import { PostInteractionsController } from './interactions/post-interactions.con
 import { PostInteractionsService } from './interactions/post-interactions.service';
 import { PostReportsService } from './interactions/post-reports.service';
 import { PostSearchModule } from './search/post-search.module';
+import { PostRelationsService } from './post-relations.service';
 import { PostViewsService } from './post-views.service';
 import { PostsController } from './posts.controller';
 import { PostsService } from './posts.service';
@@ -42,6 +43,7 @@ import { PostsService } from './posts.service';
     BlogAssistantService,
     BlogImageGeneratorService,
     PostsService,
+    PostRelationsService,
     PostInteractionsService,
     AdminPostsService,
     PostReportsService,

@@ -22,6 +22,7 @@ import {
 import { MongoModule } from '../../mongo/mongo.module';
 import { MongoService } from '../../mongo/mongo.service';
 import { AdminPostsService } from './admin-posts.service';
+import { PostRelationsService } from '../post-relations.service';
 
 describe('AdminPostsService', () => {
   let app: INestApplication;
@@ -55,6 +56,7 @@ describe('AdminPostsService', () => {
       imports: [MongoModule.forTest(createTestMongoUrl('adminposts'))],
       providers: [
         AdminPostsService,
+        PostRelationsService,
         { provide: MediaService, useValue: mediaService },
       ],
     }).compile();
