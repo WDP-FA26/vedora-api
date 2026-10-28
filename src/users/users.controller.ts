@@ -36,7 +36,9 @@ import { UpdateUserDto } from './dto/update-user.dto';
 import { UpdateUserRoleDto } from './dto/update-user-role.dto';
 import { UpdateUserStatusDto } from './dto/update-user-status.dto';
 import { UsersQueryDto } from './dto/users-query.dto';
-import { PublicUser, UsersService } from './users.service';
+import { AccountsService } from './accounts.service';
+import { type PublicUser } from './public-user';
+import { UsersService } from './users.service';
 
 @ApiTags('users')
 @ApiBearerAuth()
@@ -45,13 +47,16 @@ import { PublicUser, UsersService } from './users.service';
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Controller('users')
 export class UsersController {
-  constructor(private readonly usersService: UsersService) {}
+  constructor(
+    private readonly usersService: UsersService,
+    private readonly accounts: AccountsService,
+  ) {}
 
   @Post()
   @Roles(UserRole.ADMIN)
   @ApiOperation({ summary: 'Create a user (admin only)' })
   create(@Body() dto: CreateUserDto): Promise<PublicUser> {
-    return this.usersService.createWithPassword(dto);
+    return this.accounts.createWithPassword(dto);
   }
 
   @Get()

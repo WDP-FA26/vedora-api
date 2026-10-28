@@ -20,7 +20,7 @@ import { RefreshTokensService } from './refresh-tokens.service';
 import { hashCode } from './one-time-code';
 import { hashPassword } from './password';
 import { AuthService } from './auth.service';
-import { UsersService } from '../users/users.service';
+import { AccountsService } from '../users/accounts.service';
 
 const PASSWORD = 'StrongPassword123!';
 const verificationHash = (userId: string, code: string) =>
@@ -81,7 +81,7 @@ describe('AuthService', () => {
     const moduleRef = await Test.createTestingModule({
       imports: [MongoModule.forTest(createTestMongoUrl('authservice'))],
       providers: [
-        UsersService,
+        AccountsService,
         RefreshTokensService,
         EmailVerificationService,
         PasswordResetService,

@@ -1,6 +1,6 @@
 import type { Model } from 'mongoose';
 import { Ingredient, Recipe, RecipeIngredient } from '../mongo/models';
-import { escapeRegExp } from '../users/users.service';
+import { escapeRegExp } from '../common/text';
 import type { RecipeCatalogQueryDto } from './dto/recipe-catalog.dto';
 import type { DietaryService } from './dietary.service';
 import type { IncompatibilityRulesService } from './incompatibility-rules.service';

@@ -4,19 +4,18 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import type { AuthenticatedUser } from '../auth/auth.types';
+import { InjectModel } from '@nestjs/mongoose';
+import type { ClientSession } from 'mongodb';
+import type { Model, QueryFilter } from 'mongoose';
 import { assertAccountActive } from '../auth/account-access';
-import { hashPassword } from '../auth/password';
+import type { AuthenticatedUser } from '../auth/auth.types';
 import {
   createPaginatedResponse,
   getPaginationArgs,
   PaginatedResponseDto,
 } from '../common/pagination';
-import { InjectModel } from '@nestjs/mongoose';
-import type { ClientSession } from 'mongodb';
-import type { Model, QueryFilter } from 'mongoose';
+import { escapeRegExp } from '../common/text';
 import { lockDocument } from '../mongo/document-lock';
-import { isUniqueViolation } from '../mongo/errors';
 import {
   AccountStatus,
   User,
@@ -26,65 +25,23 @@ import {
 } from '../mongo/models';
 import { MongoService } from '../mongo/mongo.service';
 import { deleteWithReferences } from '../mongo/relations';
-import { CreateUserDto } from './dto/create-user.dto';
+import { AccountsService } from './accounts.service';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { UpdateUserRoleDto } from './dto/update-user-role.dto';
 import { UpdateUserStatusDto } from './dto/update-user-status.dto';
 import { UsersQueryDto } from './dto/users-query.dto';
+import {
+  type PublicUser,
+  publicUserProjection,
+  toPublicUser,
+} from './public-user';
+import { rethrowUniqueViolation } from './unique-conflict';
 
-export const publicUserFields = [
-  'id',
-  'username',
-  'fullName',
-  'email',
-  'role',
-  'status',
-  'accountVersion',
-  'createdAt',
-  'updatedAt',
-] as const satisfies readonly (keyof User)[];
-
-export type PublicUser = Pick<User, (typeof publicUserFields)[number]>;
-
-/** The stored fields behind `publicUserFields` (`id` is the `_id` virtual). */
-const projection = publicUserFields.filter((field) => field !== 'id').join(' ');
-
-/** What a new account may set; everything else starts at its default. */
-export type NewUser = Pick<User, 'username' | 'fullName' | 'email'> &
-  Partial<
-    Pick<User, 'passwordHash' | 'googleId' | 'emailVerifiedAt' | 'status'>
-  >;
-
-/** Escapes `text` for use inside a regular expression. */
-export function escapeRegExp(text: string): string {
-  return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}
-
-export function toPublicUser(user: PublicUser): PublicUser {
-  const {
-    id,
-    username,
-    fullName,
-    email,
-    role,
-    status,
-    accountVersion,
-    createdAt,
-    updatedAt,
-  } = user;
-  return {
-    id,
-    username,
-    fullName,
-    email,
-    role,
-    status,
-    accountVersion,
-    createdAt,
-    updatedAt,
-  };
-}
-
+/**
+ * Self-service and admin management of accounts: reading one, editing its
+ * profile, changing roles and status, and deleting it. Every operation goes
+ * through `withAccountGate`, which decides whether the actor may act.
+ */
 @Injectable()
 export class UsersService {
   constructor(
@@ -92,35 +49,8 @@ export class UsersService {
     @InjectModel(UserAccountAudit.name)
     private readonly audits: Model<UserAccountAudit>,
     private readonly mongo: MongoService,
+    private readonly accounts: AccountsService,
   ) {}
-
-  async create(data: NewUser): Promise<PublicUser> {
-    try {
-      const user = await this.users.create({
-        role: UserRole.USER,
-        status: AccountStatus.PENDING_EMAIL,
-        accountVersion: 0,
-        isProfessional: false,
-        avoidedIngredientIds: [],
-        avoidedGroupIds: [],
-        likedIngredientIds: [],
-        ...data,
-      });
-      return toPublicUser(user);
-    } catch (error: unknown) {
-      this.rethrowKnownError(error);
-    }
-  }
-
-  async createWithPassword(dto: CreateUserDto): Promise<PublicUser> {
-    const passwordHash = await hashPassword(dto.password);
-    return this.create({
-      username: dto.username,
-      passwordHash,
-      fullName: dto.fullName,
-      email: dto.email,
-    });
-  }
 
   async findAll(
     query: UsersQueryDto,
@@ -146,7 +76,7 @@ export class UsersService {
     const [items, totalItems] = await Promise.all([
       this.users
         .find(filter)
-        .select(projection)
+        .select(publicUserProjection)
         .sort({ createdAt: -1, _id: -1 })
         .skip(skip)
         .limit(take)
@@ -162,7 +92,7 @@ export class UsersService {
 
   async findOne(id: string, actor: AuthenticatedUser): Promise<PublicUser> {
     this.assertCanAccess(id, actor);
-    const user = await this.findPublicById(id);
+    const user = await this.accounts.findPublicById(id);
     if (!user) throw new NotFoundException('User not found');
     return user;
   }
@@ -191,7 +121,7 @@ export class UsersService {
       if (!user) throw new NotFoundException('User not found');
       return toPublicUser(user);
     } catch (error: unknown) {
-      this.rethrowKnownError(error);
+      rethrowUniqueViolation(error);
     }
   }
 
@@ -214,12 +144,8 @@ export class UsersService {
         });
       });
     } catch (error: unknown) {
-      this.rethrowKnownError(error);
+      rethrowUniqueViolation(error);
     }
-  }
-
-  findByUsername(username: string): Promise<User | null> {
-    return this.users.findOne({ username }).exec();
   }
 
   async updateRole(
@@ -257,7 +183,7 @@ export class UsersService {
         },
       );
     } catch (error: unknown) {
-      this.rethrowKnownError(error);
+      rethrowUniqueViolation(error);
     }
   }
 
@@ -300,78 +226,6 @@ export class UsersService {
       );
       return updated;
     });
-  }
-
-  findByGoogleId(googleId: string): Promise<User | null> {
-    return this.users.findOne({ googleId }).exec();
-  }
-
-  findByEmail(email: string): Promise<User | null> {
-    return this.users.findOne({ email }).exec();
-  }
-
-  /**
-   * Links Google to an existing account with the same email. If that account
-   * never verified its email, anyone could have registered it, so its password
-   * is removed and Google's verification takes over.
-   */
-  async linkGoogleAccount(user: User, googleId: string): Promise<PublicUser> {
-    try {
-      const linked = await this.users
-        .findOneAndUpdate(
-          {
-            _id: user.id,
-            status: {
-              $in: [AccountStatus.ACTIVE, AccountStatus.PENDING_EMAIL],
-            },
-          },
-          {
-            $set: user.emailVerifiedAt
-              ? { googleId, status: AccountStatus.ACTIVE }
-              : {
-                  googleId,
-                  passwordHash: null,
-                  emailVerifiedAt: new Date(),
-                  status: AccountStatus.ACTIVE,
-                },
-          },
-          { returnDocument: 'after' },
-        )
-        .exec();
-      if (!linked) throw new NotFoundException('User not found');
-      return toPublicUser(linked);
-    } catch (error: unknown) {
-      this.rethrowKnownError(error);
-    }
-  }
-
-  /**
-   * Frees an email or username held by a password account that was never
-   * verified and is older than `createdBefore`, so nobody can squat on an
-   * address they don't own.
-   */
-  async deleteStaleUnverified(
-    { email, username }: { email: string; username: string },
-    createdBefore: Date,
-  ): Promise<void> {
-    await this.mongo.withTransaction((session) =>
-      deleteWithReferences(this.mongo.db, session, 'users', {
-        $or: [{ email }, { username }],
-        emailVerifiedAt: null,
-        googleId: null,
-        role: UserRole.USER,
-        status: AccountStatus.PENDING_EMAIL,
-        createdAt: { $lt: createdBefore },
-      }),
-    );
-  }
-
-  async findPublicById(id: string): Promise<PublicUser | null> {
-    const user = await this.users
-      .findOne({ _id: id })
-      .select(projection)
-      .exec();
-    return user && toPublicUser(user);
   }
 
   private assertCanAccess(id: string, actor: AuthenticatedUser): void {
@@ -492,20 +346,5 @@ export class UsersService {
     session: ClientSession,
   ): Promise<User | null> {
     return this.users.findOne({ _id: id }).session(session).exec();
-  }
-
-  private rethrowKnownError(error: unknown): never {
-    if (isUniqueViolation(error)) {
-      // keyPattern names the fields of the violated unique index.
-      const keyPattern: unknown = error.keyPattern;
-      const fields =
-        keyPattern && typeof keyPattern === 'object'
-          ? Object.keys(keyPattern).join(', ')
-          : '';
-      throw new ConflictException(
-        `${fields || 'Username or email'} already exists`,
-      );
-    }
-    throw error;
   }
 }

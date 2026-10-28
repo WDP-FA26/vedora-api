@@ -24,7 +24,7 @@ import {
   ApiUnauthorizedResponse,
 } from '@nestjs/swagger';
 import { TurnstileService } from '../nutrition-chat/guest/turnstile.service';
-import { PublicUser } from '../users/users.service';
+import { type PublicUser } from '../users/public-user';
 import { AuthService } from './auth.service';
 import { AuthenticatedRequest } from './auth.types';
 import { AuthResponseDto, UserResponseDto } from './dto/auth-response.dto';

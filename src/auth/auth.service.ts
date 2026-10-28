@@ -13,9 +13,10 @@ import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { compare } from 'bcryptjs';
 import { randomBytes } from 'node:crypto';
-import { AccountStatus, User } from '../mongo/models';
+import { AccountStatus } from '../mongo/models';
 import { assertAccountActive } from './account-access';
-import { PublicUser, UsersService } from '../users/users.service';
+import { AccountsService } from '../users/accounts.service';
+import { type PublicUser, toPublicUser } from '../users/public-user';
 import { JwtPayload } from './auth.types';
 import { AuthResponseDto } from './dto/auth-response.dto';
 import {
@@ -50,7 +51,7 @@ export class AuthService {
   private readonly accessTokenTtl: number;
 
   constructor(
-    private readonly usersService: UsersService,
+    private readonly accounts: AccountsService,
     private readonly jwtService: JwtService,
     private readonly refreshTokensService: RefreshTokensService,
     private readonly emailVerificationService: EmailVerificationService,
@@ -63,11 +64,11 @@ export class AuthService {
   /** Creates an unverified account and emails a code. No tokens until verified. */
   async register(dto: RegisterDto): Promise<VerificationRequiredDto> {
     const passwordHash = await hashPassword(dto.password);
-    await this.usersService.deleteStaleUnverified(
+    await this.accounts.deleteStaleUnverified(
       dto,
       new Date(Date.now() - UNVERIFIED_ACCOUNT_TTL_MS),
     );
-    const user = await this.usersService.create({
+    const user = await this.accounts.create({
       username: dto.username,
       passwordHash,
       fullName: dto.fullName,
@@ -81,7 +82,7 @@ export class AuthService {
   async login(
     dto: Pick<LoginDto, 'username' | 'password'>,
   ): Promise<AuthResponseDto> {
-    const user = await this.usersService.findByUsername(dto.username);
+    const user = await this.accounts.findByUsername(dto.username);
     const passwordMatches = await compare(
       dto.password,
       user?.passwordHash ?? DUMMY_PASSWORD_HASH,
@@ -108,11 +109,11 @@ export class AuthService {
       });
     }
 
-    return this.createAuthResponse(this.toPublicUser(user));
+    return this.createAuthResponse(toPublicUser(user));
   }
 
   async verifyEmail(dto: VerifyEmailDto): Promise<AuthResponseDto> {
-    const user = await this.usersService.findByEmail(dto.email);
+    const user = await this.accounts.findByEmail(dto.email);
     if (
       user &&
       (user.status === AccountStatus.SUSPENDED ||
@@ -139,7 +140,7 @@ export class AuthService {
       throw new BadRequestException('Invalid or expired verification code');
     }
 
-    return this.createAuthResponse(this.toPublicUser(user));
+    return this.createAuthResponse(toPublicUser(user));
   }
 
   /**
@@ -147,7 +148,7 @@ export class AuthService {
    * which addresses exist. Only a pending sign-up can hit the resend limit.
    */
   async resendVerification(dto: ResendVerificationDto): Promise<void> {
-    const user = await this.usersService.findByEmail(dto.email);
+    const user = await this.accounts.findByEmail(dto.email);
     if (!user || user.emailVerifiedAt) return;
 
     let result: SendResult;
@@ -175,7 +176,7 @@ export class AuthService {
    * emails, so it can't be used to probe which addresses exist.
    */
   async forgotPassword(dto: ForgotPasswordDto): Promise<void> {
-    const user = await this.usersService.findByEmail(dto.email);
+    const user = await this.accounts.findByEmail(dto.email);
     if (!user) return;
 
     let result: SendResult;
@@ -202,7 +203,7 @@ export class AuthService {
   async resetPassword(dto: ResetPasswordDto): Promise<void> {
     // Hashed first, so an over-long password is rejected before using a guess.
     const passwordHash = await hashPassword(dto.password);
-    const user = await this.usersService.findByEmail(dto.email);
+    const user = await this.accounts.findByEmail(dto.email);
     const result = user
       ? await this.passwordResetService.reset(user, dto.code, passwordHash)
       : 'invalid';
@@ -225,7 +226,7 @@ export class AuthService {
   }
 
   async getCurrentUser(userId: string): Promise<PublicUser> {
-    const user = await this.usersService.findPublicById(userId);
+    const user = await this.accounts.findPublicById(userId);
     if (!user) throw new NotFoundException('User not found');
     assertAccountActive(user.status);
     return user;
@@ -242,13 +243,13 @@ export class AuthService {
   }
 
   async googleLogin(profile: GoogleProfileUser): Promise<AuthResponseDto> {
-    const googleUser = await this.usersService.findByGoogleId(profile.googleId);
+    const googleUser = await this.accounts.findByGoogleId(profile.googleId);
     if (googleUser) {
       assertAccountActive(googleUser.status);
-      return this.createAuthResponse(this.toPublicUser(googleUser));
+      return this.createAuthResponse(toPublicUser(googleUser));
     }
 
-    const existingUser = await this.usersService.findByEmail(profile.email);
+    const existingUser = await this.accounts.findByEmail(profile.email);
     if (existingUser) {
       if (
         existingUser.status === AccountStatus.SUSPENDED ||
@@ -256,7 +257,7 @@ export class AuthService {
       ) {
         assertAccountActive(existingUser.status);
       }
-      const user = await this.usersService.linkGoogleAccount(
+      const user = await this.accounts.linkGoogleAccount(
         existingUser,
         profile.googleId,
       );
@@ -271,7 +272,7 @@ export class AuthService {
       return this.createAuthResponse(user);
     }
 
-    const user = await this.usersService.create({
+    const user = await this.accounts.create({
       username: `g.${randomBytes(12).toString('hex')}`,
       googleId: profile.googleId,
       fullName: profile.fullName,
@@ -314,20 +315,6 @@ export class AuthService {
       accessTokenExpiresIn: this.accessTokenTtl,
       refreshTokenExpiresIn: refreshToken.expiresIn,
       user,
-    };
-  }
-
-  private toPublicUser(user: User): PublicUser {
-    return {
-      id: user.id,
-      username: user.username,
-      fullName: user.fullName,
-      email: user.email,
-      role: user.role,
-      status: user.status,
-      accountVersion: user.accountVersion,
-      createdAt: user.createdAt,
-      updatedAt: user.updatedAt,
     };
   }
 }

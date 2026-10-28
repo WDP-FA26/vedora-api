@@ -17,6 +17,7 @@ import { lockDocument } from '../src/mongo/document-lock';
 import { deleteWithReferences } from '../src/mongo/relations';
 import { AccountStatus, User, UserRole } from '../src/mongo/models';
 import { UpdateUserStatusDto } from '../src/users/dto/update-user-status.dto';
+import { AccountsService } from '../src/users/accounts.service';
 import { UsersService } from '../src/users/users.service';
 import { createUser, deleteWithCascade } from './fixtures';
 import {
@@ -81,6 +82,7 @@ describe('Account administration with MongoDB', () => {
       imports: [MongoModule.forTest(createTestMongoUrl('account'))],
       providers: [
         UsersService,
+        AccountsService,
         RefreshTokensService,
         EmailVerificationService,
         PasswordResetService,
@@ -414,14 +416,12 @@ describe('Account administration with MongoDB', () => {
   });
 
   it('verifies a pending email into ACTIVE before issuing a token pair', async () => {
-    await db
-      .collection<StoredDoc>('users')
-      .updateOne(
-        { _id: member.id },
-        {
-          $set: { status: AccountStatus.PENDING_EMAIL, emailVerifiedAt: null },
-        },
-      );
+    await db.collection<StoredDoc>('users').updateOne(
+      { _id: member.id },
+      {
+        $set: { status: AccountStatus.PENDING_EMAIL, emailVerifiedAt: null },
+      },
+    );
     const now = new Date();
     await db.collection<StoredDoc>('one_time_codes').insertOne({
       _id: randomUUID(),
