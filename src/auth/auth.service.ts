@@ -13,31 +13,31 @@ import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { compare } from 'bcryptjs';
 import { randomBytes } from 'node:crypto';
-import { AccountStatus } from '../mongo/models';
-import { assertAccountActive } from './account-access';
-import { AccountsService } from '../users/accounts.service';
-import { type PublicUser, toPublicUser } from '../users/public-user';
-import { JwtPayload } from './auth.types';
-import { AuthResponseDto } from './dto/auth-response.dto';
+import { AccountStatus } from '../mongo/models.js';
+import { assertAccountActive } from './account-access.js';
+import { AccountsService } from '../users/accounts.service.js';
+import { type PublicUser, toPublicUser } from '../users/public-user.js';
+import { JwtPayload } from './auth.types.js';
+import { AuthResponseDto } from './dto/auth-response.dto.js';
 import {
   ResendVerificationDto,
   VerificationRequiredDto,
   VerifyEmailDto,
-} from './dto/email-verification.dto';
-import { LoginDto } from './dto/login.dto';
-import { ForgotPasswordDto, ResetPasswordDto } from './dto/password-reset.dto';
-import { RegisterDto } from './dto/register.dto';
+} from './dto/email-verification.dto.js';
+import { LoginDto } from './dto/login.dto.js';
+import { ForgotPasswordDto, ResetPasswordDto } from './dto/password-reset.dto.js';
+import { RegisterDto } from './dto/register.dto.js';
 import {
   EmailVerificationService,
   SendResult,
-} from './email-verification.service';
-import { hashPassword } from './password';
-import { PasswordResetService } from './password-reset.service';
-import { GoogleProfileUser } from './google-auth.types';
+} from './email-verification.service.js';
+import { hashPassword } from './password.js';
+import { PasswordResetService } from './password-reset.service.js';
+import { GoogleProfileUser } from './google-auth.types.js';
 import {
   IssuedRefreshToken,
   RefreshTokensService,
-} from './refresh-tokens.service';
+} from './refresh-tokens.service.js';
 
 const DUMMY_PASSWORD_HASH =
   '$2b$12$eMcBdg./eJofytkZPDuoGOyif9iLSXILzYk0MY95Vq6P7M6.c9nTe';

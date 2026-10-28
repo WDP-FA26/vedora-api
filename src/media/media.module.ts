@@ -1,10 +1,10 @@
 import { Module } from '@nestjs/common';
-import { CaptionService } from './caption.service';
-import { TranscriptionService } from './captions/transcription.service';
-import { CloudinaryWebhookController } from './cloudinary-webhook.controller';
-import { MediaController } from './media.controller';
-import { MediaMaintenanceService } from './media-maintenance.service';
-import { MediaService } from './media.service';
+import { CaptionService } from './caption.service.js';
+import { TranscriptionService } from './captions/transcription.service.js';
+import { CloudinaryWebhookController } from './cloudinary-webhook.controller.js';
+import { MediaController } from './media.controller.js';
+import { MediaMaintenanceService } from './media-maintenance.service.js';
+import { MediaService } from './media.service.js';
 
 @Module({
   controllers: [MediaController, CloudinaryWebhookController],

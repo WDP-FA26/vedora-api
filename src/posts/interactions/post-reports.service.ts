@@ -11,22 +11,22 @@ import {
   createPaginatedResponse,
   getPaginationArgs,
   PaginatedResponseDto,
-} from '../../common/pagination';
-import { isUniqueViolation } from '../../mongo/errors';
+} from '../../common/pagination/index.js';
+import { isUniqueViolation } from '../../mongo/errors.js';
 import {
   Post,
   PostReport,
   PostReportStatus,
   PostStatus,
   User,
-} from '../../mongo/models';
+} from '../../mongo/models.js';
 import {
   AdminPostReportDto,
   CreatePostReportDto,
   PostReportDto,
   PostReportsQueryDto,
   ReportDecision,
-} from '../dto/post-interaction.dto';
+} from '../dto/post-interaction.dto.js';
 
 const toAuthor = (user: User) => ({
   id: user.id,

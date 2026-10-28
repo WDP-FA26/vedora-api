@@ -1,8 +1,8 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { Transform } from 'class-transformer';
 import { IsNotEmpty, IsString, MaxLength } from 'class-validator';
-import { CursorPaginatedResponseDto } from '../../common/pagination';
-import { PostAuthorDto } from './post-response.dto';
+import { CursorPaginatedResponseDto } from '../../common/pagination/index.js';
+import { PostAuthorDto } from './post-response.dto.js';
 
 export const MAX_COMMENT_BODY_LENGTH = 1000;
 

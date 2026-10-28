@@ -1,7 +1,7 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { IsEnum, IsOptional, IsUUID } from 'class-validator';
-import { PostType } from '../../mongo/models';
-import { CursorPaginationQueryDto } from '../../common/pagination';
+import { PostType } from '../../mongo/models.js';
+import { CursorPaginationQueryDto } from '../../common/pagination/index.js';
 
 export class ListPostsQueryDto extends CursorPaginationQueryDto {
   @ApiPropertyOptional({

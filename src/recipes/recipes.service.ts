@@ -1,24 +1,22 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { randomUUID } from 'node:crypto';
-import type { ClientSession } from 'mongodb';
 import type { Model } from 'mongoose';
 import {
   createPaginatedResponse,
   getPaginationArgs,
   PaginatedResponseDto,
   PaginationQueryDto,
-} from '../common/pagination';
-import { Recipe, RecipeIngredient, Stored } from '../mongo/models';
-import { MongoService } from '../mongo/mongo.service';
-import { deleteWithReferences } from '../mongo/relations';
+} from '../common/pagination/index.js';
+import { Recipe } from '../mongo/models.js';
+import { MongoService } from '../mongo/mongo.service.js';
 import {
   RecipeDetailDto,
   RecipeDto,
   SaveRecipeDto,
   toRecipeCard,
-} from './dto/recipe.dto';
-import { RecipeRelationsService } from './recipe-relations.service';
+} from './dto/recipe.dto.js';
+import { RecipeRelationsService } from './recipe-relations.service.js';
 
 @Injectable()
 export class RecipesService {
@@ -58,73 +56,30 @@ export class RecipesService {
 
   async create(userId: string, dto: SaveRecipeDto): Promise<RecipeDetailDto> {
     await this.relations.assertReferences(dto.ingredients, dto.postId);
-    const id = randomUUID();
-    await this.mongo.withTransaction(async (session) => {
-      const now = new Date();
-      await this.mongo.db.collection<Stored<Recipe>>('recipes').insertOne(
-        {
-          _id: id,
-          ...toData(dto),
-          createdById: userId,
-          createdAt: now,
-          updatedAt: now,
-        },
-        { session },
-      );
-      await this.addIngredients(session, id, dto);
+    const recipe = await this.recipes.create({
+      _id: randomUUID(),
+      ...toData(dto),
+      createdById: userId,
     });
-    return this.findOne(id);
+    return this.findOne(recipe.id);
   }
 
   async update(id: string, dto: SaveRecipeDto): Promise<RecipeDetailDto> {
     await this.relations.assertReferences(dto.ingredients, dto.postId);
-    await this.mongo.withTransaction(async (session) => {
-      const updated = await this.mongo.db
-        .collection<Stored<Recipe>>('recipes')
-        .updateOne(
-          { _id: id },
-          { $set: { ...toData(dto), updatedAt: new Date() } },
-          { session },
-        );
-      if (updated.matchedCount === 0) {
-        throw new NotFoundException('Recipe not found');
-      }
-      await this.mongo.db
-        .collection<Stored<RecipeIngredient>>('recipe_ingredients')
-        .deleteMany({ recipeId: id }, { session });
-      await this.addIngredients(session, id, dto);
-    });
+    const updated = await this.recipes
+      .updateOne({ _id: id }, { $set: toData(dto) })
+      .exec();
+    if (updated.matchedCount === 0) {
+      throw new NotFoundException('Recipe not found');
+    }
     return this.findOne(id);
   }
 
   async remove(id: string): Promise<void> {
-    const deleted = await this.mongo.withTransaction((session) =>
-      deleteWithReferences(this.mongo.db, session, 'recipes', {
-        _id: id,
-      }),
+    const { deletedCount } = await this.mongo.withTransaction((session) =>
+      this.recipes.deleteOne({ _id: id }, { session }).exec(),
     );
-    if (deleted === 0) throw new NotFoundException('Recipe not found');
-  }
-
-  private async addIngredients(
-    session: ClientSession,
-    recipeId: string,
-    dto: SaveRecipeDto,
-  ): Promise<void> {
-    await this.mongo.db
-      .collection<Stored<RecipeIngredient>>('recipe_ingredients')
-      .insertMany(
-        dto.ingredients.map((item, position) => ({
-          _id: randomUUID(),
-          recipeId,
-          ingredientId: item.ingredientId,
-          position,
-          quantity: item.quantity ?? null,
-          unit: item.unit || null,
-          note: item.note || null,
-        })),
-        { session },
-      );
+    if (deletedCount === 0) throw new NotFoundException('Recipe not found');
   }
 }
 
@@ -136,6 +91,12 @@ function toData(dto: SaveRecipeDto) {
     servings: dto.servings,
     prepMinutes: dto.prepMinutes ?? null,
     cookMinutes: dto.cookMinutes ?? null,
+    ingredients: dto.ingredients.map((item) => ({
+      ingredientId: item.ingredientId,
+      quantity: item.quantity ?? null,
+      unit: item.unit || null,
+      note: item.note || null,
+    })),
     steps: dto.steps,
     postId: dto.postId ?? null,
   };

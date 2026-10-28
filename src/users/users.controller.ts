@@ -21,24 +21,24 @@ import {
   ApiTags,
   ApiUnauthorizedResponse,
 } from '@nestjs/swagger';
-import { UserRole } from '../mongo/models';
-import type { AuthenticatedRequest } from '../auth/auth.types';
-import { JwtAuthGuard } from '../auth/jwt-auth.guard';
-import { UserResponseDto } from '../auth/dto/auth-response.dto';
+import { UserRole } from '../mongo/models.js';
+import type { AuthenticatedRequest } from '../auth/auth.types.js';
+import { JwtAuthGuard } from '../auth/jwt-auth.guard.js';
+import { UserResponseDto } from '../auth/dto/auth-response.dto.js';
 import {
   ApiPaginatedResponse,
   PaginatedResponseDto,
-} from '../common/pagination';
-import { Roles } from '../auth/roles.decorator';
-import { RolesGuard } from '../auth/roles.guard';
-import { CreateUserDto } from './dto/create-user.dto';
-import { UpdateUserDto } from './dto/update-user.dto';
-import { UpdateUserRoleDto } from './dto/update-user-role.dto';
-import { UpdateUserStatusDto } from './dto/update-user-status.dto';
-import { UsersQueryDto } from './dto/users-query.dto';
-import { AccountsService } from './accounts.service';
-import { type PublicUser } from './public-user';
-import { UsersService } from './users.service';
+} from '../common/pagination/index.js';
+import { Roles } from '../auth/roles.decorator.js';
+import { RolesGuard } from '../auth/roles.guard.js';
+import { CreateUserDto } from './dto/create-user.dto.js';
+import { UpdateUserDto } from './dto/update-user.dto.js';
+import { UpdateUserRoleDto } from './dto/update-user-role.dto.js';
+import { UpdateUserStatusDto } from './dto/update-user-status.dto.js';
+import { UsersQueryDto } from './dto/users-query.dto.js';
+import { AccountsService } from './accounts.service.js';
+import { type PublicUser } from './public-user.js';
+import { UsersService } from './users.service.js';
 
 @ApiTags('users')
 @ApiBearerAuth()

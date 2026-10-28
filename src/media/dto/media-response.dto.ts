@@ -4,7 +4,7 @@ import {
   MediaFailureReason,
   MediaStatus,
   MediaType,
-} from '../../mongo/models';
+} from '../../mongo/models.js';
 
 export class CaptionTrackDto {
   @ApiProperty({ example: 'vi' })

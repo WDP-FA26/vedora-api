@@ -1,19 +1,18 @@
 import { randomUUID } from 'node:crypto';
 import request from 'supertest';
 import { mockDeep, mockReset } from 'vitest-mock-extended';
-import { PostSearchIndexService } from '../src/posts/search/post-search-index.service';
-import { PostSearchService } from '../src/posts/search/post-search.service';
+import { PostSearchIndexService } from '../src/posts/search/post-search-index.service.js';
+import { PostSearchService } from '../src/posts/search/post-search.service.js';
 import {
-  type Post,
+  Post,
+  PostReport,
   PostStatus,
-  type Stored,
   PostType,
   type User,
   UserRole,
-} from '../src/mongo/models';
-import { deleteWithReferences } from '../src/mongo/relations';
-import { createE2eApp, type E2eApp } from './e2e-app';
-import { createPost, createUser } from './fixtures';
+} from '../src/mongo/models.js';
+import { createE2eApp, type E2eApp } from './e2e-app.js';
+import { createPost, createUser } from './fixtures.js';
 
 describe('Post reads and admin posts (e2e)', () => {
   const postSearch = mockDeep<PostSearchService>();
@@ -25,6 +24,8 @@ describe('Post reads and admin posts (e2e)', () => {
   let userToken: string;
   let post: Post;
   const server = () => e2e.app.getHttpServer();
+  const posts = () => e2e.mongo.connection.model<Post>(Post.name);
+  const reports = () => e2e.mongo.connection.model<PostReport>(PostReport.name);
 
   beforeAll(async () => {
     e2e = await createE2eApp('posts_e2e', (builder) =>
@@ -48,9 +49,7 @@ describe('Post reads and admin posts (e2e)', () => {
     mockReset(postSearch);
     mockReset(searchIndex);
     await e2e.mongo.withTransaction((session) =>
-      deleteWithReferences(e2e.mongo.db, session, 'posts', {
-        authorId: author.id,
-      }),
+      posts().deleteMany({ authorId: author.id }, { session }).exec(),
     );
     post = await createPost(e2e.mongo, {
       authorId: author.id,
@@ -73,11 +72,7 @@ describe('Post reads and admin posts (e2e)', () => {
       [method](path)
       .auth(userToken, { type: 'bearer' })
       .expect(403);
-    expect(
-      await e2e.mongo.db
-        .collection<Stored<Post>>('posts')
-        .findOne({ _id: post.id }),
-    ).not.toBe(null);
+    expect(await posts().findOne({ _id: post.id }).exec()).not.toBe(null);
   });
 
   it('lists posts that are not published', async () => {
@@ -96,11 +91,7 @@ describe('Post reads and admin posts (e2e)', () => {
       .delete(`/api/v1/admin/posts/${post.id}`)
       .auth(adminToken, { type: 'bearer' })
       .expect(204);
-    expect(
-      await e2e.mongo.db
-        .collection<Stored<Post>>('posts')
-        .findOne({ _id: post.id }),
-    ).toBeNull();
+    expect(await posts().findOne({ _id: post.id }).exec()).toBeNull();
     expect(searchIndex.remove).toHaveBeenCalledWith(post.id);
   });
 
@@ -153,12 +144,12 @@ describe('Post reads and admin posts (e2e)', () => {
 
   it('lets guests read a published post but not one still processing', async () => {
     await request(server()).get(`/api/v1/posts/${post.id}`).expect(404);
-    await e2e.mongo.db
-      .collection<Stored<Post>>('posts')
+    await posts()
       .updateOne(
         { _id: post.id },
         { $set: { status: PostStatus.PUBLISHED, publishedAt: new Date() } },
-      );
+      )
+      .exec();
     const response = await request(server())
       .get(`/api/v1/posts/${post.id}`)
       .expect(200);
@@ -177,12 +168,12 @@ describe('Post reads and admin posts (e2e)', () => {
   });
 
   it('reposts idempotently and requires login', async () => {
-    await e2e.mongo.db
-      .collection<Stored<Post>>('posts')
+    await posts()
       .updateOne(
         { _id: post.id },
         { $set: { status: PostStatus.PUBLISHED, publishedAt: new Date() } },
-      );
+      )
+      .exec();
     await request(server()).put(`/api/v1/posts/${post.id}/repost`).expect(401);
     for (let attempt = 0; attempt < 2; attempt++) {
       const response = await request(server())
@@ -198,12 +189,12 @@ describe('Post reads and admin posts (e2e)', () => {
   });
 
   it('validates reports and keeps the report queue to admins', async () => {
-    await e2e.mongo.db
-      .collection<Stored<Post>>('posts')
+    await posts()
       .updateOne(
         { _id: post.id },
         { $set: { status: PostStatus.PUBLISHED, publishedAt: new Date() } },
-      );
+      )
+      .exec();
     await request(server())
       .post(`/api/v1/posts/${post.id}/report`)
       .auth(adminToken, { type: 'bearer' })
@@ -214,9 +205,7 @@ describe('Post reads and admin posts (e2e)', () => {
       .auth(adminToken, { type: 'bearer' })
       .send({ reason: 'SPAM', details: '  quảng cáo  ' })
       .expect(201);
-    expect(
-      await e2e.mongo.db.collection('post_reports').findOne({}),
-    ).toMatchObject({
+    expect(await reports().findOne({}).exec()).toMatchObject({
       reason: 'SPAM',
       details: 'quảng cáo',
     });

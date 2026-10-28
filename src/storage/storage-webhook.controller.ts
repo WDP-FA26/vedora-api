@@ -9,14 +9,14 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { ApiExcludeController } from '@nestjs/swagger';
-import { KnowledgeService } from '../knowledge/knowledge.service';
-import { ProfilesService } from '../profiles/profiles.service';
-import { StorageWebhookGuard } from './storage-webhook.guard';
+import { KnowledgeService } from '../knowledge/knowledge.service.js';
+import { ProfilesService } from '../profiles/profiles.service.js';
+import { StorageWebhookGuard } from './storage-webhook.guard.js';
 import {
   StorageService,
   WebhookStorageTarget,
   type StorageEvent,
-} from './storage.service';
+} from './storage.service.js';
 
 @ApiExcludeController()
 @Controller('webhooks/storage')

@@ -1,6 +1,6 @@
 import { ConfigService } from '@nestjs/config';
 import type { Request } from 'express';
-import { ClientIpService } from './client-ip.service';
+import { ClientIpService } from './client-ip.service.js';
 
 const request = (headers: Record<string, string>) =>
   ({ headers, ip: '10.0.0.2' }) as unknown as Request;

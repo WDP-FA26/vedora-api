@@ -1,18 +1,18 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { parsePayload } from '../../common/validation';
-import { QdrantService } from '../../qdrant/qdrant.service';
+import { parsePayload } from '../../common/validation.js';
+import { QdrantService } from '../../qdrant/qdrant.service.js';
 import {
   BM25_FOLDED_VECTOR,
   BM25_VECTOR,
   bm25,
   DENSE_VECTOR,
   KnowledgePointPayload,
-} from './knowledge-collection';
-import { KnowledgeIndexService } from './knowledge-index.service';
+} from './knowledge-collection.js';
+import { KnowledgeIndexService } from './knowledge-index.service.js';
 import {
   KnowledgeModelsService,
   type RerankResult,
-} from './knowledge-models.service';
+} from './knowledge-models.service.js';
 
 const PREFETCH_LIMIT = 40;
 const CANDIDATES = 20;

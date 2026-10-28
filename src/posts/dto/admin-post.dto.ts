@@ -1,10 +1,10 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { PostStatus, PostType } from '../../mongo/models';
+import { PostStatus, PostType } from '../../mongo/models.js';
 import { IsEnum, IsOptional } from 'class-validator';
-import { PaginationQueryDto } from '../../common/pagination';
-import { AdminMediaDto } from '../../media/dto/media-response.dto';
-import { PostAuthorDto } from './post-response.dto';
-import { BlogSummaryDto } from './blog-summary.dto';
+import { PaginationQueryDto } from '../../common/pagination/index.js';
+import { AdminMediaDto } from '../../media/dto/media-response.dto.js';
+import { PostAuthorDto } from './post-response.dto.js';
+import { BlogSummaryDto } from './blog-summary.dto.js';
 
 export class AdminPostsQueryDto extends PaginationQueryDto {
   @ApiPropertyOptional({ enum: PostStatus })

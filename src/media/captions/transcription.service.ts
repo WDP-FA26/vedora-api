@@ -1,16 +1,16 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { chatModel, DEFAULT_CHAT_MODEL } from '../../ai/openrouter';
-import type { ReasoningEffort } from '../../ai/reasoning';
+import { chatModel, DEFAULT_CHAT_MODEL } from '../../ai/openrouter.js';
+import type { ReasoningEffort } from '../../ai/reasoning.js';
 import { generateText, type LanguageModel, Output } from 'ai';
 import { z } from 'zod';
-import { parsePayload, validatePayload } from '../../common/validation';
-import { type SpeechAudio, toOriginalTime } from './speech-audio';
+import { parsePayload, validatePayload } from '../../common/validation.js';
+import { type SpeechAudio, toOriginalTime } from './speech-audio.js';
 import {
   OpenRouterErrorBody,
   TranscriptionResponse,
-} from './transcription.dto';
-import type { Cue } from './vtt';
+} from './transcription.dto.js';
+import type { Cue } from './vtt.js';
 
 const OPENROUTER_API = 'https://openrouter.ai/api/v1';
 const TRANSCRIBE_TIMEOUT_MS = 3 * 60_000;

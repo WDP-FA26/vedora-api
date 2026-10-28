@@ -17,7 +17,7 @@ import {
   MinLength,
   ValidateNested,
 } from 'class-validator';
-import { NamedRefDto } from './ingredient.dto';
+import { NamedRefDto } from './ingredient.dto.js';
 
 export const MAX_RECIPE_INGREDIENTS = 50;
 export const MAX_RECIPE_STEPS = 50;

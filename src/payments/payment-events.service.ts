@@ -3,7 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { createClient } from 'redis';
 import { IsUUID } from 'class-validator';
 import { Observable, Subject } from 'rxjs';
-import { validatePayload } from '../common/validation';
+import { validatePayload } from '../common/validation.js';
 
 class PaymentChangedEvent {
   @IsUUID()

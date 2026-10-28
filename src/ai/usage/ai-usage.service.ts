@@ -2,8 +2,8 @@ import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectModel } from '@nestjs/mongoose';
 import type { Model } from 'mongoose';
-import { isUniqueViolation } from '../../mongo/errors';
-import { AiFeature, AiUsage } from '../../mongo/models';
+import { isUniqueViolation } from '../../mongo/errors.js';
+import { AiFeature, AiUsage } from '../../mongo/models.js';
 
 const TIME_ZONE = 'Asia/Bangkok';
 const DAY_MS = 86_400_000;

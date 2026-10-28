@@ -1,14 +1,14 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { QdrantService } from '../../qdrant/qdrant.service';
-import { PostEmbeddingsService } from './post-embeddings.service';
+import { QdrantService } from '../../qdrant/qdrant.service.js';
+import { PostEmbeddingsService } from './post-embeddings.service.js';
 import {
   BM25_FOLDED_VECTOR,
   BM25_VECTOR,
   bm25,
   DENSE_VECTOR,
-} from './post-search-collection';
-import { PostSearchIndexService } from './post-search-index.service';
+} from './post-search-collection.js';
+import { PostSearchIndexService } from './post-search-index.service.js';
 
 /** How deep search pages may go; each prefetch fetches this many. */
 export const MAX_SEARCH_RESULTS = 200;

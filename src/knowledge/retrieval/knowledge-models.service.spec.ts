@@ -1,5 +1,5 @@
 import { ConfigService } from '@nestjs/config';
-import { KnowledgeModelsService } from './knowledge-models.service';
+import { KnowledgeModelsService } from './knowledge-models.service.js';
 
 const fetchMock = vi.fn<typeof fetch>();
 

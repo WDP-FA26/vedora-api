@@ -2,8 +2,6 @@ import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import type { Model } from 'mongoose';
 import {
-  Blog,
-  BlogRecipe,
   MediaAsset,
   type Post,
   PostBookmark,
@@ -12,8 +10,8 @@ import {
   PostRepost,
   Recipe,
   User,
-} from '../mongo/models';
-import type { BlogSummaryDto } from './dto/blog-summary.dto';
+} from '../mongo/models.js';
+import type { BlogSummaryDto } from './dto/blog-summary.dto.js';
 
 /** What a post card shows besides the post itself. */
 export interface PostRelations {
@@ -30,11 +28,10 @@ export interface PostRelations {
 
 /**
  * Loads the author, media, blog summary, counts and the viewer's own
- * interactions of `posts`. MongoDB has no relation counts or nested
- * selects, so each is one query over all the posts at once.
+ * interactions of `posts`.
  *
  * It owns the collections it joins, so the services that render post cards
- * depend on one collaborator instead of nine models.
+ * depend on one collaborator instead of seven models.
  */
 @Injectable()
 export class PostRelationsService {
@@ -48,9 +45,6 @@ export class PostRelationsService {
     private readonly reposts: Model<PostRepost>,
     @InjectModel(PostBookmark.name)
     private readonly bookmarks: Model<PostBookmark>,
-    @InjectModel(Blog.name) private readonly blogs: Model<Blog>,
-    @InjectModel(BlogRecipe.name)
-    private readonly blogRecipes: Model<BlogRecipe>,
     @InjectModel(Recipe.name) private readonly recipes: Model<Recipe>,
   ) {}
 
@@ -80,7 +74,7 @@ export class PostRelationsService {
         .select('username fullName avatarUrl')
         .exec(),
       this.media.find(inPosts).sort({ position: 1 }).exec(),
-      this.blogSummaries(postIds),
+      this.blogSummaries(posts),
       countByPost(this.comments, postIds),
       countByPost(this.likes, postIds),
       countByPost(this.reposts, postIds),
@@ -121,54 +115,47 @@ export class PostRelationsService {
   }
 
   /**
-   * Feed reads never load the full article: the summary of each blog post in
-   * `postIds`, with its linked recipes in order. MongoDB has no nested
-   * selects, so the blogs, their recipe links and the recipes are three
-   * queries.
+   * Builds the summary of each blog post in `posts` from its embedded `blog`
+   * subdocument, resolving linked recipes in order.
    */
   private async blogSummaries(
-    postIds: readonly string[],
+    posts: readonly Post[],
   ): Promise<Map<string, BlogSummaryDto>> {
-    if (postIds.length === 0) return new Map();
-    const ids = [...postIds];
-    const [blogs, links] = await Promise.all([
-      this.blogs
-        .find({ _id: { $in: ids } })
-        .select('title coverImageUrl excerpt')
-        .exec(),
-      this.blogRecipes
-        .find({ postId: { $in: ids } })
-        .sort({ position: 1 })
-        .exec(),
-    ]);
-    const recipes = await this.recipes
-      .find({
-        _id: { $in: [...new Set(links.map(({ recipeId }) => recipeId))] },
-      })
-      .select('title imageUrl')
-      .exec();
+    const blogPosts = posts.filter(
+      (post): post is Post & { blog: NonNullable<Post['blog']> } =>
+        post.blog !== null && post.blog !== undefined,
+    );
+    if (blogPosts.length === 0) return new Map();
+    const recipeIds = [
+      ...new Set(blogPosts.flatMap(({ blog }) => blog.recipeIds)),
+    ];
+    const recipes =
+      recipeIds.length === 0
+        ? []
+        : await this.recipes
+            .find({ _id: { $in: recipeIds } })
+            .select('title imageUrl')
+            .exec();
     const recipeById = new Map(recipes.map((recipe) => [recipe.id, recipe]));
     return new Map(
-      blogs.map((blog) => [
-        blog.id,
+      blogPosts.map(({ id, blog }) => [
+        id,
         {
           title: blog.title,
           coverImageUrl: blog.coverImageUrl,
           excerpt: blog.excerpt,
-          recipes: links
-            .filter((link) => link.postId === blog.id)
-            .flatMap(({ recipeId }) => {
-              const recipe = recipeById.get(recipeId);
-              return recipe
-                ? [
-                    {
-                      id: recipe.id,
-                      title: recipe.title,
-                      imageUrl: recipe.imageUrl,
-                    },
-                  ]
-                : [];
-            }),
+          recipes: blog.recipeIds.flatMap((recipeId) => {
+            const recipe = recipeById.get(recipeId);
+            return recipe
+              ? [
+                  {
+                    id: recipe.id,
+                    title: recipe.title,
+                    imageUrl: recipe.imageUrl,
+                  },
+                ]
+              : [];
+          }),
         },
       ]),
     );

@@ -7,7 +7,7 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { CodeChallengeMethod, OAuth2Client } from 'google-auth-library';
-import { GoogleProfileUser } from './google-auth.types';
+import { GoogleProfileUser } from './google-auth.types.js';
 
 export interface GoogleAuthorization {
   /** Google's consent screen URL. */

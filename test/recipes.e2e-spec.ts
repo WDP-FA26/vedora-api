@@ -5,9 +5,9 @@ import {
   type Recipe,
   type User,
   UserRole,
-} from '../src/mongo/models';
-import { createE2eApp, type E2eApp } from './e2e-app';
-import { createIngredient, createRecipe, createUser } from './fixtures';
+} from '../src/mongo/models.js';
+import { createE2eApp, type E2eApp } from './e2e-app.js';
+import { createIngredient, createRecipe, createUser } from './fixtures.js';
 
 describe('Recipes and ingredients (e2e)', () => {
   let e2e: E2eApp;

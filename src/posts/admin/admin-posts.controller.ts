@@ -18,17 +18,17 @@ import {
   ApiTags,
   ApiUnauthorizedResponse,
 } from '@nestjs/swagger';
-import { UserRole } from '../../mongo/models';
-import { JwtAuthGuard } from '../../auth/jwt-auth.guard';
-import { Roles } from '../../auth/roles.decorator';
-import { RolesGuard } from '../../auth/roles.guard';
+import { UserRole } from '../../mongo/models.js';
+import { JwtAuthGuard } from '../../auth/jwt-auth.guard.js';
+import { Roles } from '../../auth/roles.decorator.js';
+import { RolesGuard } from '../../auth/roles.guard.js';
 import {
   ApiPaginatedResponse,
   PaginatedResponseDto,
-} from '../../common/pagination';
-import { AdminPostsService } from './admin-posts.service';
-import { AdminPostDto, AdminPostsQueryDto } from '../dto/admin-post.dto';
-import { PostsService } from '../posts.service';
+} from '../../common/pagination/index.js';
+import { AdminPostsService } from './admin-posts.service.js';
+import { AdminPostDto, AdminPostsQueryDto } from '../dto/admin-post.dto.js';
+import { PostsService } from '../posts.service.js';
 
 @ApiTags('admin')
 @ApiBearerAuth()

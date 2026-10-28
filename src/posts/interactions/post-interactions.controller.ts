@@ -23,23 +23,23 @@ import {
   ApiOperation,
   ApiTags,
 } from '@nestjs/swagger';
-import type { AuthenticatedRequest } from '../../auth/auth.types';
-import { JwtAuthGuard } from '../../auth/jwt-auth.guard';
-import { CursorPaginationQueryDto } from '../../common/pagination';
+import type { AuthenticatedRequest } from '../../auth/auth.types.js';
+import { JwtAuthGuard } from '../../auth/jwt-auth.guard.js';
+import { CursorPaginationQueryDto } from '../../common/pagination/index.js';
 import {
   CommentBodyDto,
   CommentPageDto,
   CommentResponseDto,
-} from '../dto/comment.dto';
+} from '../dto/comment.dto.js';
 import {
   CreatePostReportDto,
   PostBookmarkResponseDto,
   PostReportDto,
   PostRepostResponseDto,
-} from '../dto/post-interaction.dto';
-import { PostLikeResponseDto } from '../dto/post-like-response.dto';
-import { PostReportsService } from './post-reports.service';
-import { PostInteractionsService } from './post-interactions.service';
+} from '../dto/post-interaction.dto.js';
+import { PostLikeResponseDto } from '../dto/post-like-response.dto.js';
+import { PostReportsService } from './post-reports.service.js';
+import { PostInteractionsService } from './post-interactions.service.js';
 
 @ApiTags('post-interactions')
 @Controller('posts/:postId')

@@ -1,11 +1,11 @@
 import { Module } from '@nestjs/common';
-import { KnowledgeModule } from '../knowledge/knowledge.module';
-import { RecipesModule } from '../recipes/recipes.module';
-import { MealPlanController } from './meal-plan.controller';
-import { MealPlanService } from './meal-plan.service';
-import { MealPlannerChatService } from './meal-planner-chat.service';
-import { ShoppingListController } from './shopping-list.controller';
-import { ShoppingListService } from './shopping-list.service';
+import { KnowledgeModule } from '../knowledge/knowledge.module.js';
+import { RecipesModule } from '../recipes/recipes.module.js';
+import { MealPlanController } from './meal-plan.controller.js';
+import { MealPlanService } from './meal-plan.service.js';
+import { MealPlannerChatService } from './meal-planner-chat.service.js';
+import { ShoppingListController } from './shopping-list.controller.js';
+import { ShoppingListService } from './shopping-list.service.js';
 
 @Module({
   imports: [RecipesModule, KnowledgeModule],

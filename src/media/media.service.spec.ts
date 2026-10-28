@@ -1,17 +1,17 @@
 import type { INestApplication } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Test } from '@nestjs/testing';
-import type { ClientSession } from 'mongodb';
+import type { ClientSession } from 'mongoose';
 import type { MockInstance } from 'vitest';
-import { createMedia, createPost, createUser } from '../../test/fixtures';
+import { createMedia, createPost, createUser } from '../../test/fixtures.js';
 import {
   createTestMongoUrl,
   dropTestDatabase,
   prepareTestDatabase,
-} from '../../test/mongo-test-db';
-import { CloudinaryService } from '../cloudinary/cloudinary.service';
-import { MongoModule } from '../mongo/mongo.module';
-import { MongoService } from '../mongo/mongo.service';
+} from '../../test/mongo-test-db.js';
+import { CloudinaryService } from '../cloudinary/cloudinary.service.js';
+import { MongoModule } from '../mongo/mongo.module.js';
+import { MongoService } from '../mongo/mongo.service.js';
 import {
   CaptionStatus,
   type MediaAsset,
@@ -20,17 +20,16 @@ import {
   MediaType,
   type Post,
   PostStatus,
-  type Stored,
-} from '../mongo/models';
-import { CaptionService } from './caption.service';
+} from '../mongo/models.js';
+import { CaptionService } from './caption.service.js';
 import {
   mediaId,
   ownerId,
   publicId,
   streamBuilt,
   uploaded,
-} from './media.fixtures';
-import { MediaService } from './media.service';
+} from './media.fixtures.js';
+import { MediaService } from './media.service.js';
 
 describe('MediaService', () => {
   let app: INestApplication;
@@ -85,8 +84,8 @@ describe('MediaService', () => {
     await createUser(db, { id: ownerId });
   });
   beforeEach(async () => {
-    await db.db.collection('media_assets').deleteMany({});
-    await db.db.collection('posts').deleteMany({});
+    await assets().deleteMany({});
+    await posts().deleteMany({});
     schedule.mockClear();
     findVideo.mockReset();
     findVideo.mockResolvedValue(null);
@@ -291,12 +290,11 @@ describe('MediaService', () => {
     it('times out an upload whose file never arrived', async () => {
       const row = await createMedia(db, { postId });
       // `createdAt` is immutable to Mongoose, so backdate it as stored.
-      await db.db
-        .collection<Stored<MediaAsset>>('media_assets')
-        .updateOne(
-          { _id: row.id },
-          { $set: { createdAt: new Date('2026-09-24T00:00:00Z') } },
-        );
+      await assets().updateOne(
+        { _id: row.id },
+        { $set: { createdAt: new Date('2026-09-24T00:00:00Z') } },
+        { timestamps: false, overwriteImmutable: true },
+      );
 
       await service.refresh((await assets().findById(row.id).exec())!);
 
@@ -343,9 +341,11 @@ describe('MediaService', () => {
         status: MediaStatus.WAITING_UPLOAD,
         discardedAt: old,
       });
-      await db.db
-        .collection<Stored<MediaAsset>>('media_assets')
-        .updateOne({ _id: row.id }, { $set: { createdAt: new Date() } });
+      await assets().updateOne(
+        { _id: row.id },
+        { $set: { createdAt: new Date() } },
+        { timestamps: false, overwriteImmutable: true },
+      );
 
       const gone = await service.purge(
         (await assets().findById(row.id).exec())!,

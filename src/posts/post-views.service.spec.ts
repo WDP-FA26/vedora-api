@@ -1,15 +1,15 @@
 import type { INestApplication } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
-import { createPost, createUser } from '../../test/fixtures';
+import { createPost, createUser } from '../../test/fixtures.js';
 import {
   createTestMongoUrl,
   dropTestDatabase,
   prepareTestDatabase,
-} from '../../test/mongo-test-db';
-import { PostStatus, type Post, type Stored } from '../mongo/models';
-import { MongoModule } from '../mongo/mongo.module';
-import { MongoService } from '../mongo/mongo.service';
-import { PostViewsService } from './post-views.service';
+} from '../../test/mongo-test-db.js';
+import { Post, PostStatus } from '../mongo/models.js';
+import { MongoModule } from '../mongo/mongo.module.js';
+import { MongoService } from '../mongo/mongo.service.js';
+import { PostViewsService } from './post-views.service.js';
 
 const MINUTE = 60_000;
 
@@ -20,22 +20,17 @@ describe('PostViewsService', () => {
   let postA: string;
   let postB: string;
 
+  const posts = () => db.connection.model<Post>(Post.name);
   const viewCount = async (id: string) => {
-    const post = await db.db
-      .collection<Stored<Post>>('posts')
-      .findOne({ _id: id });
+    const post = await posts().findOne({ _id: id }).exec();
     return post?.viewCount as number;
   };
   const updatedAt = async (id: string) => {
-    const post = await db.db
-      .collection<Stored<Post>>('posts')
-      .findOne({ _id: id });
+    const post = await posts().findOne({ _id: id }).exec();
     return post?.updatedAt as Date;
   };
   const setStatus = (id: string, status: PostStatus) =>
-    db.db
-      .collection<Stored<Post>>('posts')
-      .updateOne({ _id: id }, { $set: { status } });
+    posts().updateOne({ _id: id }, { $set: { status } }).exec();
 
   beforeAll(async () => {
     const moduleRef = await Test.createTestingModule({
@@ -51,10 +46,10 @@ describe('PostViewsService', () => {
     postB = (await createPost(db, { authorId: author.id })).id;
   });
   beforeEach(async () => {
-    await db.db
-      .collection<Stored<Post>>('posts')
-      .updateMany({}, { $set: { viewCount: 0 } });
-    service = new PostViewsService(db);
+    await posts()
+      .updateMany({}, { $set: { viewCount: 0 } })
+      .exec();
+    service = new PostViewsService(posts());
   });
   afterEach(() => {
     vi.restoreAllMocks();
@@ -106,15 +101,13 @@ describe('PostViewsService', () => {
   });
 
   it('skips the database when nothing was viewed', async () => {
-    const collection = vi.spyOn(db.db, 'collection');
+    const bulkWrite = vi.spyOn(posts(), 'bulkWrite');
     await service.flush();
-    expect(collection).not.toHaveBeenCalled();
+    expect(bulkWrite).not.toHaveBeenCalled();
   });
 
   it('keeps the counts for the next flush when the write fails', async () => {
-    const posts = db.db.collection<Stored<Post>>('posts');
-    vi.spyOn(posts, 'bulkWrite').mockRejectedValueOnce(new Error('down'));
-    vi.spyOn(db.db, 'collection').mockReturnValue(posts as never);
+    vi.spyOn(posts(), 'bulkWrite').mockRejectedValueOnce(new Error('down'));
     service.record('user-1', [postA]);
     await service.flush();
     expect(await viewCount(postA)).toBe(0);

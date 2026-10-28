@@ -1,6 +1,6 @@
 import { Controller, Get } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
-import { MongoService } from '../mongo/mongo.service';
+import { MongoService } from '../mongo/mongo.service.js';
 
 @ApiTags('health')
 @Controller('health')
@@ -16,7 +16,7 @@ export class HealthController {
   @Get('ready')
   @ApiOperation({ summary: 'Readiness check including MongoDB' })
   async ready(): Promise<{ status: string; database: string }> {
-    await this.mongo.db.admin().command({ ping: 1 });
+    await this.mongo.ping();
     return { status: 'ok', database: 'up' };
   }
 }

@@ -22,17 +22,17 @@ import {
 } from '@nestjs/swagger';
 import { pipeUIMessageStreamToResponse } from 'ai';
 import type { Response } from 'express';
-import type { AuthenticatedRequest } from '../auth/auth.types';
-import { JwtAuthGuard } from '../auth/jwt-auth.guard';
-import { UserThrottlerGuard } from '../nutrition-chat/user-throttler.guard';
+import type { AuthenticatedRequest } from '../auth/auth.types.js';
+import { JwtAuthGuard } from '../auth/jwt-auth.guard.js';
+import { UserThrottlerGuard } from '../nutrition-chat/user-throttler.guard.js';
 import {
   MealPlanDto,
   MealPlanPreviewDto,
   MealPlannerChatDto,
   SaveMealDaysDto,
-} from './dto/meal-plan.dto';
-import { MealPlanService } from './meal-plan.service';
-import { MealPlannerChatService } from './meal-planner-chat.service';
+} from './dto/meal-plan.dto.js';
+import { MealPlanService } from './meal-plan.service.js';
+import { MealPlannerChatService } from './meal-planner-chat.service.js';
 
 @ApiTags('meal-plan')
 @ApiBearerAuth()

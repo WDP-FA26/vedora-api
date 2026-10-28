@@ -13,19 +13,19 @@ import {
   KnowledgeDocument,
   KnowledgeDocumentFailureReason,
   KnowledgeDocumentStatus,
-} from '../mongo/models';
+} from '../mongo/models.js';
 import { NoSuchKey } from '@aws-sdk/client-s3';
-import { StorageService, StorageTarget } from '../storage/storage.service';
+import { StorageService, StorageTarget } from '../storage/storage.service.js';
 import {
   CreateKnowledgeUploadResponseDto,
   KnowledgeDocumentResponseDto,
-} from './dto/knowledge-document-response.dto';
+} from './dto/knowledge-document-response.dto.js';
 import {
   DocumentExtractionError,
   type ExtractedSection,
-} from './extractors/document-extractor';
-import { PDF_CONTENT_TYPE, PdfExtractor } from './extractors/pdf-extractor';
-import { KnowledgeIndexService } from './retrieval/knowledge-index.service';
+} from './extractors/document-extractor.js';
+import { PDF_CONTENT_TYPE, PdfExtractor } from './extractors/pdf-extractor.js';
+import { KnowledgeIndexService } from './retrieval/knowledge-index.service.js';
 
 @Injectable()
 export class KnowledgeService {

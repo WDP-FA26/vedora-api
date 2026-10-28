@@ -1,5 +1,5 @@
 import { APICallError, RetryError } from 'ai';
-import { chatErrorCode } from './errors';
+import { chatErrorCode } from './errors.js';
 
 describe('chatErrorCode', () => {
   const callError = (statusCode: number) =>

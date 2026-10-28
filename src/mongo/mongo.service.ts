@@ -1,27 +1,23 @@
 import { Injectable } from '@nestjs/common';
 import { InjectConnection } from '@nestjs/mongoose';
-import type { ClientSession, Db } from 'mongodb';
-import type { Connection } from 'mongoose';
+import type { ClientSession, Connection } from 'mongoose';
 
 /**
- * The database connection shared by every model: transactions, the driver
- * `Db` for the few pipelines models do not cover, and nothing else.
+ * The Mongoose connection shared by every model: starts snapshot transactions.
  *
- * MongoDB has no transactions on `Model` helpers, so start one here, pass
- * `{ session }` to every model operation inside it, and do side effects
- * (mail, events) after it returns. `session.withTransaction` retries the
- * callback on a write conflict, so the callback must be safe to repeat.
+ * Pass `{ session }` (or `.session(session)`) to every model operation inside
+ * `withTransaction`, and do side effects (mail, events) after it returns.
+ * `session.withTransaction` retries the callback on a write conflict, so the
+ * callback must be safe to repeat.
  */
 @Injectable()
 export class MongoService {
   constructor(@InjectConnection() readonly connection: Connection) {}
 
-  get db(): Db {
-    // Defined once `MongooseModule.forRoot` resolves, which it does before
-    // any request or lifecycle hook runs.
+  async ping(): Promise<void> {
     const database = this.connection.db;
     if (!database) throw new Error('MongoDB connection is not ready');
-    return database;
+    await database.admin().command({ ping: 1 });
   }
 
   async withTransaction<T>(

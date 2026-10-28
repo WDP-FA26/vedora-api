@@ -19,14 +19,14 @@ import {
   ApiTags,
   ApiTooManyRequestsResponse,
 } from '@nestjs/swagger';
-import type { AuthenticatedRequest } from '../auth/auth.types';
-import { JwtAuthGuard } from '../auth/jwt-auth.guard';
-import { CreateUploadDto } from './dto/create-upload.dto';
+import type { AuthenticatedRequest } from '../auth/auth.types.js';
+import { JwtAuthGuard } from '../auth/jwt-auth.guard.js';
+import { CreateUploadDto } from './dto/create-upload.dto.js';
 import {
   CreateUploadResponseDto,
   MediaResponseDto,
-} from './dto/media-response.dto';
-import { MediaService } from './media.service';
+} from './dto/media-response.dto.js';
+import { MediaService } from './media.service.js';
 
 @ApiTags('media')
 @ApiBearerAuth()

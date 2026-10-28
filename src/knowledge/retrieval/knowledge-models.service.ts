@@ -1,13 +1,13 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import type { ClassConstructor } from 'class-transformer';
-import { parsePayload, validatePayload } from '../../common/validation';
+import { parsePayload, validatePayload } from '../../common/validation.js';
 import {
   EmbeddingsResponse,
   OcrResponse,
   OpenRouterErrorBody,
   RerankResponse,
-} from './openrouter.dto';
+} from './openrouter.dto.js';
 
 type EmbeddingInput = string | { image: Uint8Array };
 

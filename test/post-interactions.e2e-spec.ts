@@ -1,19 +1,17 @@
 import { randomUUID } from 'node:crypto';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import request from 'supertest';
-import type { CommentPageDto } from '../src/posts/dto/comment.dto';
-import type { PostPageDto } from '../src/posts/dto/post-response.dto';
+import type { CommentPageDto } from '../src/posts/dto/comment.dto.js';
+import type { PostPageDto } from '../src/posts/dto/post-response.dto.js';
 import {
-  type Post,
-  type PostComment,
+  Post,
+  PostComment,
   PostStatus,
-  type Stored,
-  type User,
+  User,
   UserRole,
-} from '../src/mongo/models';
-import { deleteWithReferences } from '../src/mongo/relations';
-import { createE2eApp, type E2eApp } from './e2e-app';
-import { createPost, createUser } from './fixtures';
+} from '../src/mongo/models.js';
+import { createE2eApp, type E2eApp } from './e2e-app.js';
+import { createPost, createUser } from './fixtures.js';
 
 describe('Post comments and likes (e2e)', () => {
   let e2e: E2eApp;
@@ -27,19 +25,23 @@ describe('Post comments and likes (e2e)', () => {
   let comment: { id: string };
   const server = () => e2e.app.getHttpServer();
   const posts = () => `/api/v1/posts/${post.id}`;
+  const postsModel = () => e2e.mongo.connection.model<Post>(Post.name);
+  const commentsModel = () =>
+    e2e.mongo.connection.model<PostComment>(PostComment.name);
+  const usersModel = () => e2e.mongo.connection.model<User>(User.name);
+  const count = (collection: string) =>
+    e2e.mongo.connection.collections[collection].countDocuments();
 
   const addComment = async (authorId: string, createdAt = new Date()) => {
     const id = randomUUID();
-    await e2e.mongo.db
-      .collection<Stored<PostComment>>('post_comments')
-      .insertOne({
-        _id: id,
-        postId: post.id,
-        authorId,
-        body: 'Bài viết hữu ích!',
-        createdAt,
-        updatedAt: createdAt,
-      });
+    await commentsModel().create({
+      _id: id,
+      postId: post.id,
+      authorId,
+      body: 'Bài viết hữu ích!',
+      createdAt,
+      updatedAt: createdAt,
+    });
     return { id };
   };
 
@@ -59,16 +61,14 @@ describe('Post comments and likes (e2e)', () => {
   });
   beforeEach(async () => {
     await e2e.mongo.withTransaction((session) =>
-      deleteWithReferences(e2e.mongo.db, session, 'posts', {
-        authorId: other.id,
-      }),
+      postsModel().deleteMany({ authorId: other.id }, { session }).exec(),
     );
     for (const collection of [
       'post_comments',
       'post_likes',
       'post_bookmarks',
     ] as const) {
-      await e2e.mongo.db.collection(collection).deleteMany({});
+      await e2e.mongo.connection.collections[collection].deleteMany({});
     }
     post = await createPost(e2e.mongo, {
       authorId: other.id,
@@ -126,11 +126,7 @@ describe('Post comments and likes (e2e)', () => {
         .send(body)
         .expect(400);
     }
-    expect(
-      await e2e.mongo.db
-        .collection<Stored<PostComment>>('post_comments')
-        .countDocuments(),
-    ).toBe(1);
+    expect(await commentsModel().countDocuments()).toBe(1);
   });
 
   it('accepts the maximum comment length', async () => {
@@ -147,9 +143,7 @@ describe('Post comments and likes (e2e)', () => {
       .auth(token, { type: 'bearer' })
       .send({ body: 'Updated' })
       .expect(200);
-    const stored = await e2e.mongo.db
-      .collection<Stored<PostComment>>('post_comments')
-      .findOne({ _id: comment.id });
+    const stored = await commentsModel().findOne({ _id: comment.id }).exec();
     expect(stored?.body).toBe('Updated');
   });
 
@@ -162,9 +156,7 @@ describe('Post comments and likes (e2e)', () => {
         .auth(role === 'ADMIN' ? adminToken : token, { type: 'bearer' })
         .send({ body: 'Updated' })
         .expect(403);
-      const stored = await e2e.mongo.db
-        .collection<Stored<PostComment>>('post_comments')
-        .findOne({ _id: foreign.id });
+      const stored = await commentsModel().findOne({ _id: foreign.id }).exec();
       expect(stored?.body).toBe('Bài viết hữu ích!');
     },
   );
@@ -186,9 +178,7 @@ describe('Post comments and likes (e2e)', () => {
         .auth(byToken, { type: 'bearer' })
         .expect(204);
       expect(
-        await e2e.mongo.db
-          .collection<Stored<PostComment>>('post_comments')
-          .findOne({ _id: target.id }),
+        await commentsModel().findOne({ _id: target.id }).exec(),
       ).toBeNull();
     },
   );
@@ -199,11 +189,7 @@ describe('Post comments and likes (e2e)', () => {
       .delete(`${posts()}/comments/${comment.id}`)
       .auth(await e2e.sign(third), { type: 'bearer' })
       .expect(403);
-    expect(
-      await e2e.mongo.db
-        .collection<Stored<PostComment>>('post_comments')
-        .countDocuments(),
-    ).toBe(1);
+    expect(await commentsModel().countDocuments()).toBe(1);
   });
 
   it.each(['patch', 'delete'] as const)(
@@ -215,11 +201,7 @@ describe('Post comments and likes (e2e)', () => {
         .auth(token, { type: 'bearer' })
         .send({ body: 'Updated' })
         .expect(404);
-      expect(
-        await e2e.mongo.db
-          .collection<Stored<PostComment>>('post_comments')
-          .countDocuments(),
-      ).toBe(1);
+      expect(await commentsModel().countDocuments()).toBe(1);
     },
   );
 
@@ -267,20 +249,18 @@ describe('Post comments and likes (e2e)', () => {
   ] as const)(
     'hides missing/non-published posts on %s %s',
     async (method, path) => {
-      await e2e.mongo.db
-        .collection<Stored<Post>>('posts')
+      await postsModel()
         .updateOne(
           { _id: post.id },
           { $set: { status: PostStatus.PROCESSING } },
-        );
+        )
+        .exec();
       await request(server())
         [method](`${posts()}/${path.replace('{comment}', comment.id)}`)
         .auth(token, { type: 'bearer' })
         .send({ body: 'Hello' })
         .expect(404);
-      expect(await e2e.mongo.db.collection('post_likes').countDocuments()).toBe(
-        0,
-      );
+      expect(await count('post_likes')).toBe(0);
     },
   );
 
@@ -296,9 +276,7 @@ describe('Post comments and likes (e2e)', () => {
         likeCount: 1,
       });
     }
-    expect(await e2e.mongo.db.collection('post_likes').countDocuments()).toBe(
-      1,
-    );
+    expect(await count('post_likes')).toBe(1);
   });
 
   it('unlikes idempotently and only removes the caller’s like', async () => {
@@ -329,22 +307,18 @@ describe('Post comments and likes (e2e)', () => {
         .expect(200);
       expect(response.body).toEqual({ postId: post.id, isBookmarked: true });
     }
-    expect(
-      await e2e.mongo.db.collection('post_bookmarks').countDocuments(),
-    ).toBe(1);
+    expect(await count('post_bookmarks')).toBe(1);
   });
 
   it('does not save a missing or unpublished post', async () => {
-    await e2e.mongo.db
-      .collection<Stored<Post>>('posts')
-      .updateOne({ _id: post.id }, { $set: { status: PostStatus.PROCESSING } });
+    await postsModel()
+      .updateOne({ _id: post.id }, { $set: { status: PostStatus.PROCESSING } })
+      .exec();
     await request(server())
       .put(`${posts()}/bookmark`)
       .auth(token, { type: 'bearer' })
       .expect(404);
-    expect(
-      await e2e.mongo.db.collection('post_bookmarks').countDocuments(),
-    ).toBe(0);
+    expect(await count('post_bookmarks')).toBe(0);
   });
 
   it('removes a saved post even after the post was unpublished', async () => {
@@ -352,17 +326,15 @@ describe('Post comments and likes (e2e)', () => {
       .put(`${posts()}/bookmark`)
       .auth(token, { type: 'bearer' })
       .expect(200);
-    await e2e.mongo.db
-      .collection<Stored<Post>>('posts')
-      .updateOne({ _id: post.id }, { $set: { status: PostStatus.PROCESSING } });
+    await postsModel()
+      .updateOne({ _id: post.id }, { $set: { status: PostStatus.PROCESSING } })
+      .exec();
     const response = await request(server())
       .delete(`${posts()}/bookmark`)
       .auth(token, { type: 'bearer' })
       .expect(200);
     expect(response.body).toEqual({ postId: post.id, isBookmarked: false });
-    expect(
-      await e2e.mongo.db.collection('post_bookmarks').countDocuments(),
-    ).toBe(0);
+    expect(await count('post_bookmarks')).toBe(0);
   });
 
   it('lists only the caller’s saved posts and needs a session', async () => {
@@ -439,9 +411,7 @@ describe('Post comments and likes (e2e)', () => {
   it('rejects a token for a deleted account', async () => {
     const gone = await createUser(e2e.mongo);
     const goneToken = await e2e.sign(gone);
-    await e2e.mongo.db
-      .collection<Stored<User>>('users')
-      .deleteOne({ _id: gone.id });
+    await usersModel().deleteOne({ _id: gone.id }).exec();
     await request(server())
       .get('/api/v1/posts')
       .auth(goneToken, { type: 'bearer' })

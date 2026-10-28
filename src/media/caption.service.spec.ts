@@ -2,28 +2,27 @@ import type { INestApplication } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Test } from '@nestjs/testing';
 import { mockDeep, type DeepMockProxy } from 'vitest-mock-extended';
-import { createMedia, createPost, createUser } from '../../test/fixtures';
+import { createMedia, createPost, createUser } from '../../test/fixtures.js';
 import {
   createTestMongoUrl,
   dropTestDatabase,
   prepareTestDatabase,
-} from '../../test/mongo-test-db';
-import { CloudinaryService } from '../cloudinary/cloudinary.service';
-import { MongoModule } from '../mongo/mongo.module';
-import { MongoService } from '../mongo/mongo.service';
+} from '../../test/mongo-test-db.js';
+import { CloudinaryService } from '../cloudinary/cloudinary.service.js';
+import { MongoModule } from '../mongo/mongo.module.js';
+import { MongoService } from '../mongo/mongo.service.js';
 import {
   CaptionStatus,
   type MediaAsset,
   MediaStatus,
   type Post,
   PostStatus,
-  type Stored,
-} from '../mongo/models';
-import { CaptionService } from './caption.service';
-import * as speechAudio from './captions/speech-audio';
-import { TranscriptionService } from './captions/transcription.service';
+} from '../mongo/models.js';
+import { CaptionService } from './caption.service.js';
+import * as speechAudio from './captions/speech-audio.js';
+import { TranscriptionService } from './captions/transcription.service.js';
 
-vi.mock('./captions/speech-audio', async (importOriginal) => ({
+vi.mock('./captions/speech-audio.js', async (importOriginal) => ({
   ...(await importOriginal<typeof speechAudio>()),
   extractSpeechAudio: vi.fn(),
 }));
@@ -63,8 +62,8 @@ describe('CaptionService', () => {
     service = app.get(CaptionService);
   });
   beforeEach(async () => {
-    await db.db.collection('media_assets').deleteMany({});
-    await db.db.collection('posts').deleteMany({});
+    await assets().deleteMany({});
+    await posts().deleteMany({});
     media = await addMedia();
 
     cloudinary.originalUrl.mockReturnValue('https://cdn/original');
@@ -208,18 +207,16 @@ describe('CaptionService', () => {
   });
 
   it('lets captioning that a restart cut off be picked up again', async () => {
-    await db.db
-      .collection<Stored<MediaAsset>>('media_assets')
-      .updateOne(
-        { _id: media.id },
-        { $set: { captionStatus: CaptionStatus.TRANSCRIBING } },
-      );
-    await db.db
-      .collection<Stored<MediaAsset>>('media_assets')
-      .updateOne(
-        { _id: media.id },
-        { $set: { updatedAt: new Date(Date.now() - 31 * 60_000) } },
-      );
+    await assets().updateOne(
+      { _id: media.id },
+      {
+        $set: {
+          captionStatus: CaptionStatus.TRANSCRIBING,
+          updatedAt: new Date(Date.now() - 31 * 60_000),
+        },
+      },
+      { timestamps: false },
+    );
 
     await service.releaseStale();
 

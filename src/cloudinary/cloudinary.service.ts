@@ -1,6 +1,7 @@
 import { Injectable, ServiceUnavailableException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { v2 as cloudinary } from 'cloudinary';
+import { z } from 'zod';
 import { createHash, randomUUID, timingSafeEqual } from 'node:crypto';
 
 /** Adaptive HLS, built by an eager job right after the upload. */
@@ -19,16 +20,20 @@ export interface SignedUpload {
 }
 
 /** The video fields we read, shared by Admin API answers and notifications. */
-export interface CloudinaryVideo {
-  public_id: string;
-  duration?: number;
-  width?: number;
-  height?: number;
+const cloudinaryVideoSchema = z.object({
+  public_id: z.string(),
+  duration: z.number().optional(),
+  width: z.number().optional(),
+  height: z.number().optional(),
   /** Display aspect ratio, e.g. `16:9`. */
-  video?: { dar?: string };
+  video: z.object({ dar: z.string().optional() }).optional(),
   /** Generated files; the HLS stream appears here once it's built. */
-  derived?: { transformation: string; format: string }[];
-}
+  derived: z
+    .array(z.object({ transformation: z.string(), format: z.string() }))
+    .optional(),
+});
+
+export type CloudinaryVideo = z.infer<typeof cloudinaryVideoSchema>;
 
 /**
  * Holds the Cloudinary credentials. Endpoints that need Cloudinary answer
@@ -182,9 +187,10 @@ export class CloudinaryService {
   /** The video, or null when Cloudinary has no such file. */
   async findVideo(publicId: string): Promise<CloudinaryVideo | null> {
     try {
-      return (await this.require().api.resource(publicId, {
+      const resource: unknown = await this.require().api.resource(publicId, {
         resource_type: 'video',
-      })) as CloudinaryVideo;
+      });
+      return cloudinaryVideoSchema.parse(resource);
     } catch (error) {
       if (httpCode(error) === 404) return null;
       throw error;

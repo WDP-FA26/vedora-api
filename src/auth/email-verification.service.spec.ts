@@ -5,22 +5,28 @@ import {
   createTestMongoUrl,
   dropTestDatabase,
   prepareTestDatabase,
-} from '../../test/mongo-test-db';
-import { MailService } from '../mail/mail.service';
-import { MongoModule } from '../mongo/mongo.module';
-import { MongoService } from '../mongo/mongo.service';
-import { EmailVerificationService } from './email-verification.service';
+} from '../../test/mongo-test-db.js';
+import { MailService } from '../mail/mail.service.js';
+import {
+  AccountStatus,
+  EmailVerificationGuesses,
+  OneTimeCode,
+  OneTimeCodePurpose,
+  User,
+  UserRole,
+} from '../mongo/models.js';
+import { MongoModule } from '../mongo/mongo.module.js';
+import { MongoService } from '../mongo/mongo.service.js';
+import { EmailVerificationService } from './email-verification.service.js';
 
 const user = {
   id: '4a1e32e4-e18e-4dd7-8b4a-246ef2113ff2',
   email: 'a@b.vn',
 };
-const PURPOSE = 'EMAIL_VERIFICATION';
+const PURPOSE = OneTimeCodePurpose.EMAIL_VERIFICATION;
 const hashOf = (code: string) =>
   createHash('sha256').update(`${user.id}:${code}`).digest('hex');
 const secondsAgo = (seconds: number) => new Date(Date.now() - seconds * 1000);
-
-type StoredDoc = { _id: string; [key: string]: unknown };
 
 describe('EmailVerificationService', () => {
   let app: INestApplication;
@@ -31,14 +37,16 @@ describe('EmailVerificationService', () => {
   };
   let service: EmailVerificationService;
 
-  const codes = () => db.db.collection<StoredDoc>('one_time_codes');
+  const codes = () => db.connection.model<OneTimeCode>(OneTimeCode.name);
   const guesses = () =>
-    db.db.collection<StoredDoc>('email_verification_guesses');
-  const users = () => db.db.collection<StoredDoc>('users');
+    db.connection.model<EmailVerificationGuesses>(
+      EmailVerificationGuesses.name,
+    );
+  const users = () => db.connection.model<User>(User.name);
   const pending = () => codes().findOne({ userId: user.id, purpose: PURPOSE });
 
   const seedCode = (fields: Record<string, unknown> = {}) =>
-    codes().insertOne({
+    codes().create({
       _id: 'code-1',
       userId: user.id,
       purpose: PURPOSE,
@@ -51,13 +59,13 @@ describe('EmailVerificationService', () => {
       ...fields,
     });
   const seedUser = (fields: Record<string, unknown> = {}) =>
-    users().insertOne({
+    users().create({
       _id: user.id,
       username: 'vedora.user',
       fullName: 'Vedora User',
       email: user.email,
-      role: 'USER',
-      status: 'PENDING_EMAIL',
+      role: UserRole.USER,
+      status: AccountStatus.PENDING_EMAIL,
       accountVersion: 0,
       isProfessional: false,
       emailVerifiedAt: null,
@@ -205,7 +213,7 @@ describe('EmailVerificationService', () => {
     });
 
     it('locks the email once its guesses are used up, even with a fresh code', async () => {
-      await guesses().insertOne({
+      await guesses().create({
         _id: user.email,
         guesses: 15,
         windowStart: new Date(),
@@ -236,6 +244,7 @@ describe('EmailVerificationService', () => {
 
     it('answers 404 when the account disappeared', async () => {
       await users().deleteMany({});
+      await seedCode({ codeHash: hashOf('123456') });
 
       await expect(service.verify(user, '123456')).rejects.toMatchObject({
         status: 404,

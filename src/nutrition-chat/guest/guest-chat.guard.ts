@@ -8,9 +8,9 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import type { Request } from 'express';
-import { ClientIpService } from './client-ip.service';
-import { GuestQuotaService } from './guest-quota.service';
-import { GuestSessionService } from './guest-session.service';
+import { ClientIpService } from './client-ip.service.js';
+import { GuestQuotaService } from './guest-quota.service.js';
+import { GuestSessionService } from './guest-session.service.js';
 
 /** Lets a guest session through while it has messages left today. */
 @Injectable()

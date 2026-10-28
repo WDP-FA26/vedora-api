@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { ThrottlerGuard } from '@nestjs/throttler';
-import type { AuthenticatedRequest } from '../auth/auth.types';
+import type { AuthenticatedRequest } from '../auth/auth.types.js';
 
 /** Limits per signed-in user rather than per IP; runs after `JwtAuthGuard`. */
 @Injectable()

@@ -11,15 +11,22 @@ import {
   createTestMongoUrl,
   dropTestDatabase,
   prepareTestDatabase,
-} from '../../test/mongo-test-db';
-import { createPost, createUser } from '../../test/fixtures';
-import { NotificationsService } from '../notifications/notifications.service';
-import { MongoModule } from '../mongo/mongo.module';
-import { MongoService } from '../mongo/mongo.service';
-import type { PresignedUploadDto } from '../storage/presigned-upload.dto';
-import { StorageService, StorageTarget } from '../storage/storage.service';
-import { ProfileImageKind } from '../mongo/models';
-import { ProfilesService } from './profiles.service';
+} from '../../test/mongo-test-db.js';
+import { createPost, createUser } from '../../test/fixtures.js';
+import { NotificationsService } from '../notifications/notifications.service.js';
+import { MongoModule } from '../mongo/mongo.module.js';
+import { MongoService } from '../mongo/mongo.service.js';
+import type { PresignedUploadDto } from '../storage/presigned-upload.dto.js';
+import { StorageService, StorageTarget } from '../storage/storage.service.js';
+import {
+  Follow,
+  Post,
+  ProfileImageKind,
+  ProfileImageStatus,
+  ProfileImageUpload,
+  User,
+} from '../mongo/models.js';
+import { ProfilesService } from './profiles.service.js';
 
 const userId = '4a1e32e4-e18e-4dd7-8b4a-246ef2113ff2';
 const viewerId = '0b8f0c1e-3c55-4c1b-9d0e-2f7f3a9f7a10';
@@ -33,8 +40,6 @@ const presigned: PresignedUploadDto = {
   expiresAt: new Date('2026-09-28T09:00:00Z'),
 };
 
-type StoredDoc = { _id: string; [key: string]: unknown };
-
 describe('ProfilesService', () => {
   let app: INestApplication;
   let db: MongoService;
@@ -47,13 +52,14 @@ describe('ProfilesService', () => {
   };
   const notifications = { notify: vi.fn() };
 
-  const users = () => db.db.collection<StoredDoc>('users');
-  const follows = () => db.db.collection<StoredDoc>('follows');
-  const uploads = () => db.db.collection<StoredDoc>('profile_image_uploads');
-  const posts = () => db.db.collection<StoredDoc>('posts');
+  const users = () => db.connection.model<User>(User.name);
+  const follows = () => db.connection.model<Follow>(Follow.name);
+  const uploads = () =>
+    db.connection.model<ProfileImageUpload>(ProfileImageUpload.name);
+  const posts = () => db.connection.model<Post>(Post.name);
 
   const insertFollow = (followerId: string, followingId: string, at: Date) =>
-    follows().insertOne({
+    follows().create({
       _id: randomUUID(),
       followerId,
       followingId,
@@ -61,11 +67,11 @@ describe('ProfilesService', () => {
     });
 
   const insertUpload = (fields: Record<string, unknown> = {}) =>
-    uploads().insertOne({
+    uploads().create({
       _id: imageId,
       ownerId: userId,
-      kind: 'AVATAR',
-      status: 'READY',
+      kind: ProfileImageKind.AVATAR,
+      status: ProfileImageStatus.READY,
       storageKey,
       createdAt: new Date(),
       ...fields,
@@ -284,11 +290,11 @@ describe('ProfilesService', () => {
     const old = new Date('2026-01-01T00:00:00Z');
     await insertUpload({ createdAt: old });
     const unusedKey = 'profiles/unused.webp';
-    await uploads().insertOne({
+    await uploads().create({
       _id: viewerId,
       ownerId: null,
-      kind: 'AVATAR',
-      status: 'READY',
+      kind: ProfileImageKind.AVATAR,
+      status: ProfileImageStatus.READY,
       storageKey: unusedKey,
       createdAt: old,
     });

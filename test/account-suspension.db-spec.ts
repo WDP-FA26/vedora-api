@@ -3,36 +3,39 @@ import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { Test } from '@nestjs/testing';
 import type { INestApplication } from '@nestjs/common';
-import { AuthService } from '../src/auth/auth.service';
-import { AuthenticatedUser } from '../src/auth/auth.types';
-import { EmailVerificationService } from '../src/auth/email-verification.service';
-import { PasswordResetService } from '../src/auth/password-reset.service';
-import { RefreshTokensService } from '../src/auth/refresh-tokens.service';
-import { hashPassword } from '../src/auth/password';
-import { hashCode } from '../src/auth/one-time-code';
-import { MailService } from '../src/mail/mail.service';
-import { MongoModule } from '../src/mongo/mongo.module';
-import { MongoService } from '../src/mongo/mongo.service';
-import { lockDocument } from '../src/mongo/document-lock';
-import { deleteWithReferences } from '../src/mongo/relations';
-import { AccountStatus, User, UserRole } from '../src/mongo/models';
-import { UpdateUserStatusDto } from '../src/users/dto/update-user-status.dto';
-import { AccountsService } from '../src/users/accounts.service';
-import { UsersService } from '../src/users/users.service';
-import { createUser, deleteWithCascade } from './fixtures';
+import { AuthService } from '../src/auth/auth.service.js';
+import { AuthenticatedUser } from '../src/auth/auth.types.js';
+import { EmailVerificationService } from '../src/auth/email-verification.service.js';
+import { PasswordResetService } from '../src/auth/password-reset.service.js';
+import { RefreshTokensService } from '../src/auth/refresh-tokens.service.js';
+import { hashPassword } from '../src/auth/password.js';
+import { hashCode } from '../src/auth/one-time-code.js';
+import { MailService } from '../src/mail/mail.service.js';
+import { MongoModule } from '../src/mongo/mongo.module.js';
+import { MongoService } from '../src/mongo/mongo.service.js';
+import { lockDocument } from '../src/mongo/document-lock.js';
+import {
+  AccountStatus,
+  OneTimeCode,
+  OneTimeCodePurpose,
+  User,
+  UserAccountAudit,
+  UserRole,
+} from '../src/mongo/models.js';
+import { UpdateUserStatusDto } from '../src/users/dto/update-user-status.dto.js';
+import { AccountsService } from '../src/users/accounts.service.js';
+import { UsersService } from '../src/users/users.service.js';
+import { createUser, deleteWithCascade } from './fixtures.js';
 import {
   createTestMongoUrl,
   dropTestDatabase,
   prepareTestDatabase,
-} from './mongo-test-db';
-
-type StoredDoc = { _id: string; [key: string]: unknown };
+} from './mongo-test-db.js';
 
 describe('Account administration with MongoDB', () => {
   const password = 'AccountTests123!';
   let app: INestApplication;
   let mongo: MongoService;
-  let db: MongoService['db'];
   let users: UsersService;
   let refresh: RefreshTokensService;
   let auth: AuthService;
@@ -62,20 +65,19 @@ describe('Account administration with MongoDB', () => {
     expectedVersion: 0,
     reason: 'Role review',
   };
+  const userModel = () => mongo.connection.model<User>(User.name);
+  const auditModel = () =>
+    mongo.connection.model<UserAccountAudit>(UserAccountAudit.name);
+  const codeModel = () => mongo.connection.model<OneTimeCode>(OneTimeCode.name);
   const count = (collection: string) =>
-    db.collection(collection).countDocuments();
+    mongo.connection.collections[collection].countDocuments();
   const activeAdminCount = () =>
-    db
-      .collection<StoredDoc>('users')
-      .countDocuments({ role: UserRole.ADMIN, status: AccountStatus.ACTIVE });
-  const findUser = (id: string) =>
-    db.collection<StoredDoc>('users').findOne({ _id: id });
-  const audits = () =>
-    db
-      .collection<StoredDoc>('user_account_audits')
-      .find()
-      .sort({ accountVersion: 1 })
-      .toArray();
+    userModel().countDocuments({
+      role: UserRole.ADMIN,
+      status: AccountStatus.ACTIVE,
+    });
+  const findUser = (id: string) => userModel().findOne({ _id: id }).exec();
+  const audits = () => auditModel().find().sort({ accountVersion: 1 }).exec();
 
   beforeAll(async () => {
     const moduleRef = await Test.createTestingModule({
@@ -108,7 +110,6 @@ describe('Account administration with MongoDB', () => {
     await app.init();
     await prepareTestDatabase(app);
     mongo = app.get(MongoService);
-    db = mongo.db;
     users = app.get(UsersService);
     refresh = app.get(RefreshTokensService);
     auth = app.get(AuthService);
@@ -116,12 +117,14 @@ describe('Account administration with MongoDB', () => {
   });
 
   beforeEach(async () => {
-    await db.collection<StoredDoc>('user_account_audits').deleteMany({});
-    await db.collection<StoredDoc>('one_time_codes').deleteMany({});
-    await db.collection<StoredDoc>('refresh_tokens').deleteMany({});
-    await db.collection<StoredDoc>('email_verification_guesses').deleteMany({});
+    await auditModel().deleteMany({});
+    await codeModel().deleteMany({});
+    await mongo.connection.collections.refresh_tokens.deleteMany({});
+    await mongo.connection.collections.email_verification_guesses.deleteMany(
+      {},
+    );
     await mongo.withTransaction((session) =>
-      deleteWithReferences(db, session, 'users', {}),
+      userModel().deleteMany({}, { session }).exec(),
     );
     const make = (username: string, role: UserRole) =>
       createUser(mongo, {
@@ -194,7 +197,7 @@ describe('Account administration with MongoDB', () => {
   it('rolls back the status change when the audit cannot be written', async () => {
     // Make the audit insert fail: add a rule to the collection's validator
     // for the duration of the test.
-    await db.command({
+    await mongo.connection.db!.command({
       collMod: 'user_account_audits',
       validator: { $expr: { $lte: [{ $strLenCP: '$reason' }, 500] } },
     });
@@ -207,7 +210,7 @@ describe('Account administration with MongoDB', () => {
         ),
       ).rejects.toThrow();
     } finally {
-      await db.command({
+      await mongo.connection.db!.command({
         collMod: 'user_account_audits',
         validator: {},
       });
@@ -327,9 +330,9 @@ describe('Account administration with MongoDB', () => {
         fullName: member.fullName,
       }),
     ).rejects.toMatchObject({ response: { code: 'ACCOUNT_SUSPENDED' } });
-    await db
-      .collection<StoredDoc>('users')
-      .updateOne({ _id: member.id }, { $set: { googleId: 'google-member' } });
+    await userModel()
+      .updateOne({ _id: member.id }, { $set: { googleId: 'google-member' } })
+      .exec();
     await expect(
       auth.googleLogin({
         googleId: 'google-member',
@@ -356,15 +359,15 @@ describe('Account administration with MongoDB', () => {
   it('orders new refresh-token issuance after a committed suspension', async () => {
     let issuing: Promise<unknown> = Promise.resolve();
     await mongo.withTransaction(async (session) => {
-      await lockDocument(db, session, 'user', member.id);
+      await lockDocument(mongo, session, 'user', member.id);
       issuing = refresh.issue(member.id).catch((error: unknown) => error);
-      await db
-        .collection<User>('users')
+      await userModel()
         .updateOne(
           { _id: member.id },
           { $set: { status: AccountStatus.SUSPENDED } },
           { session },
-        );
+        )
+        .exec();
     });
     expect(await issuing).toMatchObject({
       response: { code: 'ACCOUNT_SUSPENDED' },
@@ -405,9 +408,7 @@ describe('Account administration with MongoDB', () => {
   it('retains the deletion audit after the account is physically removed', async () => {
     await users.remove(member.id, actor(member));
     expect(await findUser(member.id)).toBeNull();
-    expect(
-      await db.collection<StoredDoc>('user_account_audits').findOne({}),
-    ).toMatchObject({
+    expect(await auditModel().findOne({}).exec()).toMatchObject({
       actorId: member.id,
       userId: member.id,
       action: 'DELETE',
@@ -416,19 +417,21 @@ describe('Account administration with MongoDB', () => {
   });
 
   it('verifies a pending email into ACTIVE before issuing a token pair', async () => {
-    await db.collection<StoredDoc>('users').updateOne(
-      { _id: member.id },
-      {
-        $set: { status: AccountStatus.PENDING_EMAIL, emailVerifiedAt: null },
-      },
-    );
+    await userModel()
+      .updateOne(
+        { _id: member.id },
+        {
+          $set: { status: AccountStatus.PENDING_EMAIL, emailVerifiedAt: null },
+        },
+      )
+      .exec();
     const now = new Date();
-    await db.collection<StoredDoc>('one_time_codes').insertOne({
+    await codeModel().create({
       _id: randomUUID(),
       attempts: 0,
       resendCount: 0,
       userId: member.id,
-      purpose: 'EMAIL_VERIFICATION',
+      purpose: OneTimeCodePurpose.EMAIL_VERIFICATION,
       codeHash: hashCode(member.id, '123456'),
       expiresAt: new Date(now.getTime() + 600_000),
       sentAt: now,
@@ -445,12 +448,12 @@ describe('Account administration with MongoDB', () => {
     const codeHash = createHash('sha256')
       .update(`password-reset:${member.id}:123456`)
       .digest('hex');
-    await db.collection<StoredDoc>('one_time_codes').insertOne({
+    await codeModel().create({
       _id: randomUUID(),
       attempts: 0,
       resendCount: 0,
       userId: member.id,
-      purpose: 'PASSWORD_RESET',
+      purpose: OneTimeCodePurpose.PASSWORD_RESET,
       codeHash,
       expiresAt: new Date(now.getTime() + 600_000),
       sentAt: now,

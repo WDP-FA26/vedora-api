@@ -2,10 +2,10 @@ import { Injectable, Logger } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { InjectModel } from '@nestjs/mongoose';
 import type { Model } from 'mongoose';
-import { MediaAsset, MediaStatus } from '../mongo/models';
-import { CloudinaryService } from '../cloudinary/cloudinary.service';
-import { CaptionService } from './caption.service';
-import { MediaService } from './media.service';
+import { MediaAsset, MediaStatus } from '../mongo/models.js';
+import { CloudinaryService } from '../cloudinary/cloudinary.service.js';
+import { CaptionService } from './caption.service.js';
+import { MediaService } from './media.service.js';
 
 const STALE_AFTER_MS = 10 * 60 * 1000;
 const ORPHAN_AFTER_MS = 24 * 60 * 60 * 1000;

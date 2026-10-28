@@ -1,16 +1,16 @@
 import { createHash, randomUUID } from 'node:crypto';
 import request from 'supertest';
-import { MediaService } from '../src/media/media.service';
-import { MAX_BLOG_CONTENT, BlogDetailDto } from '../src/posts/dto/blog.dto';
+import { MediaService } from '../src/media/media.service.js';
+import { MAX_BLOG_CONTENT, BlogDetailDto } from '../src/posts/dto/blog.dto.js';
 import {
+  Post,
   PostStatus,
   PostType,
   type Recipe,
   type User,
-} from '../src/mongo/models';
-import { deleteWithReferences } from '../src/mongo/relations';
-import { createE2eApp, type E2eApp } from './e2e-app';
-import { createPost, createRecipe, createUser } from './fixtures';
+} from '../src/mongo/models.js';
+import { createE2eApp, type E2eApp } from './e2e-app.js';
+import { createPost, createRecipe, createUser } from './fixtures.js';
 
 describe('Blogs (HTTP)', () => {
   let e2e: E2eApp;
@@ -45,11 +45,15 @@ describe('Blogs (HTTP)', () => {
     ]);
     recipe = await createRecipe(e2e.mongo, { title: 'Đậu hũ' });
   });
+  const count = (collection: string) =>
+    e2e.mongo.connection.collections[collection].countDocuments();
+
   beforeEach(async () => {
     await e2e.mongo.withTransaction((session) =>
-      deleteWithReferences(e2e.mongo.db, session, 'posts', {
-        authorId: author.id,
-      }),
+      e2e.mongo.connection
+        .model<Post>(Post.name)
+        .deleteMany({ authorId: author.id }, { session })
+        .exec(),
     );
   });
   afterAll(async () => {
@@ -63,7 +67,7 @@ describe('Blogs (HTTP)', () => {
         [method](`/api/v1/blogs${method === 'post' ? '' : `/${randomUUID()}`}`)
         .send({ title: 'Món chay' })
         .expect(401);
-      expect(await e2e.mongo.db.collection('posts').countDocuments()).toBe(0);
+      expect(await count('posts')).toBe(0);
     },
   );
 
@@ -102,7 +106,7 @@ describe('Blogs (HTTP)', () => {
     await asAuthor(request(server()).post('/api/v1/blogs'))
       .send({ title: 'Món chay', ...fields })
       .expect(400);
-    expect(await e2e.mongo.db.collection('posts').countDocuments()).toBe(0);
+    expect(await count('posts')).toBe(0);
   });
 
   it('rejects publishing without content and reports missing recipes', async () => {
@@ -118,7 +122,7 @@ describe('Blogs (HTTP)', () => {
       code: 'BLOG_RECIPE_NOT_FOUND',
       recipeIds: [missingId],
     });
-    expect(await e2e.mongo.db.collection('posts').countDocuments()).toBe(0);
+    expect(await count('posts')).toBe(0);
   });
 
   it('accepts long UTF-8 articles beyond the default JSON parser size', async () => {
@@ -269,7 +273,7 @@ describe('Blogs (HTTP)', () => {
       .delete(`/api/v1/blogs/${draft.id}`)
       .auth(otherToken, { type: 'bearer' })
       .expect(404);
-    expect(await e2e.mongo.db.collection('blogs').countDocuments()).toBe(1);
+    expect(await count('posts')).toBe(1);
   });
 
   it('blocks draft comments, likes and bookmarks through existing endpoints', async () => {
@@ -282,14 +286,8 @@ describe('Blogs (HTTP)', () => {
         request(server()).put(`/api/v1/posts/${draft.id}/${interaction}`),
       ).expect(404);
     }
-    expect(
-      await e2e.mongo.db.collection('post_comments').countDocuments(),
-    ).toBe(0);
-    expect(await e2e.mongo.db.collection('post_likes').countDocuments()).toBe(
-      0,
-    );
-    expect(
-      await e2e.mongo.db.collection('post_bookmarks').countDocuments(),
-    ).toBe(0);
+    expect(await count('post_comments')).toBe(0);
+    expect(await count('post_likes')).toBe(0);
+    expect(await count('post_bookmarks')).toBe(0);
   });
 });

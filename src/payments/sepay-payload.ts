@@ -10,7 +10,7 @@ import {
   MaxLength,
   Min,
 } from 'class-validator';
-import { validatePayload } from '../common/validation';
+import { validatePayload } from '../common/validation.js';
 
 /** SePay's "Banking" webhook body, as sent on a completed transfer. */
 class BankWebhookPayload {

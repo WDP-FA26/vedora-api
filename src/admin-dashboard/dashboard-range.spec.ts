@@ -1,4 +1,4 @@
-import { resolveDashboardRange } from './dashboard-range';
+import { resolveDashboardRange } from './dashboard-range.js';
 
 describe('Dashboard Bangkok calendar range', () => {
   it('defaults to 30 inclusive days using Bangkok midnight rather than UTC date', () => {

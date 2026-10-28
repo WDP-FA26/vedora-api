@@ -10,8 +10,8 @@ import {
   Min,
   MinLength,
 } from 'class-validator';
-import { PaginationQueryDto } from '../../common/pagination';
-import { RecipeDetailDto, RecipeDto } from './recipe.dto';
+import { PaginationQueryDto } from '../../common/pagination/index.js';
+import { RecipeDetailDto, RecipeDto } from './recipe.dto.js';
 
 export class RecipeCatalogQueryDto extends PaginationQueryDto {
   @ApiPropertyOptional({

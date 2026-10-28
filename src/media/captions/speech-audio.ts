@@ -27,7 +27,10 @@ const DOWNLOAD_TIMEOUT_MS = 5 * 60_000;
 
 /** `FFMPEG_PATH` (the Docker image's ffmpeg), else the npm-bundled binary. */
 function ffmpegPath(): string {
-  return process.env.FFMPEG_PATH || ffmpegStatic || 'ffmpeg';
+  // ffmpeg-static types its CommonJS export as an ES default, which
+  // `nodenext` resolves to the module namespace instead of the path.
+  const bundled = typeof ffmpegStatic === 'string' ? ffmpegStatic : null;
+  return process.env.FFMPEG_PATH || bundled || 'ffmpeg';
 }
 
 /** Thrown when the video has no audio stream at all. */

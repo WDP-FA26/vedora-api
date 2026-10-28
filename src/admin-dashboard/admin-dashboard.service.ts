@@ -1,7 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import type { Document } from 'mongodb';
-import type { Model } from 'mongoose';
+import type { Model, PipelineStage } from 'mongoose';
 import {
   AccountStatus,
   Post,
@@ -12,25 +11,28 @@ import {
   Recipe,
   User,
   UserRole,
-} from '../mongo/models';
-import { DAY_MS, resolveDashboardRange } from './dashboard-range';
+} from '../mongo/models.js';
+import { DAY_MS, resolveDashboardRange } from './dashboard-range.js';
 import {
   DashboardDayDto,
   DashboardDto,
   DashboardQueryDto,
   UNAVAILABLE_DASHBOARD_METRICS,
-} from './dto/dashboard.dto';
+} from './dto/dashboard.dto.js';
 
 type DayCounts = Omit<DashboardDayDto, 'date'>;
 type DatabaseDay = { date: string } & Record<keyof DayCounts, number>;
 type DayCount = { _id: string; count: number };
 type StatusCount = { _id: AccountStatus; count: number };
 type DayAggregator = {
-  aggregate<T>(pipeline: Document[]): { exec(): Promise<T[]> };
+  aggregate<T>(pipeline: PipelineStage[]): { exec(): Promise<T[]> };
 };
 
 /** Pipeline counting the matching documents per Asia/Bangkok calendar day. */
-const dailyCounts = (dateField: string, match: Document): Document[] => [
+const dailyCounts = (
+  dateField: string,
+  match: Record<string, unknown>,
+): PipelineStage[] => [
   { $match: match },
   {
     $group: {
@@ -109,7 +111,7 @@ export class AdminDashboardService {
       const bounds = { $gte: start, $lt: endExclusive };
       const days = (
         model: DayAggregator,
-        pipeline: Document[],
+        pipeline: PipelineStage[],
       ): Promise<DayCount[]> => model.aggregate<DayCount>(pipeline).exec();
       const [
         newMembers,

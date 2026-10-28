@@ -1,8 +1,8 @@
 import { ExecutionContext, UnauthorizedException } from '@nestjs/common';
 import { ExecutionContextHost } from '@nestjs/core/helpers/execution-context-host';
 import { mockDeep } from 'vitest-mock-extended';
-import { StorageWebhookGuard } from './storage-webhook.guard';
-import { StorageService } from './storage.service';
+import { StorageWebhookGuard } from './storage-webhook.guard.js';
+import { StorageService } from './storage.service.js';
 
 function contextWith(authorization?: string): ExecutionContext {
   return new ExecutionContextHost([

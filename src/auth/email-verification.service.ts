@@ -7,9 +7,9 @@ import {
   OneTimeCode,
   OneTimeCodePurpose,
   User,
-} from '../mongo/models';
-import { MailService } from '../mail/mail.service';
-import { MongoService } from '../mongo/mongo.service';
+} from '../mongo/models.js';
+import { MailService } from '../mail/mail.service.js';
+import { MongoService } from '../mongo/mongo.service.js';
 import {
   CODE_TTL_MS,
   MAX_ATTEMPTS,
@@ -20,9 +20,9 @@ import {
   generateCode,
   hashCode,
   hashesMatch,
-} from './one-time-code';
+} from './one-time-code.js';
 
-export type { SendResult } from './one-time-code';
+export type { SendResult } from './one-time-code.js';
 
 /** `locked`: the email used up its guesses for the day. */
 export type VerifyResult = 'verified' | 'invalid' | 'locked';

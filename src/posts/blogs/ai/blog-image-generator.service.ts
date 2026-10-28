@@ -1,24 +1,24 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { AiFeature } from '../../../mongo/models';
+import { AiFeature } from '../../../mongo/models.js';
 import { generateImage, type ImageModel, type LanguageModel } from 'ai';
 import { randomUUID } from 'node:crypto';
-import { moderateWithRetry } from '../../../ai/moderation/moderation';
+import { moderateWithRetry } from '../../../ai/moderation/moderation.js';
 import {
   chatModel,
   DEFAULT_IMAGE_MODEL,
   DEFAULT_MODERATION_MODEL,
   imageModel,
-} from '../../../ai/openrouter';
-import { AiUsageService } from '../../../ai/usage/ai-usage.service';
+} from '../../../ai/openrouter.js';
+import { AiUsageService } from '../../../ai/usage/ai-usage.service.js';
 import {
   StorageService,
   StorageTarget,
-} from '../../../storage/storage.service';
+} from '../../../storage/storage.service.js';
 import {
   BLOG_ASSISTANT_POLICY,
   blogRefusal,
-} from './blog-assistant.moderation';
+} from './blog-assistant.moderation.js';
 
 export const IMAGE_ASPECT_RATIOS = ['1:1', '4:3', '3:4', '16:9'] as const;
 export type ImageAspectRatio = (typeof IMAGE_ASPECT_RATIOS)[number];

@@ -1,7 +1,7 @@
 import { ConfigService } from '@nestjs/config';
-import { validateEnvironment } from '../config/environment';
-import { SePayProvider } from './sepay.provider';
-import { parseBankWebhook } from './sepay-payload';
+import { validateEnvironment } from '../config/environment.js';
+import { SePayProvider } from './sepay.provider.js';
+import { parseBankWebhook } from './sepay-payload.js';
 
 const config = {
   SEPAY_PAYMENT_ENABLED: true,

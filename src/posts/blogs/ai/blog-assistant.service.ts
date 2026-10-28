@@ -21,45 +21,43 @@ import {
   toUIMessageStream,
   type UIMessage,
 } from 'ai';
-import { cannedReply } from '../../../ai/chat/canned-reply';
-import { chatErrorCode } from '../../../ai/chat/errors';
-import { replyFilter } from '../../../ai/chat/reply-filter';
-import { moderateWithRetry } from '../../../ai/moderation/moderation';
+import { cannedReply } from '../../../ai/chat/canned-reply.js';
+import { chatErrorCode } from '../../../ai/chat/errors.js';
+import { replyFilter } from '../../../ai/chat/reply-filter.js';
+import { moderateWithRetry } from '../../../ai/moderation/moderation.js';
 import {
   chatModel,
   DEFAULT_CHAT_MODEL,
   DEFAULT_MODERATION_MODEL,
-} from '../../../ai/openrouter';
-import { AiUsageService } from '../../../ai/usage/ai-usage.service';
-import { KnowledgeSearchService } from '../../../knowledge/retrieval/knowledge-search.service';
+} from '../../../ai/openrouter.js';
+import { AiUsageService } from '../../../ai/usage/ai-usage.service.js';
+import { KnowledgeSearchService } from '../../../knowledge/retrieval/knowledge-search.service.js';
 import {
   AiFeature,
-  BlogRecipe,
   Ingredient,
   Post,
   PostType,
   Recipe,
-  RecipeIngredient,
-} from '../../../mongo/models';
+} from '../../../mongo/models.js';
 import {
   type BlogAssistantChatDto,
   type BlogAssistantQuotaDto,
   MAX_SELECTION,
-} from '../../dto/blog-ai.dto';
+} from '../../dto/blog-ai.dto.js';
 import {
   BLOG_ASSISTANT_POLICY,
   BLOG_ASSISTANT_REFUSALS,
   blogRefusal,
-} from './blog-assistant.moderation';
+} from './blog-assistant.moderation.js';
 import {
   blogAssistantInstructions,
   type LinkedRecipe,
-} from './blog-assistant.prompt';
+} from './blog-assistant.prompt.js';
 import {
   type BlogAssistantTools,
   blogAssistantTools,
-} from './blog-assistant.tools';
-import { BlogImageGeneratorService } from './blog-image-generator.service';
+} from './blog-assistant.tools.js';
+import { BlogImageGeneratorService } from './blog-image-generator.service.js';
 
 // room to search, generate an image and propose a couple of edits
 const MAX_STEPS = 8;
@@ -87,11 +85,7 @@ export class BlogAssistantService {
     private readonly images: BlogImageGeneratorService,
     private readonly usage: AiUsageService,
     @InjectModel(Post.name) private readonly posts: Model<Post>,
-    @InjectModel(BlogRecipe.name)
-    private readonly blogRecipes: Model<BlogRecipe>,
     @InjectModel(Recipe.name) private readonly recipes: Model<Recipe>,
-    @InjectModel(RecipeIngredient.name)
-    private readonly recipeIngredients: Model<RecipeIngredient>,
     @InjectModel(Ingredient.name)
     private readonly ingredients: Model<Ingredient>,
   ) {
@@ -208,27 +202,22 @@ export class BlogAssistantService {
   ): Promise<LinkedRecipe[]> {
     const post = await this.posts
       .findOne({ _id: blogId, authorId: userId, type: PostType.BLOG })
-      .select('_id')
+      .select('blog.recipeIds')
       .exec();
     if (!post) throw new NotFoundException('Blog not found');
-    const links = await this.blogRecipes
-      .find({ postId: blogId })
-      .sort({ position: 1 })
-      .exec();
-    const recipeIds = links.map(({ recipeId }) => recipeId);
-    const [recipes, items] = await Promise.all([
-      this.recipes.find({ _id: { $in: recipeIds } }).exec(),
-      recipeIds.length === 0
-        ? []
-        : this.recipeIngredients
-            .find({ recipeId: { $in: recipeIds } })
-            .sort({ position: 1 })
-            .exec(),
-    ]);
+    const recipeIds = post.blog?.recipeIds ?? [];
+    if (recipeIds.length === 0) return [];
+    const recipes = await this.recipes.find({ _id: { $in: recipeIds } }).exec();
     const ingredients = await this.ingredients
       .find({
         _id: {
-          $in: [...new Set(items.map(({ ingredientId }) => ingredientId))],
+          $in: [
+            ...new Set(
+              recipes.flatMap((recipe) =>
+                recipe.ingredients.map(({ ingredientId }) => ingredientId),
+              ),
+            ),
+          ],
         },
       })
       .exec();
@@ -236,7 +225,7 @@ export class BlogAssistantService {
     const ingredientById = new Map(
       ingredients.map((ingredient) => [ingredient.id, ingredient]),
     );
-    return links.flatMap(({ recipeId }) => {
+    return recipeIds.flatMap((recipeId) => {
       const recipe = recipeById.get(recipeId);
       if (!recipe) return [];
       return [
@@ -245,9 +234,8 @@ export class BlogAssistantService {
           servings: recipe.servings,
           prepMinutes: recipe.prepMinutes,
           cookMinutes: recipe.cookMinutes,
-          ingredients: items
-            .filter((item) => item.recipeId === recipe.id)
-            .flatMap(({ quantity, unit, ingredientId }) => {
+          ingredients: recipe.ingredients.flatMap(
+            ({ quantity, unit, ingredientId }) => {
               const ingredient = ingredientById.get(ingredientId);
               return ingredient
                 ? [
@@ -258,7 +246,8 @@ export class BlogAssistantService {
                     },
                   ]
                 : [];
-            }),
+            },
+          ),
         },
       ];
     });

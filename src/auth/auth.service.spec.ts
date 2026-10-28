@@ -4,23 +4,29 @@ import { JwtService } from '@nestjs/jwt';
 import { Test } from '@nestjs/testing';
 import { compare } from 'bcryptjs';
 import type { INestApplication } from '@nestjs/common';
-import type { Db } from 'mongodb';
 import {
   createTestMongoUrl,
   dropTestDatabase,
   prepareTestDatabase,
-} from '../../test/mongo-test-db';
-import { createUser } from '../../test/fixtures';
-import { MailService } from '../mail/mail.service';
-import { MongoModule } from '../mongo/mongo.module';
-import { MongoService } from '../mongo/mongo.service';
-import { EmailVerificationService } from './email-verification.service';
-import { PasswordResetService } from './password-reset.service';
-import { RefreshTokensService } from './refresh-tokens.service';
-import { hashCode } from './one-time-code';
-import { hashPassword } from './password';
-import { AuthService } from './auth.service';
-import { AccountsService } from '../users/accounts.service';
+} from '../../test/mongo-test-db.js';
+import { createUser } from '../../test/fixtures.js';
+import { MailService } from '../mail/mail.service.js';
+import {
+  EmailVerificationGuesses,
+  OneTimeCode,
+  OneTimeCodePurpose,
+  RefreshToken,
+  User,
+} from '../mongo/models.js';
+import { MongoModule } from '../mongo/mongo.module.js';
+import { MongoService } from '../mongo/mongo.service.js';
+import { EmailVerificationService } from './email-verification.service.js';
+import { PasswordResetService } from './password-reset.service.js';
+import { RefreshTokensService } from './refresh-tokens.service.js';
+import { hashCode } from './one-time-code.js';
+import { hashPassword } from './password.js';
+import { AuthService } from './auth.service.js';
+import { AccountsService } from '../users/accounts.service.js';
 
 const PASSWORD = 'StrongPassword123!';
 const verificationHash = (userId: string, code: string) =>
@@ -28,12 +34,9 @@ const verificationHash = (userId: string, code: string) =>
 const resetHash = (userId: string, code: string) =>
   hashCode(`password-reset:${userId}`, code);
 
-type StoredDoc = { _id: string; [key: string]: unknown };
-
 describe('AuthService', () => {
   let app: INestApplication;
   let db: MongoService;
-  let database: Db;
   let service: AuthService;
   let refreshTokens: RefreshTokensService;
   const mail = {
@@ -42,9 +45,13 @@ describe('AuthService', () => {
   };
   let passwordHash: string;
 
-  const codes = () => database.collection<StoredDoc>('one_time_codes');
-  const tokens = () => database.collection<StoredDoc>('refresh_tokens');
-  const userDocs = () => database.collection<StoredDoc>('users');
+  const codes = () => db.connection.model<OneTimeCode>(OneTimeCode.name);
+  const tokens = () => db.connection.model<RefreshToken>(RefreshToken.name);
+  const userDocs = () => db.connection.model<User>(User.name);
+  const guesses = () =>
+    db.connection.model<EmailVerificationGuesses>(
+      EmailVerificationGuesses.name,
+    );
 
   const seedCode = (
     userId: string,
@@ -52,10 +59,10 @@ describe('AuthService', () => {
     code: string,
     fields: Record<string, unknown> = {},
   ) =>
-    codes().insertOne({
+    codes().create({
       _id: `${userId}:${purpose}`,
       userId,
-      purpose,
+      purpose: purpose as OneTimeCodePurpose,
       codeHash:
         purpose === 'PASSWORD_RESET'
           ? resetHash(userId, code)
@@ -107,7 +114,6 @@ describe('AuthService', () => {
     await app.init();
     await prepareTestDatabase(app);
     db = app.get(MongoService);
-    database = db.db;
     service = app.get(AuthService);
     refreshTokens = app.get(RefreshTokensService);
     passwordHash = await hashPassword(PASSWORD);
@@ -119,9 +125,7 @@ describe('AuthService', () => {
     await userDocs().deleteMany({});
     await codes().deleteMany({});
     await tokens().deleteMany({});
-    await database
-      .collection<StoredDoc>('email_verification_guesses')
-      .deleteMany({});
+    await guesses().deleteMany({});
   });
   afterAll(async () => {
     await dropTestDatabase(app);
@@ -260,13 +264,11 @@ describe('AuthService', () => {
   it('rejects verification with 429 once the email is out of guesses', async () => {
     const user = await makeUser({ emailVerifiedAt: null });
     await seedCode(user.id, 'EMAIL_VERIFICATION', '123456');
-    await database
-      .collection<StoredDoc>('email_verification_guesses')
-      .insertOne({
-        _id: 'hello@vedora.vn',
-        guesses: 15,
-        windowStart: new Date(),
-      });
+    await guesses().create({
+      _id: 'hello@vedora.vn',
+      guesses: 15,
+      windowStart: new Date(),
+    });
 
     await expect(
       service.verifyEmail({ email: 'hello@vedora.vn', code: '123456' }),
@@ -361,7 +363,7 @@ describe('AuthService', () => {
     await expect(
       compare('NewStrongPassword123!', stored?.passwordHash as string),
     ).resolves.toBe(true);
-    for (const token of await tokens().find().toArray()) {
+    for (const token of await tokens().find().exec()) {
       expect(token.revokedAt).toBeInstanceOf(Date);
     }
   });
@@ -378,7 +380,7 @@ describe('AuthService', () => {
         password: 'NewStrongPassword123!',
       }),
     ).rejects.toBeInstanceOf(BadRequestException);
-    for (const token of await tokens().find().toArray()) {
+    for (const token of await tokens().find().exec()) {
       expect(token.revokedAt).toBeNull();
     }
   });
@@ -397,13 +399,11 @@ describe('AuthService', () => {
     const user = await makeUser();
     await refreshTokens.issue(user.id);
     await seedCode(user.id, 'PASSWORD_RESET', '123456');
-    await database
-      .collection<StoredDoc>('email_verification_guesses')
-      .insertOne({
-        _id: 'hello@vedora.vn',
-        guesses: 15,
-        windowStart: new Date(),
-      });
+    await guesses().create({
+      _id: 'hello@vedora.vn',
+      guesses: 15,
+      windowStart: new Date(),
+    });
 
     await expect(
       service.resetPassword({
@@ -415,7 +415,7 @@ describe('AuthService', () => {
       status: 429,
       response: { code: 'VERIFY_LIMIT_REACHED' },
     });
-    for (const token of await tokens().find().toArray()) {
+    for (const token of await tokens().find().exec()) {
       expect(token.revokedAt).toBeNull();
     }
   });
@@ -443,7 +443,7 @@ describe('AuthService', () => {
     expect(
       (await userDocs().findOne({ _id: user.id }))?.emailVerifiedAt,
     ).toBeInstanceOf(Date);
-    const stored = await tokens().find().toArray();
+    const stored = await tokens().find().exec();
     expect(stored.filter((token) => token.revokedAt !== null)).toHaveLength(1);
     expect(await codes().countDocuments()).toBe(0);
   });

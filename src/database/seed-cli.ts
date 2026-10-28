@@ -1,9 +1,9 @@
 import 'dotenv/config';
 import mongoose from 'mongoose';
-import { registerModels } from '../mongo/schemas';
-import { MongoService } from '../mongo/mongo.service';
-import { seedDatabase } from './seed';
-import { seedCatalog } from './seed-catalog';
+import { registerModels } from '../mongo/schemas/index.js';
+import { MongoService } from '../mongo/mongo.service.js';
+import { seedDatabase } from './seed.js';
+import { seedCatalog } from './seed-catalog.js';
 
 async function main(): Promise<void> {
   const url = process.env.DATABASE_URL;

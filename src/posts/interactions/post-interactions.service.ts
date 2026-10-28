@@ -6,14 +6,14 @@ import {
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import type { Model } from 'mongoose';
-import type { AuthenticatedUser } from '../../auth/auth.types';
+import type { AuthenticatedUser } from '../../auth/auth.types.js';
 import {
   afterCursor,
   createCursorPaginatedResponse,
   CursorPaginationQueryDto,
-} from '../../common/pagination';
-import { NotificationsService } from '../../notifications/notifications.service';
-import { isUniqueViolation } from '../../mongo/errors';
+} from '../../common/pagination/index.js';
+import { NotificationsService } from '../../notifications/notifications.service.js';
+import { isUniqueViolation } from '../../mongo/errors.js';
 import {
   NotificationType,
   Post,
@@ -24,17 +24,17 @@ import {
   PostStatus,
   User,
   UserRole,
-} from '../../mongo/models';
+} from '../../mongo/models.js';
 import {
   CommentBodyDto,
   CommentPageDto,
   CommentResponseDto,
-} from '../dto/comment.dto';
+} from '../dto/comment.dto.js';
 import {
   PostBookmarkResponseDto,
   PostRepostResponseDto,
-} from '../dto/post-interaction.dto';
-import { PostLikeResponseDto } from '../dto/post-like-response.dto';
+} from '../dto/post-interaction.dto.js';
+import { PostLikeResponseDto } from '../dto/post-like-response.dto.js';
 
 function toCommentDto(comment: PostComment, author: User): CommentResponseDto {
   return {

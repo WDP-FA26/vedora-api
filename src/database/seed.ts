@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { compare, hash, truncates } from 'bcryptjs';
-import { AccountStatus, UserRole, type User } from '../mongo/models';
-import type { MongoService } from '../mongo/mongo.service';
+import { AccountStatus, UserRole, type User } from '../mongo/models.js';
+import type { MongoService } from '../mongo/mongo.service.js';
 
 export async function seedDatabase(mongo: MongoService): Promise<void> {
   const seedPassword = process.env.SEED_USER_PASSWORD;

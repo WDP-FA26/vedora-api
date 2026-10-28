@@ -1,12 +1,12 @@
 import { tool } from 'ai';
 import { z } from 'zod';
-import type { KnowledgeSearchService } from '../../../knowledge/retrieval/knowledge-search.service';
-import { searchKnowledgeTool } from '../../../ai/tools/search-knowledge.tool';
+import type { KnowledgeSearchService } from '../../../knowledge/retrieval/knowledge-search.service.js';
+import { searchKnowledgeTool } from '../../../ai/tools/search-knowledge.tool.js';
 import {
   type BlogImageGeneratorService,
   IMAGE_ASPECT_RATIOS,
   IMAGE_ERRORS,
-} from './blog-image-generator.service';
+} from './blog-image-generator.service.js';
 
 export const MAX_EDIT_MARKDOWN = 8000;
 const MAX_TITLE = 150;

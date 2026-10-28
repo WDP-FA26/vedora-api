@@ -7,7 +7,7 @@ import { ConfigService } from '@nestjs/config';
 import { Test } from '@nestjs/testing';
 import { OAuth2Client } from 'google-auth-library';
 import type { Mock } from 'vitest';
-import { GoogleOAuthService } from './google-oauth.service';
+import { GoogleOAuthService } from './google-oauth.service.js';
 
 describe('GoogleOAuthService', () => {
   const env: Record<string, string> = {

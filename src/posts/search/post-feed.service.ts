@@ -7,10 +7,10 @@ import {
   PostComment,
   PostLike,
   PostStatus,
-} from '../../mongo/models';
-import { QdrantService } from '../../qdrant/qdrant.service';
-import { DENSE_VECTOR, toEpochSeconds } from './post-search-collection';
-import { PostSearchIndexService } from './post-search-index.service';
+} from '../../mongo/models.js';
+import { QdrantService } from '../../qdrant/qdrant.service.js';
+import { DENSE_VECTOR, toEpochSeconds } from './post-search-collection.js';
+import { PostSearchIndexService } from './post-search-index.service.js';
 
 /** How deep the feed goes; each source fetches at most this many. */
 export const MAX_FEED_RESULTS = 200;
@@ -91,19 +91,26 @@ export class PostFeedService {
         .exec(),
     ]);
     const interactions = [...likes, ...bookmarks, ...comments];
+    const interactedPostIds = new Set<string>();
+    for (const { postId } of interactions) interactedPostIds.add(postId);
     const published = await this.posts
       .find({
-        _id: { $in: [...new Set(interactions.map(({ postId }) => postId))] },
+        _id: { $in: Array.from(interactedPostIds) },
         status: PostStatus.PUBLISHED,
       })
       .select('_id')
       .exec();
     const live = new Set(published.map(({ id }) => id));
-    const ids = interactions
+    const newestFirst = interactions
       .filter(({ postId }) => live.has(postId))
-      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
-      .map(({ postId }) => postId);
-    return [...new Set(ids)].slice(0, TASTE_POSTS);
+      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+    // Single pass: first (newest) occurrence wins, stop once the page is full.
+    const recentPostIds = new Set<string>();
+    for (const { postId } of newestFirst) {
+      recentPostIds.add(postId);
+      if (recentPostIds.size === TASTE_POSTS) break;
+    }
+    return Array.from(recentPostIds);
   }
 
   /** Recent posts by others, best `best_score` match plus freshness first. */

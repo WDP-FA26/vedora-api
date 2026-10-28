@@ -3,8 +3,8 @@ import {
   MediaAsset,
   MediaStatus,
   MediaType,
-} from '../mongo/models';
-import type { CloudinaryNotification } from './dto/cloudinary-notification';
+} from '../mongo/models.js';
+import type { CloudinaryNotification } from './dto/cloudinary-notification.js';
 
 // Test fixtures shared by the media specs.
 

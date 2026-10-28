@@ -12,30 +12,29 @@ import {
   afterCursor,
   createCursorPaginatedResponse,
   CursorPaginationQueryDto,
-} from '../common/pagination';
-import { MediaService } from '../media/media.service';
-import { CloudinaryService } from '../cloudinary/cloudinary.service';
+} from '../common/pagination/index.js';
+import { MediaService } from '../media/media.service.js';
+import { CloudinaryService } from '../cloudinary/cloudinary.service.js';
 import {
   MediaStatus,
   MediaAsset,
   Post,
   PostBookmark,
   PostStatus,
-} from '../mongo/models';
-import { MongoService } from '../mongo/mongo.service';
-import { deleteWithReferences } from '../mongo/relations';
-import { MAX_FEED_RESULTS, PostFeedService } from './search/post-feed.service';
-import { PostSearchIndexService } from './search/post-search-index.service';
+} from '../mongo/models.js';
+import { MongoService } from '../mongo/mongo.service.js';
+import { MAX_FEED_RESULTS, PostFeedService } from './search/post-feed.service.js';
+import { PostSearchIndexService } from './search/post-search-index.service.js';
 import {
   MAX_SEARCH_RESULTS,
   PostSearchService,
-} from './search/post-search.service';
-import { CreatePostDto } from './dto/create-post.dto';
-import { FEED_CURSOR, FeedQueryDto } from './dto/feed-query.dto';
-import { ListPostsQueryDto } from './dto/list-posts-query.dto';
-import { PostPageDto, PostResponseDto } from './dto/post-response.dto';
-import { SearchPostsQueryDto } from './dto/search-posts-query.dto';
-import { PostRelationsService } from './post-relations.service';
+} from './search/post-search.service.js';
+import { CreatePostDto } from './dto/create-post.dto.js';
+import { FEED_CURSOR, FeedQueryDto } from './dto/feed-query.dto.js';
+import { ListPostsQueryDto } from './dto/list-posts-query.dto.js';
+import { PostPageDto, PostResponseDto } from './dto/post-response.dto.js';
+import { SearchPostsQueryDto } from './dto/search-posts-query.dto.js';
+import { PostRelationsService } from './post-relations.service.js';
 
 @Injectable()
 export class PostsService {
@@ -290,7 +289,7 @@ export class PostsService {
   private async destroy(id: string): Promise<void> {
     const media = await this.media.find({ postId: id }).select('_id').exec();
     await this.mongo.withTransaction((session) =>
-      deleteWithReferences(this.mongo.db, session, 'posts', { _id: id }),
+      this.posts.deleteOne({ _id: id }, { session }).exec(),
     );
     await this.searchIndex.remove(id);
     // The media rows were detached (onDelete SetNull); remove them from

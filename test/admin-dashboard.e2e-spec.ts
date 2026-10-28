@@ -1,15 +1,17 @@
 import { randomUUID } from 'node:crypto';
 import { JwtService } from '@nestjs/jwt';
 import request from 'supertest';
-import type { Document } from 'mongodb';
 import {
   AccountStatus,
+  PostReport,
+  PostReportReason,
+  PostReportStatus,
   PostType,
   type User,
   UserRole,
-} from '../src/mongo/models';
-import { createE2eApp, type E2eApp } from './e2e-app';
-import { createPost, createRecipe, createUser } from './fixtures';
+} from '../src/mongo/models.js';
+import { createE2eApp, type E2eApp } from './e2e-app.js';
+import { createPost, createRecipe, createUser } from './fixtures.js';
 
 describe('Admin dashboard (HTTP)', () => {
   let e2e: E2eApp;
@@ -85,21 +87,18 @@ describe('Admin dashboard (HTTP)', () => {
       publishedAt: october2,
     });
     for (let index = 0; index < 3; index++) {
-      const blog = await createPost(e2e.mongo, {
+      await createPost(e2e.mongo, {
         authorId: author.id,
         type: PostType.BLOG,
         publishedAt: october2,
-      });
-      await e2e.mongo.db
-        .collection<Document & { _id: string }>('blogs')
-        .insertOne({
-          _id: blog.id,
+        blog: {
           title: 'Blog',
           coverImageUrl: null,
           content: 'Content',
           excerpt: 'Content',
-          updatedAt: new Date(),
-        });
+          recipeIds: [],
+        },
+      });
     }
     const reported = await createPost(e2e.mongo, {
       authorId: author.id,
@@ -112,18 +111,16 @@ describe('Admin dashboard (HTTP)', () => {
       ['DISMISSED', october2],
     ] as const) {
       const reporter = await createUser(e2e.mongo);
-      await e2e.mongo.db
-        .collection<Document & { _id: string }>('post_reports')
-        .insertOne({
-          _id: randomUUID(),
-          postId: reported.id,
-          reporterId: reporter.id,
-          reason: 'OTHER',
-          status,
-          createdAt: october2,
-          reviewedAt,
-          reviewedById: reviewedAt ? admin.id : null,
-        });
+      await e2e.mongo.connection.model<PostReport>(PostReport.name).create({
+        _id: randomUUID(),
+        postId: reported.id,
+        reporterId: reporter.id,
+        reason: PostReportReason.OTHER,
+        status: status as PostReportStatus,
+        createdAt: october2,
+        reviewedAt,
+        reviewedById: reviewedAt ? admin.id : null,
+      });
     }
     // The range is Bangkok days, so 17:00 UTC is the boundary.
     await createRecipe(e2e.mongo, {

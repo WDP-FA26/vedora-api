@@ -21,15 +21,15 @@ import {
   ApiTags,
   ApiUnauthorizedResponse,
 } from '@nestjs/swagger';
-import { UserRole } from '../mongo/models';
-import type { AuthenticatedRequest } from '../auth/auth.types';
-import { JwtAuthGuard } from '../auth/jwt-auth.guard';
-import { Roles } from '../auth/roles.decorator';
-import { RolesGuard } from '../auth/roles.guard';
+import { UserRole } from '../mongo/models.js';
+import type { AuthenticatedRequest } from '../auth/auth.types.js';
+import { JwtAuthGuard } from '../auth/jwt-auth.guard.js';
+import { Roles } from '../auth/roles.decorator.js';
+import { RolesGuard } from '../auth/roles.guard.js';
 import {
   ApiPaginatedResponse,
   PaginatedResponseDto,
-} from '../common/pagination';
+} from '../common/pagination/index.js';
 import {
   AdminVerificationRequestDetailDto,
   AdminVerificationRequestDto,
@@ -40,8 +40,8 @@ import {
   ReviewVerificationRequestDto,
   VerificationRequestDto,
   VerificationRequestsQueryDto,
-} from './dto/verification.dto';
-import { VerificationService } from './verification.service';
+} from './dto/verification.dto.js';
+import { VerificationService } from './verification.service.js';
 
 @ApiTags('verification')
 @ApiBearerAuth()

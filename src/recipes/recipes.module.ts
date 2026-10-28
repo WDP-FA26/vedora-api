@@ -3,19 +3,19 @@ import {
   AdminIncompatibilityRulesController,
   AdminIngredientGroupsController,
   AdminIngredientsController,
-} from './admin-ingredients.controller';
-import { AdminRecipesController } from './admin-recipes.controller';
-import { DietaryController } from './dietary.controller';
-import { DietaryService } from './dietary.service';
-import { IncompatibilityRulesService } from './incompatibility-rules.service';
-import { IngredientsService } from './ingredients.service';
-import { RecipesService } from './recipes.service';
-import { RecipeCatalogService } from './recipe-catalog.service';
-import { RecipeRelationsService } from './recipe-relations.service';
-import { RecipesController } from './recipes.controller';
-import { RecipeFavoritesService } from './recipe-favorites.service';
-import { RecipeRatingsController } from './recipe-ratings.controller';
-import { RecipeRatingsService } from './recipe-ratings.service';
+} from './admin-ingredients.controller.js';
+import { AdminRecipesController } from './admin-recipes.controller.js';
+import { DietaryController } from './dietary.controller.js';
+import { DietaryService } from './dietary.service.js';
+import { IncompatibilityRulesService } from './incompatibility-rules.service.js';
+import { IngredientsService } from './ingredients.service.js';
+import { RecipesService } from './recipes.service.js';
+import { RecipeCatalogService } from './recipe-catalog.service.js';
+import { RecipeRelationsService } from './recipe-relations.service.js';
+import { RecipesController } from './recipes.controller.js';
+import { RecipeFavoritesService } from './recipe-favorites.service.js';
+import { RecipeRatingsController } from './recipe-ratings.controller.js';
+import { RecipeRatingsService } from './recipe-ratings.service.js';
 
 @Module({
   controllers: [

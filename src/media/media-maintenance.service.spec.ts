@@ -1,19 +1,19 @@
 import type { INestApplication } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Test } from '@nestjs/testing';
-import { createMedia } from '../../test/fixtures';
+import { createMedia } from '../../test/fixtures.js';
 import {
   createTestMongoUrl,
   dropTestDatabase,
   prepareTestDatabase,
-} from '../../test/mongo-test-db';
-import { CloudinaryService } from '../cloudinary/cloudinary.service';
-import { MongoModule } from '../mongo/mongo.module';
-import { MongoService } from '../mongo/mongo.service';
-import { type MediaAsset, MediaStatus } from '../mongo/models';
-import { CaptionService } from './caption.service';
-import { MediaMaintenanceService } from './media-maintenance.service';
-import { MediaService } from './media.service';
+} from '../../test/mongo-test-db.js';
+import { CloudinaryService } from '../cloudinary/cloudinary.service.js';
+import { MongoModule } from '../mongo/mongo.module.js';
+import { MongoService } from '../mongo/mongo.service.js';
+import { type MediaAsset, MediaStatus } from '../mongo/models.js';
+import { CaptionService } from './caption.service.js';
+import { MediaMaintenanceService } from './media-maintenance.service.js';
+import { MediaService } from './media.service.js';
 
 describe('MediaMaintenanceService', () => {
   let app: INestApplication;
@@ -58,7 +58,7 @@ describe('MediaMaintenanceService', () => {
     maintenance = app.get(MediaMaintenanceService);
   });
   beforeEach(async () => {
-    await db.db.collection('media_assets').deleteMany({});
+    await db.connection.collections.media_assets.deleteMany({});
     mediaService.purge.mockClear();
     captions.releaseStale.mockClear();
     captions.schedule.mockClear();

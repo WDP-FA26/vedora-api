@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { ProfileImageKind } from '../../mongo/models';
+import { ProfileImageKind } from '../../mongo/models.js';
 import {
   IsEnum,
   IsIn,
@@ -10,7 +10,7 @@ import {
   Min,
   MinLength,
 } from 'class-validator';
-import { PresignedUploadDto } from '../../storage/presigned-upload.dto';
+import { PresignedUploadDto } from '../../storage/presigned-upload.dto.js';
 
 export class ProfileSummaryDto {
   @ApiProperty({ format: 'uuid' }) id!: string;

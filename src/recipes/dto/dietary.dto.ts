@@ -1,6 +1,6 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { ArrayMaxSize, ArrayUnique, IsArray, IsUUID } from 'class-validator';
-import { NamedRefDto } from './ingredient.dto';
+import { NamedRefDto } from './ingredient.dto.js';
 
 export const MAX_AVOIDED_INGREDIENTS = 200;
 export const MAX_AVOIDED_GROUPS = 50;

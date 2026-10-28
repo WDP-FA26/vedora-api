@@ -23,14 +23,14 @@ import {
   ApiOperation,
   ApiTags,
 } from '@nestjs/swagger';
-import { ProfileImageKind } from '../mongo/models';
-import type { AuthenticatedRequest } from '../auth/auth.types';
-import { JwtAuthGuard } from '../auth/jwt-auth.guard';
-import { CursorPaginationQueryDto } from '../common/pagination';
+import { ProfileImageKind } from '../mongo/models.js';
+import type { AuthenticatedRequest } from '../auth/auth.types.js';
+import { JwtAuthGuard } from '../auth/jwt-auth.guard.js';
+import { CursorPaginationQueryDto } from '../common/pagination/index.js';
 import {
   FollowSuggestionListDto,
   FollowSuggestionQueryDto,
-} from './dto/follow-suggestion.dto';
+} from './dto/follow-suggestion.dto.js';
 import {
   CreateProfileImageUploadDto,
   ProfileDto,
@@ -38,9 +38,9 @@ import {
   ProfileListDto,
   ProfileRelationshipDto,
   UpdateProfileDto,
-} from './dto/profile.dto';
-import { FollowSuggestionsService } from './follow-suggestions.service';
-import { ProfilesService } from './profiles.service';
+} from './dto/profile.dto.js';
+import { FollowSuggestionsService } from './follow-suggestions.service.js';
+import { ProfilesService } from './profiles.service.js';
 
 @ApiTags('profiles')
 @Controller('profiles')

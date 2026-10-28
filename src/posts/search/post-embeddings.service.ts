@@ -9,7 +9,7 @@ import {
   IsString,
   ValidateNested,
 } from 'class-validator';
-import { parsePayload, validatePayload } from '../../common/validation';
+import { parsePayload, validatePayload } from '../../common/validation.js';
 
 const OPENROUTER_API = 'https://openrouter.ai/api/v1';
 const BATCH = 64;

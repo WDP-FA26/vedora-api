@@ -5,37 +5,35 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import type { ClientSession } from 'mongodb';
-import type { Model, QueryFilter } from 'mongoose';
-import { assertAccountActive } from '../auth/account-access';
-import type { AuthenticatedUser } from '../auth/auth.types';
+import type { ClientSession, Model, QueryFilter } from 'mongoose';
+import { assertAccountActive } from '../auth/account-access.js';
+import type { AuthenticatedUser } from '../auth/auth.types.js';
 import {
   createPaginatedResponse,
   getPaginationArgs,
   PaginatedResponseDto,
-} from '../common/pagination';
-import { escapeRegExp } from '../common/text';
-import { lockDocument } from '../mongo/document-lock';
+} from '../common/pagination/index.js';
+import { escapeRegExp } from '../common/text.js';
+import { lockDocument } from '../mongo/document-lock.js';
 import {
   AccountStatus,
   User,
   UserAccountAction,
   UserAccountAudit,
   UserRole,
-} from '../mongo/models';
-import { MongoService } from '../mongo/mongo.service';
-import { deleteWithReferences } from '../mongo/relations';
-import { AccountsService } from './accounts.service';
-import { UpdateUserDto } from './dto/update-user.dto';
-import { UpdateUserRoleDto } from './dto/update-user-role.dto';
-import { UpdateUserStatusDto } from './dto/update-user-status.dto';
-import { UsersQueryDto } from './dto/users-query.dto';
+} from '../mongo/models.js';
+import { MongoService } from '../mongo/mongo.service.js';
+import { AccountsService } from './accounts.service.js';
+import { UpdateUserDto } from './dto/update-user.dto.js';
+import { UpdateUserRoleDto } from './dto/update-user-role.dto.js';
+import { UpdateUserStatusDto } from './dto/update-user-status.dto.js';
+import { UsersQueryDto } from './dto/users-query.dto.js';
 import {
   type PublicUser,
   publicUserProjection,
   toPublicUser,
-} from './public-user';
-import { rethrowUniqueViolation } from './unique-conflict';
+} from './public-user.js';
+import { rethrowUniqueViolation } from './unique-conflict.js';
 
 /**
  * Self-service and admin management of accounts: reading one, editing its
@@ -139,9 +137,7 @@ export class UsersService {
           AccountStatus.DELETED,
           target.role,
         );
-        await deleteWithReferences(this.mongo.db, session, 'users', {
-          _id: id,
-        });
+        await this.users.deleteOne({ _id: id }, { session }).exec();
       });
     } catch (error: unknown) {
       rethrowUniqueViolation(error);
@@ -319,10 +315,9 @@ export class UsersService {
       // changes to different admins. Per-account locks also order these
       // changes against refresh-token issuance. Locks are taken in a fixed
       // order.
-      const database = this.mongo.db;
-      await lockDocument(database, session, 'account-gate');
+      await lockDocument(this.mongo, session, 'account-gate');
       for (const lockId of [...new Set([id, actor.sub])].sort()) {
-        await lockDocument(database, session, 'user', lockId);
+        await lockDocument(this.mongo, session, 'user', lockId);
       }
       const currentActor = await this.findUser(actor.sub, session);
       if (!currentActor)

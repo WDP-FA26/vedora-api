@@ -6,8 +6,8 @@ import {
   KnowledgeDocument,
   KnowledgeDocumentFailureReason,
   KnowledgeDocumentStatus,
-} from '../mongo/models';
-import { UPLOAD_TTL_SECONDS } from '../storage/storage.service';
+} from '../mongo/models.js';
+import { UPLOAD_TTL_SECONDS } from '../storage/storage.service.js';
 
 const EVENT_GRACE_MS = 10 * 60 * 1000;
 const STALE_PROCESSING_MS = 15 * 60 * 1000;

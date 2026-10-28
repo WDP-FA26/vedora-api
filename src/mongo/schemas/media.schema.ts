@@ -7,9 +7,9 @@ import {
   MediaFailureReason,
   MediaStatus,
   MediaType,
-} from '../enums';
-import { collectionSchema, indexName } from './common';
-import { Identified } from './user.schema';
+} from '../enums.js';
+import { collectionSchema } from './common.js';
+import { Identified } from './user.schema.js';
 
 /** One WebVTT track of a video, embedded in the asset. */
 @Schema({ _id: false })
@@ -98,30 +98,12 @@ export class MediaAsset extends Identified {
 }
 
 export const MediaAssetSchema = SchemaFactory.createForClass(MediaAsset);
-MediaAssetSchema.index(
-  { publicId: 1 },
-  { unique: true, name: indexName('media_assets', ['publicId'], 'key') },
-);
-MediaAssetSchema.index(
-  { ownerId: 1, status: 1 },
-  { name: indexName('media_assets', ['ownerId', 'status'], 'idx') },
-);
-MediaAssetSchema.index(
-  { postId: 1 },
-  { name: indexName('media_assets', ['postId'], 'idx') },
-);
-MediaAssetSchema.index(
-  { status: 1, updatedAt: 1 },
-  { name: indexName('media_assets', ['status', 'updatedAt'], 'idx') },
-);
-MediaAssetSchema.index(
-  { discardedAt: 1 },
-  { name: indexName('media_assets', ['discardedAt'], 'idx') },
-);
-MediaAssetSchema.index(
-  { captionStatus: 1, updatedAt: 1 },
-  { name: indexName('media_assets', ['captionStatus', 'updatedAt'], 'idx') },
-);
+MediaAssetSchema.index({ publicId: 1 }, { unique: true });
+MediaAssetSchema.index({ ownerId: 1, status: 1 });
+MediaAssetSchema.index({ postId: 1 });
+MediaAssetSchema.index({ status: 1, updatedAt: 1 });
+MediaAssetSchema.index({ discardedAt: 1 });
+MediaAssetSchema.index({ captionStatus: 1, updatedAt: 1 });
 
 @Schema(collectionSchema('knowledge_documents'))
 export class KnowledgeDocument extends Identified {
@@ -173,14 +155,5 @@ export class KnowledgeDocument extends Identified {
 
 export const KnowledgeDocumentSchema =
   SchemaFactory.createForClass(KnowledgeDocument);
-KnowledgeDocumentSchema.index(
-  { storageKey: 1 },
-  {
-    unique: true,
-    name: indexName('knowledge_documents', ['storageKey'], 'key'),
-  },
-);
-KnowledgeDocumentSchema.index(
-  { status: 1, updatedAt: 1 },
-  { name: indexName('knowledge_documents', ['status', 'updatedAt'], 'idx') },
-);
+KnowledgeDocumentSchema.index({ storageKey: 1 }, { unique: true });
+KnowledgeDocumentSchema.index({ status: 1, updatedAt: 1 });

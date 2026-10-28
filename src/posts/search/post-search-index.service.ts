@@ -3,9 +3,9 @@ import { ConfigService } from '@nestjs/config';
 import { InjectModel } from '@nestjs/mongoose';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import type { Model } from 'mongoose';
-import { MediaAsset, Post, PostStatus, PostType } from '../../mongo/models';
-import { QdrantService } from '../../qdrant/qdrant.service';
-import { PostEmbeddingsService } from './post-embeddings.service';
+import { MediaAsset, Post, PostStatus, PostType } from '../../mongo/models.js';
+import { QdrantService } from '../../qdrant/qdrant.service.js';
+import { PostEmbeddingsService } from './post-embeddings.service.js';
 import {
   BM25_FOLDED_VECTOR,
   BM25_VECTOR,
@@ -13,7 +13,7 @@ import {
   DENSE_VECTOR,
   type PostPointPayload,
   toEpochSeconds,
-} from './post-search-collection';
+} from './post-search-collection.js';
 
 const BATCH_SIZE = 64;
 /**

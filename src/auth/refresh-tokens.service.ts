@@ -2,12 +2,11 @@ import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectModel } from '@nestjs/mongoose';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
-import type { ClientSession } from 'mongodb';
-import type { Model } from 'mongoose';
-import { lockDocument } from '../mongo/document-lock';
-import { RefreshToken, User } from '../mongo/models';
-import { MongoService } from '../mongo/mongo.service';
-import { assertAccountActive } from './account-access';
+import type { ClientSession, Model } from 'mongoose';
+import { lockDocument } from '../mongo/document-lock.js';
+import { RefreshToken, User } from '../mongo/models.js';
+import { MongoService } from '../mongo/mongo.service.js';
+import { assertAccountActive } from './account-access.js';
 
 export interface IssuedRefreshToken {
   token: string;
@@ -155,7 +154,7 @@ export class RefreshTokensService {
     session: ClientSession,
     userId: string,
   ): Promise<void> {
-    await lockDocument(this.mongo.db, session, 'user', userId);
+    await lockDocument(this.mongo, session, 'user', userId);
     const user = await this.users
       .findOne({ _id: userId })
       .select('status')

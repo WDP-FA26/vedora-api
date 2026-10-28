@@ -1,17 +1,16 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import type { Model } from 'mongoose';
-import { hashPassword } from '../auth/password';
-import { AccountStatus, User, UserRole } from '../mongo/models';
-import { MongoService } from '../mongo/mongo.service';
-import { deleteWithReferences } from '../mongo/relations';
-import { CreateUserDto } from './dto/create-user.dto';
+import { hashPassword } from '../auth/password.js';
+import { AccountStatus, User, UserRole } from '../mongo/models.js';
+import { MongoService } from '../mongo/mongo.service.js';
+import { CreateUserDto } from './dto/create-user.dto.js';
 import {
   type PublicUser,
   publicUserProjection,
   toPublicUser,
-} from './public-user';
-import { rethrowUniqueViolation } from './unique-conflict';
+} from './public-user.js';
+import { rethrowUniqueViolation } from './unique-conflict.js';
 
 /** What a new account may set; everything else starts at its default. */
 export type NewUser = Pick<User, 'username' | 'fullName' | 'email'> &
@@ -124,14 +123,19 @@ export class AccountsService {
     createdBefore: Date,
   ): Promise<void> {
     await this.mongo.withTransaction((session) =>
-      deleteWithReferences(this.mongo.db, session, 'users', {
-        $or: [{ email }, { username }],
-        emailVerifiedAt: null,
-        googleId: null,
-        role: UserRole.USER,
-        status: AccountStatus.PENDING_EMAIL,
-        createdAt: { $lt: createdBefore },
-      }),
+      this.users
+        .deleteMany(
+          {
+            $or: [{ email }, { username }],
+            emailVerifiedAt: null,
+            googleId: null,
+            role: UserRole.USER,
+            status: AccountStatus.PENDING_EMAIL,
+            createdAt: { $lt: createdBefore },
+          },
+          { session },
+        )
+        .exec(),
     );
   }
 }

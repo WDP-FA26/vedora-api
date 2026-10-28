@@ -6,33 +6,23 @@ import {
 import { InjectModel } from '@nestjs/mongoose';
 import { randomUUID } from 'node:crypto';
 import { isURL } from 'class-validator';
-import type { ClientSession } from 'mongodb';
-import type { Model } from 'mongoose';
+import type { ClientSession, Model } from 'mongoose';
 import {
   afterCursor,
   createCursorPaginatedResponse,
-} from '../../common/pagination';
-import { lockDocument } from '../../mongo/document-lock';
-import {
-  Blog,
-  BlogRecipe,
-  Post,
-  PostStatus,
-  PostType,
-  Recipe,
-  type Stored,
-} from '../../mongo/models';
-import { MongoService } from '../../mongo/mongo.service';
-import { deleteWithReferences } from '../../mongo/relations';
-import { StorageService, StorageTarget } from '../../storage/storage.service';
+} from '../../common/pagination/index.js';
+import { lockDocument } from '../../mongo/document-lock.js';
+import { Post, PostStatus, PostType, Recipe } from '../../mongo/models.js';
+import { MongoService } from '../../mongo/mongo.service.js';
+import { StorageService, StorageTarget } from '../../storage/storage.service.js';
 import {
   BlogDetailDto,
   CreateBlogDto,
   MyBlogsQueryDto,
   UpdateBlogDto,
-} from '../dto/blog.dto';
-import { PostPageDto } from '../dto/post-response.dto';
-import { PostsService } from '../posts.service';
+} from '../dto/blog.dto.js';
+import { PostPageDto } from '../dto/post-response.dto.js';
+import { PostsService } from '../posts.service.js';
 
 @Injectable()
 export class BlogsService {
@@ -41,9 +31,6 @@ export class BlogsService {
     private readonly posts: PostsService,
     private readonly storage: StorageService,
     @InjectModel(Post.name) private readonly postsModel: Model<Post>,
-    @InjectModel(Blog.name) private readonly blogsModel: Model<Blog>,
-    @InjectModel(BlogRecipe.name)
-    private readonly blogRecipes: Model<BlogRecipe>,
     @InjectModel(Recipe.name) private readonly recipesModel: Model<Recipe>,
   ) {}
 
@@ -54,39 +41,27 @@ export class BlogsService {
     const content = dto.content ?? '';
     this.validatePublication(status, content);
     await this.validateRecipes(dto.recipeIds);
-    const id = randomUUID();
-    // The post, its blog and its recipe links are written together.
-    await this.mongo.withTransaction(async (session) => {
-      const now = new Date();
-      await this.collections.posts.insertOne(
-        {
-          _id: id,
-          authorId,
-          type: PostType.BLOG,
-          status,
-          body: null,
-          searchIndexedAt: null,
-          viewCount: 0,
-          publishedAt: status === PostStatus.PUBLISHED ? now : null,
-          createdAt: now,
-          updatedAt: now,
-        },
-        { session },
-      );
-      await this.collections.blogs.insertOne(
-        {
-          _id: id,
-          title: dto.title,
-          content,
-          excerpt: this.excerpt(content),
-          coverImageUrl: dto.coverImageUrl ?? null,
-          updatedAt: now,
-        },
-        { session },
-      );
-      await this.linkRecipes(session, id, dto.recipeIds ?? []);
+    const now = new Date();
+    const post = await this.postsModel.create({
+      _id: randomUUID(),
+      authorId,
+      type: PostType.BLOG,
+      status,
+      body: null,
+      blog: {
+        title: dto.title,
+        content,
+        excerpt: this.excerpt(content),
+        coverImageUrl: dto.coverImageUrl ?? null,
+        recipeIds: dto.recipeIds ?? [],
+      },
+      searchIndexedAt: null,
+      viewCount: 0,
+      publishedAt: status === PostStatus.PUBLISHED ? now : null,
+      createdAt: now,
+      updatedAt: now,
     });
-    return this.loadDetail(id, authorId);
+    return this.toDetail(post, authorId);
   }
 
   async findOne(id: string, viewerId?: string): Promise<BlogDetailDto> {
@@ -144,55 +119,41 @@ export class BlogsService {
     await this.validateRecipes(dto.recipeIds);
     await this.mongo.withTransaction(async (session) => {
       const current = await this.lockOwned(session, id, authorId);
-      const blog = await this.collections.blogs.findOne(
-        { _id: id },
-        { session },
-      );
+      const blog = current.blog;
       if (!blog) throw new NotFoundException('Blog not found');
       const status: PostStatus =
         (dto.status as PostStatus | undefined) ?? current.status;
       const content = dto.content ?? blog.content;
       this.validatePublication(status, content);
       const now = new Date();
-      await this.collections.posts.updateOne(
-        { _id: id },
-        {
-          $set: {
-            status,
-            // Edits and re-publication keep the original feed position.
-            publishedAt:
-              status === PostStatus.PUBLISHED
-                ? (current.publishedAt ?? now)
-                : current.publishedAt,
-            updatedAt: now,
+      await this.postsModel
+        .updateOne(
+          { _id: id },
+          {
+            $set: {
+              status,
+              // Edits and re-publication keep the original feed position.
+              publishedAt:
+                status === PostStatus.PUBLISHED
+                  ? (current.publishedAt ?? now)
+                  : current.publishedAt,
+              'blog.title': dto.title ?? blog.title,
+              'blog.content': content,
+              'blog.excerpt':
+                dto.content !== undefined
+                  ? this.excerpt(dto.content)
+                  : blog.excerpt,
+              'blog.coverImageUrl':
+                dto.coverImageUrl !== undefined
+                  ? dto.coverImageUrl
+                  : blog.coverImageUrl,
+              'blog.recipeIds': dto.recipeIds ?? blog.recipeIds,
+              updatedAt: now,
+            },
           },
-        },
-        { session },
-      );
-      await this.collections.blogs.updateOne(
-        { _id: id },
-        {
-          $set: {
-            ...(dto.title !== undefined && { title: dto.title }),
-            ...(dto.content !== undefined && {
-              content: dto.content,
-              excerpt: this.excerpt(dto.content),
-            }),
-            ...(dto.coverImageUrl !== undefined && {
-              coverImageUrl: dto.coverImageUrl,
-            }),
-            updatedAt: now,
-          },
-        },
-        { session },
-      );
-      if (dto.recipeIds !== undefined) {
-        await this.collections.blogRecipes.deleteMany(
-          { postId: id },
           { session },
-        );
-        await this.linkRecipes(session, id, dto.recipeIds);
-      }
+        )
+        .exec();
     });
     return this.loadDetail(id, authorId);
   }
@@ -200,20 +161,8 @@ export class BlogsService {
   async remove(id: string, authorId: string): Promise<void> {
     await this.mongo.withTransaction(async (session) => {
       await this.lockOwned(session, id, authorId);
-      // The post owns its blog, recipe links and interactions.
-      await deleteWithReferences(this.mongo.db, session, 'posts', {
-        _id: id,
-      });
+      await this.postsModel.deleteOne({ _id: id }, { session }).exec();
     });
-  }
-
-  private get collections() {
-    const database = this.mongo.db;
-    return {
-      posts: database.collection<Stored<Post>>('posts'),
-      blogs: database.collection<Stored<Blog>>('blogs'),
-      blogRecipes: database.collection<Stored<BlogRecipe>>('blog_recipes'),
-    };
   }
 
   /** Locks and returns the author's blog post. */
@@ -224,30 +173,13 @@ export class BlogsService {
   ) {
     // Serialize edit/publish/delete so publication cannot validate an old
     // content value while another edit replaces it with an empty draft.
-    await lockDocument(this.mongo.db, session, 'post', id);
-    const owned = await this.collections.posts.findOne(
-      { _id: id, authorId, type: PostType.BLOG },
-      { session },
-    );
+    await lockDocument(this.mongo, session, 'post', id);
+    const owned = await this.postsModel
+      .findOne({ _id: id, authorId, type: PostType.BLOG })
+      .session(session)
+      .exec();
     if (!owned) throw new NotFoundException('Blog not found');
     return owned;
-  }
-
-  private async linkRecipes(
-    session: ClientSession,
-    postId: string,
-    recipeIds: string[],
-  ): Promise<void> {
-    if (recipeIds.length === 0) return;
-    await this.collections.blogRecipes.insertMany(
-      recipeIds.map((recipeId, position) => ({
-        _id: randomUUID(),
-        postId,
-        recipeId,
-        position,
-      })),
-      { session },
-    );
   }
 
   private validatePublication(status: PostStatus, content: string) {
@@ -317,11 +249,11 @@ export class BlogsService {
     viewerId?: string,
   ): Promise<BlogDetailDto> {
     const [response] = await this.posts.toResponses([post], viewerId);
-    const blog = await this.blogsModel
-      .findOne({ _id: post.id })
-      .select('content updatedAt')
-      .exec();
-    if (!response || !blog) throw new NotFoundException('Blog not found');
-    return { ...response, content: blog.content, updatedAt: blog.updatedAt };
+    if (!response || !post.blog) throw new NotFoundException('Blog not found');
+    return {
+      ...response,
+      content: post.blog.content,
+      updatedAt: post.updatedAt,
+    };
   }
 }

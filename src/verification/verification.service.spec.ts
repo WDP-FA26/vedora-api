@@ -11,13 +11,18 @@ import {
   createTestMongoUrl,
   dropTestDatabase,
   prepareTestDatabase,
-} from '../../test/mongo-test-db';
-import { createUser } from '../../test/fixtures';
-import { MongoModule } from '../mongo/mongo.module';
-import { MongoService } from '../mongo/mongo.service';
-import { StorageService, StorageTarget } from '../storage/storage.service';
-import { VerificationStatus } from '../mongo/models';
-import { VerificationService } from './verification.service';
+} from '../../test/mongo-test-db.js';
+import { createUser } from '../../test/fixtures.js';
+import { MongoModule } from '../mongo/mongo.module.js';
+import { MongoService } from '../mongo/mongo.service.js';
+import { StorageService, StorageTarget } from '../storage/storage.service.js';
+import {
+  User,
+  VerificationProof,
+  VerificationRequest,
+  VerificationStatus,
+} from '../mongo/models.js';
+import { VerificationService } from './verification.service.js';
 
 const userId = '4a1e32e4-e18e-4dd7-8b4a-246ef2113ff2';
 const adminId = '0b8f0c1e-3c55-4c1b-9d0e-2f7f3a9f7a10';
@@ -26,8 +31,6 @@ const proofId = 'c2b9a8f4-6f0b-4a8b-9d53-6c3f2f1f2a11';
 const storageKey = `verifications/${userId}/${proofId}.png`;
 const statement = 'Head chef at a plant-based restaurant since 2019.';
 const submission = { statement, proofIds: [proofId] };
-
-type StoredDoc = { _id: string; [key: string]: unknown };
 
 describe('VerificationService', () => {
   let app: INestApplication;
@@ -41,12 +44,14 @@ describe('VerificationService', () => {
     delete: vi.fn(),
   };
 
-  const users = () => db.db.collection<StoredDoc>('users');
-  const requests = () => db.db.collection<StoredDoc>('verification_requests');
-  const proofs = () => db.db.collection<StoredDoc>('verification_proofs');
+  const users = () => db.connection.model<User>(User.name);
+  const requests = () =>
+    db.connection.model<VerificationRequest>(VerificationRequest.name);
+  const proofs = () =>
+    db.connection.model<VerificationProof>(VerificationProof.name);
 
   const insertProof = (fields: Record<string, unknown> = {}) =>
-    proofs().insertOne({
+    proofs().create({
       _id: proofId,
       ownerId: userId,
       requestId: null,
@@ -56,11 +61,11 @@ describe('VerificationService', () => {
     });
 
   const insertRequest = (fields: Record<string, unknown> = {}) =>
-    requests().insertOne({
+    requests().create({
       _id: requestId,
       userId,
       statement,
-      status: 'PENDING',
+      status: VerificationStatus.PENDING,
       reviewNote: null,
       reviewedById: null,
       reviewedAt: null,
@@ -233,8 +238,8 @@ describe('VerificationService', () => {
     });
 
     it('answers 404 for an unknown account', async () => {
-      await insertProof();
       await users().deleteMany({});
+      await insertProof();
 
       await expect(service.submit(userId, submission)).rejects.toBeInstanceOf(
         NotFoundException,

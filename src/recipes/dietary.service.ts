@@ -1,19 +1,14 @@
 import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import type { Model } from 'mongoose';
-import {
-  Ingredient,
-  IngredientGroup,
-  IngredientGroupMember,
-  User,
-} from '../mongo/models';
-import { allExist } from '../mongo/references';
+import { Ingredient, IngredientGroup, User } from '../mongo/models.js';
+import { allExist } from '../mongo/references.js';
 import {
   DietaryOptionsDto,
   DietaryRestrictionsDto,
   SaveDietaryRestrictionsDto,
-} from './dto/dietary.dto';
-import { badRequest } from './recipe-errors';
+} from './dto/dietary.dto.js';
+import { badRequest } from './recipe-errors.js';
 
 /** What a user does not eat (ingredients and whole groups) and the ingredients they like. Never shown to others. */
 @Injectable()
@@ -23,8 +18,6 @@ export class DietaryService {
     private readonly ingredients: Model<Ingredient>,
     @InjectModel(IngredientGroup.name)
     private readonly groups: Model<IngredientGroup>,
-    @InjectModel(IngredientGroupMember.name)
-    private readonly members: Model<IngredientGroupMember>,
     @InjectModel(User.name) private readonly users: Model<User>,
   ) {}
 
@@ -34,9 +27,6 @@ export class DietaryService {
       this.ingredients.find().sort({ name: 1 }).exec(),
       this.groups.find({ dietary: true }).sort({ name: 1 }).exec(),
     ]);
-    const members = await this.members
-      .find({ groupId: { $in: groups.map(({ id }) => id) } })
-      .exec();
     const nameOf = new Map(ingredients.map(({ id, name }) => [id, name]));
     return {
       ingredients: ingredients.map(({ id, name, aliases }) => ({
@@ -44,12 +34,11 @@ export class DietaryService {
         name,
         aliases: [...aliases],
       })),
-      groups: groups.map(({ id, name }) => ({
+      groups: groups.map(({ id, name, ingredientIds }) => ({
         id,
         name,
-        ingredients: members
-          .filter(({ groupId }) => groupId === id)
-          .map(({ ingredientId }) => nameOf.get(ingredientId) ?? '')
+        ingredients: ingredientIds
+          .map((ingredientId) => nameOf.get(ingredientId) ?? '')
           .sort(),
       })),
     };
@@ -88,13 +77,13 @@ export class DietaryService {
   /** Every ingredient the user avoids, directly or through a group. */
   async avoidedIngredientIds(userId: string): Promise<Set<string>> {
     const user = await this.preferences(userId);
-    const viaGroups = await this.members
-      .find({ groupId: { $in: [...user.avoidedGroupIds] } })
-      .select('ingredientId')
+    const viaGroups = await this.groups
+      .find({ _id: { $in: [...user.avoidedGroupIds] } })
+      .select('ingredientIds')
       .exec();
     return new Set([
       ...user.avoidedIngredientIds,
-      ...viaGroups.map(({ ingredientId }) => ingredientId),
+      ...viaGroups.flatMap(({ ingredientIds }) => ingredientIds),
     ]);
   }
 

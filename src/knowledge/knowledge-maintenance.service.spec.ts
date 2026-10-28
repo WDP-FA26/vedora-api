@@ -4,15 +4,15 @@ import {
   createTestMongoUrl,
   dropTestDatabase,
   prepareTestDatabase,
-} from '../../test/mongo-test-db';
-import { MongoModule } from '../mongo/mongo.module';
-import { MongoService } from '../mongo/mongo.service';
+} from '../../test/mongo-test-db.js';
+import { MongoModule } from '../mongo/mongo.module.js';
+import { MongoService } from '../mongo/mongo.service.js';
 import {
   type KnowledgeDocument,
   KnowledgeDocumentFailureReason,
   KnowledgeDocumentStatus,
-} from '../mongo/models';
-import { KnowledgeMaintenanceService } from './knowledge-maintenance.service';
+} from '../mongo/models.js';
+import { KnowledgeMaintenanceService } from './knowledge-maintenance.service.js';
 
 describe('KnowledgeMaintenanceService', () => {
   let app: INestApplication;
@@ -52,7 +52,7 @@ describe('KnowledgeMaintenanceService', () => {
   });
   beforeEach(async () => {
     vi.useFakeTimers({ now, toFake: ['Date'] });
-    await db.db.collection('knowledge_documents').deleteMany({});
+    await db.connection.collections.knowledge_documents.deleteMany({});
   });
   afterEach(() => {
     vi.useRealTimers();

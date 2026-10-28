@@ -23,23 +23,23 @@ import {
   ApiTooManyRequestsResponse,
   ApiUnauthorizedResponse,
 } from '@nestjs/swagger';
-import { TurnstileService } from '../nutrition-chat/guest/turnstile.service';
-import { type PublicUser } from '../users/public-user';
-import { AuthService } from './auth.service';
-import { AuthenticatedRequest } from './auth.types';
-import { AuthResponseDto, UserResponseDto } from './dto/auth-response.dto';
+import { TurnstileService } from '../nutrition-chat/guest/turnstile.service.js';
+import { type PublicUser } from '../users/public-user.js';
+import { AuthService } from './auth.service.js';
+import { AuthenticatedRequest } from './auth.types.js';
+import { AuthResponseDto, UserResponseDto } from './dto/auth-response.dto.js';
 import {
   ResendVerificationDto,
   VerificationRequiredDto,
   VerifyEmailDto,
-} from './dto/email-verification.dto';
-import { LoginDto } from './dto/login.dto';
-import { ForgotPasswordDto, ResetPasswordDto } from './dto/password-reset.dto';
-import { RefreshTokenDto } from './dto/refresh-token.dto';
-import { RegisterDto } from './dto/register.dto';
-import { JwtAuthGuard } from './jwt-auth.guard';
-import { GoogleAuthorizationDto, GoogleExchangeDto } from './dto/google.dto';
-import { GoogleOAuthService } from './google-oauth.service';
+} from './dto/email-verification.dto.js';
+import { LoginDto } from './dto/login.dto.js';
+import { ForgotPasswordDto, ResetPasswordDto } from './dto/password-reset.dto.js';
+import { RefreshTokenDto } from './dto/refresh-token.dto.js';
+import { RegisterDto } from './dto/register.dto.js';
+import { JwtAuthGuard } from './jwt-auth.guard.js';
+import { GoogleAuthorizationDto, GoogleExchangeDto } from './dto/google.dto.js';
+import { GoogleOAuthService } from './google-oauth.service.js';
 
 @ApiTags('auth')
 @Controller('auth')

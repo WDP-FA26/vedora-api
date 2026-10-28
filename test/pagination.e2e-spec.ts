@@ -1,10 +1,10 @@
 import { randomUUID } from 'node:crypto';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import request from 'supertest';
-import { MAX_PAGE_NUMBER } from '../src/common/pagination';
-import { UserRole, type Post, type User } from '../src/mongo/models';
-import { createE2eApp, type E2eApp } from './e2e-app';
-import { createPost, createUser } from './fixtures';
+import { MAX_PAGE_NUMBER } from '../src/common/pagination/index.js';
+import { UserRole, type Post, type User } from '../src/mongo/models.js';
+import { createE2eApp, type E2eApp } from './e2e-app.js';
+import { createPost, createUser } from './fixtures.js';
 
 describe('Shared pagination (e2e)', () => {
   let e2e: E2eApp;

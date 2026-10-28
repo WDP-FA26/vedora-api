@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { PostReportReason, PostReportStatus } from '../../mongo/models';
+import { PostReportReason, PostReportStatus } from '../../mongo/models.js';
 import { Transform } from 'class-transformer';
 import {
   ArrayMaxSize,
@@ -12,8 +12,8 @@ import {
   IsUUID,
   MaxLength,
 } from 'class-validator';
-import { PaginationQueryDto } from '../../common/pagination';
-import { PostAuthorDto } from './post-response.dto';
+import { PaginationQueryDto } from '../../common/pagination/index.js';
+import { PostAuthorDto } from './post-response.dto.js';
 
 export const MAX_VIEW_BATCH = 50;
 export const MAX_REPORT_DETAILS_LENGTH = 500;

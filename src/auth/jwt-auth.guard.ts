@@ -8,9 +8,10 @@ import { JwtService } from '@nestjs/jwt';
 import { InjectModel } from '@nestjs/mongoose';
 import { isUUID } from 'class-validator';
 import type { Model } from 'mongoose';
-import { User } from '../mongo/models';
-import { AuthenticatedRequest, JwtPayload } from './auth.types';
-import { assertAccountActive } from './account-access';
+import { User } from '../mongo/models.js';
+import { AuthenticatedRequest, JwtPayload } from './auth.types.js';
+import { assertAccountActive } from './account-access.js';
+import { extractBearerToken } from './bearer-token.js';
 
 @Injectable()
 export class JwtAuthGuard implements CanActivate {
@@ -21,7 +22,7 @@ export class JwtAuthGuard implements CanActivate {
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const request = context.switchToHttp().getRequest<AuthenticatedRequest>();
-    const token = this.extractBearerToken(request.headers.authorization);
+    const token = extractBearerToken(request.headers.authorization);
 
     if (!token) {
       throw new UnauthorizedException('Authentication required');
@@ -54,10 +55,5 @@ export class JwtAuthGuard implements CanActivate {
     assertAccountActive(user.status);
     request.user = { sub: user.id, username: user.username, role: user.role };
     return true;
-  }
-
-  private extractBearerToken(authorization?: string): string | undefined {
-    const [type, token] = authorization?.split(' ') ?? [];
-    return type?.toLowerCase() === 'bearer' && token ? token : undefined;
   }
 }

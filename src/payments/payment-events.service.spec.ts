@@ -1,7 +1,7 @@
 import { EventEmitter } from 'node:events';
 import { ConfigService } from '@nestjs/config';
 import { createClient } from 'redis';
-import { PaymentEventsService, PaymentSignal } from './payment-events.service';
+import { PaymentEventsService, PaymentSignal } from './payment-events.service.js';
 
 vi.mock('redis', () => ({ createClient: vi.fn() }));
 

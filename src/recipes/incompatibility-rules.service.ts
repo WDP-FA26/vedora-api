@@ -6,27 +6,26 @@ import {
   getPaginationArgs,
   PaginatedResponseDto,
   PaginationQueryDto,
-} from '../common/pagination';
+} from '../common/pagination/index.js';
 import {
   Ingredient,
   IngredientGroup,
-  IngredientGroupMember,
   IncompatibilityRule,
-} from '../mongo/models';
-import { allExist } from '../mongo/references';
+} from '../mongo/models.js';
+import { allExist } from '../mongo/references.js';
 import {
   type ConflictRule,
   detectConflicts,
   type IngredientConflict,
-} from './conflicts';
+} from './conflicts.js';
 import {
   IncompatibilityRuleDto,
   RuleSideDto,
   RuleSideInputDto,
   SaveIncompatibilityRuleDto,
-} from './dto/ingredient.dto';
-import { RecipeConflictDto } from './dto/recipe.dto';
-import { badRequest, conflict } from './recipe-errors';
+} from './dto/ingredient.dto.js';
+import { RecipeConflictDto } from './dto/recipe.dto.js';
+import { badRequest, conflict } from './recipe-errors.js';
 
 type Named = { id: string; name: string };
 
@@ -55,8 +54,6 @@ export class IncompatibilityRulesService {
     private readonly ingredients: Model<Ingredient>,
     @InjectModel(IngredientGroup.name)
     private readonly groups: Model<IngredientGroup>,
-    @InjectModel(IngredientGroupMember.name)
-    private readonly members: Model<IngredientGroupMember>,
   ) {}
 
   async findAll(
@@ -135,16 +132,21 @@ export class IncompatibilityRulesService {
     const ingredientIds = [...new Set(ingredientSets.flat())];
     if (ingredientIds.length < 2) return ingredientSets.map(() => []);
 
-    const memberships = await this.members
-      .find({ ingredientId: { $in: ingredientIds } })
+    const matchingGroups = await this.groups
+      .find({ ingredientIds: { $in: ingredientIds } })
+      .select('ingredientIds')
       .exec();
     const groupsByIngredient = new Map<string, Set<string>>();
-    for (const { ingredientId, groupId } of memberships) {
-      const groups = groupsByIngredient.get(ingredientId) ?? new Set();
-      groups.add(groupId);
-      groupsByIngredient.set(ingredientId, groups);
+    const wanted = new Set(ingredientIds);
+    for (const group of matchingGroups) {
+      for (const ingredientId of group.ingredientIds) {
+        if (!wanted.has(ingredientId)) continue;
+        const groups = groupsByIngredient.get(ingredientId) ?? new Set();
+        groups.add(group.id);
+        groupsByIngredient.set(ingredientId, groups);
+      }
     }
-    const groupIds = [...new Set(memberships.map(({ groupId }) => groupId))];
+    const groupIds = matchingGroups.map(({ id }) => id);
 
     const rules = await this.rules
       .find({

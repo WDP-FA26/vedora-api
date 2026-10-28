@@ -3,7 +3,7 @@ import { ApiExtraModels, ApiOkResponse, getSchemaPath } from '@nestjs/swagger';
 import {
   PaginatedResponseDto,
   PaginationMetaDto,
-} from './paginated-response.dto';
+} from './paginated-response.dto.js';
 
 /** Documents the item model that TypeScript's generic response type erases. */
 export function ApiPaginatedResponse(model: Type<unknown>) {

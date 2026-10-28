@@ -6,14 +6,14 @@ import {
   ApiTags,
   ApiUnauthorizedResponse,
 } from '@nestjs/swagger';
-import type { AuthenticatedRequest } from '../auth/auth.types';
-import { JwtAuthGuard } from '../auth/jwt-auth.guard';
-import { DietaryService } from './dietary.service';
+import type { AuthenticatedRequest } from '../auth/auth.types.js';
+import { JwtAuthGuard } from '../auth/jwt-auth.guard.js';
+import { DietaryService } from './dietary.service.js';
 import {
   DietaryOptionsDto,
   DietaryRestrictionsDto,
   SaveDietaryRestrictionsDto,
-} from './dto/dietary.dto';
+} from './dto/dietary.dto.js';
 
 @ApiTags('dietary')
 @ApiBearerAuth()

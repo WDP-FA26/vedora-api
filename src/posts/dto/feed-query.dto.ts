@@ -1,6 +1,6 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { IsOptional, Matches } from 'class-validator';
-import { PaginationLimitDto } from '../../common/pagination';
+import { PaginationLimitDto } from '../../common/pagination/index.js';
 
 /** `<offset>.<asOf in ms>`: later pages rank against the first page's time. */
 export const FEED_CURSOR = /^(\d{1,3})\.(\d{1,15})$/;

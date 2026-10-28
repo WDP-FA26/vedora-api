@@ -5,46 +5,44 @@ import { JwtModule, JwtService } from '@nestjs/jwt';
 import { Test } from '@nestjs/testing';
 import {
   type IngredientGroup,
-  type IngredientGroupMember,
   type IncompatibilityRule,
   type MealPlanEntry,
   MealSection,
+  type Post,
   PostStatus,
   type Recipe,
-  type RecipeIngredient,
   type User,
   Weekday,
-} from '../src/mongo/models';
-import { MongoModule } from '../src/mongo/mongo.module';
-import { MongoService } from '../src/mongo/mongo.service';
+} from '../src/mongo/models.js';
+import { MongoModule } from '../src/mongo/mongo.module.js';
+import { MongoService } from '../src/mongo/mongo.service.js';
 import request from 'supertest';
-import type { App } from 'supertest/types';
-import { configureApp } from '../src/app.setup';
-import { MealPlanController } from '../src/meal-plan/meal-plan.controller';
-import { MealPlannerChatService } from '../src/meal-plan/meal-planner-chat.service';
-import { UserThrottlerGuard } from '../src/nutrition-chat/user-throttler.guard';
+import type { App } from 'supertest/types.js';
+import { configureApp } from '../src/app.setup.js';
+import { MealPlanController } from '../src/meal-plan/meal-plan.controller.js';
+import { MealPlannerChatService } from '../src/meal-plan/meal-planner-chat.service.js';
+import { UserThrottlerGuard } from '../src/nutrition-chat/user-throttler.guard.js';
 import type {
   MealPlanDto,
   SaveMealDayDto,
-} from '../src/meal-plan/dto/meal-plan.dto';
-import { RecipeCatalogQueryDto } from '../src/recipes/dto/recipe-catalog.dto';
-import { IncompatibilityRulesService } from '../src/recipes/incompatibility-rules.service';
-import { RecipeCatalogService } from '../src/recipes/recipe-catalog.service';
-import { RecipeRelationsService } from '../src/recipes/recipe-relations.service';
-import { MealPlanService } from '../src/meal-plan/meal-plan.service';
-import { DietaryService } from '../src/recipes/dietary.service';
-import { deleteWithReferences } from '../src/mongo/relations';
+} from '../src/meal-plan/dto/meal-plan.dto.js';
+import { RecipeCatalogQueryDto } from '../src/recipes/dto/recipe-catalog.dto.js';
+import { IncompatibilityRulesService } from '../src/recipes/incompatibility-rules.service.js';
+import { RecipeCatalogService } from '../src/recipes/recipe-catalog.service.js';
+import { RecipeRelationsService } from '../src/recipes/recipe-relations.service.js';
+import { MealPlanService } from '../src/meal-plan/meal-plan.service.js';
+import { DietaryService } from '../src/recipes/dietary.service.js';
 import {
   createIngredient,
   createPost,
   createRecipe,
   createUser,
-} from './fixtures';
+} from './fixtures.js';
 import {
   createTestMongoUrl,
   dropTestDatabase,
   prepareTestDatabase,
-} from './mongo-test-db';
+} from './mongo-test-db.js';
 
 describe('Recipe catalog with MongoDB', () => {
   let mongo: MongoService;
@@ -66,8 +64,8 @@ describe('Recipe catalog with MongoDB', () => {
   let app: INestApplication<App>;
   let token: string;
 
-  const members = () =>
-    mongo.connection.model<IngredientGroupMember>('IngredientGroupMember');
+  const groupsModel = () =>
+    mongo.connection.model<IngredientGroup>('IngredientGroup');
   const rulesModel = () =>
     mongo.connection.model<IncompatibilityRule>('IncompatibilityRule');
   const recipesModel = () => mongo.connection.model<Recipe>('Recipe');
@@ -76,7 +74,12 @@ describe('Recipe catalog with MongoDB', () => {
     mongo.connection.model<MealPlanEntry>('MealPlanEntry');
 
   const addMember = (groupId: string, ingredientId: string) =>
-    members().create({ _id: randomUUID(), groupId, ingredientId });
+    groupsModel()
+      .updateOne(
+        { _id: groupId },
+        { $addToSet: { ingredientIds: ingredientId } },
+      )
+      .exec();
   const rule = (sides: {
     aIngredientId?: string | null;
     aGroupId?: string | null;
@@ -131,10 +134,12 @@ describe('Recipe catalog with MongoDB', () => {
     ({ id: spinachId } = await createIngredient(mongo, { name: 'Rau bina' }));
     ({ id: riceId } = await createIngredient(mongo, { name: 'Gạo lứt' }));
     const group = async (name: string, ingredientId: string) => {
-      const { id } = await mongo.connection
-        .model<IngredientGroup>('IngredientGroup')
-        .create({ _id: randomUUID(), name, dietary: false });
-      await addMember(id, ingredientId);
+      const { id } = await groupsModel().create({
+        _id: randomUUID(),
+        name,
+        dietary: false,
+        ingredientIds: [ingredientId],
+      });
       return id;
     };
     soyGroupId = await group('Đậu nành', tofuId);
@@ -151,19 +156,13 @@ describe('Recipe catalog with MongoDB', () => {
         prepMinutes,
         cookMinutes,
         steps: ['Nấu'],
+        ingredients: ingredientIds.map((ingredientId) => ({
+          ingredientId,
+          quantity: 200,
+          unit: 'g',
+          note: null,
+        })),
       });
-      await mongo.connection
-        .model<RecipeIngredient>('RecipeIngredient')
-        .insertMany(
-          ingredientIds.map((ingredientId, position) => ({
-            _id: randomUUID(),
-            recipeId: id,
-            ingredientId,
-            position,
-            quantity: 200,
-            unit: 'g',
-          })),
-        );
       return id;
     }
     tofuRecipeId = await recipe('Đậu hũ sốt cà', [tofuId], 10, 5);
@@ -189,35 +188,33 @@ describe('Recipe catalog with MongoDB', () => {
     );
     zeroRecipeId = await recipe('Món ăn ngay', [riceId], 0, 0);
     // Equal timestamps exercise the unique-id tie breaker.
-    await mongo.db
-      .collection('recipes')
+    await mongo.connection
+      .model('Recipe')
       .updateMany(
         {},
         { $set: { updatedAt: new Date('2026-10-12T00:00:00Z') } },
-      );
+        { timestamps: false },
+      )
+      .exec();
     token = await app
       .get(JwtService)
       .signAsync({ sub: userId, username: 'catalog.user' });
   });
 
   beforeEach(async () => {
-    const { db } = mongo;
-    await db
-      .collection('users')
-      .updateMany(
-        {},
-        { $set: { avoidedIngredientIds: [], avoidedGroupIds: [] } },
-      );
-    await db.collection('incompatibility_rules').deleteMany({});
-    await db.collection('meal_plan_entries').deleteMany({});
-    await db
-      .collection('recipes')
-      .updateMany(
-        {},
-        { $set: { postId: null, updatedAt: new Date('2026-10-12T00:00:00Z') } },
-      );
+    const { collections } = mongo.connection;
+    await collections.users.updateMany(
+      {},
+      { $set: { avoidedIngredientIds: [], avoidedGroupIds: [] } },
+    );
+    await collections.incompatibility_rules.deleteMany({});
+    await collections.meal_plan_entries.deleteMany({});
+    await collections.recipes.updateMany(
+      {},
+      { $set: { postId: null, updatedAt: new Date('2026-10-12T00:00:00Z') } },
+    );
     await mongo.withTransaction((session) =>
-      deleteWithReferences(db, session, 'posts', {}),
+      mongo.connection.model<Post>('Post').deleteMany({}, { session }).exec(),
     );
   });
 
@@ -350,10 +347,10 @@ describe('Recipe catalog with MongoDB', () => {
     await rule({ aGroupId: greensGroupId, bGroupId: greensGroupId });
     expect(await suitableIds()).toContain(tofuRecipeId);
     expect(await suitableIds()).not.toContain(conflictRecipeId);
-    await members().deleteOne({
-      groupId: greensGroupId,
-      ingredientId: tofuId,
-    });
+    await groupsModel().updateOne(
+      { _id: greensGroupId },
+      { $pull: { ingredientIds: tofuId } },
+    );
   });
 
   it('combines search, time and suitability in the count and rows', async () => {

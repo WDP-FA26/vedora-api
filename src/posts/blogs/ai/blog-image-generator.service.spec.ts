@@ -1,13 +1,13 @@
 import { ConfigService } from '@nestjs/config';
-import { AiFeature } from '../../../mongo/models';
+import { AiFeature } from '../../../mongo/models.js';
 import { MockImageModelV4, MockLanguageModelV4 } from 'ai/test';
 import { type DeepMockProxy, mockDeep } from 'vitest-mock-extended';
-import { AiUsageService } from '../../../ai/usage/ai-usage.service';
+import { AiUsageService } from '../../../ai/usage/ai-usage.service.js';
 import {
   StorageService,
   StorageTarget,
-} from '../../../storage/storage.service';
-import { BlogImageGeneratorService } from './blog-image-generator.service';
+} from '../../../storage/storage.service.js';
+import { BlogImageGeneratorService } from './blog-image-generator.service.js';
 
 const USER_ID = '4a1e32e4-e18e-4dd7-8b4a-246ef2113ff2';
 const OTHER_ID = '9b2f43f5-f29f-4ee8-9c5b-357f03224003';

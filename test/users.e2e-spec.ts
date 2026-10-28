@@ -1,12 +1,9 @@
 import { randomUUID } from 'node:crypto';
 import { JwtService } from '@nestjs/jwt';
 import request from 'supertest';
-import { User, UserRole } from '../src/mongo/models';
-import { deleteWithReferences } from '../src/mongo/relations';
-import { createE2eApp, type E2eApp } from './e2e-app';
-import { createUser } from './fixtures';
-
-type StoredDoc = { _id: string; [key: string]: unknown };
+import { User, UserAccountAudit, UserRole } from '../src/mongo/models.js';
+import { createE2eApp, type E2eApp } from './e2e-app.js';
+import { createUser } from './fixtures.js';
 
 /** An `id` from a response body, without trusting its shape. */
 function responseId(body: unknown): unknown {
@@ -32,12 +29,12 @@ describe('Account permissions (e2e)', () => {
 
   const server = () => e2e.app.getHttpServer();
   const jwt = () => e2e.app.get(JwtService);
-  const users = () => e2e.mongo.db.collection<StoredDoc>('users');
+  const users = () => e2e.mongo.connection.model<User>(User.name);
   const audits = () =>
-    e2e.mongo.db.collection<StoredDoc>('user_account_audits');
+    e2e.mongo.connection.model<UserAccountAudit>(UserAccountAudit.name);
   const countUsers = () => users().countDocuments();
   const storedUser = async (id: string) => {
-    const stored = await users().findOne({ _id: id });
+    const stored = await users().findOne({ _id: id }).exec();
     if (!stored) throw new Error(`User ${id} is missing`);
     return stored;
   };
@@ -49,10 +46,10 @@ describe('Account permissions (e2e)', () => {
     // Start from the same three accounts. Tokens deliberately have no role
     // claim: the database decides their current permissions.
     await e2e.mongo.withTransaction((session) =>
-      deleteWithReferences(e2e.mongo.db, session, 'users', {}),
+      users().deleteMany({}, { session }).exec(),
     );
     await audits().deleteMany({});
-    await e2e.mongo.db.collection<StoredDoc>('refresh_tokens').deleteMany({});
+    await e2e.mongo.connection.collections.refresh_tokens.deleteMany({});
     user = await createUser(e2e.mongo, { username: 'vedora.user' });
     admin = await createUser(e2e.mongo, {
       username: 'vedora.admin',

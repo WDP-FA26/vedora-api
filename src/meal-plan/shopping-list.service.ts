@@ -1,30 +1,38 @@
 import { Injectable } from '@nestjs/common';
-import type {
+import { InjectModel } from '@nestjs/mongoose';
+import type { Model } from 'mongoose';
+import {
   Ingredient,
   MealPlanEntry,
   Recipe,
-  RecipeIngredient,
-  Stored,
-  Weekday,
-} from '../mongo/models';
-import { MongoService } from '../mongo/mongo.service';
-import { MEAL_SECTIONS, WEEKDAYS } from './dto/meal-plan.dto';
+  type Weekday,
+} from '../mongo/models.js';
+import { MongoService } from '../mongo/mongo.service.js';
+import { MEAL_SECTIONS, WEEKDAYS } from './dto/meal-plan.dto.js';
 import {
   ShoppingListDto,
   ShoppingListItemDto,
   ShoppingListQueryDto,
-} from './dto/shopping-list.dto';
+} from './dto/shopping-list.dto.js';
 
 @Injectable()
 export class ShoppingListService {
-  constructor(private readonly mongo: MongoService) {}
+  constructor(
+    @InjectModel(MealPlanEntry.name)
+    private readonly entries: Model<MealPlanEntry>,
+    @InjectModel(Recipe.name)
+    private readonly recipes: Model<Recipe>,
+    @InjectModel(Ingredient.name)
+    private readonly ingredients: Model<Ingredient>,
+    private readonly mongo: MongoService,
+  ) {}
 
   async get(
     userId: string,
     query: ShoppingListQueryDto,
   ): Promise<ShoppingListDto> {
     const days = WEEKDAYS.filter((day) => query.days.includes(day));
-    const { loaded, ingredients } = await this.load(userId, days);
+    const { loaded, ingredientById } = await this.load(userId, days);
     // Enums are plain strings in MongoDB and sort alphabetically, so the
     // day and section order (Mon..Sun, breakfast..other) is applied here.
     // The sort is stable: position and recipe order carry over within one.
@@ -38,10 +46,9 @@ export class ShoppingListService {
       { item: ShoppingListItemDto; sum: number; knownCount: number }
     >();
     for (const { day, section, recipe } of entries) {
-      const sources = ingredients.filter(
-        (item) => item.recipeId === recipe._id,
-      );
-      for (const source of sources) {
+      for (const source of recipe.ingredients) {
+        const ingredient = ingredientById.get(source.ingredientId);
+        if (!ingredient) continue;
         // Empty/whitespace legacy units mean unspecified. Do not case-fold or
         // convert units: g, kg, ml and individual pieces stay separate.
         const unit = source.unit?.trim() || null;
@@ -51,7 +58,7 @@ export class ShoppingListService {
           group = {
             item: {
               ingredientId: source.ingredientId,
-              name: source.ingredient.name,
+              name: ingredient.name,
               unit,
               knownQuantity: null,
               hasUnknownQuantity: false,
@@ -68,7 +75,7 @@ export class ShoppingListService {
           group.knownCount++;
         }
         group.item.contributions.push({
-          recipeId: recipe._id,
+          recipeId: recipe.id,
           recipeTitle: recipe.title,
           day,
           section,
@@ -93,48 +100,46 @@ export class ShoppingListService {
   }
 
   /**
-   * The timetable entries of `days` with their recipes, and those recipes'
-   * ingredients with names. Read in one transaction, so a timetable or recipe
-   * changed mid-read can't mix old and new data.
+   * The timetable entries of `days` with their recipes and ingredient names.
+   * Read in one transaction, so a timetable or recipe changed mid-read can't
+   * mix old and new data.
    */
   private load(userId: string, days: Weekday[]) {
-    const { db: database } = this.mongo;
     return this.mongo.withTransaction(async (session) => {
-      const entries = await database
-        .collection<Stored<MealPlanEntry>>('meal_plan_entries')
-        .find({ userId, day: { $in: days } }, { session })
+      const entries = await this.entries
+        .find({ userId, day: { $in: days } })
         .sort({ position: 1, recipeId: 1 })
-        .toArray();
+        .session(session)
+        .exec();
       const recipeIds = [...new Set(entries.map(({ recipeId }) => recipeId))];
-      const recipes = await database
-        .collection<Stored<Recipe>>('recipes')
-        .find({ _id: { $in: recipeIds } }, { session })
-        .toArray();
-      const items = await database
-        .collection<Stored<RecipeIngredient>>('recipe_ingredients')
-        .find({ recipeId: { $in: recipeIds } }, { session })
-        .sort({ position: 1 })
-        .toArray();
-      const names = await database
-        .collection<Stored<Ingredient>>('ingredients')
-        .find(
-          {
-            _id: { $in: [...new Set(items.map((item) => item.ingredientId))] },
+      const recipes = await this.recipes
+        .find({ _id: { $in: recipeIds } })
+        .session(session)
+        .exec();
+      const names = await this.ingredients
+        .find({
+          _id: {
+            $in: [
+              ...new Set(
+                recipes.flatMap((recipe) =>
+                  recipe.ingredients.map(({ ingredientId }) => ingredientId),
+                ),
+              ),
+            ],
           },
-          { session },
-        )
-        .toArray();
-      const recipeById = new Map(recipes.map((recipe) => [recipe._id, recipe]));
-      const ingredientById = new Map(names.map((item) => [item._id, item]));
+        })
+        .session(session)
+        .exec();
+      const recipeById = new Map(recipes.map((recipe) => [recipe.id, recipe]));
+      const ingredientById = new Map(names.map((item) => [item.id, item]));
       return {
         loaded: entries.flatMap((entry) => {
           const recipe = recipeById.get(entry.recipeId);
-          return recipe ? [{ ...entry, recipe }] : [];
+          return recipe
+            ? [{ day: entry.day, section: entry.section, recipe }]
+            : [];
         }),
-        ingredients: items.flatMap((item) => {
-          const ingredient = ingredientById.get(item.ingredientId);
-          return ingredient ? [{ ...item, ingredient }] : [];
-        }),
+        ingredientById,
       };
     });
   }

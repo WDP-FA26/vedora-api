@@ -5,8 +5,8 @@ import {
   MongooseModule,
 } from '@nestjs/mongoose';
 import type { Connection, Model } from 'mongoose';
-import { MongoService } from './mongo.service';
-import { MODEL_DEFINITIONS } from './schemas';
+import { MongoService } from './mongo.service.js';
+import { MODEL_DEFINITIONS } from './schemas/index.js';
 
 /**
  * One connection and one model provider per collection, available app-wide.
@@ -20,12 +20,8 @@ export class MongoModule {
   static forRoot(): DynamicModule {
     return MongoModule.build(
       MongooseModule.forRootAsync({
-        // Read at connection time, not module load: the e2e harness gives
-        // every spec its own database by setting `DATABASE_URL` first. The
-        // ConfigModule validation still guarantees its shape at startup.
         useFactory: () => ({
           uri: databaseUrl(),
-          // Creates the indexes the schemas declare on startup.
           autoIndex: true,
         }),
       }),

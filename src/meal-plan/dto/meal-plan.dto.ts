@@ -1,6 +1,6 @@
 import { applyDecorators } from '@nestjs/common';
 import { ApiProperty } from '@nestjs/swagger';
-import { MealSection, Weekday } from '../../mongo/models';
+import { MealSection, Weekday } from '../../mongo/models.js';
 import { Type } from 'class-transformer';
 import {
   ArrayMaxSize,

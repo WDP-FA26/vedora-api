@@ -6,13 +6,13 @@ import {
   afterCursor,
   createCursorPaginatedResponse,
   CursorPaginationQueryDto,
-} from '../common/pagination';
-import { Notification, NotificationType, User } from '../mongo/models';
+} from '../common/pagination/index.js';
+import { Notification, NotificationType, User } from '../mongo/models.js';
 import {
   NotificationDto,
   NotificationPageDto,
   UnreadCountDto,
-} from './dto/notification.dto';
+} from './dto/notification.dto.js';
 
 type NotificationRow = { notification: Notification; actor: User };
 

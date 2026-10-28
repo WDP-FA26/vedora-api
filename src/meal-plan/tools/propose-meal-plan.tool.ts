@@ -1,12 +1,12 @@
-import { Weekday } from '../../mongo/models';
+import { Weekday } from '../../mongo/models.js';
 import { tool } from 'ai';
 import { z } from 'zod';
 import {
   MAX_DISHES_PER_SECTION,
   type MealPlanProblemDto,
-} from '../dto/meal-plan.dto';
-import type { MealPlanPreview, MealPlanService } from '../meal-plan.service';
-import { DAY_NAMES } from '../meal-planner.prompt';
+} from '../dto/meal-plan.dto.js';
+import type { MealPlanPreview, MealPlanService } from '../meal-plan.service.js';
+import { DAY_NAMES } from '../meal-planner.prompt.js';
 
 export type MealPlanProposal = MealPlanPreview & { ok: boolean };
 

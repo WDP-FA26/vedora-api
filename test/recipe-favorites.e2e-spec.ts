@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import request from 'supertest';
-import { createE2eApp, type E2eApp } from './e2e-app';
-import { createRecipe, createUser } from './fixtures';
+import { createE2eApp, type E2eApp } from './e2e-app.js';
+import { createRecipe, createUser } from './fixtures.js';
 
 describe('Recipe favorites (e2e)', () => {
   let e2e: E2eApp;

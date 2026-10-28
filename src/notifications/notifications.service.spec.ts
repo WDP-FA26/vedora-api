@@ -3,17 +3,17 @@ import { ConfigService } from '@nestjs/config';
 import { getModelToken } from '@nestjs/mongoose';
 import { Test } from '@nestjs/testing';
 import type { Model } from 'mongoose';
-import type { Notification, User } from '../mongo/models';
-import { MongoModule } from '../mongo/mongo.module';
-import { MongoService } from '../mongo/mongo.service';
+import type { Notification, User } from '../mongo/models.js';
+import { MongoModule } from '../mongo/mongo.module.js';
+import { MongoService } from '../mongo/mongo.service.js';
 import {
   createTestMongoUrl,
   dropTestDatabase,
   prepareTestDatabase,
-} from '../../test/mongo-test-db';
-import { createUser } from '../../test/fixtures';
-import { NotificationType } from '../mongo/models';
-import { NotificationsService } from './notifications.service';
+} from '../../test/mongo-test-db.js';
+import { createUser } from '../../test/fixtures.js';
+import { NotificationType } from '../mongo/models.js';
+import { NotificationsService } from './notifications.service.js';
 
 const postId = 'b7f6f651-b0fc-43a5-b589-edbda60e5983';
 
@@ -24,7 +24,8 @@ describe('NotificationsService', () => {
   let recipient: User;
   let actor: User;
 
-  const stored = () => db.db.collection('notifications').find({}).toArray();
+  const notifications = () => db.connection.model<Notification>('Notification');
+  const stored = () => notifications().find({}).exec();
 
   beforeAll(async () => {
     const moduleRef = await Test.createTestingModule({
@@ -43,7 +44,7 @@ describe('NotificationsService', () => {
     actor = await createUser(db, { username: 'actor', fullName: 'A' });
   });
   beforeEach(async () => {
-    await db.db.collection('notifications').deleteMany({});
+    await notifications().deleteMany({});
   });
   afterEach(() => {
     vi.restoreAllMocks();
@@ -154,9 +155,9 @@ describe('NotificationsService', () => {
       type: NotificationType.FOLLOW,
     });
     const [row] = await stored();
-    await service.markRead(actor.id, String(row._id));
+    await service.markRead(actor.id, row.id);
     expect((await service.unreadCount(recipient.id)).unreadCount).toBe(1);
-    await service.markRead(recipient.id, String(row._id));
+    await service.markRead(recipient.id, row.id);
     expect((await service.unreadCount(recipient.id)).unreadCount).toBe(0);
   });
 });

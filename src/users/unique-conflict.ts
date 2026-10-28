@@ -1,5 +1,5 @@
 import { ConflictException } from '@nestjs/common';
-import { isUniqueViolation } from '../mongo/errors';
+import { isUniqueViolation } from '../mongo/errors.js';
 
 /**
  * Rethrows a unique-index rejection as a 409 naming the fields that collided,

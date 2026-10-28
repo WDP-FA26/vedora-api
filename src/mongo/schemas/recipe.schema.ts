@@ -1,8 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
-import { MealSection, Weekday } from '../enums';
-import { collectionSchema, indexName } from './common';
-import { Identified } from './user.schema';
+import { MealSection, Weekday } from '../enums.js';
+import { collectionSchema, onDelete } from './common.js';
+import { Identified } from './user.schema.js';
 
 @Schema(collectionSchema('ingredients'))
 export class Ingredient extends Identified {
@@ -23,10 +23,41 @@ export class Ingredient extends Identified {
 }
 
 export const IngredientSchema = SchemaFactory.createForClass(Ingredient);
-IngredientSchema.index(
-  { name: 1 },
-  { unique: true, name: indexName('ingredients', ['name'], 'key') },
-);
+IngredientSchema.index({ name: 1 }, { unique: true });
+
+onDelete(IngredientSchema, async (db, ids, session) => {
+  const inIds = { $in: ids };
+  await db
+    .model('IngredientGroup')
+    .updateMany(
+      { ingredientIds: inIds },
+      { $pull: { ingredientIds: inIds } },
+      { session, timestamps: false },
+    )
+    .exec();
+  await db
+    .model('IncompatibilityRule')
+    .deleteMany(
+      { $or: [{ aIngredientId: inIds }, { bIngredientId: inIds }] },
+      { session },
+    )
+    .exec();
+  await db
+    .model('User')
+    .updateMany(
+      {
+        $or: [{ avoidedIngredientIds: inIds }, { likedIngredientIds: inIds }],
+      },
+      {
+        $pull: {
+          avoidedIngredientIds: inIds,
+          likedIngredientIds: inIds,
+        },
+      },
+      { session, timestamps: false },
+    )
+    .exec();
+});
 
 @Schema(collectionSchema('ingredient_groups'))
 export class IngredientGroup extends Identified {
@@ -42,6 +73,9 @@ export class IngredientGroup extends Identified {
   @Prop({ type: Boolean, required: true, default: false })
   dietary!: boolean;
 
+  @Prop({ type: [String], required: true, default: [] })
+  ingredientIds!: string[];
+
   @Prop({ type: Date })
   createdAt!: Date;
 
@@ -51,41 +85,27 @@ export class IngredientGroup extends Identified {
 
 export const IngredientGroupSchema =
   SchemaFactory.createForClass(IngredientGroup);
-IngredientGroupSchema.index(
-  { name: 1 },
-  { unique: true, name: indexName('ingredient_groups', ['name'], 'key') },
-);
+IngredientGroupSchema.index({ name: 1 }, { unique: true });
+IngredientGroupSchema.index({ ingredientIds: 1 });
 
-@Schema(collectionSchema('ingredient_group_members', 'none'))
-export class IngredientGroupMember extends Identified {
-  @Prop({ type: String, default: () => randomUUID() })
-  _id!: string;
-
-  @Prop({ type: String, required: true })
-  groupId!: string;
-
-  @Prop({ type: String, required: true })
-  ingredientId!: string;
-}
-
-export const IngredientGroupMemberSchema = SchemaFactory.createForClass(
-  IngredientGroupMember,
-);
-IngredientGroupMemberSchema.index(
-  { groupId: 1, ingredientId: 1 },
-  {
-    unique: true,
-    name: indexName(
-      'ingredient_group_members',
-      ['groupId', 'ingredientId'],
-      'key',
-    ),
-  },
-);
-IngredientGroupMemberSchema.index(
-  { ingredientId: 1 },
-  { name: indexName('ingredient_group_members', ['ingredientId'], 'idx') },
-);
+onDelete(IngredientGroupSchema, async (db, ids, session) => {
+  const inIds = { $in: ids };
+  await db
+    .model('IncompatibilityRule')
+    .deleteMany(
+      { $or: [{ aGroupId: inIds }, { bGroupId: inIds }] },
+      { session },
+    )
+    .exec();
+  await db
+    .model('User')
+    .updateMany(
+      { avoidedGroupIds: inIds },
+      { $pull: { avoidedGroupIds: inIds } },
+      { session, timestamps: false },
+    )
+    .exec();
+});
 
 @Schema(collectionSchema('incompatibility_rules'))
 export class IncompatibilityRule extends Identified {
@@ -125,11 +145,27 @@ for (const field of [
   'bIngredientId',
   'bGroupId',
 ] as const) {
-  IncompatibilityRuleSchema.index(
-    { [field]: 1 },
-    { name: indexName('incompatibility_rules', [field], 'idx') },
-  );
+  IncompatibilityRuleSchema.index({ [field]: 1 });
 }
+
+/** One ingredient line inside a recipe, ordered by array position. */
+@Schema({ _id: false })
+export class RecipeIngredient {
+  @Prop({ type: String, required: true })
+  ingredientId!: string;
+
+  @Prop({ type: Number, default: null })
+  quantity!: number | null;
+
+  @Prop({ type: String, default: null })
+  unit!: string | null;
+
+  @Prop({ type: String, default: null })
+  note!: string | null;
+}
+
+export const RecipeIngredientSchema =
+  SchemaFactory.createForClass(RecipeIngredient);
 
 @Schema(collectionSchema('recipes'))
 export class Recipe extends Identified {
@@ -160,6 +196,9 @@ export class Recipe extends Identified {
   @Prop({ type: Number, default: null })
   cookMinutes!: number | null;
 
+  @Prop({ type: [RecipeIngredientSchema], required: true, default: [] })
+  ingredients!: RecipeIngredient[];
+
   @Prop({ type: [String], required: true, default: [] })
   steps!: string[];
 
@@ -171,48 +210,30 @@ export class Recipe extends Identified {
 }
 
 export const RecipeSchema = SchemaFactory.createForClass(Recipe);
-RecipeSchema.index(
-  { postId: 1 },
-  { name: indexName('recipes', ['postId'], 'idx') },
-);
+RecipeSchema.index({ postId: 1 });
+RecipeSchema.index({ 'ingredients.ingredientId': 1 });
 
-@Schema(collectionSchema('recipe_ingredients', 'none'))
-export class RecipeIngredient extends Identified {
-  @Prop({ type: String, default: () => randomUUID() })
-  _id!: string;
-
-  @Prop({ type: String, required: true })
-  recipeId!: string;
-
-  @Prop({ type: String, required: true })
-  ingredientId!: string;
-
-  @Prop({ type: Number, required: true })
-  position!: number;
-
-  @Prop({ type: Number, default: null })
-  quantity!: number | null;
-
-  @Prop({ type: String, default: null })
-  unit!: string | null;
-
-  @Prop({ type: String, default: null })
-  note!: string | null;
-}
-
-export const RecipeIngredientSchema =
-  SchemaFactory.createForClass(RecipeIngredient);
-RecipeIngredientSchema.index(
-  { recipeId: 1, ingredientId: 1 },
-  {
-    unique: true,
-    name: indexName('recipe_ingredients', ['recipeId', 'ingredientId'], 'key'),
-  },
-);
-RecipeIngredientSchema.index(
-  { ingredientId: 1 },
-  { name: indexName('recipe_ingredients', ['ingredientId'], 'idx') },
-);
+onDelete(RecipeSchema, async (db, ids, session) => {
+  const inIds = { $in: ids };
+  await db
+    .model('Post')
+    .updateMany(
+      { 'blog.recipeIds': inIds },
+      { $pull: { 'blog.recipeIds': inIds } },
+      { session, timestamps: false },
+    )
+    .exec();
+  for (const modelName of [
+    'RecipeFavorite',
+    'RecipeRating',
+    'MealPlanEntry',
+  ] as const) {
+    await db
+      .model(modelName)
+      .deleteMany({ recipeId: inIds }, { session })
+      .exec();
+  }
+});
 
 @Schema(collectionSchema('recipe_favorites', 'created'))
 export class RecipeFavorite extends Identified {
@@ -231,23 +252,8 @@ export class RecipeFavorite extends Identified {
 
 export const RecipeFavoriteSchema =
   SchemaFactory.createForClass(RecipeFavorite);
-RecipeFavoriteSchema.index(
-  { recipeId: 1, userId: 1 },
-  {
-    unique: true,
-    name: indexName('recipe_favorites', ['recipeId', 'userId'], 'key'),
-  },
-);
-RecipeFavoriteSchema.index(
-  { userId: 1, createdAt: 1, recipeId: 1 },
-  {
-    name: indexName(
-      'recipe_favorites',
-      ['userId', 'createdAt', 'recipeId'],
-      'idx',
-    ),
-  },
-);
+RecipeFavoriteSchema.index({ recipeId: 1, userId: 1 }, { unique: true });
+RecipeFavoriteSchema.index({ userId: 1, createdAt: 1, recipeId: 1 });
 
 @Schema(collectionSchema('recipe_ratings'))
 export class RecipeRating extends Identified {
@@ -271,17 +277,8 @@ export class RecipeRating extends Identified {
 }
 
 export const RecipeRatingSchema = SchemaFactory.createForClass(RecipeRating);
-RecipeRatingSchema.index(
-  { recipeId: 1, userId: 1 },
-  {
-    unique: true,
-    name: indexName('recipe_ratings', ['recipeId', 'userId'], 'key'),
-  },
-);
-RecipeRatingSchema.index(
-  { userId: 1 },
-  { name: indexName('recipe_ratings', ['userId'], 'idx') },
-);
+RecipeRatingSchema.index({ recipeId: 1, userId: 1 }, { unique: true });
+RecipeRatingSchema.index({ userId: 1 });
 
 @Schema(collectionSchema('meal_plan_entries', 'none'))
 export class MealPlanEntry extends Identified {
@@ -307,16 +304,6 @@ export class MealPlanEntry extends Identified {
 export const MealPlanEntrySchema = SchemaFactory.createForClass(MealPlanEntry);
 MealPlanEntrySchema.index(
   { userId: 1, day: 1, section: 1, recipeId: 1 },
-  {
-    unique: true,
-    name: indexName(
-      'meal_plan_entries',
-      ['userId', 'day', 'section', 'recipeId'],
-      'key',
-    ),
-  },
+  { unique: true },
 );
-MealPlanEntrySchema.index(
-  { recipeId: 1 },
-  { name: indexName('meal_plan_entries', ['recipeId'], 'idx') },
-);
+MealPlanEntrySchema.index({ recipeId: 1 });

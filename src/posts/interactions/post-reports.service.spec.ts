@@ -5,23 +5,23 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
-import { createPost, createUser } from '../../../test/fixtures';
+import { createPost, createUser } from '../../../test/fixtures.js';
 import {
   createTestMongoUrl,
   dropTestDatabase,
   prepareTestDatabase,
-} from '../../../test/mongo-test-db';
+} from '../../../test/mongo-test-db.js';
 import {
-  type Post,
+  Post,
+  PostReport,
   PostReportReason,
   PostReportStatus,
   PostStatus,
-  type Stored,
   type User,
-} from '../../mongo/models';
-import { MongoModule } from '../../mongo/mongo.module';
-import { MongoService } from '../../mongo/mongo.service';
-import { PostReportsService } from './post-reports.service';
+} from '../../mongo/models.js';
+import { MongoModule } from '../../mongo/mongo.module.js';
+import { MongoService } from '../../mongo/mongo.service.js';
+import { PostReportsService } from './post-reports.service.js';
 
 describe('PostReportsService', () => {
   let app: INestApplication;
@@ -45,8 +45,8 @@ describe('PostReportsService', () => {
     reporter = await createUser(db, { username: 'reporter' });
   });
   beforeEach(async () => {
-    await db.db.collection('post_reports').deleteMany({});
-    await db.db.collection<Stored<Post>>('posts').deleteMany({});
+    await db.connection.model(PostReport.name).deleteMany({});
+    await db.connection.model(Post.name).deleteMany({});
     post = await createPost(db, { authorId: author.id });
   });
   afterAll(async () => {
@@ -60,7 +60,7 @@ describe('PostReportsService', () => {
       details,
     });
   const count = (collection: string) =>
-    db.db.collection(collection).countDocuments();
+    db.connection.collections[collection].countDocuments();
 
   it('files a report against a published post', async () => {
     await expect(file(reporter.id, '')).resolves.toMatchObject({
@@ -74,8 +74,8 @@ describe('PostReportsService', () => {
 
   it('refuses reports on missing posts and on your own post', async () => {
     await expect(file(author.id)).rejects.toBeInstanceOf(BadRequestException);
-    await db.db
-      .collection<Stored<Post>>('posts')
+    await db.connection
+      .model<Post>(Post.name)
       .updateOne({ _id: post.id }, { $set: { status: PostStatus.PROCESSING } });
     await expect(file()).rejects.toBeInstanceOf(NotFoundException);
     expect(await count('post_reports')).toBe(0);

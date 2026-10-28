@@ -1,17 +1,15 @@
 import { randomUUID } from 'node:crypto';
 import { Test } from '@nestjs/testing';
 import type { INestApplication } from '@nestjs/common';
-import { FollowSuggestionsService } from '../src/profiles/follow-suggestions.service';
-import { MongoModule } from '../src/mongo/mongo.module';
-import { MongoService } from '../src/mongo/mongo.service';
-import { createUser } from './fixtures';
+import { FollowSuggestionsService } from '../src/profiles/follow-suggestions.service.js';
+import { MongoModule } from '../src/mongo/mongo.module.js';
+import { MongoService } from '../src/mongo/mongo.service.js';
+import { createUser } from './fixtures.js';
 import {
   createTestMongoUrl,
   dropTestDatabase,
   prepareTestDatabase,
-} from './mongo-test-db';
-
-type StoredDoc = { _id: string; [key: string]: unknown };
+} from './mongo-test-db.js';
 
 describe('Follow suggestions with MongoDB', () => {
   let app: INestApplication;
@@ -19,9 +17,9 @@ describe('Follow suggestions with MongoDB', () => {
   let service: FollowSuggestionsService;
   const ids: Record<string, string> = {};
 
-  const follows = () => db.db.collection<StoredDoc>('follows');
+  const follows = () => db.connection.model('Follow');
   const follow = (from: string, to: string) =>
-    follows().insertOne({
+    follows().create({
       _id: randomUUID(),
       followerId: ids[from],
       followingId: ids[to],
@@ -88,9 +86,7 @@ describe('Follow suggestions with MongoDB', () => {
     ]);
     await service.dismiss(ids.a, ids.f);
     expect(
-      await db.db
-        .collection<StoredDoc>('suggestion_dismissals')
-        .countDocuments(),
+      await db.connection.collections.suggestion_dismissals.countDocuments(),
     ).toBe(1);
 
     await service.rebuild([ids.a]);

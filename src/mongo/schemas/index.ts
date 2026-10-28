@@ -1,20 +1,18 @@
 import type { Connection, Schema } from 'mongoose';
 import {
-  BlogRecipeSchema,
-  BlogSchema,
   PostBookmarkSchema,
   PostCommentSchema,
   PostLikeSchema,
   PostReportSchema,
   PostRepostSchema,
   PostSchema,
-} from './post.schema';
+} from './post.schema.js';
 import {
   AiUsageSchema,
   PaymentIntentSchema,
   PaymentRequestSchema,
   PaymentWebhookReceiptSchema,
-} from './payment.schema';
+} from './payment.schema.js';
 import {
   EmailVerificationGuessesSchema,
   FollowSchema,
@@ -26,33 +24,33 @@ import {
   SuggestionDismissalSchema,
   UserAccountAuditSchema,
   UserSchema,
-} from './user.schema';
+} from './user.schema.js';
 import {
-  IngredientGroupMemberSchema,
   IngredientGroupSchema,
   IngredientSchema,
   IncompatibilityRuleSchema,
   MealPlanEntrySchema,
   RecipeFavoriteSchema,
-  RecipeIngredientSchema,
   RecipeRatingSchema,
   RecipeSchema,
-} from './recipe.schema';
-import { KnowledgeDocumentSchema, MediaAssetSchema } from './media.schema';
+} from './recipe.schema.js';
+import { KnowledgeDocumentSchema, MediaAssetSchema } from './media.schema.js';
 import {
   VerificationProofSchema,
   VerificationRequestSchema,
-} from './verification.schema';
+} from './verification.schema.js';
+import { DocumentLockSchema } from '../document-lock.js';
 
-export * from './user.schema';
-export * from './post.schema';
-export * from './media.schema';
-export * from './verification.schema';
-export * from './recipe.schema';
-export * from './payment.schema';
+export * from './user.schema.js';
+export * from './post.schema.js';
+export * from './media.schema.js';
+export * from './verification.schema.js';
+export * from './recipe.schema.js';
+export * from './payment.schema.js';
 
 /** Every collection the API reads or writes, keyed by its model name. */
 export const MODEL_DEFINITIONS: { name: string; schema: Schema }[] = [
+  { name: 'DocumentLock', schema: DocumentLockSchema },
   { name: 'User', schema: UserSchema },
   { name: 'UserAccountAudit', schema: UserAccountAuditSchema },
   { name: 'Follow', schema: FollowSchema },
@@ -64,8 +62,6 @@ export const MODEL_DEFINITIONS: { name: string; schema: Schema }[] = [
   { name: 'OneTimeCode', schema: OneTimeCodeSchema },
   { name: 'EmailVerificationGuesses', schema: EmailVerificationGuessesSchema },
   { name: 'Post', schema: PostSchema },
-  { name: 'Blog', schema: BlogSchema },
-  { name: 'BlogRecipe', schema: BlogRecipeSchema },
   { name: 'PostComment', schema: PostCommentSchema },
   { name: 'PostLike', schema: PostLikeSchema },
   { name: 'PostRepost', schema: PostRepostSchema },
@@ -77,10 +73,8 @@ export const MODEL_DEFINITIONS: { name: string; schema: Schema }[] = [
   { name: 'VerificationProof', schema: VerificationProofSchema },
   { name: 'Ingredient', schema: IngredientSchema },
   { name: 'IngredientGroup', schema: IngredientGroupSchema },
-  { name: 'IngredientGroupMember', schema: IngredientGroupMemberSchema },
   { name: 'IncompatibilityRule', schema: IncompatibilityRuleSchema },
   { name: 'Recipe', schema: RecipeSchema },
-  { name: 'RecipeIngredient', schema: RecipeIngredientSchema },
   { name: 'RecipeFavorite', schema: RecipeFavoriteSchema },
   { name: 'RecipeRating', schema: RecipeRatingSchema },
   { name: 'MealPlanEntry', schema: MealPlanEntrySchema },

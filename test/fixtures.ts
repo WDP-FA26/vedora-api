@@ -13,9 +13,8 @@ import {
   type Recipe,
   type User,
   UserRole,
-} from '../src/mongo/models';
-import type { MongoService } from '../src/mongo/mongo.service';
-import { deleteWithReferences } from '../src/mongo/relations';
+} from '../src/mongo/models.js';
+import type { MongoService } from '../src/mongo/mongo.service.js';
 
 // Documents with the defaults every write must spell out. Each takes the
 // fields a test cares about and fills the rest.
@@ -61,31 +60,28 @@ export function createIngredient(
   });
 }
 
-/** A recipe with its ingredients, by position. */
-export async function createRecipe(
+/** A recipe with its embedded ingredients, in array order. */
+export function createRecipe(
   db: MongoService,
   fields: Partial<Recipe> = {},
   ingredientIds: string[] = [],
 ): Promise<Recipe> {
-  const { id, ...rest } = fields;
-  const recipe = await model<Recipe>(db, 'Recipe').create({
+  const { id, ingredients, ...rest } = fields;
+  return model<Recipe>(db, 'Recipe').create({
     _id: id ?? randomUUID(),
     title: 'Test recipe',
     servings: 2,
     steps: ['Cook'],
+    ingredients:
+      ingredients ??
+      ingredientIds.map((ingredientId) => ({
+        ingredientId,
+        quantity: null,
+        unit: null,
+        note: null,
+      })),
     ...rest,
   });
-  if (ingredientIds.length > 0) {
-    await model(db, 'RecipeIngredient').insertMany(
-      ingredientIds.map((ingredientId, position) => ({
-        _id: randomUUID(),
-        recipeId: recipe.id,
-        ingredientId,
-        position,
-      })),
-    );
-  }
-  return recipe;
 }
 
 export function createPost(
@@ -121,13 +117,23 @@ export function createMedia(
   });
 }
 
-/** Deletes a document and applies the onDelete rules, as the services do. */
-export function deleteWithCascade(
+const COLLECTION_MODEL: Record<'users' | 'posts' | 'recipes', string> = {
+  users: 'User',
+  posts: 'Post',
+  recipes: 'Recipe',
+};
+
+/** Deletes a document through its Mongoose model so schema `onDelete` hooks run. */
+export async function deleteWithCascade(
   db: MongoService,
-  collection: Parameters<typeof deleteWithReferences>[2],
+  collection: 'users' | 'posts' | 'recipes',
   id: string,
 ): Promise<number> {
-  return db.withTransaction((session) =>
-    deleteWithReferences(db.db, session, collection, { _id: id }),
+  const { deletedCount } = await db.withTransaction((session) =>
+    db.connection
+      .model(COLLECTION_MODEL[collection])
+      .deleteOne({ _id: id }, { session })
+      .exec(),
   );
+  return deletedCount;
 }

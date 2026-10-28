@@ -7,25 +7,23 @@ import {
   type MealPlanEntry,
   MealSection,
   type Recipe,
-  type RecipeIngredient,
-  type Stored,
   UserRole,
   Weekday,
-} from '../src/mongo/models';
+} from '../src/mongo/models.js';
 import request from 'supertest';
-import type { App } from 'supertest/types';
-import { configureApp } from '../src/app.setup';
-import { MongoModule } from '../src/mongo/mongo.module';
-import { MongoService } from '../src/mongo/mongo.service';
-import { ShoppingListController } from '../src/meal-plan/shopping-list.controller';
-import { ShoppingListService } from '../src/meal-plan/shopping-list.service';
-import type { ShoppingListDto } from '../src/meal-plan/dto/shopping-list.dto';
-import { createIngredient, createRecipe, createUser } from './fixtures';
+import type { App } from 'supertest/types.js';
+import { configureApp } from '../src/app.setup.js';
+import { MongoModule } from '../src/mongo/mongo.module.js';
+import { MongoService } from '../src/mongo/mongo.service.js';
+import { ShoppingListController } from '../src/meal-plan/shopping-list.controller.js';
+import { ShoppingListService } from '../src/meal-plan/shopping-list.service.js';
+import type { ShoppingListDto } from '../src/meal-plan/dto/shopping-list.dto.js';
+import { createIngredient, createRecipe, createUser } from './fixtures.js';
 import {
   createTestMongoUrl,
   dropTestDatabase,
   prepareTestDatabase,
-} from './mongo-test-db';
+} from './mongo-test-db.js';
 
 describe('Shopping list with MongoDB', () => {
   let db: MongoService;
@@ -93,29 +91,25 @@ describe('Shopping list with MongoDB', () => {
       const recipe = await createRecipe(db, {
         title: `Shopping dish ${index}`,
         servings: source.servings,
-      });
-      await db.connection.model<RecipeIngredient>('RecipeIngredient').create({
-        _id: randomUUID(),
-        recipeId: recipe.id,
-        ingredientId: index === 5 ? otherIngredientId : ingredientId,
-        position: 0,
-        quantity: source.quantity === null ? null : Number(source.quantity),
-        unit: source.unit,
-        note: source.note,
+        ingredients: [
+          {
+            ingredientId: index === 5 ? otherIngredientId : ingredientId,
+            quantity: source.quantity === null ? null : Number(source.quantity),
+            unit: source.unit,
+            note: source.note,
+          },
+        ],
       });
       recipes.push(recipe.id);
     }
   });
   beforeEach(async () => {
-    await db.db.collection('meal_plan_entries').deleteMany({});
+    await db.connection.collections.meal_plan_entries.deleteMany({});
     await db.connection
       .model<Recipe>('Recipe')
-      .updateOne({ _id: recipes[0] }, { $set: { servings: 2 } });
-    await db.connection
-      .model<RecipeIngredient>('RecipeIngredient')
       .updateOne(
-        { recipeId: recipes[0], ingredientId },
-        { $set: { quantity: 0.1 } },
+        { _id: recipes[0], 'ingredients.ingredientId': ingredientId },
+        { $set: { servings: 2, 'ingredients.$.quantity': 0.1 } },
       );
     const slots = [
       {
@@ -270,11 +264,9 @@ describe('Shopping list with MongoDB', () => {
     await entriesModel().deleteMany({ userId: first });
     expect((await get().expect(200)).body).toMatchObject({ items: [] });
   });
-  // Writers in driver transactions, as the services write related documents.
-  const entries = () =>
-    db.db.collection<Stored<MealPlanEntry>>('meal_plan_entries');
-  const items = () =>
-    db.db.collection<Stored<RecipeIngredient>>('recipe_ingredients');
+  // Writers in transactions, as the services write related documents.
+  const entries = () => db.connection.model<MealPlanEntry>('MealPlanEntry');
+  const recipesModel = () => db.connection.model<Recipe>('Recipe');
 
   it('does not mix a prior timetable with newer ingredient data', async () => {
     await entriesModel().deleteMany({ userId: first, day: Weekday.MON });
@@ -292,25 +284,27 @@ describe('Shopping list with MongoDB', () => {
             { userId: first, day: Weekday.MON },
             { session },
           );
-          await items().updateOne(
-            { recipeId: recipes[0], ingredientId },
-            { $set: { quantity: switched ? 0.9 : 0.1 } },
+          await recipesModel().updateOne(
+            { _id: recipes[0], 'ingredients.ingredientId': ingredientId },
+            { $set: { 'ingredients.$.quantity': switched ? 0.9 : 0.1 } },
             { session },
           );
-          await items().updateOne(
-            { recipeId: recipes[1], ingredientId },
-            { $set: { quantity: switched ? 0.8 : 0.2 } },
+          await recipesModel().updateOne(
+            { _id: recipes[1], 'ingredients.ingredientId': ingredientId },
+            { $set: { 'ingredients.$.quantity': switched ? 0.8 : 0.2 } },
             { session },
           );
-          await entries().insertOne(
-            {
-              _id: randomUUID(),
-              userId: first,
-              day: Weekday.MON,
-              section: MealSection.LUNCH,
-              recipeId: recipes[switched ? 1 : 0],
-              position: 0,
-            },
+          await entries().create(
+            [
+              {
+                _id: randomUUID(),
+                userId: first,
+                day: Weekday.MON,
+                section: MealSection.LUNCH,
+                recipeId: recipes[switched ? 1 : 0],
+                position: 0,
+              },
+            ],
             { session },
           );
         });
@@ -338,16 +332,14 @@ describe('Shopping list with MongoDB', () => {
       for (let index = 0; index < 10; index++) {
         const servings = index % 2 === 0 ? 4 : 2;
         await db.withTransaction(async (session) => {
-          await db.db
-            .collection<Stored<Recipe>>('recipes')
-            .updateOne(
-              { _id: recipes[0] },
-              { $set: { servings } },
-              { session },
-            );
-          await items().updateOne(
-            { recipeId: recipes[0], ingredientId },
-            { $set: { quantity: servings === 4 ? 0.2 : 0.1 } },
+          await recipesModel().updateOne(
+            { _id: recipes[0], 'ingredients.ingredientId': ingredientId },
+            {
+              $set: {
+                servings,
+                'ingredients.$.quantity': servings === 4 ? 0.2 : 0.1,
+              },
+            },
             { session },
           );
         });

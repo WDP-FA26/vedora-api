@@ -1,16 +1,16 @@
 import type { INestApplication } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { hash } from 'bcryptjs';
-import { createUser } from '../../test/fixtures';
+import { createUser } from '../../test/fixtures.js';
 import {
   createTestMongoUrl,
   dropTestDatabase,
   prepareTestDatabase,
-} from '../../test/mongo-test-db';
-import { MongoModule } from '../mongo/mongo.module';
-import { AccountStatus, type User, UserRole } from '../mongo/models';
-import { MongoService } from '../mongo/mongo.service';
-import { seedDatabase } from './seed';
+} from '../../test/mongo-test-db.js';
+import { MongoModule } from '../mongo/mongo.module.js';
+import { AccountStatus, type User, UserRole } from '../mongo/models.js';
+import { MongoService } from '../mongo/mongo.service.js';
+import { seedDatabase } from './seed.js';
 
 describe('Admin bootstrap', () => {
   let app: INestApplication;

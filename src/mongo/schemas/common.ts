@@ -1,4 +1,5 @@
 import type { SchemaOptions } from '@nestjs/mongoose';
+import type { ClientSession, Connection, Schema } from 'mongoose';
 
 type Timestamps = 'both' | 'created' | 'updated' | 'none';
 
@@ -10,9 +11,8 @@ const TIMESTAMPS: Record<Timestamps, SchemaOptions['timestamps']> = {
 };
 
 /**
- * Options shared by every schema: the collection name it has always used,
- * the timestamps Prisma maintained, no `__v`, and `toObject()`/`toJSON()`
- * carrying the `id` string that services and DTOs read.
+ * Options shared by every schema: collection name, timestamps, no `__v`, and
+ * `toObject()`/`toJSON()` carrying the `id` string that services and DTOs read.
  */
 export function collectionSchema(
   collection: string,
@@ -28,14 +28,33 @@ export function collectionSchema(
 }
 
 /**
- * Index names Prisma generated for the same keys. Keeping them makes the
- * schema a no-op on databases that were created by `prisma db push`, instead
- * of MongoDB rejecting a second index with the same key.
+ * Runs `cleanup` with the connection, matching `_id`s and active session
+ * before `deleteMany` or `deleteOne` removes documents from `schema`.
  */
-export function indexName(
-  collection: string,
-  fields: string[],
-  kind: 'key' | 'idx',
-) {
-  return `${collection}_${fields.join('_')}_${kind}`;
+export function onDelete<T extends { _id: string }>(
+  schema: Schema<T>,
+  cleanup: (
+    db: Connection,
+    ids: string[],
+    session: ClientSession | undefined,
+  ) => Promise<void>,
+): void {
+  for (const hook of ['deleteMany', 'deleteOne'] as const) {
+    schema.pre(hook, { document: false, query: true }, async function () {
+      const session = this.getOptions().session ?? undefined;
+      const docs = await this.model.db
+        .model<{ _id: string }>(this.model.modelName)
+        .find(this.getFilter())
+        .select('_id')
+        .lean()
+        .session(session ?? null)
+        .exec();
+      if (docs.length === 0) return;
+      await cleanup(
+        this.model.db,
+        docs.map((doc) => doc._id),
+        session,
+      );
+    });
+  }
 }

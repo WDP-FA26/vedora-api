@@ -4,25 +4,25 @@ import { getModelToken } from '@nestjs/mongoose';
 import { Test } from '@nestjs/testing';
 import type { Model } from 'mongoose';
 import { type DeepMockProxy, mockDeep } from 'vitest-mock-extended';
-import { createUser } from '../../../test/fixtures';
+import { createUser } from '../../../test/fixtures.js';
 import {
   createTestMongoUrl,
   dropTestDatabase,
   prepareTestDatabase,
-} from '../../../test/mongo-test-db';
-import { Blog } from '../../mongo/models';
-import { MongoModule } from '../../mongo/mongo.module';
-import { MongoService } from '../../mongo/mongo.service';
-import { StorageService, StorageTarget } from '../../storage/storage.service';
-import { BlogsService } from './blogs.service';
-import { PostsService } from '../posts.service';
+} from '../../../test/mongo-test-db.js';
+import { Post } from '../../mongo/models.js';
+import { MongoModule } from '../../mongo/mongo.module.js';
+import { MongoService } from '../../mongo/mongo.service.js';
+import { StorageService, StorageTarget } from '../../storage/storage.service.js';
+import { BlogsService } from './blogs.service.js';
+import { PostsService } from '../posts.service.js';
 
 const STORAGE = 'http://localhost:9000/vedora-blogs';
 
 describe('BlogsService covers', () => {
   let app: INestApplication;
   let db: MongoService;
-  let blogsModel: Model<Blog>;
+  let postsModel: Model<Post>;
   let storage: DeepMockProxy<StorageService>;
   let blogs: BlogsService;
   let authorId: string;
@@ -40,7 +40,7 @@ describe('BlogsService covers', () => {
     await app.init();
     await prepareTestDatabase(app);
     db = app.get(MongoService);
-    blogsModel = app.get(getModelToken(Blog.name));
+    postsModel = app.get(getModelToken(Post.name));
     authorId = (await createUser(db)).id;
   });
   beforeEach(() => {
@@ -56,15 +56,11 @@ describe('BlogsService covers', () => {
       posts,
       storage,
       app.get(getModelToken('Post')),
-      app.get(getModelToken('Blog')),
-      app.get(getModelToken('BlogRecipe')),
       app.get(getModelToken('Recipe')),
     );
   });
   afterEach(async () => {
-    await db.db.collection('blogs').deleteMany({});
-    await db.db.collection('posts').deleteMany({});
-    await db.db.collection('blog_recipes').deleteMany({});
+    await db.connection.collections.posts.deleteMany({});
   });
   afterAll(async () => {
     await dropTestDatabase(app);
@@ -73,7 +69,7 @@ describe('BlogsService covers', () => {
 
   const create = (coverImageUrl: string) =>
     blogs.create(authorId, { title: 'Phở chay', coverImageUrl });
-  const stored = () => blogsModel.find({}).exec();
+  const stored = () => postsModel.find({}).exec();
 
   it.each([
     ['an https link', 'https://cdn.example.com/pho.jpg'],
@@ -81,7 +77,7 @@ describe('BlogsService covers', () => {
   ])('accepts %s', async (_case, url) => {
     await create(url);
 
-    expect(await stored()).toMatchObject([{ coverImageUrl: url }]);
+    expect(await stored()).toMatchObject([{ blog: { coverImageUrl: url } }]);
   });
 
   it.each([

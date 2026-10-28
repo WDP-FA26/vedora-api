@@ -7,20 +7,19 @@ import {
 import { InjectModel } from '@nestjs/mongoose';
 import { randomUUID } from 'node:crypto';
 import type { HydratedDocument, Model } from 'mongoose';
-import { lockDocument } from '../mongo/document-lock';
+import { lockDocument } from '../mongo/document-lock.js';
 import {
   Ingredient,
   MealPlanEntry,
   MealSection,
   Recipe,
   RecipeIngredient,
-  Stored,
   User,
   Weekday,
-} from '../mongo/models';
-import { MongoService } from '../mongo/mongo.service';
-import { DietaryService } from '../recipes/dietary.service';
-import { IncompatibilityRulesService } from '../recipes/incompatibility-rules.service';
+} from '../mongo/models.js';
+import { MongoService } from '../mongo/mongo.service.js';
+import { DietaryService } from '../recipes/dietary.service.js';
+import { IncompatibilityRulesService } from '../recipes/incompatibility-rules.service.js';
 import {
   MEAL_SECTIONS,
   MealPlanDto,
@@ -29,10 +28,10 @@ import {
   MealRecipeDto,
   SaveMealDayDto,
   WEEKDAYS,
-} from './dto/meal-plan.dto';
+} from './dto/meal-plan.dto.js';
 
-/** A recipe with its ingredients, by position, and their names. */
-type RecipeRow = Recipe & {
+/** A recipe with its ingredients and their names. */
+type RecipeRow = Omit<Recipe, 'ingredients'> & {
   ingredients: (RecipeIngredient & { ingredient: Ingredient })[];
 };
 type DaySections = Record<MealSection, RecipeRow[]>;
@@ -73,10 +72,11 @@ const toRef = ({ id, title }: RecipeRow): RecipeRef => ({ id, title });
 export class MealPlanService {
   constructor(
     @InjectModel(Recipe.name) private readonly recipes: Model<Recipe>,
-    @InjectModel(RecipeIngredient.name)
-    private readonly recipeIngredients: Model<RecipeIngredient>,
     @InjectModel(Ingredient.name)
     private readonly ingredients: Model<Ingredient>,
+    @InjectModel(MealPlanEntry.name)
+    private readonly entries: Model<MealPlanEntry>,
+    @InjectModel(User.name) private readonly users: Model<User>,
     private readonly dietary: DietaryService,
     private readonly rules: IncompatibilityRulesService,
     private readonly mongo: MongoService,
@@ -199,27 +199,31 @@ export class MealPlanService {
         })),
       ),
     );
-    const { db } = this.mongo;
     // The days are replaced as a whole: their old entries and the new ones
     // change together.
     const saved = await this.mongo.withTransaction(async (session) => {
-      await lockDocument(db, session, 'user', userId);
-      const user = await db
-        .collection<Stored<User>>('users')
-        .findOne({ _id: userId }, { session });
+      await lockDocument(this.mongo, session, 'user', userId);
+      const user = await this.users
+        .findOne({ _id: userId })
+        .session(session)
+        .exec();
       if (!user) throw new NotFoundException('User not found');
-      const planned = db.collection<Stored<MealPlanEntry>>('meal_plan_entries');
-      await planned.deleteMany(
-        { userId, day: { $in: preview.days.map(({ day }) => day) } },
-        { session },
-      );
+      await this.entries
+        .deleteMany(
+          { userId, day: { $in: preview.days.map(({ day }) => day) } },
+          { session },
+        )
+        .exec();
       // insertMany rejects an empty list (a day saved empty).
-      if (entries.length > 0) await planned.insertMany(entries, { session });
+      if (entries.length > 0) {
+        await this.entries.insertMany(entries, { session });
+      }
       // The timetable as this save left it, not as a following save leaves it.
-      return planned
-        .find({ userId }, { session })
+      return this.entries
+        .find({ userId })
         .sort({ position: 1 })
-        .toArray();
+        .session(session)
+        .exec();
     });
     return this.toPlan(userId, await this.weekOf(saved));
   }
@@ -233,8 +237,6 @@ export class MealPlanService {
     const text = query?.trim().toLowerCase();
     const includesText = (value: string | null) =>
       !!text && !!value?.toLowerCase().includes(text);
-    // MongoDB has no relation filters, so the recipes are filtered by their
-    // ingredients here. The catalog is admin-curated and small.
     const recipes = (
       await this.recipeRows(await this.recipes.find().sort({ title: 1 }).exec())
     )
@@ -273,10 +275,8 @@ export class MealPlanService {
   }
 
   private async saved(userId: string): Promise<Week> {
-    const entries =
-      this.mongo.db.collection<Stored<MealPlanEntry>>('meal_plan_entries');
     return this.weekOf(
-      await entries.find({ userId }).sort({ position: 1 }).toArray(),
+      await this.entries.find({ userId }).sort({ position: 1 }).exec(),
     );
   }
 
@@ -301,16 +301,16 @@ export class MealPlanService {
     return week;
   }
 
-  /** Adds each recipe's ingredients, by position, with their names. */
+  /** Adds each recipe's ingredients with their names. */
   private async recipeRows(
     recipes: HydratedDocument<Recipe>[],
   ): Promise<RecipeRow[]> {
-    const items = await this.recipeIngredients
-      .find({ recipeId: { $in: recipes.map(({ id }) => id) } })
-      .sort({ position: 1 })
-      .exec();
     const ingredientIds = [
-      ...new Set(items.map(({ ingredientId }) => ingredientId)),
+      ...new Set(
+        recipes.flatMap((recipe) =>
+          recipe.ingredients.map(({ ingredientId }) => ingredientId),
+        ),
+      ),
     ];
     const ingredients = await this.ingredients
       .find({ _id: { $in: ingredientIds } })
@@ -318,22 +318,17 @@ export class MealPlanService {
     const ingredientById = new Map(
       ingredients.map((ingredient) => [ingredient.id, ingredient]),
     );
-    return recipes.map((recipe) => ({
-      ...(recipe.toObject() as Recipe),
-      id: recipe.id,
-      ingredients: items
-        .filter(({ recipeId }) => recipeId === recipe.id)
-        .flatMap((item) => {
+    return recipes.map((recipe) => {
+      const plain = recipe.toObject() as Recipe;
+      return {
+        ...plain,
+        id: recipe.id,
+        ingredients: plain.ingredients.flatMap((item) => {
           const ingredient = ingredientById.get(item.ingredientId);
-          return ingredient
-            ? [
-                Object.assign(item.toObject() as RecipeIngredient, {
-                  ingredient,
-                }),
-              ]
-            : [];
+          return ingredient ? [{ ...item, ingredient }] : [];
         }),
-    }));
+      };
+    });
   }
 
   private async problems(

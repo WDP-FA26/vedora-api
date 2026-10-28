@@ -2,32 +2,31 @@ import { randomUUID } from 'node:crypto';
 import type { INestApplication } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { mockDeep } from 'vitest-mock-extended';
-import { MediaService } from '../src/media/media.service';
-import { CloudinaryService } from '../src/cloudinary/cloudinary.service';
-import { PostStatus, PostType } from '../src/mongo/models';
-import { MongoModule } from '../src/mongo/mongo.module';
-import { MongoService } from '../src/mongo/mongo.service';
-import { deleteWithReferences } from '../src/mongo/relations';
-import { PostFeedService } from '../src/posts/search/post-feed.service';
-import { PostSearchIndexService } from '../src/posts/search/post-search-index.service';
-import { PostSearchService } from '../src/posts/search/post-search.service';
-import { BlogsService } from '../src/posts/blogs/blogs.service';
-import { PostInteractionsService } from '../src/posts/interactions/post-interactions.service';
-import { PostsService } from '../src/posts/posts.service';
-import { PostRelationsService } from '../src/posts/post-relations.service';
-import { NotificationsService } from '../src/notifications/notifications.service';
-import { StorageService } from '../src/storage/storage.service';
+import { MediaService } from '../src/media/media.service.js';
+import { CloudinaryService } from '../src/cloudinary/cloudinary.service.js';
+import { Post, PostStatus, PostType } from '../src/mongo/models.js';
+import { MongoModule } from '../src/mongo/mongo.module.js';
+import { MongoService } from '../src/mongo/mongo.service.js';
+import { PostFeedService } from '../src/posts/search/post-feed.service.js';
+import { PostSearchIndexService } from '../src/posts/search/post-search-index.service.js';
+import { PostSearchService } from '../src/posts/search/post-search.service.js';
+import { BlogsService } from '../src/posts/blogs/blogs.service.js';
+import { PostInteractionsService } from '../src/posts/interactions/post-interactions.service.js';
+import { PostsService } from '../src/posts/posts.service.js';
+import { PostRelationsService } from '../src/posts/post-relations.service.js';
+import { NotificationsService } from '../src/notifications/notifications.service.js';
+import { StorageService } from '../src/storage/storage.service.js';
 import {
   createPost,
   createRecipe,
   createUser,
   deleteWithCascade,
-} from './fixtures';
+} from './fixtures.js';
 import {
   createTestMongoUrl,
   dropTestDatabase,
   prepareTestDatabase,
-} from './mongo-test-db';
+} from './mongo-test-db.js';
 
 describe('Blog lifecycle with MongoDB', () => {
   let app: INestApplication;
@@ -40,7 +39,7 @@ describe('Blog lifecycle with MongoDB', () => {
   let recipeIds: string[];
 
   const count = (collection: string) =>
-    db.db.collection(collection).countDocuments();
+    db.connection.collections[collection].countDocuments();
 
   beforeAll(async () => {
     const moduleRef = await Test.createTestingModule({
@@ -99,7 +98,7 @@ describe('Blog lifecycle with MongoDB', () => {
 
   beforeEach(async () => {
     await db.withTransaction((session) =>
-      deleteWithReferences(db.db, session, 'posts', {}),
+      db.connection.model<Post>(Post.name).deleteMany({}, { session }).exec(),
     );
   });
 
@@ -316,8 +315,7 @@ describe('Blog lifecycle with MongoDB', () => {
     await interactions.setLike(article.id, otherId, true);
     await interactions.setBookmark(article.id, otherId, true);
     await blogs.remove(article.id, authorId);
-    expect(await count('blogs')).toBe(0);
-    expect(await count('blog_recipes')).toBe(0);
+    expect(await count('posts')).toBe(0);
     expect(await count('post_comments')).toBe(0);
     expect(await count('post_likes')).toBe(0);
     expect(await count('post_bookmarks')).toBe(0);
@@ -342,6 +340,6 @@ describe('Blog lifecycle with MongoDB', () => {
     expect((await blogs.findOne(article.id, authorId)).blog?.recipes).toEqual(
       [],
     );
-    expect(await count('blogs')).toBe(1);
+    expect(await count('posts')).toBe(1);
   });
 });

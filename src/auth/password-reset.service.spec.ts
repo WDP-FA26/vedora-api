@@ -5,25 +5,31 @@ import {
   createTestMongoUrl,
   dropTestDatabase,
   prepareTestDatabase,
-} from '../../test/mongo-test-db';
-import { MailService } from '../mail/mail.service';
-import { MongoModule } from '../mongo/mongo.module';
-import { MongoService } from '../mongo/mongo.service';
-import { PasswordResetService } from './password-reset.service';
+} from '../../test/mongo-test-db.js';
+import { MailService } from '../mail/mail.service.js';
+import {
+  AccountStatus,
+  EmailVerificationGuesses,
+  OneTimeCode,
+  OneTimeCodePurpose,
+  User,
+  UserRole,
+} from '../mongo/models.js';
+import { MongoModule } from '../mongo/mongo.module.js';
+import { MongoService } from '../mongo/mongo.service.js';
+import { PasswordResetService } from './password-reset.service.js';
 
 const user = {
   id: '4a1e32e4-e18e-4dd7-8b4a-246ef2113ff2',
   email: 'a@b.vn',
   emailVerifiedAt: new Date('2026-09-01T00:00:00.000Z'),
 };
-const PURPOSE = 'PASSWORD_RESET';
+const PURPOSE = OneTimeCodePurpose.PASSWORD_RESET;
 const hashOf = (code: string) =>
   createHash('sha256')
     .update(`password-reset:${user.id}:${code}`)
     .digest('hex');
 const secondsAgo = (seconds: number) => new Date(Date.now() - seconds * 1000);
-
-type StoredDoc = { _id: string; [key: string]: unknown };
 
 describe('PasswordResetService', () => {
   let app: INestApplication;
@@ -34,15 +40,17 @@ describe('PasswordResetService', () => {
   };
   let service: PasswordResetService;
 
-  const codes = () => db.db.collection<StoredDoc>('one_time_codes');
+  const codes = () => db.connection.model<OneTimeCode>(OneTimeCode.name);
   const guesses = () =>
-    db.db.collection<StoredDoc>('email_verification_guesses');
-  const users = () => db.db.collection<StoredDoc>('users');
+    db.connection.model<EmailVerificationGuesses>(
+      EmailVerificationGuesses.name,
+    );
+  const users = () => db.connection.model<User>(User.name);
   const pending = () => codes().findOne({ userId: user.id, purpose: PURPOSE });
   const storedUser = () => users().findOne({ _id: user.id });
 
   const seedCode = (fields: Record<string, unknown> = {}) =>
-    codes().insertOne({
+    codes().create({
       _id: 'code-1',
       userId: user.id,
       purpose: PURPOSE,
@@ -55,13 +63,13 @@ describe('PasswordResetService', () => {
       ...fields,
     });
   const seedUser = (fields: Record<string, unknown> = {}) =>
-    users().insertOne({
+    users().create({
       _id: user.id,
       username: 'vedora.user',
       fullName: 'Vedora User',
       email: user.email,
-      role: 'USER',
-      status: 'ACTIVE',
+      role: UserRole.USER,
+      status: AccountStatus.ACTIVE,
       accountVersion: 0,
       isProfessional: false,
       emailVerifiedAt: user.emailVerifiedAt,
@@ -216,7 +224,7 @@ describe('PasswordResetService', () => {
     });
 
     it('shares the per-email guess budget with verification codes', async () => {
-      await guesses().insertOne({
+      await guesses().create({
         _id: user.email,
         guesses: 15,
         windowStart: new Date(),
@@ -227,10 +235,10 @@ describe('PasswordResetService', () => {
     });
 
     it('clears the remaining codes and guesses of the account', async () => {
-      await codes().insertOne({
+      await codes().create({
         _id: 'code-2',
         userId: user.id,
-        purpose: 'EMAIL_VERIFICATION',
+        purpose: OneTimeCodePurpose.EMAIL_VERIFICATION,
         codeHash: 'c'.repeat(64),
         attempts: 0,
         expiresAt: new Date(Date.now() + 600_000),
@@ -238,7 +246,7 @@ describe('PasswordResetService', () => {
         firstSentAt: new Date(),
         resendCount: 0,
       });
-      await guesses().insertOne({
+      await guesses().create({
         _id: user.email,
         guesses: 2,
         windowStart: new Date(),

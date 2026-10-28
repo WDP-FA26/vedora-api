@@ -1,9 +1,9 @@
 import { isStepCount, ToolLoopAgent } from 'ai';
-import { chatModel } from '../ai/openrouter';
-import type { ReasoningEffort } from '../ai/reasoning';
-import { searchKnowledgeTool } from '../ai/tools/search-knowledge.tool';
-import type { KnowledgeSearchService } from '../knowledge/retrieval/knowledge-search.service';
-import { INSTRUCTIONS } from './nutrition-chat.prompt';
+import { chatModel } from '../ai/openrouter.js';
+import type { ReasoningEffort } from '../ai/reasoning.js';
+import { searchKnowledgeTool } from '../ai/tools/search-knowledge.tool.js';
+import type { KnowledgeSearchService } from '../knowledge/retrieval/knowledge-search.service.js';
+import { INSTRUCTIONS } from './nutrition-chat.prompt.js';
 
 // guests get two searches and an answer, and a bounded reply
 const MAX_STEPS = 3;

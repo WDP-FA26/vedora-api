@@ -7,10 +7,10 @@ import {
   ApiUnauthorizedResponse,
 } from '@nestjs/swagger';
 import type { Response } from 'express';
-import type { AuthenticatedRequest } from '../auth/auth.types';
-import { JwtAuthGuard } from '../auth/jwt-auth.guard';
-import { ShoppingListDto, ShoppingListQueryDto } from './dto/shopping-list.dto';
-import { ShoppingListService } from './shopping-list.service';
+import type { AuthenticatedRequest } from '../auth/auth.types.js';
+import { JwtAuthGuard } from '../auth/jwt-auth.guard.js';
+import { ShoppingListDto, ShoppingListQueryDto } from './dto/shopping-list.dto.js';
+import { ShoppingListService } from './shopping-list.service.js';
 
 @ApiTags('meal-plan')
 @ApiBearerAuth()

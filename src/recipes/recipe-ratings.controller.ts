@@ -21,15 +21,15 @@ import {
   ApiUnauthorizedResponse,
 } from '@nestjs/swagger';
 import type { Response } from 'express';
-import type { AuthenticatedRequest } from '../auth/auth.types';
-import { JwtAuthGuard } from '../auth/jwt-auth.guard';
-import { OptionalJwtAuthGuard } from '../auth/optional-jwt-auth.guard';
+import type { AuthenticatedRequest } from '../auth/auth.types.js';
+import { JwtAuthGuard } from '../auth/jwt-auth.guard.js';
+import { OptionalJwtAuthGuard } from '../auth/optional-jwt-auth.guard.js';
 import {
   MyRecipeRatingDto,
   RecipeRatingSummaryDto,
   SetRecipeRatingDto,
-} from './dto/recipe-rating.dto';
-import { RecipeRatingsService } from './recipe-ratings.service';
+} from './dto/recipe-rating.dto.js';
+import { RecipeRatingsService } from './recipe-ratings.service.js';
 
 @ApiTags('recipe-ratings')
 @ApiNotFoundResponse({ description: 'Recipe not found' })

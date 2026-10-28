@@ -1,7 +1,7 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { IsIn, IsInt, Max, Min } from 'class-validator';
-import { SignedUploadDto } from '../../media/dto/media-response.dto';
-import { PresignedUploadDto } from '../../storage/presigned-upload.dto';
+import { SignedUploadDto } from '../../media/dto/media-response.dto.js';
+import { PresignedUploadDto } from '../../storage/presigned-upload.dto.js';
 
 export const BLOG_IMAGE_TYPES = [
   'image/jpeg',

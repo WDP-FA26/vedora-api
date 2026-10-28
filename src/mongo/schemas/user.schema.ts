@@ -9,8 +9,8 @@ import {
   ProfileImageStatus,
   UserAccountAction,
   UserRole,
-} from '../enums';
-import { collectionSchema, indexName } from './common';
+} from '../enums.js';
+import { collectionSchema, onDelete } from './common.js';
 
 /** The string `id` a Mongoose document exposes for its stored `_id`. */
 export abstract class Identified {
@@ -88,22 +88,62 @@ export class User extends Identified {
 }
 
 export const UserSchema = SchemaFactory.createForClass(User);
-UserSchema.index(
-  { username: 1 },
-  { unique: true, name: indexName('users', ['username'], 'key') },
-);
-UserSchema.index(
-  { email: 1 },
-  { unique: true, name: indexName('users', ['email'], 'key') },
-);
+UserSchema.index({ username: 1 }, { unique: true });
+UserSchema.index({ email: 1 }, { unique: true });
 UserSchema.index(
   { googleId: 1 },
   {
     unique: true,
-    name: indexName('users', ['googleId'], 'key'),
     partialFilterExpression: { googleId: { $type: 'string' } },
   },
 );
+
+onDelete(UserSchema, async (db, ids, session) => {
+  const inIds = { $in: ids };
+  await db.model('Post').deleteMany({ authorId: inIds }, { session }).exec();
+  await db
+    .model('VerificationRequest')
+    .deleteMany({ userId: inIds }, { session })
+    .exec();
+  const cascadeModels: Array<[string, Record<string, unknown>]> = [
+    ['Follow', { $or: [{ followerId: inIds }, { followingId: inIds }] }],
+    ['Notification', { $or: [{ recipientId: inIds }, { actorId: inIds }] }],
+    ['FollowSuggestion', { $or: [{ userId: inIds }, { candidateId: inIds }] }],
+    ['SuggestionDismissal', { userId: inIds }],
+    ['RefreshToken', { userId: inIds }],
+    ['OneTimeCode', { userId: inIds }],
+    ['PostComment', { authorId: inIds }],
+    ['PostLike', { userId: inIds }],
+    ['PostRepost', { userId: inIds }],
+    ['PostBookmark', { userId: inIds }],
+    ['PostReport', { reporterId: inIds }],
+    ['RecipeFavorite', { userId: inIds }],
+    ['RecipeRating', { userId: inIds }],
+    ['MealPlanEntry', { userId: inIds }],
+    ['AiUsage', { userId: inIds }],
+  ];
+  for (const [modelName, filter] of cascadeModels) {
+    await db.model(modelName).deleteMany(filter, { session }).exec();
+  }
+  for (const [modelName, field] of [
+    ['ProfileImageUpload', 'ownerId'],
+    ['PostReport', 'reviewedById'],
+    ['MediaAsset', 'ownerId'],
+    ['KnowledgeDocument', 'uploadedById'],
+    ['VerificationRequest', 'reviewedById'],
+    ['VerificationProof', 'ownerId'],
+    ['Recipe', 'createdById'],
+  ] as const) {
+    await db
+      .model(modelName)
+      .updateMany(
+        { [field]: inIds },
+        { $set: { [field]: null } },
+        { session, timestamps: false },
+      )
+      .exec();
+  }
+});
 
 @Schema(collectionSchema('user_account_audits', 'created'))
 export class UserAccountAudit extends Identified {
@@ -147,14 +187,8 @@ export class UserAccountAudit extends Identified {
 
 export const UserAccountAuditSchema =
   SchemaFactory.createForClass(UserAccountAudit);
-UserAccountAuditSchema.index(
-  { userId: 1, createdAt: 1 },
-  { name: indexName('user_account_audits', ['userId', 'createdAt'], 'idx') },
-);
-UserAccountAuditSchema.index(
-  { actorId: 1, createdAt: 1 },
-  { name: indexName('user_account_audits', ['actorId', 'createdAt'], 'idx') },
-);
+UserAccountAuditSchema.index({ userId: 1, createdAt: 1 });
+UserAccountAuditSchema.index({ actorId: 1, createdAt: 1 });
 
 @Schema(collectionSchema('follows', 'created'))
 export class Follow extends Identified {
@@ -172,33 +206,9 @@ export class Follow extends Identified {
 }
 
 export const FollowSchema = SchemaFactory.createForClass(Follow);
-FollowSchema.index(
-  { followerId: 1, followingId: 1 },
-  {
-    unique: true,
-    name: indexName('follows', ['followerId', 'followingId'], 'key'),
-  },
-);
-FollowSchema.index(
-  { followingId: 1, createdAt: 1, followerId: 1 },
-  {
-    name: indexName(
-      'follows',
-      ['followingId', 'createdAt', 'followerId'],
-      'idx',
-    ),
-  },
-);
-FollowSchema.index(
-  { followerId: 1, createdAt: 1, followingId: 1 },
-  {
-    name: indexName(
-      'follows',
-      ['followerId', 'createdAt', 'followingId'],
-      'idx',
-    ),
-  },
-);
+FollowSchema.index({ followerId: 1, followingId: 1 }, { unique: true });
+FollowSchema.index({ followingId: 1, createdAt: 1, followerId: 1 });
+FollowSchema.index({ followerId: 1, createdAt: 1, followingId: 1 });
 
 @Schema(collectionSchema('notifications', 'created'))
 export class Notification extends Identified {
@@ -228,18 +238,9 @@ export class Notification extends Identified {
 }
 
 export const NotificationSchema = SchemaFactory.createForClass(Notification);
-NotificationSchema.index(
-  { recipientId: 1, createdAt: 1, _id: 1 },
-  { name: 'notifications_recipientId_createdAt__id_idx' },
-);
-NotificationSchema.index(
-  { recipientId: 1, readAt: 1 },
-  { name: indexName('notifications', ['recipientId', 'readAt'], 'idx') },
-);
-NotificationSchema.index(
-  { postId: 1 },
-  { name: indexName('notifications', ['postId'], 'idx') },
-);
+NotificationSchema.index({ recipientId: 1, createdAt: 1, _id: 1 });
+NotificationSchema.index({ recipientId: 1, readAt: 1 });
+NotificationSchema.index({ postId: 1 });
 
 @Schema(collectionSchema('follow_suggestions', 'none'))
 export class FollowSuggestion extends Identified {
@@ -268,27 +269,9 @@ export class FollowSuggestion extends Identified {
 
 export const FollowSuggestionSchema =
   SchemaFactory.createForClass(FollowSuggestion);
-FollowSuggestionSchema.index(
-  { userId: 1, candidateId: 1 },
-  {
-    unique: true,
-    name: indexName('follow_suggestions', ['userId', 'candidateId'], 'key'),
-  },
-);
-FollowSuggestionSchema.index(
-  { userId: 1, score: -1, candidateId: 1 },
-  {
-    name: indexName(
-      'follow_suggestions',
-      ['userId', 'score', 'candidateId'],
-      'idx',
-    ),
-  },
-);
-FollowSuggestionSchema.index(
-  { candidateId: 1 },
-  { name: indexName('follow_suggestions', ['candidateId'], 'idx') },
-);
+FollowSuggestionSchema.index({ userId: 1, candidateId: 1 }, { unique: true });
+FollowSuggestionSchema.index({ userId: 1, score: -1, candidateId: 1 });
+FollowSuggestionSchema.index({ candidateId: 1 });
 
 @Schema(collectionSchema('suggestion_dismissals', 'created'))
 export class SuggestionDismissal extends Identified {
@@ -309,10 +292,7 @@ export const SuggestionDismissalSchema =
   SchemaFactory.createForClass(SuggestionDismissal);
 SuggestionDismissalSchema.index(
   { userId: 1, candidateId: 1 },
-  {
-    unique: true,
-    name: indexName('suggestion_dismissals', ['userId', 'candidateId'], 'key'),
-  },
+  { unique: true },
 );
 
 @Schema(collectionSchema('profile_image_uploads', 'created'))
@@ -343,21 +323,9 @@ export class ProfileImageUpload extends Identified {
 
 export const ProfileImageUploadSchema =
   SchemaFactory.createForClass(ProfileImageUpload);
-ProfileImageUploadSchema.index(
-  { storageKey: 1 },
-  {
-    unique: true,
-    name: indexName('profile_image_uploads', ['storageKey'], 'key'),
-  },
-);
-ProfileImageUploadSchema.index(
-  { ownerId: 1, status: 1 },
-  { name: indexName('profile_image_uploads', ['ownerId', 'status'], 'idx') },
-);
-ProfileImageUploadSchema.index(
-  { status: 1, createdAt: 1 },
-  { name: indexName('profile_image_uploads', ['status', 'createdAt'], 'idx') },
-);
+ProfileImageUploadSchema.index({ storageKey: 1 }, { unique: true });
+ProfileImageUploadSchema.index({ ownerId: 1, status: 1 });
+ProfileImageUploadSchema.index({ status: 1, createdAt: 1 });
 
 @Schema(collectionSchema('refresh_tokens', 'created'))
 export class RefreshToken extends Identified {
@@ -384,22 +352,10 @@ export class RefreshToken extends Identified {
 }
 
 export const RefreshTokenSchema = SchemaFactory.createForClass(RefreshToken);
-RefreshTokenSchema.index(
-  { tokenHash: 1 },
-  { unique: true, name: indexName('refresh_tokens', ['tokenHash'], 'key') },
-);
-RefreshTokenSchema.index(
-  { familyId: 1 },
-  { name: indexName('refresh_tokens', ['familyId'], 'idx') },
-);
-RefreshTokenSchema.index(
-  { userId: 1 },
-  { name: indexName('refresh_tokens', ['userId'], 'idx') },
-);
-RefreshTokenSchema.index(
-  { expiresAt: 1 },
-  { name: indexName('refresh_tokens', ['expiresAt'], 'idx') },
-);
+RefreshTokenSchema.index({ tokenHash: 1 }, { unique: true });
+RefreshTokenSchema.index({ familyId: 1 });
+RefreshTokenSchema.index({ userId: 1 });
+RefreshTokenSchema.index({ expiresAt: 1 });
 
 @Schema(collectionSchema('one_time_codes', 'none'))
 export class OneTimeCode extends Identified {
@@ -436,13 +392,7 @@ export class OneTimeCode extends Identified {
 }
 
 export const OneTimeCodeSchema = SchemaFactory.createForClass(OneTimeCode);
-OneTimeCodeSchema.index(
-  { userId: 1, purpose: 1 },
-  {
-    unique: true,
-    name: indexName('one_time_codes', ['userId', 'purpose'], 'key'),
-  },
-);
+OneTimeCodeSchema.index({ userId: 1, purpose: 1 }, { unique: true });
 
 /** `_id` is the email address, so codes survive deleting and re-registering. */
 @Schema(collectionSchema('email_verification_guesses', 'none'))

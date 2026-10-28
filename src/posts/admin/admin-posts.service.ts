@@ -5,12 +5,12 @@ import {
   createPaginatedResponse,
   getPaginationArgs,
   PaginatedResponseDto,
-} from '../../common/pagination';
-import { AdminMediaDto } from '../../media/dto/media-response.dto';
-import { MediaService } from '../../media/media.service';
-import { type MediaAsset, Post } from '../../mongo/models';
-import { AdminPostDto, AdminPostsQueryDto } from '../dto/admin-post.dto';
-import { PostRelationsService } from '../post-relations.service';
+} from '../../common/pagination/index.js';
+import { AdminMediaDto } from '../../media/dto/media-response.dto.js';
+import { MediaService } from '../../media/media.service.js';
+import { type MediaAsset, Post } from '../../mongo/models.js';
+import { AdminPostDto, AdminPostsQueryDto } from '../dto/admin-post.dto.js';
+import { PostRelationsService } from '../post-relations.service.js';
 
 /** Every post whatever its status, for the admin content page. */
 @Injectable()

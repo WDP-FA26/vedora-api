@@ -11,17 +11,20 @@ import {
   getPaginationArgs,
   PaginatedResponseDto,
   PaginationQueryDto,
-} from '../common/pagination';
-import { lockDocument } from '../mongo/document-lock';
-import { Recipe, RecipeFavorite, Stored, User } from '../mongo/models';
-import { MongoService } from '../mongo/mongo.service';
-import { totalMinutes } from './dto/recipe-catalog.dto';
+} from '../common/pagination/index.js';
+import { lockDocument } from '../mongo/document-lock.js';
+import { Recipe, RecipeFavorite, User } from '../mongo/models.js';
+import { MongoService } from '../mongo/mongo.service.js';
+import { totalMinutes } from './dto/recipe-catalog.dto.js';
 import {
   FavoriteRecipeDto,
   RecipeFavoriteStateDto,
-} from './dto/recipe-favorite.dto';
-import { toRecipeCard } from './dto/recipe.dto';
-import { RecipeRelationsService } from './recipe-relations.service';
+} from './dto/recipe-favorite.dto.js';
+import { toRecipeCard } from './dto/recipe.dto.js';
+import {
+  RecipeRelationsService,
+  sourcePostIds,
+} from './recipe-relations.service.js';
 
 @Injectable()
 export class RecipeFavoritesService {
@@ -29,6 +32,7 @@ export class RecipeFavoritesService {
     @InjectModel(Recipe.name) private readonly recipes: Model<Recipe>,
     @InjectModel(RecipeFavorite.name)
     private readonly favorites: Model<RecipeFavorite>,
+    @InjectModel(User.name) private readonly users: Model<User>,
     private readonly relations: RecipeRelationsService,
     private readonly mongo: MongoService,
   ) {}
@@ -55,7 +59,7 @@ export class RecipeFavoritesService {
     );
     const [recipes, published] = await Promise.all([
       this.relations.hydrate(ordered),
-      this.relations.publishedPostIds(ordered.map(({ postId }) => postId)),
+      this.relations.publishedPostIds(sourcePostIds(ordered)),
     ]);
     return createPaginatedResponse(
       ordered.map((recipe, index) => ({
@@ -78,30 +82,33 @@ export class RecipeFavoritesService {
     userId: string,
     isFavorite: boolean,
   ): Promise<RecipeFavoriteStateDto> {
-    const { db } = this.mongo;
     return this.mongo.withTransaction(async (session) => {
-      await lockDocument(db, session, 'user', userId);
-      await lockDocument(db, session, 'recipe', recipeId);
+      await lockDocument(this.mongo, session, 'user', userId);
+      await lockDocument(this.mongo, session, 'recipe', recipeId);
       // One session runs one operation at a time.
-      const user = await db
-        .collection<Stored<User>>('users')
-        .findOne({ _id: userId }, { session });
-      const recipe = await db
-        .collection<Stored<Recipe>>('recipes')
-        .findOne({ _id: recipeId }, { session });
+      const user = await this.users
+        .findOne({ _id: userId })
+        .session(session)
+        .exec();
+      const recipe = await this.recipes
+        .findOne({ _id: recipeId })
+        .session(session)
+        .exec();
       if (!user) throw new UnauthorizedException('Account no longer exists');
       if (!recipe) throw new NotFoundException('Recipe not found');
-      const favorites =
-        db.collection<Stored<RecipeFavorite>>('recipe_favorites');
       if (isFavorite) {
         // Duplicate retries preserve the original savedAt and ordering.
-        await favorites.updateOne(
-          { recipeId, userId },
-          { $setOnInsert: { _id: randomUUID(), createdAt: new Date() } },
-          { upsert: true, session },
-        );
+        await this.favorites
+          .updateOne(
+            { recipeId, userId },
+            { $setOnInsert: { _id: randomUUID(), createdAt: new Date() } },
+            { upsert: true, session },
+          )
+          .exec();
       } else {
-        await favorites.deleteOne({ recipeId, userId }, { session });
+        await this.favorites
+          .deleteOne({ recipeId, userId }, { session })
+          .exec();
       }
       return { recipeId, isFavorite };
     });

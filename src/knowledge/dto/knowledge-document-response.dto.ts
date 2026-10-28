@@ -2,8 +2,8 @@ import { ApiProperty } from '@nestjs/swagger';
 import {
   KnowledgeDocumentFailureReason,
   KnowledgeDocumentStatus,
-} from '../../mongo/models';
-import { PresignedUploadDto } from '../../storage/presigned-upload.dto';
+} from '../../mongo/models.js';
+import { PresignedUploadDto } from '../../storage/presigned-upload.dto.js';
 
 export class KnowledgeDocumentResponseDto {
   @ApiProperty({ format: 'uuid' })

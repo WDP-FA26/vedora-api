@@ -5,23 +5,23 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { type LanguageModel, toUIMessageStream } from 'ai';
-import { cannedReply } from '../ai/chat/canned-reply';
-import { chatErrorCode, failedStatus } from '../ai/chat/errors';
-import { replyFilter } from '../ai/chat/reply-filter';
+import { cannedReply } from '../ai/chat/canned-reply.js';
+import { chatErrorCode, failedStatus } from '../ai/chat/errors.js';
+import { replyFilter } from '../ai/chat/reply-filter.js';
 import {
   moderateWithRetry,
   type ModerationVerdict,
-} from '../ai/moderation/moderation';
-import { NUTRITION_POLICY } from '../ai/moderation/policies/nutrition';
+} from '../ai/moderation/moderation.js';
+import { NUTRITION_POLICY } from '../ai/moderation/policies/nutrition.js';
 import {
   chatModel,
   DEFAULT_CHAT_MODEL,
   DEFAULT_MODERATION_MODEL,
-} from '../ai/openrouter';
-import type { ReasoningEffort } from '../ai/reasoning';
-import { KnowledgeSearchService } from '../knowledge/retrieval/knowledge-search.service';
-import type { ChatMessageDto } from './dto/nutrition-chat.dto';
-import { NutritionAgent } from './nutrition-chat.agent';
+} from '../ai/openrouter.js';
+import type { ReasoningEffort } from '../ai/reasoning.js';
+import { KnowledgeSearchService } from '../knowledge/retrieval/knowledge-search.service.js';
+import type { ChatMessageDto } from './dto/nutrition-chat.dto.js';
+import { NutritionAgent } from './nutrition-chat.agent.js';
 
 const SEARCH_TIMEOUT_MS = 5000;
 

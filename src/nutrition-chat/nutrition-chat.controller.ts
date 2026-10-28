@@ -23,16 +23,16 @@ import {
   CreateGuestSessionDto,
   GuestSessionDto,
   NutritionChatDto,
-} from './dto/nutrition-chat.dto';
-import { ClientIpService } from './guest/client-ip.service';
-import { GuestChatGuard } from './guest/guest-chat.guard';
-import { GuestQuotaService } from './guest/guest-quota.service';
+} from './dto/nutrition-chat.dto.js';
+import { ClientIpService } from './guest/client-ip.service.js';
+import { GuestChatGuard } from './guest/guest-chat.guard.js';
+import { GuestQuotaService } from './guest/guest-quota.service.js';
 import {
   GUEST_SESSION_TTL_SEC,
   GuestSessionService,
-} from './guest/guest-session.service';
-import { TurnstileService } from './guest/turnstile.service';
-import { NutritionChatService } from './nutrition-chat.service';
+} from './guest/guest-session.service.js';
+import { TurnstileService } from './guest/turnstile.service.js';
+import { NutritionChatService } from './nutrition-chat.service.js';
 
 /**
  * The landing page's nutrition chat, open to guests. A visitor trades a

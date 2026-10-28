@@ -1,9 +1,7 @@
 import request from 'supertest';
-import type { User } from '../src/mongo/models';
-import { createE2eApp, type E2eApp } from './e2e-app';
-import { createPost, createUser } from './fixtures';
-
-type StoredDoc = { _id: string; [key: string]: unknown };
+import { Follow, User } from '../src/mongo/models.js';
+import { createE2eApp, type E2eApp } from './e2e-app.js';
+import { createPost, createUser } from './fixtures.js';
 
 describe('Profiles and follows (e2e)', () => {
   let e2e: E2eApp;
@@ -56,7 +54,7 @@ describe('Profiles and follows (e2e)', () => {
         .expect(204);
     }
     expect(
-      await e2e.mongo.db.collection<StoredDoc>('follows').countDocuments({
+      await e2e.mongo.connection.model<Follow>(Follow.name).countDocuments({
         followerId: user.id,
         followingId: other.id,
       }),
@@ -84,9 +82,10 @@ describe('Profiles and follows (e2e)', () => {
       .auth(token, { type: 'bearer' })
       .send({ avatarUrl: 'https://example.com/forged.png' })
       .expect(400);
-    const stored = await e2e.mongo.db
-      .collection<StoredDoc>('users')
-      .findOne({ _id: user.id });
+    const stored = await e2e.mongo.connection
+      .model<User>(User.name)
+      .findOne({ _id: user.id })
+      .exec();
     expect(stored?.avatarUrl).toBeNull();
   });
 });

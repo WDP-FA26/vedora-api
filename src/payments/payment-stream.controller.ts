@@ -6,6 +6,7 @@ import {
   ParseUUIDPipe,
   Req,
   Sse,
+  UnauthorizedException,
   UseGuards,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
@@ -26,11 +27,12 @@ import {
   takeWhile,
   takeUntil,
 } from 'rxjs';
-import type { AuthenticatedRequest } from '../auth/auth.types';
-import { JwtAuthGuard } from '../auth/jwt-auth.guard';
-import { AccountStatus, User } from '../mongo/models';
-import { PaymentEventsService } from './payment-events.service';
-import { PaymentsService } from './payments.service';
+import type { AuthenticatedRequest } from '../auth/auth.types.js';
+import { extractBearerToken } from '../auth/bearer-token.js';
+import { JwtAuthGuard } from '../auth/jwt-auth.guard.js';
+import { AccountStatus, User } from '../mongo/models.js';
+import { PaymentEventsService } from './payment-events.service.js';
+import { PaymentsService } from './payments.service.js';
 
 @ApiTags('billing')
 @ApiBearerAuth()
@@ -61,7 +63,8 @@ export class PaymentStreamController {
     @Req() request: AuthenticatedRequest,
   ): Promise<Observable<MessageEvent>> {
     await this.payments.get(id, request.user.sub);
-    const token = request.headers.authorization!.split(' ')[1];
+    const token = extractBearerToken(request.headers.authorization);
+    if (!token) throw new UnauthorizedException('Authentication required');
     const live = this.events
       .stream(request.user.sub, id)
       .pipe(

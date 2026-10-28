@@ -3,27 +3,32 @@ import { INestApplication } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtModule, JwtService } from '@nestjs/jwt';
 import { Test } from '@nestjs/testing';
-import type { Document } from 'mongodb';
 import request from 'supertest';
-import type { App } from 'supertest/types';
-import { AdminDashboardController } from '../src/admin-dashboard/admin-dashboard.controller';
-import { AdminDashboardService } from '../src/admin-dashboard/admin-dashboard.service';
-import { configureApp } from '../src/app.setup';
-import type { DashboardDto } from '../src/admin-dashboard/dto/dashboard.dto';
-import { MongoModule } from '../src/mongo/mongo.module';
-import { MongoService } from '../src/mongo/mongo.service';
+import type { App } from 'supertest/types.js';
+import { AdminDashboardController } from '../src/admin-dashboard/admin-dashboard.controller.js';
+import { AdminDashboardService } from '../src/admin-dashboard/admin-dashboard.service.js';
+import { configureApp } from '../src/app.setup.js';
+import type { DashboardDto } from '../src/admin-dashboard/dto/dashboard.dto.js';
+import { MongoModule } from '../src/mongo/mongo.module.js';
+import { MongoService } from '../src/mongo/mongo.service.js';
 import {
   AccountStatus,
+  Post,
+  PostReport,
+  PostReportReason,
+  PostReportStatus,
   PostStatus,
   PostType,
+  Recipe,
+  User,
   UserRole,
-} from '../src/mongo/models';
-import { createPost, createRecipe, createUser } from './fixtures';
+} from '../src/mongo/models.js';
+import { createPost, createRecipe, createUser } from './fixtures.js';
 import {
   createTestMongoUrl,
   dropTestDatabase,
   prepareTestDatabase,
-} from './mongo-test-db';
+} from './mongo-test-db.js';
 
 describe('Admin dashboard with MongoDB', () => {
   let db: MongoService;
@@ -107,23 +112,23 @@ describe('Admin dashboard with MongoDB', () => {
       ['BLOG', null, 'DRAFT'],
       ['POST', start, 'FAILED'],
     ] as const) {
-      const post = await createPost(db, {
+      await createPost(db, {
         authorId: memberId,
         type: type as PostType,
         status: status as PostStatus,
         publishedAt,
         body: 'dashboard body',
+        blog:
+          type === 'BLOG'
+            ? {
+                title: 'Dashboard blog',
+                coverImageUrl: null,
+                content: 'Content',
+                excerpt: 'Content',
+                recipeIds: [],
+              }
+            : null,
       });
-      if (type === 'BLOG') {
-        await db.db.collection<Document & { _id: string }>('blogs').insertOne({
-          _id: post.id,
-          title: 'Dashboard blog',
-          coverImageUrl: null,
-          content: 'Content',
-          excerpt: 'Content',
-          updatedAt: new Date(),
-        });
-      }
     }
     for (const createdAt of [before, start, new Date(end.getTime() - 1), end]) {
       await createRecipe(db, { title: 'Dashboard recipe', createdAt });
@@ -141,18 +146,16 @@ describe('Admin dashboard with MongoDB', () => {
         publishedAt: before,
         body: 'Report source',
       });
-      await db.db
-        .collection<Document & { _id: string }>('post_reports')
-        .insertOne({
-          _id: randomUUID(),
-          postId: post.id,
-          reporterId: memberId,
-          reason: 'OTHER',
-          status,
-          createdAt,
-          reviewedAt,
-          reviewedById: reviewedAt ? adminId : null,
-        });
+      await db.connection.model<PostReport>(PostReport.name).create({
+        _id: randomUUID(),
+        postId: post.id,
+        reporterId: memberId,
+        reason: PostReportReason.OTHER,
+        status: status as PostReportStatus,
+        createdAt,
+        reviewedAt,
+        reviewedById: reviewedAt ? adminId : null,
+      });
     }
   });
 
@@ -252,49 +255,51 @@ describe('Admin dashboard with MongoDB', () => {
   });
 
   it('blocks a suspended administrator with the same unexpired JWT', async () => {
-    await db.db
-      .collection<Document & { _id: string }>('users')
+    const users = db.connection.model<User>(User.name);
+    await users
       .updateOne(
         { _id: adminId },
         { $set: { status: AccountStatus.SUSPENDED } },
-      );
+      )
+      .exec();
     try {
       await request(app.getHttpServer())
         .get(path)
         .auth(token, { type: 'bearer' })
         .expect(401);
     } finally {
-      await db.db
-        .collection<Document & { _id: string }>('users')
-        .updateOne(
-          { _id: adminId },
-          { $set: { status: AccountStatus.ACTIVE } },
-        );
+      await users
+        .updateOne({ _id: adminId }, { $set: { status: AccountStatus.ACTIVE } })
+        .exec();
     }
   });
 
   it('does not mutate any underlying domain records', async () => {
     const snapshot = async () => ({
-      users: await db.db
-        .collection('users')
+      users: await db.connection
+        .model<User>(User.name)
         .find({})
         .sort({ _id: 1 })
-        .toArray(),
-      posts: await db.db
-        .collection('posts')
+        .lean()
+        .exec(),
+      posts: await db.connection
+        .model<Post>(Post.name)
         .find({})
         .sort({ _id: 1 })
-        .toArray(),
-      reports: await db.db
-        .collection('post_reports')
+        .lean()
+        .exec(),
+      reports: await db.connection
+        .model<PostReport>(PostReport.name)
         .find({})
         .sort({ _id: 1 })
-        .toArray(),
-      recipes: await db.db
-        .collection('recipes')
+        .lean()
+        .exec(),
+      recipes: await db.connection
+        .model<Recipe>(Recipe.name)
         .find({})
         .sort({ _id: 1 })
-        .toArray(),
+        .lean()
+        .exec(),
     });
     const beforeQuery = await snapshot();
     await dashboard.get(query);

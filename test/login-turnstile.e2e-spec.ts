@@ -4,12 +4,12 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import request from 'supertest';
-import type { App } from 'supertest/types';
+import type { App } from 'supertest/types.js';
 import { mockDeep, mockReset } from 'vitest-mock-extended';
-import { AuthService } from '../src/auth/auth.service';
-import { TurnstileService } from '../src/nutrition-chat/guest/turnstile.service';
-import { AccountStatus, UserRole } from '../src/mongo/models';
-import { createE2eApp, type E2eApp } from './e2e-app';
+import { AuthService } from '../src/auth/auth.service.js';
+import { TurnstileService } from '../src/nutrition-chat/guest/turnstile.service.js';
+import { AccountStatus, UserRole } from '../src/mongo/models.js';
+import { createE2eApp, type E2eApp } from './e2e-app.js';
 
 describe('Password login requires Turnstile (HTTP)', () => {
   const auth = mockDeep<AuthService>();

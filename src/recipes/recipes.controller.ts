@@ -21,27 +21,27 @@ import {
   ApiUnauthorizedResponse,
 } from '@nestjs/swagger';
 import type { Response } from 'express';
-import type { OptionalAuthenticatedRequest } from '../auth/auth.types';
-import { OptionalJwtAuthGuard } from '../auth/optional-jwt-auth.guard';
-import { JwtAuthGuard } from '../auth/jwt-auth.guard';
-import type { AuthenticatedRequest } from '../auth/auth.types';
+import type { OptionalAuthenticatedRequest } from '../auth/auth.types.js';
+import { OptionalJwtAuthGuard } from '../auth/optional-jwt-auth.guard.js';
+import { JwtAuthGuard } from '../auth/jwt-auth.guard.js';
+import type { AuthenticatedRequest } from '../auth/auth.types.js';
 import {
   ApiPaginatedResponse,
   PaginatedResponseDto,
   PaginationQueryDto,
-} from '../common/pagination';
+} from '../common/pagination/index.js';
 import {
   CatalogRecipeDetailDto,
   CatalogRecipeDto,
   RecipeCatalogQueryDto,
-} from './dto/recipe-catalog.dto';
-import { RecipeCatalogService } from './recipe-catalog.service';
-import { RecipeFavoritesService } from './recipe-favorites.service';
+} from './dto/recipe-catalog.dto.js';
+import { RecipeCatalogService } from './recipe-catalog.service.js';
+import { RecipeFavoritesService } from './recipe-favorites.service.js';
 import {
   FavoriteRecipeDto,
   RecipeFavoriteBodyDto,
   RecipeFavoriteStateDto,
-} from './dto/recipe-favorite.dto';
+} from './dto/recipe-favorite.dto.js';
 
 @ApiTags('recipes')
 @UseGuards(OptionalJwtAuthGuard)

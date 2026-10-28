@@ -1,8 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
-import { VerificationStatus } from '../enums';
-import { collectionSchema, indexName } from './common';
-import { Identified } from './user.schema';
+import { VerificationStatus } from '../enums.js';
+import { collectionSchema, onDelete } from './common.js';
+import { Identified } from './user.schema.js';
 
 @Schema(collectionSchema('verification_requests'))
 export class VerificationRequest extends Identified {
@@ -41,14 +41,19 @@ export class VerificationRequest extends Identified {
 
 export const VerificationRequestSchema =
   SchemaFactory.createForClass(VerificationRequest);
-VerificationRequestSchema.index(
-  { status: 1, createdAt: 1 },
-  { name: indexName('verification_requests', ['status', 'createdAt'], 'idx') },
-);
-VerificationRequestSchema.index(
-  { userId: 1, createdAt: 1 },
-  { name: indexName('verification_requests', ['userId', 'createdAt'], 'idx') },
-);
+VerificationRequestSchema.index({ status: 1, createdAt: 1 });
+VerificationRequestSchema.index({ userId: 1, createdAt: 1 });
+
+onDelete(VerificationRequestSchema, async (db, ids, session) => {
+  await db
+    .model('VerificationProof')
+    .updateMany(
+      { requestId: { $in: ids } },
+      { $set: { requestId: null } },
+      { session, timestamps: false },
+    )
+    .exec();
+});
 
 @Schema(collectionSchema('verification_proofs', 'created'))
 export class VerificationProof extends Identified {
@@ -70,18 +75,6 @@ export class VerificationProof extends Identified {
 
 export const VerificationProofSchema =
   SchemaFactory.createForClass(VerificationProof);
-VerificationProofSchema.index(
-  { storageKey: 1 },
-  {
-    unique: true,
-    name: indexName('verification_proofs', ['storageKey'], 'key'),
-  },
-);
-VerificationProofSchema.index(
-  { ownerId: 1, requestId: 1 },
-  { name: indexName('verification_proofs', ['ownerId', 'requestId'], 'idx') },
-);
-VerificationProofSchema.index(
-  { requestId: 1, createdAt: 1 },
-  { name: indexName('verification_proofs', ['requestId', 'createdAt'], 'idx') },
-);
+VerificationProofSchema.index({ storageKey: 1 }, { unique: true });
+VerificationProofSchema.index({ ownerId: 1, requestId: 1 });
+VerificationProofSchema.index({ requestId: 1, createdAt: 1 });

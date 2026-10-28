@@ -1,5 +1,5 @@
 import type { Request } from 'express';
-import type { UserRole } from '../mongo/models';
+import type { UserRole } from '../mongo/models.js';
 
 export interface JwtPayload {
   sub: string;

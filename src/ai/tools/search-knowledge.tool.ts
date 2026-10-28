@@ -4,9 +4,12 @@ import { z } from 'zod';
 import type {
   KnowledgeHit,
   KnowledgeSearchService,
-} from '../../knowledge/retrieval/knowledge-search.service';
+} from '../../knowledge/retrieval/knowledge-search.service.js';
 
 const logger = new Logger('SearchKnowledgeTool');
+
+const SEARCH_UNAVAILABLE_MESSAGE =
+  'The document search failed and is temporarily unavailable. This is not evidence that the documents lack data: say the lookup failed instead of claiming nothing exists.';
 
 const searchKnowledgeInput = z.object({
   query: z
@@ -23,13 +26,22 @@ export function searchKnowledgeTool(knowledge: KnowledgeSearchService) {
     inputSchema: searchKnowledgeInput,
     execute: async ({ query }, { abortSignal }) => {
       try {
-        return await knowledge.search(query, abortSignal);
+        const hits = await knowledge.search(query, abortSignal);
+        return { status: 'ok' as const, hits };
       } catch (error) {
+        // Keep the chat alive, but tell the model the search failed: an empty
+        // result would read as "the documents have no data".
         logger.warn(`Knowledge search failed: ${String(error)}`);
-        return [];
+        return { status: 'unavailable' as const };
       }
     },
-    toModelOutput: ({ output }) => ({ type: 'text', value: passages(output) }),
+    toModelOutput: ({ output }) => ({
+      type: 'text',
+      value:
+        output.status === 'ok'
+          ? passages(output.hits)
+          : SEARCH_UNAVAILABLE_MESSAGE,
+    }),
   });
 }
 

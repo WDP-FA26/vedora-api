@@ -1,16 +1,16 @@
 import { BadRequestException, ConflictException } from '@nestjs/common';
 import type { INestApplication } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
-import { createIngredient } from '../../test/fixtures';
+import { createIngredient } from '../../test/fixtures.js';
 import {
   createTestMongoUrl,
   dropTestDatabase,
   prepareTestDatabase,
-} from '../../test/mongo-test-db';
-import { MongoModule } from '../mongo/mongo.module';
-import type { IngredientGroup, IncompatibilityRule } from '../mongo/models';
-import { MongoService } from '../mongo/mongo.service';
-import { IncompatibilityRulesService } from './incompatibility-rules.service';
+} from '../../test/mongo-test-db.js';
+import { MongoModule } from '../mongo/mongo.module.js';
+import type { IngredientGroup, IncompatibilityRule } from '../mongo/models.js';
+import { MongoService } from '../mongo/mongo.service.js';
+import { IncompatibilityRulesService } from './incompatibility-rules.service.js';
 
 const tofu = 'a1a2d3e4-0000-4000-8000-000000000001';
 const spinach = 'a1a2d3e4-0000-4000-8000-000000000002';
@@ -26,7 +26,6 @@ describe('IncompatibilityRulesService', () => {
     mongo.connection.model<IngredientGroup>('IngredientGroup');
   const rules = () =>
     mongo.connection.model<IncompatibilityRule>('IncompatibilityRule');
-  const members = () => mongo.connection.model('IngredientGroupMember');
 
   beforeAll(async () => {
     const moduleRef = await Test.createTestingModule({
@@ -43,14 +42,17 @@ describe('IncompatibilityRulesService', () => {
     for (const collection of [
       'ingredients',
       'ingredient_groups',
-      'ingredient_group_members',
       'incompatibility_rules',
     ]) {
-      await mongo.db.collection(collection).deleteMany({});
+      await mongo.connection.collections[collection].deleteMany({});
     }
     await createIngredient(mongo, { id: tofu, name: 'Đậu hũ' });
     await createIngredient(mongo, { id: spinach, name: 'Rau bina' });
-    await groups().create({ _id: greens, name: 'Rau giàu oxalat' });
+    await groups().create({
+      _id: greens,
+      name: 'Rau giàu oxalat',
+      ingredientIds: [],
+    });
   });
   afterAll(async () => {
     await dropTestDatabase(app);
@@ -120,7 +122,10 @@ describe('IncompatibilityRulesService', () => {
   });
 
   it('finds conflicts through group membership and names both sides', async () => {
-    await members().create({ groupId: greens, ingredientId: spinach });
+    await groups().updateOne(
+      { _id: greens },
+      { $addToSet: { ingredientIds: spinach } },
+    );
     const created = await service.create({
       a: { kind: 'INGREDIENT', id: tofu },
       b: { kind: 'GROUP', id: greens },

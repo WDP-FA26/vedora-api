@@ -4,38 +4,37 @@ import { ConfigService } from '@nestjs/config';
 import { JwtModule, JwtService } from '@nestjs/jwt';
 import { Test } from '@nestjs/testing';
 import request from 'supertest';
-import type { App } from 'supertest/types';
-import { configureApp } from '../src/app.setup';
-import { MongoModule } from '../src/mongo/mongo.module';
-import { MongoService } from '../src/mongo/mongo.service';
+import type { App } from 'supertest/types.js';
+import { configureApp } from '../src/app.setup.js';
+import { MongoModule } from '../src/mongo/mongo.module.js';
+import { MongoService } from '../src/mongo/mongo.service.js';
 import {
   BillingPlan,
+  PaymentIntent,
+  PaymentRequest,
   PaymentStatus,
-  type PaymentIntent,
-  type PaymentRequest,
-  type PaymentWebhookReceipt,
-  type Stored,
-  type User,
+  PaymentWebhookReceipt,
+  User,
   UserRole,
-} from '../src/mongo/models';
+} from '../src/mongo/models.js';
 import {
   PaymentsController,
   PaymentReconciliationController,
   SePayWebhookController,
-} from '../src/payments/payments.controller';
-import { PaymentsService } from '../src/payments/payments.service';
-import { SePayProvider } from '../src/payments/sepay.provider';
-import { SePayWebhookGuard } from '../src/payments/sepay-webhook.guard';
-import type { PaymentDto } from '../src/payments/payment.dto';
-import { PaymentEventsService } from '../src/payments/payment-events.service';
-import { PaymentStreamController } from '../src/payments/payment-stream.controller';
-import * as paymentCodes from '../src/payments/payment-code';
-import { createUser, deleteWithCascade } from './fixtures';
+} from '../src/payments/payments.controller.js';
+import { PaymentsService } from '../src/payments/payments.service.js';
+import { SePayProvider } from '../src/payments/sepay.provider.js';
+import { SePayWebhookGuard } from '../src/payments/sepay-webhook.guard.js';
+import type { PaymentDto } from '../src/payments/payment.dto.js';
+import { PaymentEventsService } from '../src/payments/payment-events.service.js';
+import { PaymentStreamController } from '../src/payments/payment-stream.controller.js';
+import * as paymentCodes from '../src/payments/payment-code.js';
+import { createUser, deleteWithCascade } from './fixtures.js';
 import {
   createTestMongoUrl,
   dropTestDatabase,
   prepareTestDatabase,
-} from './mongo-test-db';
+} from './mongo-test-db.js';
 
 describe('SePay payments with MongoDB and HTTP', () => {
   const secret = 'sepay-integration-webhook-secret';
@@ -58,13 +57,12 @@ describe('SePay payments with MongoDB and HTTP', () => {
   let service: PaymentsService;
   let jwt: JwtService;
   let counter = 1000;
-  const intents = () =>
-    db.db.collection<Stored<PaymentIntent>>('payment_intents');
+  const intents = () => db.connection.model<PaymentIntent>(PaymentIntent.name);
   const requests = () =>
-    db.db.collection<Stored<PaymentRequest>>('payment_requests');
+    db.connection.model<PaymentRequest>(PaymentRequest.name);
   const receipts = () =>
-    db.db.collection<Stored<PaymentWebhookReceipt>>('payment_webhook_receipts');
-  const users = () => db.db.collection<Stored<User>>('users');
+    db.connection.model<PaymentWebhookReceipt>(PaymentWebhookReceipt.name);
+  const users = () => db.connection.model<User>(User.name);
   const path = '/api/v1';
   const webhookPath = `${path}/payments/sepay/bank-transfer-webhook`;
   const makeUser = async (role: 'USER' | 'ADMIN' = 'USER') => {
@@ -109,7 +107,7 @@ describe('SePay payments with MongoDB and HTTP', () => {
       .set('Authorization', credential)
       .send(body);
   /** Captured purchases; each one used to write a ledger row. */
-  const captures = (where: Partial<Stored<PaymentIntent>>) =>
+  const captures = (where: Partial<PaymentIntent>) =>
     intents().countDocuments({ ...where, status: PaymentStatus.SUCCEEDED });
   /** Membership as the overview reports it, with dates. */
   const membershipOf = async (userId: string) => {
@@ -218,11 +216,9 @@ describe('SePay payments with MongoDB and HTTP', () => {
     const one = await makeUser(),
       two = await makeUser();
     const stored = new Set(
-      (
-        await intents()
-          .find({}, { projection: { paymentCode: 1 } })
-          .toArray()
-      ).map((row) => row.paymentCode),
+      (await intents().find({}).select('paymentCode').exec()).map(
+        (row) => row.paymentCode,
+      ),
     );
     const unused: string[] = [];
     for (let value = 0; unused.length < 2; value++) {
@@ -251,7 +247,7 @@ describe('SePay payments with MongoDB and HTTP', () => {
     const owner = await makeUser(),
       user = await makeUser();
     await create(owner);
-    await db.db.collection('payment_intents').createIndex(
+    await intents().collection.createIndex(
       { amount: 1 },
       {
         name: 'reject_test_same_price',
@@ -267,9 +263,7 @@ describe('SePay payments with MongoDB and HTTP', () => {
       });
       expect(generate).toHaveBeenCalledOnce();
     } finally {
-      await db.db
-        .collection('payment_intents')
-        .dropIndex('reject_test_same_price');
+      await intents().collection.dropIndex('reject_test_same_price');
     }
   });
 
@@ -721,12 +715,12 @@ describe('SePay payments with MongoDB and HTTP', () => {
       body = event(payment);
     // Make the receipt insert fail: add a rule to the collection's validator
     // for the duration of the test.
-    const [info] = await db.db
-      .listCollections({ name: 'payment_webhook_receipts' })
+    const [info] = await db.connection
+      .db!.listCollections({ name: 'payment_webhook_receipts' })
       .toArray();
     const validator: unknown =
       'options' in info ? info.options?.validator : undefined;
-    await db.db.command({
+    await db.connection.db!.command({
       collMod: 'payment_webhook_receipts',
       validator: validator
         ? { $and: [validator, { outcome: { $ne: 'CAPTURED' } }] }
@@ -743,7 +737,7 @@ describe('SePay payments with MongoDB and HTTP', () => {
         }),
       ).toBe(0);
     } finally {
-      await db.db.command({
+      await db.connection.db!.command({
         collMod: 'payment_webhook_receipts',
         validator: validator ?? {},
       });

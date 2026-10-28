@@ -6,15 +6,14 @@ import {
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { randomUUID } from 'node:crypto';
-import type { ClientSession } from 'mongodb';
-import type { Model } from 'mongoose';
-import { lockDocument } from '../mongo/document-lock';
-import { Recipe, RecipeRating, Stored, User } from '../mongo/models';
-import { MongoService } from '../mongo/mongo.service';
+import type { ClientSession, Model } from 'mongoose';
+import { lockDocument } from '../mongo/document-lock.js';
+import { Recipe, RecipeRating, User } from '../mongo/models.js';
+import { MongoService } from '../mongo/mongo.service.js';
 import {
   MyRecipeRatingDto,
   RecipeRatingSummaryDto,
-} from './dto/recipe-rating.dto';
+} from './dto/recipe-rating.dto.js';
 
 @Injectable()
 export class RecipeRatingsService {
@@ -22,6 +21,7 @@ export class RecipeRatingsService {
     @InjectModel(Recipe.name) private readonly recipes: Model<Recipe>,
     @InjectModel(RecipeRating.name)
     private readonly recipeRatings: Model<RecipeRating>,
+    @InjectModel(User.name) private readonly users: Model<User>,
     private readonly mongo: MongoService,
   ) {}
 
@@ -48,14 +48,14 @@ export class RecipeRatingsService {
     userId: string,
     value: number | null,
   ): Promise<MyRecipeRatingDto> {
-    const { db } = this.mongo;
     return this.mongo.withTransaction(async (session) => {
       // Account -> recipe lock order. Account updates/deletion cannot race
       // verification, and concurrent scores on a recipe settle sequentially.
-      await lockDocument(db, session, 'user', userId);
-      const actor = await db
-        .collection<Stored<User>>('users')
-        .findOne({ _id: userId }, { session });
+      await lockDocument(this.mongo, session, 'user', userId);
+      const actor = await this.users
+        .findOne({ _id: userId })
+        .session(session)
+        .exec();
       if (!actor) throw new UnauthorizedException('Account no longer exists');
       if (value !== null && !actor.emailVerifiedAt) {
         throw new ForbiddenException({
@@ -64,10 +64,11 @@ export class RecipeRatingsService {
         });
       }
 
-      await lockDocument(db, session, 'recipe', recipeId);
-      const recipe = await db
-        .collection<Stored<Recipe>>('recipes')
-        .findOne({ _id: recipeId }, { session });
+      await lockDocument(this.mongo, session, 'recipe', recipeId);
+      const recipe = await this.recipes
+        .findOne({ _id: recipeId })
+        .session(session)
+        .exec();
       if (!recipe) throw new NotFoundException('Recipe not found');
       if (value !== null && recipe.createdById === userId) {
         throw new ForbiddenException({
@@ -76,19 +77,22 @@ export class RecipeRatingsService {
         });
       }
 
-      const ratings = db.collection<Stored<RecipeRating>>('recipe_ratings');
       if (value === null) {
-        await ratings.deleteOne({ recipeId, userId }, { session });
+        await this.recipeRatings
+          .deleteOne({ recipeId, userId }, { session })
+          .exec();
       } else {
         const now = new Date();
-        await ratings.updateOne(
-          { recipeId, userId },
-          {
-            $set: { value, updatedAt: now },
-            $setOnInsert: { _id: randomUUID(), createdAt: now },
-          },
-          { upsert: true, session },
-        );
+        await this.recipeRatings
+          .updateOne(
+            { recipeId, userId },
+            {
+              $set: { value, updatedAt: now },
+              $setOnInsert: { _id: randomUUID(), createdAt: now },
+            },
+            { upsert: true, session },
+          )
+          .exec();
       }
       return {
         ...(await this.aggregate(recipeId, session)),
@@ -115,8 +119,7 @@ export class RecipeRatingsService {
     recipeId: string,
     session?: ClientSession,
   ): Promise<RecipeRatingSummaryDto> {
-    const [stats] = await this.mongo.db
-      .collection('recipe_ratings')
+    const [stats] = await this.recipeRatings
       .aggregate<{ count: number; sum: number }>(
         [
           { $match: { recipeId } },
@@ -139,7 +142,7 @@ export class RecipeRatingsService {
         ],
         { session },
       )
-      .toArray();
+      .exec();
     const ratingCount = stats?.count ?? 0;
     return {
       recipeId,

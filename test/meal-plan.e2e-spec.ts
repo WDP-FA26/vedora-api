@@ -1,14 +1,14 @@
 import { randomUUID } from 'node:crypto';
 import request from 'supertest';
-import type { MealPlanDto } from '../src/meal-plan/dto/meal-plan.dto';
+import type { MealPlanDto } from '../src/meal-plan/dto/meal-plan.dto.js';
 import type {
   Ingredient,
   MealPlanEntry,
   Recipe,
   User,
-} from '../src/mongo/models';
-import { createE2eApp, type E2eApp } from './e2e-app';
-import { createIngredient, createRecipe, createUser } from './fixtures';
+} from '../src/mongo/models.js';
+import { createE2eApp, type E2eApp } from './e2e-app.js';
+import { createIngredient, createRecipe, createUser } from './fixtures.js';
 
 describe('Meal plan (e2e)', () => {
   let e2e: E2eApp;

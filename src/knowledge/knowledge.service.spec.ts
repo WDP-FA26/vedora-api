@@ -8,25 +8,25 @@ import { ConfigService } from '@nestjs/config';
 import { Test } from '@nestjs/testing';
 import { NoSuchKey } from '@aws-sdk/client-s3';
 import { mockDeep, type DeepMockProxy } from 'vitest-mock-extended';
-import { createUser } from '../../test/fixtures';
+import { createUser } from '../../test/fixtures.js';
 import {
   createTestMongoUrl,
   dropTestDatabase,
   prepareTestDatabase,
-} from '../../test/mongo-test-db';
-import { MongoModule } from '../mongo/mongo.module';
-import { MongoService } from '../mongo/mongo.service';
+} from '../../test/mongo-test-db.js';
+import { MongoModule } from '../mongo/mongo.module.js';
+import { MongoService } from '../mongo/mongo.service.js';
 import {
   type KnowledgeDocument,
   KnowledgeDocumentFailureReason,
   KnowledgeDocumentStatus,
-} from '../mongo/models';
-import type { PresignedUploadDto } from '../storage/presigned-upload.dto';
-import { StorageService, StorageTarget } from '../storage/storage.service';
-import { DocumentExtractionError } from './extractors/document-extractor';
-import { PdfExtractor } from './extractors/pdf-extractor';
-import { KnowledgeService } from './knowledge.service';
-import { KnowledgeIndexService } from './retrieval/knowledge-index.service';
+} from '../mongo/models.js';
+import type { PresignedUploadDto } from '../storage/presigned-upload.dto.js';
+import { StorageService, StorageTarget } from '../storage/storage.service.js';
+import { DocumentExtractionError } from './extractors/document-extractor.js';
+import { PdfExtractor } from './extractors/pdf-extractor.js';
+import { KnowledgeService } from './knowledge.service.js';
+import { KnowledgeIndexService } from './retrieval/knowledge-index.service.js';
 
 const presigned: PresignedUploadDto = {
   url: 'https://storage.vedora.vn/vedora-knowledge/knowledge/d.pdf?X-Amz-Signature=s',
@@ -85,7 +85,7 @@ describe('KnowledgeService', () => {
   });
   beforeEach(async () => {
     vi.restoreAllMocks();
-    await db.db.collection('knowledge_documents').deleteMany({});
+    await db.connection.collections.knowledge_documents.deleteMany({});
     extractor.extract.mockReset();
     index.index.mockReset();
     index.remove.mockReset();

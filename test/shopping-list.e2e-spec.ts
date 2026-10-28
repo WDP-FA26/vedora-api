@@ -1,7 +1,7 @@
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import request from 'supertest';
-import { createE2eApp, type E2eApp } from './e2e-app';
-import { createUser } from './fixtures';
+import { createE2eApp, type E2eApp } from './e2e-app.js';
+import { createUser } from './fixtures.js';
 
 const ROOT = '/api/v1/meal-plan/shopping-list';
 describe('Shopping list API (e2e)', () => {

@@ -1,4 +1,4 @@
-import type { ModerationVerdict } from '../ai/moderation/moderation';
+import type { ModerationVerdict } from '../ai/moderation/moderation.js';
 
 /** What the meal planner says when moderation refuses a message. */
 export const PLANNER_REFUSALS: Record<

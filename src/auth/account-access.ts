@@ -1,5 +1,5 @@
 import { UnauthorizedException } from '@nestjs/common';
-import { AccountStatus } from '../mongo/models';
+import { AccountStatus } from '../mongo/models.js';
 
 export function assertAccountActive(status: AccountStatus): void {
   if (status !== AccountStatus.ACTIVE) {

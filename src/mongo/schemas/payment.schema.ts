@@ -1,8 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
-import { AiFeature, BillingPlan, PaymentStatus } from '../enums';
-import { collectionSchema, indexName } from './common';
-import { Identified } from './user.schema';
+import { AiFeature, BillingPlan, PaymentStatus } from '../enums.js';
+import { collectionSchema } from './common.js';
+import { Identified } from './user.schema.js';
 
 @Schema(collectionSchema('payment_intents'))
 export class PaymentIntent extends Identified {
@@ -83,25 +83,12 @@ export class PaymentIntent extends Identified {
 }
 
 export const PaymentIntentSchema = SchemaFactory.createForClass(PaymentIntent);
-PaymentIntentSchema.index(
-  { invoiceNumber: 1 },
-  {
-    unique: true,
-    name: indexName('payment_intents', ['invoiceNumber'], 'key'),
-  },
-);
-PaymentIntentSchema.index(
-  { paymentCode: 1 },
-  {
-    unique: true,
-    name: indexName('payment_intents', ['paymentCode'], 'key'),
-  },
-);
+PaymentIntentSchema.index({ invoiceNumber: 1 }, { unique: true });
+PaymentIntentSchema.index({ paymentCode: 1 }, { unique: true });
 PaymentIntentSchema.index(
   { activeIntentKey: 1 },
   {
     unique: true,
-    name: indexName('payment_intents', ['activeIntentKey'], 'key'),
     partialFilterExpression: { activeIntentKey: { $type: 'string' } },
   },
 );
@@ -109,24 +96,11 @@ PaymentIntentSchema.index(
   { providerTransactionId: 1 },
   {
     unique: true,
-    name: indexName('payment_intents', ['providerTransactionId'], 'key'),
     partialFilterExpression: { providerTransactionId: { $type: 'string' } },
   },
 );
-PaymentIntentSchema.index(
-  { userId: 1, createdAt: 1 },
-  { name: indexName('payment_intents', ['userId', 'createdAt'], 'idx') },
-);
-PaymentIntentSchema.index(
-  { userId: 1, status: 1, capturedAt: 1 },
-  {
-    name: indexName(
-      'payment_intents',
-      ['userId', 'status', 'capturedAt'],
-      'idx',
-    ),
-  },
-);
+PaymentIntentSchema.index({ userId: 1, createdAt: 1 });
+PaymentIntentSchema.index({ userId: 1, status: 1, capturedAt: 1 });
 
 @Schema(collectionSchema('payment_requests', 'created'))
 export class PaymentRequest extends Identified {
@@ -151,13 +125,7 @@ export class PaymentRequest extends Identified {
 
 export const PaymentRequestSchema =
   SchemaFactory.createForClass(PaymentRequest);
-PaymentRequestSchema.index(
-  { actorId: 1, requestKey: 1 },
-  {
-    unique: true,
-    name: indexName('payment_requests', ['actorId', 'requestKey'], 'key'),
-  },
-);
+PaymentRequestSchema.index({ actorId: 1, requestKey: 1 }, { unique: true });
 
 @Schema(collectionSchema('payment_webhook_receipts', 'created'))
 export class PaymentWebhookReceipt extends Identified {
@@ -183,26 +151,8 @@ export class PaymentWebhookReceipt extends Identified {
 export const PaymentWebhookReceiptSchema = SchemaFactory.createForClass(
   PaymentWebhookReceipt,
 );
-PaymentWebhookReceiptSchema.index(
-  { providerTransactionId: 1, createdAt: 1 },
-  {
-    name: indexName(
-      'payment_webhook_receipts',
-      ['providerTransactionId', 'createdAt'],
-      'idx',
-    ),
-  },
-);
-PaymentWebhookReceiptSchema.index(
-  { intentId: 1, createdAt: 1 },
-  {
-    name: indexName(
-      'payment_webhook_receipts',
-      ['intentId', 'createdAt'],
-      'idx',
-    ),
-  },
-);
+PaymentWebhookReceiptSchema.index({ providerTransactionId: 1, createdAt: 1 });
+PaymentWebhookReceiptSchema.index({ intentId: 1, createdAt: 1 });
 
 @Schema(collectionSchema('ai_usage', 'none'))
 export class AiUsage extends Identified {
@@ -223,10 +173,4 @@ export class AiUsage extends Identified {
 }
 
 export const AiUsageSchema = SchemaFactory.createForClass(AiUsage);
-AiUsageSchema.index(
-  { userId: 1, day: 1, feature: 1 },
-  {
-    unique: true,
-    name: indexName('ai_usage', ['userId', 'day', 'feature'], 'key'),
-  },
-);
+AiUsageSchema.index({ userId: 1, day: 1, feature: 1 }, { unique: true });

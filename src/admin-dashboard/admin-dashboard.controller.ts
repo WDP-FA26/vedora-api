@@ -8,12 +8,12 @@ import {
   ApiTags,
   ApiUnauthorizedResponse,
 } from '@nestjs/swagger';
-import { UserRole } from '../mongo/models';
-import { JwtAuthGuard } from '../auth/jwt-auth.guard';
-import { Roles } from '../auth/roles.decorator';
-import { RolesGuard } from '../auth/roles.guard';
-import { AdminDashboardService } from './admin-dashboard.service';
-import { DashboardDto, DashboardQueryDto } from './dto/dashboard.dto';
+import { UserRole } from '../mongo/models.js';
+import { JwtAuthGuard } from '../auth/jwt-auth.guard.js';
+import { Roles } from '../auth/roles.decorator.js';
+import { RolesGuard } from '../auth/roles.guard.js';
+import { AdminDashboardService } from './admin-dashboard.service.js';
+import { DashboardDto, DashboardQueryDto } from './dto/dashboard.dto.js';
 
 @ApiTags('admin')
 @ApiBearerAuth()

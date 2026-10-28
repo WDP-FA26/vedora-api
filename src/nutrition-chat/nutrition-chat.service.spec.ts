@@ -4,9 +4,9 @@ import { Test } from '@nestjs/testing';
 import { simulateReadableStream, type UIMessageChunk } from 'ai';
 import { convertReadableStreamToArray, MockLanguageModelV4 } from 'ai/test';
 import { type DeepMockProxy, mockDeep } from 'vitest-mock-extended';
-import { KnowledgeSearchService } from '../knowledge/retrieval/knowledge-search.service';
-import { INSTRUCTIONS } from './nutrition-chat.prompt';
-import { NutritionChatService } from './nutrition-chat.service';
+import { KnowledgeSearchService } from '../knowledge/retrieval/knowledge-search.service.js';
+import { INSTRUCTIONS } from './nutrition-chat.prompt.js';
+import { NutritionChatService } from './nutrition-chat.service.js';
 
 type StreamPart =
   Awaited<
@@ -254,7 +254,7 @@ describe('NutritionChatService', () => {
       });
     });
 
-    it('tells the model nothing was found when the search fails', async () => {
+    it('tells the model the search failed, not that nothing was found', async () => {
       steps = [searchChunks];
       knowledge.search.mockRejectedValue(new Error('Qdrant down'));
 
@@ -262,7 +262,7 @@ describe('NutritionChatService', () => {
 
       expect(toolResult()).toEqual({
         type: 'text',
-        value: 'No relevant passages found.',
+        value: expect.stringContaining('search failed') as string,
       });
     });
 

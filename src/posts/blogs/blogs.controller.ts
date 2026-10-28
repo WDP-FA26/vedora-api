@@ -23,31 +23,31 @@ import {
   ApiTags,
   OmitType,
 } from '@nestjs/swagger';
-import { PostType } from '../../mongo/models';
+import { PostType } from '../../mongo/models.js';
 import type { Response } from 'express';
 import type {
   AuthenticatedRequest,
   OptionalAuthenticatedRequest,
-} from '../../auth/auth.types';
-import { JwtAuthGuard } from '../../auth/jwt-auth.guard';
-import { OptionalJwtAuthGuard } from '../../auth/optional-jwt-auth.guard';
-import { BlogImagesService } from './blog-images.service';
-import { BlogsService } from './blogs.service';
-import { CloudinaryService } from '../../cloudinary/cloudinary.service';
+} from '../../auth/auth.types.js';
+import { JwtAuthGuard } from '../../auth/jwt-auth.guard.js';
+import { OptionalJwtAuthGuard } from '../../auth/optional-jwt-auth.guard.js';
+import { BlogImagesService } from './blog-images.service.js';
+import { BlogsService } from './blogs.service.js';
+import { CloudinaryService } from '../../cloudinary/cloudinary.service.js';
 import {
   BlogImageUploadDto,
   BlogVideoUploadDto,
   CreateBlogImageUploadDto,
-} from '../dto/blog-image.dto';
+} from '../dto/blog-image.dto.js';
 import {
   BlogDetailDto,
   CreateBlogDto,
   MyBlogsQueryDto,
   UpdateBlogDto,
-} from '../dto/blog.dto';
-import { ListPostsQueryDto } from '../dto/list-posts-query.dto';
-import { PostPageDto } from '../dto/post-response.dto';
-import { PostsService } from '../posts.service';
+} from '../dto/blog.dto.js';
+import { ListPostsQueryDto } from '../dto/list-posts-query.dto.js';
+import { PostPageDto } from '../dto/post-response.dto.js';
+import { PostsService } from '../posts.service.js';
 
 export class ListBlogsQueryDto extends OmitType(ListPostsQueryDto, ['type']) {}
 

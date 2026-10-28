@@ -11,7 +11,7 @@ import {
   S3Client,
 } from '@aws-sdk/client-s3';
 import { mockClient } from 'aws-sdk-client-mock';
-import { StorageService, StorageTarget } from './storage.service';
+import { StorageService, StorageTarget } from './storage.service.js';
 
 const s3 = mockClient(S3Client);
 

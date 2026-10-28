@@ -1,15 +1,14 @@
 import { randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { z } from 'zod';
 import type {
   Ingredient,
   IngredientGroup,
-  IngredientGroupMember,
   IncompatibilityRule,
   Recipe,
-  RecipeIngredient,
-} from '../mongo/models';
-import type { MongoService } from '../mongo/mongo.service';
+} from '../mongo/models.js';
+import type { MongoService } from '../mongo/mongo.service.js';
 
 // The starter catalog: plant-based Vietnamese ingredients, groups,
 // incompatibility rules and recipes from `seed-data/recipes.json`.
@@ -17,39 +16,61 @@ import type { MongoService } from '../mongo/mongo.service';
 // are matched by name or title, and nothing an admin edited is overwritten
 // or deleted. An existing recipe only gains a photo when it has none.
 
-type Side = { kind: 'INGREDIENT' | 'GROUP'; name: string };
+const sideSchema = z.object({
+  kind: z.enum(['INGREDIENT', 'GROUP']),
+  name: z.string(),
+});
 
-export interface SeedData {
-  ingredients: { name: string; aliases: string[] }[];
-  groups: {
-    name: string;
-    description: string;
-    dietary: boolean;
-    ingredients: string[];
-  }[];
-  rules: { a: Side; b: Side; reason: string; source: string }[];
-  recipes: {
-    title: string;
-    description: string;
-    servings: number;
-    prepMinutes: number;
-    cookMinutes: number;
-    imageUrl?: string;
-    ingredients: {
-      name: string;
-      quantity?: number;
-      unit?: string;
-      note?: string;
-    }[];
-    steps: string[];
-  }[];
-}
+const seedDataSchema = z.object({
+  ingredients: z.array(
+    z.object({ name: z.string(), aliases: z.array(z.string()) }),
+  ),
+  groups: z.array(
+    z.object({
+      name: z.string(),
+      description: z.string(),
+      dietary: z.boolean(),
+      ingredients: z.array(z.string()),
+    }),
+  ),
+  rules: z.array(
+    z.object({
+      a: sideSchema,
+      b: sideSchema,
+      reason: z.string(),
+      source: z.string(),
+    }),
+  ),
+  recipes: z.array(
+    z.object({
+      title: z.string(),
+      description: z.string(),
+      servings: z.number(),
+      prepMinutes: z.number(),
+      cookMinutes: z.number(),
+      imageUrl: z.string().optional(),
+      ingredients: z.array(
+        z.object({
+          name: z.string(),
+          quantity: z.number().optional(),
+          unit: z.string().optional(),
+          note: z.string().optional(),
+        }),
+      ),
+      steps: z.array(z.string()),
+    }),
+  ),
+});
+
+type Side = z.infer<typeof sideSchema>;
+export type SeedData = z.infer<typeof seedDataSchema>;
 
 /** Read from the working directory: the production image ships `seed-data/` beside `dist/`. */
 export function loadCatalog(): SeedData {
-  return JSON.parse(
+  const raw: unknown = JSON.parse(
     readFileSync(join(process.cwd(), 'seed-data', 'recipes.json'), 'utf8'),
-  ) as SeedData;
+  );
+  return seedDataSchema.parse(raw);
 }
 
 export async function seedCatalog(
@@ -59,15 +80,10 @@ export async function seedCatalog(
   const ingredientsModel = mongo.connection.model<Ingredient>('Ingredient');
   const groupsModel =
     mongo.connection.model<IngredientGroup>('IngredientGroup');
-  const membersModel = mongo.connection.model<IngredientGroupMember>(
-    'IngredientGroupMember',
-  );
   const rulesModel = mongo.connection.model<IncompatibilityRule>(
     'IncompatibilityRule',
   );
   const recipesModel = mongo.connection.model<Recipe>('Recipe');
-  const recipeIngredientsModel =
-    mongo.connection.model<RecipeIngredient>('RecipeIngredient');
 
   const ingredientIds = new Map<string, string>();
   for (const { name, aliases } of data.ingredients) {
@@ -84,22 +100,24 @@ export async function seedCatalog(
 
   const groupIds = new Map<string, string>();
   for (const { name, description, dietary, ingredients } of data.groups) {
-    const row =
-      (await groupsModel.findOne({ name })) ??
-      (await groupsModel.create({
+    const memberIds = ingredients.map(ingredientId);
+    let row = await groupsModel.findOne({ name });
+    if (row) {
+      await groupsModel.updateOne(
+        { _id: row.id },
+        { $addToSet: { ingredientIds: { $each: memberIds } } },
+        { timestamps: false },
+      );
+    } else {
+      row = await groupsModel.create({
         _id: randomUUID(),
         name,
         description,
         dietary,
-      }));
-    groupIds.set(name, row.id);
-    for (const member of ingredients) {
-      const key = { groupId: row.id, ingredientId: ingredientId(member) };
-      const exists = await membersModel.findOne(key);
-      if (!exists) {
-        await membersModel.create({ _id: randomUUID(), ...key });
-      }
+        ingredientIds: memberIds,
+      });
     }
+    groupIds.set(name, row.id);
   }
 
   const side = ({ kind, name }: Side) => {
@@ -147,24 +165,16 @@ export async function seedCatalog(
       }
       continue;
     }
-    // MongoDB has no nested writes: create the recipe, then its ingredients.
-    const created = await recipesModel.create({
+    await recipesModel.create({
       _id: randomUUID(),
       ...recipe,
+      ingredients: ingredients.map((item) => ({
+        ingredientId: ingredientId(item.name),
+        quantity: item.quantity ?? null,
+        unit: item.unit ?? null,
+        note: item.note ?? null,
+      })),
     });
-    if (ingredients.length > 0) {
-      await recipeIngredientsModel.insertMany(
-        ingredients.map((item, position) => ({
-          _id: randomUUID(),
-          recipeId: created.id,
-          ingredientId: ingredientId(item.name),
-          position,
-          quantity: item.quantity ?? null,
-          unit: item.unit ?? null,
-          note: item.note ?? null,
-        })),
-      );
-    }
     recipes++;
   }
 

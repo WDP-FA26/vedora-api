@@ -2,7 +2,7 @@ import type { INestApplication } from '@nestjs/common';
 import { getConnectionToken } from '@nestjs/mongoose';
 import type { Connection } from 'mongoose';
 import { randomUUID } from 'node:crypto';
-import { MODEL_DEFINITIONS } from '../src/mongo/schemas';
+import { MODEL_DEFINITIONS } from '../src/mongo/schemas/index.js';
 
 /** The local replica set from docker-compose.yml, unless TEST_DATABASE_URL is set. */
 const LOCAL_TEST_URL =

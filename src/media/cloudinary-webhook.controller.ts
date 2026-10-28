@@ -10,11 +10,11 @@ import {
 } from '@nestjs/common';
 import { ApiExcludeController } from '@nestjs/swagger';
 import type { IncomingHttpHeaders } from 'node:http';
-import { CloudinaryService } from '../cloudinary/cloudinary.service';
-import { validatePayload } from '../common/validation';
-import { CloudinaryNotification } from './dto/cloudinary-notification';
-import { MediaService } from './media.service';
-import { RawBody } from './raw-body.decorator';
+import { CloudinaryService } from '../cloudinary/cloudinary.service.js';
+import { validatePayload } from '../common/validation.js';
+import { CloudinaryNotification } from './dto/cloudinary-notification.js';
+import { MediaService } from './media.service.js';
+import { RawBody } from './raw-body.decorator.js';
 
 /**
  * Cloudinary calls this for upload and eager events. It is public; the

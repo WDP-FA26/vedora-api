@@ -4,24 +4,24 @@ import { getModelToken } from '@nestjs/mongoose';
 import { Test } from '@nestjs/testing';
 import type { Model } from 'mongoose';
 import { type DeepMockProxy, mockDeep } from 'vitest-mock-extended';
-import { createMedia, createPost, createUser } from '../../../test/fixtures';
+import { createMedia, createPost, createUser } from '../../../test/fixtures.js';
 import {
   createTestMongoUrl,
   dropTestDatabase,
   prepareTestDatabase,
-} from '../../../test/mongo-test-db';
+} from '../../../test/mongo-test-db.js';
 import {
   MediaAsset,
   Post,
   PostStatus,
   PostType,
   type User,
-} from '../../mongo/models';
-import { MongoModule } from '../../mongo/mongo.module';
-import { MongoService } from '../../mongo/mongo.service';
-import { QdrantService } from '../../qdrant/qdrant.service';
-import { PostEmbeddingsService } from './post-embeddings.service';
-import { chunkText, PostSearchIndexService } from './post-search-index.service';
+} from '../../mongo/models.js';
+import { MongoModule } from '../../mongo/mongo.module.js';
+import { MongoService } from '../../mongo/mongo.service.js';
+import { QdrantService } from '../../qdrant/qdrant.service.js';
+import { PostEmbeddingsService } from './post-embeddings.service.js';
+import { chunkText, PostSearchIndexService } from './post-search-index.service.js';
 
 describe('PostSearchIndexService', () => {
   let app: INestApplication;
@@ -56,8 +56,8 @@ describe('PostSearchIndexService', () => {
     author = await createUser(db);
   });
   beforeEach(async () => {
-    await db.db.collection('posts').deleteMany({});
-    await db.db.collection('media_assets').deleteMany({});
+    await db.connection.collections.posts.deleteMany({});
+    await db.connection.collections.media_assets.deleteMany({});
     post = await createPost(db, {
       authorId: author.id,
       body: 'Đậu hũ sốt cà',

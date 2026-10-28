@@ -1,9 +1,9 @@
 import { randomUUID } from 'node:crypto';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import request from 'supertest';
-import type { RecipeRating, User } from '../src/mongo/models';
-import { createE2eApp, type E2eApp } from './e2e-app';
-import { createRecipe, createUser } from './fixtures';
+import type { RecipeRating, User } from '../src/mongo/models.js';
+import { createE2eApp, type E2eApp } from './e2e-app.js';
+import { createRecipe, createUser } from './fixtures.js';
 
 describe('Recipe ratings API (e2e)', () => {
   let e2e: E2eApp;

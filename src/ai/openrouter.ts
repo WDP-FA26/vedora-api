@@ -1,6 +1,6 @@
 import { createOpenRouter } from '@openrouter/ai-sdk-provider';
 import type { ImageModel, LanguageModel } from 'ai';
-import type { ReasoningEffort } from './reasoning';
+import type { ReasoningEffort } from './reasoning.js';
 
 /** Used when the deployment does not pin a chat model. */
 export const DEFAULT_CHAT_MODEL = 'openrouter/auto';

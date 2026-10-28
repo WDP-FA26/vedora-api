@@ -17,16 +17,16 @@ import {
   createPaginatedResponse,
   getPaginationArgs,
   PaginatedResponseDto,
-} from '../common/pagination';
-import { lockDocument } from '../mongo/document-lock';
+} from '../common/pagination/index.js';
+import { lockDocument } from '../mongo/document-lock.js';
 import {
   User,
   VerificationProof,
   VerificationRequest,
   VerificationStatus,
-} from '../mongo/models';
-import { MongoService } from '../mongo/mongo.service';
-import { StorageService, StorageTarget } from '../storage/storage.service';
+} from '../mongo/models.js';
+import { MongoService } from '../mongo/mongo.service.js';
+import { StorageService, StorageTarget } from '../storage/storage.service.js';
 import {
   AdminVerificationRequestDetailDto,
   AdminVerificationRequestDto,
@@ -37,7 +37,7 @@ import {
   ReviewVerificationRequestDto,
   VerificationRequestDto,
   VerificationRequestsQueryDto,
-} from './dto/verification.dto';
+} from './dto/verification.dto.js';
 
 const IMAGE_EXTENSIONS: Record<string, string> = {
   'image/jpeg': 'jpg',
@@ -126,7 +126,7 @@ export class VerificationService {
     const requestId = randomUUID();
     await this.mongo.withTransaction(async (session) => {
       // Two submits at once must not both see "no pending request".
-      await lockDocument(this.mongo.db, session, 'user', userId);
+      await lockDocument(this.mongo, session, 'user', userId);
       const user = await this.users
         .findOne({ _id: userId })
         .session(session)

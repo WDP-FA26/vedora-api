@@ -6,23 +6,23 @@ import {
   createIngredient,
   createRecipe,
   createUser,
-} from '../../test/fixtures';
+} from '../../test/fixtures.js';
 import {
   createTestMongoUrl,
   dropTestDatabase,
   prepareTestDatabase,
-} from '../../test/mongo-test-db';
-import { MongoModule } from '../mongo/mongo.module';
+} from '../../test/mongo-test-db.js';
+import { MongoModule } from '../mongo/mongo.module.js';
 import {
   type IncompatibilityRule,
   type MealPlanEntry,
   MealSection,
   Weekday,
-} from '../mongo/models';
-import { MongoService } from '../mongo/mongo.service';
-import { DietaryService } from '../recipes/dietary.service';
-import { IncompatibilityRulesService } from '../recipes/incompatibility-rules.service';
-import { MealPlanService } from './meal-plan.service';
+} from '../mongo/models.js';
+import { MongoService } from '../mongo/mongo.service.js';
+import { DietaryService } from '../recipes/dietary.service.js';
+import { IncompatibilityRulesService } from '../recipes/incompatibility-rules.service.js';
+import { MealPlanService } from './meal-plan.service.js';
 
 const USER_ID = '4a1e32e4-e18e-4dd7-8b4a-246ef2113ff2';
 const TOFU_ID = 'a1a2d3e4-0000-4000-8000-000000000001';
@@ -73,14 +73,12 @@ describe('MealPlanService', () => {
     for (const collection of [
       'meal_plan_entries',
       'recipes',
-      'recipe_ingredients',
       'ingredients',
       'ingredient_groups',
-      'ingredient_group_members',
       'incompatibility_rules',
       'users',
     ]) {
-      await mongo.db.collection(collection).deleteMany({});
+      await mongo.connection.collections[collection].deleteMany({});
     }
     await createUser(mongo, { id: USER_ID, username: 'plan.user' });
     await createIngredient(mongo, { id: TOFU_ID, name: 'Đậu hũ' });

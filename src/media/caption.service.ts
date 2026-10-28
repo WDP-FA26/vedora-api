@@ -8,15 +8,15 @@ import {
   MediaStatus,
   Post,
   PostStatus,
-} from '../mongo/models';
-import { CloudinaryService } from '../cloudinary/cloudinary.service';
-import { extractSpeechAudio } from './captions/speech-audio';
+} from '../mongo/models.js';
+import { CloudinaryService } from '../cloudinary/cloudinary.service.js';
+import { extractSpeechAudio } from './captions/speech-audio.js';
 import {
   languageName,
   TranscriptionService,
   translationTarget,
-} from './captions/transcription.service';
-import { type Cue, toVtt, vttText } from './captions/vtt';
+} from './captions/transcription.service.js';
+import { type Cue, toVtt, vttText } from './captions/vtt.js';
 
 const BATCH_SIZE = 10;
 /** A TRANSCRIBING row untouched this long was cut off by a restart. */

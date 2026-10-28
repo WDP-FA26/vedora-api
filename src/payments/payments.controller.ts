@@ -26,19 +26,19 @@ import {
 } from '@nestjs/swagger';
 import { InjectModel } from '@nestjs/mongoose';
 import type { Model } from 'mongoose';
-import type { AuthenticatedRequest } from '../auth/auth.types';
-import { JwtAuthGuard } from '../auth/jwt-auth.guard';
-import { Roles } from '../auth/roles.decorator';
-import { RolesGuard } from '../auth/roles.guard';
-import { PaymentWebhookReceipt, UserRole } from '../mongo/models';
+import type { AuthenticatedRequest } from '../auth/auth.types.js';
+import { JwtAuthGuard } from '../auth/jwt-auth.guard.js';
+import { Roles } from '../auth/roles.decorator.js';
+import { RolesGuard } from '../auth/roles.guard.js';
+import { PaymentWebhookReceipt, UserRole } from '../mongo/models.js';
 import {
   BillingCatalogDto,
   BillingOverviewDto,
   CreatePaymentDto,
   PaymentDto,
-} from './payment.dto';
-import { PaymentsService } from './payments.service';
-import { SePayWebhookGuard } from './sepay-webhook.guard';
+} from './payment.dto.js';
+import { PaymentsService } from './payments.service.js';
+import { SePayWebhookGuard } from './sepay-webhook.guard.js';
 
 @ApiTags('billing')
 @ApiBearerAuth()

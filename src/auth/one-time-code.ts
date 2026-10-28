@@ -1,7 +1,7 @@
 import { createHash, randomInt, timingSafeEqual } from 'node:crypto';
 import type { Model } from 'mongoose';
-import { EmailVerificationGuesses, OneTimeCodePurpose } from '../mongo/models';
-import { isUniqueViolation } from '../mongo/errors';
+import { EmailVerificationGuesses, OneTimeCodePurpose } from '../mongo/models.js';
+import { isUniqueViolation } from '../mongo/errors.js';
 
 // Rules shared by the six-digit codes we email: verification and password
 // reset. Guesses are capped per code and per email per day (15 in 10^6), and

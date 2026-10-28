@@ -1,12 +1,12 @@
 import { createHash } from 'node:crypto';
-import { MediaStatus, type MediaAsset } from '../src/mongo/models';
+import { MediaStatus, type MediaAsset } from '../src/mongo/models.js';
 import request from 'supertest';
 import type { MockInstance } from 'vitest';
-import { GuestSessionService } from '../src/nutrition-chat/guest/guest-session.service';
-import { KnowledgeService } from '../src/knowledge/knowledge.service';
-import { mediaId, publicId, uploaded } from '../src/media/media.fixtures';
-import { createE2eApp, type E2eApp } from './e2e-app';
-import { createMedia, createUser } from './fixtures';
+import { GuestSessionService } from '../src/nutrition-chat/guest/guest-session.service.js';
+import { KnowledgeService } from '../src/knowledge/knowledge.service.js';
+import { mediaId, publicId, uploaded } from '../src/media/media.fixtures.js';
+import { createE2eApp, type E2eApp } from './e2e-app.js';
+import { createMedia, createUser } from './fixtures.js';
 
 const CLOUDINARY_SECRET = 'e2e-api-secret';
 

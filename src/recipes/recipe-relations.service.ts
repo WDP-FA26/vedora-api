@@ -1,30 +1,21 @@
 import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import type { Model } from 'mongoose';
-import {
-  Ingredient,
-  Post,
-  PostStatus,
-  Recipe,
-  RecipeIngredient,
-  User,
-} from '../mongo/models';
-import { allExist } from '../mongo/references';
-import { RecipeDetailDto } from './dto/recipe.dto';
-import { IncompatibilityRulesService } from './incompatibility-rules.service';
-import { badRequest } from './recipe-errors';
+import { Ingredient, Post, PostStatus, Recipe, User } from '../mongo/models.js';
+import { allExist } from '../mongo/references.js';
+import { RecipeDetailDto } from './dto/recipe.dto.js';
+import { IncompatibilityRulesService } from './incompatibility-rules.service.js';
+import { badRequest } from './recipe-errors.js';
 
 /**
- * Reads the collections a recipe card joins: its ingredient lines with their
- * names, the source post and its author, and the conflicts between the
- * ingredients. It owns those collections, so the services that render recipes
- * depend on one collaborator instead of five models.
+ * Reads the collections a recipe card joins: its ingredient names, the source
+ * post and its author, and the conflicts between the ingredients. It owns
+ * those collections, so the services that render recipes depend on one
+ * collaborator instead of four models.
  */
 @Injectable()
 export class RecipeRelationsService {
   constructor(
-    @InjectModel(RecipeIngredient.name)
-    private readonly recipeIngredients: Model<RecipeIngredient>,
     @InjectModel(Ingredient.name)
     private readonly ingredients: Model<Ingredient>,
     @InjectModel(Post.name) private readonly posts: Model<Post>,
@@ -34,35 +25,32 @@ export class RecipeRelationsService {
 
   /** Recipe details for `rows`, in the same order. */
   async hydrate(rows: readonly Recipe[]): Promise<RecipeDetailDto[]> {
-    const recipeIds = rows.map(({ id }) => id);
     const postIds = rows.flatMap(({ postId }) => (postId ? [postId] : []));
-    const [items, posts] = await Promise.all([
-      this.recipeIngredients
-        .find({ recipeId: { $in: recipeIds } })
-        .sort({ position: 1 })
-        .exec(),
+    const ingredientIds = [
+      ...new Set(
+        rows.flatMap(({ ingredients }) =>
+          ingredients.map(({ ingredientId }) => ingredientId),
+        ),
+      ),
+    ];
+    const [ingredients, posts] = await Promise.all([
+      this.ingredients.find({ _id: { $in: ingredientIds } }).exec(),
       this.posts.find({ _id: { $in: postIds } }).exec(),
     ]);
-    const ingredientIds = [
-      ...new Set(items.map(({ ingredientId }) => ingredientId)),
-    ];
     const authorIds = [...new Set(posts.map(({ authorId }) => authorId))];
-    const [ingredients, authors] = await Promise.all([
-      this.ingredients.find({ _id: { $in: ingredientIds } }).exec(),
-      this.users.find({ _id: { $in: authorIds } }).exec(),
-    ]);
+    const authors = await this.users.find({ _id: { $in: authorIds } }).exec();
     const ingredientById = new Map(
       ingredients.map((ingredient) => [ingredient.id, ingredient]),
     );
     const authorById = new Map(authors.map((author) => [author.id, author]));
-    const ingredientsOf = (id: string) =>
-      items.filter(({ recipeId }) => recipeId === id);
     const postById = new Map(posts.map((post) => [post.id, post]));
     const conflicts = await this.rules.findConflictsForEach(
-      rows.map(({ id }) => ingredientsOf(id).map((item) => item.ingredientId)),
+      rows.map(({ ingredients }) =>
+        ingredients.map((item) => item.ingredientId),
+      ),
     );
     return rows.map((row, index) => {
-      const rowItems = ingredientsOf(row.id);
+      const rowItems = row.ingredients;
       const names = new Map(
         rowItems.map((item) => [
           item.ingredientId,
@@ -113,13 +101,11 @@ export class RecipeRelationsService {
   }
 
   /** The source posts among `postIds` that are published. */
-  async publishedPostIds(
-    postIds: readonly (string | null)[],
-  ): Promise<Set<string>> {
+  async publishedPostIds(postIds: readonly string[]): Promise<Set<string>> {
     const posts = await this.posts
       .find({
         status: PostStatus.PUBLISHED,
-        _id: { $in: postIds.filter((id) => id !== null) },
+        _id: { $in: postIds },
       })
       .select('_id')
       .exec();
@@ -145,4 +131,15 @@ export class RecipeRelationsService {
       );
     }
   }
+}
+
+/** The source post ids of recipes; recipes without a source post are skipped. */
+export function sourcePostIds(
+  recipes: readonly { postId?: string | null }[],
+): string[] {
+  const postIds: string[] = [];
+  for (const { postId } of recipes) {
+    if (postId) postIds.push(postId);
+  }
+  return postIds;
 }

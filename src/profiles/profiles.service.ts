@@ -10,9 +10,9 @@ import {
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { InjectModel } from '@nestjs/mongoose';
 import type { Model, QueryFilter } from 'mongoose';
-import { afterCursor, CursorPaginationQueryDto } from '../common/pagination';
-import { NotificationsService } from '../notifications/notifications.service';
-import { isUniqueViolation } from '../mongo/errors';
+import { afterCursor, CursorPaginationQueryDto } from '../common/pagination/index.js';
+import { NotificationsService } from '../notifications/notifications.service.js';
+import { isUniqueViolation } from '../mongo/errors.js';
 import {
   Follow,
   NotificationType,
@@ -22,8 +22,8 @@ import {
   ProfileImageStatus,
   ProfileImageUpload,
   User,
-} from '../mongo/models';
-import { StorageService, StorageTarget } from '../storage/storage.service';
+} from '../mongo/models.js';
+import { StorageService, StorageTarget } from '../storage/storage.service.js';
 import {
   CreateProfileImageUploadDto,
   ProfileDto,
@@ -32,7 +32,7 @@ import {
   ProfileRelationshipDto,
   ProfileSummaryDto,
   UpdateProfileDto,
-} from './dto/profile.dto';
+} from './dto/profile.dto.js';
 
 const IMAGE_EXTENSIONS: Record<string, string> = {
   'image/jpeg': 'jpg',

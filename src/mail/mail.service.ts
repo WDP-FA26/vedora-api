@@ -1,27 +1,17 @@
-import { Injectable, Logger } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
-import { Resend } from 'resend';
+import { Injectable } from '@nestjs/common';
+import { Mailer } from '@nestjs/mail';
 
 /**
- * Transactional email through Resend. Without `RESEND_API_KEY` (allowed only
- * outside production) messages are written to the log instead, so local
- * sign-up works without an email account.
+ * Transactional email through `@nestjs/mail`. The transport is chosen in
+ * `MailModule`: Resend, or the log when `RESEND_API_KEY` is empty (allowed only
+ * outside production), so local sign-up works without an email account.
  */
 @Injectable()
 export class MailService {
-  private readonly logger = new Logger(MailService.name);
-  private readonly resend: Resend | null;
-  private readonly from: string;
-
-  constructor(configService: ConfigService) {
-    const apiKey = configService.get<string>('RESEND_API_KEY', '');
-    this.resend = apiKey ? new Resend(apiKey) : null;
-    this.from = configService.getOrThrow<string>('MAIL_FROM');
-  }
+  constructor(private readonly mailer: Mailer) {}
 
   async sendVerificationCode(to: string, code: string): Promise<void> {
     await this.sendCode(to, code, {
-      kind: 'verification',
       subject: `${code} là mã xác minh Vedora của bạn`,
       intro: 'Mã xác minh email của bạn là:',
       footer:
@@ -31,7 +21,6 @@ export class MailService {
 
   async sendPasswordResetCode(to: string, code: string): Promise<void> {
     await this.sendCode(to, code, {
-      kind: 'password reset',
       subject: `${code} là mã đặt lại mật khẩu Vedora của bạn`,
       intro: 'Mã đặt lại mật khẩu của bạn là:',
       footer:
@@ -42,7 +31,7 @@ export class MailService {
   private async sendCode(
     to: string,
     code: string,
-    copy: { kind: string; subject: string; intro: string; footer: string },
+    copy: { subject: string; intro: string; footer: string },
   ): Promise<void> {
     const text = [`${copy.intro} ${code}`, '', copy.footer].join('\n');
     const html = `<div style="font-family:system-ui,sans-serif;font-size:15px;line-height:1.5;color:#1c1917">
@@ -51,22 +40,6 @@ export class MailService {
   <p style="color:#57534e">${copy.footer}</p>
 </div>`;
 
-    if (!this.resend) {
-      this.logger.warn(
-        `RESEND_API_KEY is empty; ${copy.kind} code for ${to}: ${code}`,
-      );
-      return;
-    }
-
-    const { error } = await this.resend.emails.send({
-      from: this.from,
-      to,
-      subject: copy.subject,
-      text,
-      html,
-    });
-    if (error) {
-      throw new Error(`Resend rejected the email: ${error.message}`);
-    }
+    await this.mailer.send({ to, subject: copy.subject, text, html });
   }
 }

@@ -1,4 +1,4 @@
-import type { User } from '../mongo/models';
+import type { User } from '../mongo/models.js';
 
 /** The account fields every response exposes. */
 export const publicUserFields = [

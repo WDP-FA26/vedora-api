@@ -1,8 +1,8 @@
-import { KnowledgeDocumentFailureReason } from '../../mongo/models';
+import { KnowledgeDocumentFailureReason } from '../../mongo/models.js';
 import { type DeepMockProxy, mockDeep } from 'vitest-mock-extended';
-import { KnowledgeModelsService } from '../retrieval/knowledge-models.service';
-import { DocumentExtractionError } from './document-extractor';
-import { PdfExtractor } from './pdf-extractor';
+import { KnowledgeModelsService } from '../retrieval/knowledge-models.service.js';
+import { DocumentExtractionError } from './document-extractor.js';
+import { PdfExtractor } from './pdf-extractor.js';
 
 type Page = { text?: string; image?: boolean };
 

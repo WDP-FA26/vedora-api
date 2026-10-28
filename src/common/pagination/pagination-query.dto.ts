@@ -1,7 +1,7 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import { IsInt, IsOptional, Max, Min } from 'class-validator';
-import { PaginationLimitDto } from './pagination-limit.dto';
+import { PaginationLimitDto } from './pagination-limit.dto.js';
 
 // Keeps calculated skip values sane before they reach MongoDB.
 export const MAX_PAGE_NUMBER = 1_000_000;

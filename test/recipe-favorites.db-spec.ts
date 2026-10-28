@@ -4,34 +4,34 @@ import { ConfigService } from '@nestjs/config';
 import { JwtModule, JwtService } from '@nestjs/jwt';
 import { Test } from '@nestjs/testing';
 import request from 'supertest';
-import type { App } from 'supertest/types';
-import { configureApp } from '../src/app.setup';
-import { MongoModule } from '../src/mongo/mongo.module';
+import type { App } from 'supertest/types.js';
+import { configureApp } from '../src/app.setup.js';
+import { MongoModule } from '../src/mongo/mongo.module.js';
 import {
   PostStatus,
   type Recipe,
   type RecipeFavorite,
-} from '../src/mongo/models';
-import { MongoService } from '../src/mongo/mongo.service';
-import { RecipesController } from '../src/recipes/recipes.controller';
-import { RecipeCatalogService } from '../src/recipes/recipe-catalog.service';
-import { RecipeRelationsService } from '../src/recipes/recipe-relations.service';
-import { RecipeFavoritesService } from '../src/recipes/recipe-favorites.service';
-import { IncompatibilityRulesService } from '../src/recipes/incompatibility-rules.service';
-import { DietaryService } from '../src/recipes/dietary.service';
-import type { FavoriteRecipeDto } from '../src/recipes/dto/recipe-favorite.dto';
-import type { PaginatedResponseDto } from '../src/common/pagination';
+} from '../src/mongo/models.js';
+import { MongoService } from '../src/mongo/mongo.service.js';
+import { RecipesController } from '../src/recipes/recipes.controller.js';
+import { RecipeCatalogService } from '../src/recipes/recipe-catalog.service.js';
+import { RecipeRelationsService } from '../src/recipes/recipe-relations.service.js';
+import { RecipeFavoritesService } from '../src/recipes/recipe-favorites.service.js';
+import { IncompatibilityRulesService } from '../src/recipes/incompatibility-rules.service.js';
+import { DietaryService } from '../src/recipes/dietary.service.js';
+import type { FavoriteRecipeDto } from '../src/recipes/dto/recipe-favorite.dto.js';
+import type { PaginatedResponseDto } from '../src/common/pagination/index.js';
 import {
   createPost,
   createRecipe,
   createUser,
   deleteWithCascade,
-} from './fixtures';
+} from './fixtures.js';
 import {
   createTestMongoUrl,
   dropTestDatabase,
   prepareTestDatabase,
-} from './mongo-test-db';
+} from './mongo-test-db.js';
 
 describe('Recipe favorites with MongoDB', () => {
   let db: MongoService;
@@ -91,7 +91,7 @@ describe('Recipe favorites with MongoDB', () => {
     }
   });
   beforeEach(async () => {
-    await db.db.collection('recipe_favorites').deleteMany({});
+    await favorites().deleteMany({});
   });
   afterAll(async () => {
     if (app) await dropTestDatabase(app);
@@ -161,12 +161,11 @@ describe('Recipe favorites with MongoDB', () => {
   });
   it('paginates equal savedAt timestamps using recipe ID as a stable tie breaker', async () => {
     for (const id of recipes) await save(id).expect(200);
-    await db.db
-      .collection('recipe_favorites')
-      .updateMany(
-        { userId: first },
-        { $set: { createdAt: new Date('2026-10-19T00:00:00Z') } },
-      );
+    await favorites().updateMany(
+      { userId: first },
+      { $set: { createdAt: new Date('2026-10-19T00:00:00Z') } },
+      { timestamps: false, overwriteImmutable: true },
+    );
     const one = (await list(firstToken, '?limit=2').expect(200))
       .body as PaginatedResponseDto<FavoriteRecipeDto>;
     const two = (await list(firstToken, '?limit=2&page=2').expect(200))

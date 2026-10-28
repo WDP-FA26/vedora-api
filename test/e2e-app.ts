@@ -2,15 +2,15 @@ import type { INestApplication } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { Test, type TestingModuleBuilder } from '@nestjs/testing';
 import type { Connection } from 'mongoose';
-import type { App } from 'supertest/types';
-import { AppModule } from '../src/app.module';
-import { configureApp } from '../src/app.setup';
-import { MongoService } from '../src/mongo/mongo.service';
+import type { App } from 'supertest/types.js';
+import { AppModule } from '../src/app.module.js';
+import { configureApp } from '../src/app.setup.js';
+import { MongoService } from '../src/mongo/mongo.service.js';
 import {
   createTestMongoUrl,
   dropTestDatabase,
   prepareTestDatabase,
-} from './mongo-test-db';
+} from './mongo-test-db.js';
 
 export interface E2eApp {
   app: INestApplication<App>;

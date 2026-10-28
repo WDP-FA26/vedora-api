@@ -2,7 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { InjectModel } from '@nestjs/mongoose';
 import type { Model } from 'mongoose';
-import { isUniqueViolation } from '../mongo/errors';
+import { isUniqueViolation } from '../mongo/errors.js';
 import {
   Follow,
   FollowSuggestion,
@@ -11,12 +11,12 @@ import {
   PostStatus,
   SuggestionDismissal,
   User,
-} from '../mongo/models';
-import { MongoService } from '../mongo/mongo.service';
+} from '../mongo/models.js';
+import { MongoService } from '../mongo/mongo.service.js';
 import {
   FollowSuggestionDto,
   FollowSuggestionListDto,
-} from './dto/follow-suggestion.dto';
+} from './dto/follow-suggestion.dto.js';
 
 /** Newest followings of a user, and newest followings of each of those. */
 const FAN_OUT = 200;
@@ -200,7 +200,11 @@ export class FollowSuggestionsService {
     }
 
     // The newest FAN_OUT followings of each person they follow.
-    const viaIds = [...new Set([...via.values()].flat())];
+    const viaIdSet = new Set<string>();
+    for (const ids of via.values()) {
+      for (const id of ids) viaIdSet.add(id);
+    }
+    const viaIds = Array.from(viaIdSet);
     const secondDegree = new Map<string, string[]>();
     for (let start = 0; start < viaIds.length; start += BATCH_SIZE) {
       const chunk = viaIds.slice(start, start + BATCH_SIZE);

@@ -235,7 +235,7 @@ API ghi yêu cầu Bearer token. Response bài đăng bổ sung `commentCount`, 
 `isLiked`; feed vẫn đọc công khai, gửi token để nhận trạng thái like của người xem.
 
 Mỗi cặp bài/người dùng chỉ có một like và một bookmark (unique index), và xoá bài sẽ
-xoá kèm comment/like/bookmark qua `deleteWithReferences`.
+xoá kèm comment/like/bookmark qua hook `onDelete` trên schema.
 Tài liệu FE: [docs/docs-for-FE/post-comments-likes.md](docs/docs-for-FE/post-comments-likes.md).
 
 ## Kho công thức và chọn món vào thực đơn
@@ -374,10 +374,10 @@ Khi sửa schema, sửa class trong `src/mongo/schemas/`: Mongoose tạo collect
 
 Một số quy tắc của MongoDB mà code phải tuân theo (chi tiết trong `src/mongo/`):
 
-- Khoá chính là `String` UUID trong `_id`; document trả về có thêm virtual `id` cùng giá trị. Model nối dùng id riêng cộng unique index.
-- Không có khoá ngoại: `onDelete` do `deleteWithReferences` áp dụng (`cascade`, `setNull`, `restrict`). Ghi id tham chiếu dạng scalar thì service phải kiểm tra tồn tại trước (`allExist`).
+- Khoá chính là `String` UUID trong `_id`; document trả về có thêm virtual `id` cùng giá trị.
+- Không có khoá ngoại: dọn dẹp khi xoá do hook `onDelete` trên từng schema đảm nhiệm (cascade hoặc gán `null` / `$pull`). Ghi id tham chiếu dạng scalar thì service phải kiểm tra tồn tại trước (`allExist`).
 - Field optional mặc định `null`, mảng mặc định `[]`, để document luôn có đủ field mà code đọc.
-- Danh sách con nhỏ thuộc hẳn một document (phụ đề) được nhúng vào document cha thay vì tách collection.
+- Dữ liệu con thuộc hẳn một document (blog trên bài đăng, nguyên liệu trong công thức, danh sách nguyên liệu của nhóm, phụ đề video) được nhúng vào document cha thay vì tách collection.
 - Index unique trên field optional (`googleId`, `activeIntentKey`, `providerTransactionId`) là partial index (`$type: "string"`).
 - Transaction mở bằng `MongoService.withTransaction`; mọi truy vấn bên trong phải nhận `.session(session)`. MongoDB không có `SELECT … FOR UPDATE`: transaction cần khoá dùng `lockDocument`, khi xung đột ghi driver tự thử lại callback.
 - Không `.lean()` trong service: giữ document để dùng virtual `id`; không spread document, dùng field cụ thể hoặc `.toObject()`.
@@ -513,6 +513,8 @@ Tài liệu Dokploy tham khảo:
 
 ## Biến môi trường
 
+Cấu hình được kiểm tra khi API khởi động: thiếu biến bắt buộc hoặc Qdrant không phản hồi thì tiến trình dừng trước khi mở cổng, không đợi đến request đầu tiên.
+
 | Biến | Bắt buộc | Mặc định | Ý nghĩa |
 | --- | --- | --- | --- |
 | `DATABASE_URL` | Có | — | MongoDB connection string của replica set. Chạy API trên host thì thêm `directConnection=true` |
@@ -521,6 +523,8 @@ Tài liệu Dokploy tham khảo:
 | `API_PREFIX` | Không | `api/v1` | Global API prefix |
 | `CORS_ORIGIN` | Không | `*` | Một hoặc nhiều origin, phân tách bằng dấu phẩy |
 | `JWT_SECRET` | Có | — | Secret ký và xác thực access token, tối thiểu 32 ký tự |
+| `OPENROUTER_API_KEY` | Có | — | Key OpenRouter cho trợ lý dinh dưỡng và knowledge base; API không khởi động nếu để trống |
+| `QDRANT_URL` | Có | — | URL Qdrant; API kiểm tra kết nối lúc khởi động và dừng nếu không truy cập được trong 5 giây |
 | `JWT_ACCESS_TTL` | Không | `3600` | Thời hạn access token, tính bằng giây |
 | `REFRESH_TOKEN_TTL` | Không | `2592000` | Thời hạn refresh token, tính bằng giây |
 | `GOOGLE_CLIENT_ID` | Khi dùng Google login | — | OAuth 2.0 Client ID của Google |

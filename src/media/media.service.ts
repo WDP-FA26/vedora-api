@@ -9,9 +9,8 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectModel } from '@nestjs/mongoose';
-import type { Model, QueryFilter } from 'mongoose';
+import type { ClientSession, Model, QueryFilter } from 'mongoose';
 import { randomUUID } from 'node:crypto';
-import type { ClientSession } from 'mongodb';
 import {
   CaptionStatus,
   MediaAsset,
@@ -20,21 +19,19 @@ import {
   MediaType,
   Post,
   PostStatus,
-  type Stored,
-} from '../mongo/models';
-import { MongoService } from '../mongo/mongo.service';
+} from '../mongo/models.js';
 import {
   CloudinaryService,
   type CloudinaryVideo,
   STREAM_TRANSFORMATION,
   UPLOAD_SIGNATURE_TTL_SECONDS,
-} from '../cloudinary/cloudinary.service';
-import { CaptionService } from './caption.service';
+} from '../cloudinary/cloudinary.service.js';
+import { CaptionService } from './caption.service.js';
 import {
   CreateUploadResponseDto,
   MediaResponseDto,
-} from './dto/media-response.dto';
-import type { CloudinaryNotification } from './dto/cloudinary-notification';
+} from './dto/media-response.dto.js';
+import type { CloudinaryNotification } from './dto/cloudinary-notification.js';
 
 const PENDING: readonly MediaStatus[] = [
   MediaStatus.WAITING_UPLOAD,
@@ -104,7 +101,6 @@ export class MediaService {
     @InjectModel(MediaAsset.name)
     private readonly mediaAssets: Model<MediaAsset>,
     @InjectModel(Post.name) private readonly posts: Model<Post>,
-    private readonly mongo: MongoService,
     private readonly cloudinary: CloudinaryService,
     private readonly captions: CaptionService,
     configService: ConfigService,
@@ -238,19 +234,20 @@ export class MediaService {
     postId: string,
     mediaIds: string[],
   ): Promise<void> {
-    const media = this.mongo.db.collection<Stored<MediaAsset>>('media_assets');
     for (const [position, id] of mediaIds.entries()) {
-      const claimed = await media.updateOne(
-        {
-          _id: id,
-          ownerId,
-          postId: null,
-          discardedAt: null,
-          status: { $ne: MediaStatus.FAILED },
-        },
-        { $set: { postId, position, updatedAt: new Date() } },
-        { session },
-      );
+      const claimed = await this.mediaAssets
+        .updateOne(
+          {
+            _id: id,
+            ownerId,
+            postId: null,
+            discardedAt: null,
+            status: { $ne: MediaStatus.FAILED },
+          },
+          { $set: { postId, position } },
+          { session },
+        )
+        .exec();
       if (claimed.modifiedCount !== 1) {
         throw new BadRequestException({
           statusCode: HttpStatus.BAD_REQUEST,

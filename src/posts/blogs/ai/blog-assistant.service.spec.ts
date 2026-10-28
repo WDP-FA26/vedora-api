@@ -7,38 +7,35 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { getModelToken } from '@nestjs/mongoose';
 import { Test } from '@nestjs/testing';
-import { AiFeature } from '../../../mongo/models';
+import { AiFeature } from '../../../mongo/models.js';
 import { simulateReadableStream, type UIMessageChunk } from 'ai';
 import { convertReadableStreamToArray, MockLanguageModelV4 } from 'ai/test';
 import type { Model } from 'mongoose';
 import { type DeepMockProxy, mockDeep } from 'vitest-mock-extended';
-import { AiUsageService } from '../../../ai/usage/ai-usage.service';
-import { KnowledgeSearchService } from '../../../knowledge/retrieval/knowledge-search.service';
+import { AiUsageService } from '../../../ai/usage/ai-usage.service.js';
+import { KnowledgeSearchService } from '../../../knowledge/retrieval/knowledge-search.service.js';
 import {
   createIngredient,
   createPost,
   createRecipe,
-} from '../../../../test/fixtures';
+} from '../../../../test/fixtures.js';
 import {
   createTestMongoUrl,
   dropTestDatabase,
   prepareTestDatabase,
-} from '../../../../test/mongo-test-db';
+} from '../../../../test/mongo-test-db.js';
 import {
-  Blog,
-  BlogRecipe,
   Ingredient,
   Post,
   PostStatus,
   PostType,
   Recipe,
-  RecipeIngredient,
-} from '../../../mongo/models';
-import { MongoModule } from '../../../mongo/mongo.module';
-import { MongoService } from '../../../mongo/mongo.service';
-import type { BlogAssistantChatDto } from '../../dto/blog-ai.dto';
-import { BlogAssistantService } from './blog-assistant.service';
-import { BlogImageGeneratorService } from './blog-image-generator.service';
+} from '../../../mongo/models.js';
+import { MongoModule } from '../../../mongo/mongo.module.js';
+import { MongoService } from '../../../mongo/mongo.service.js';
+import type { BlogAssistantChatDto } from '../../dto/blog-ai.dto.js';
+import { BlogAssistantService } from './blog-assistant.service.js';
+import { BlogImageGeneratorService } from './blog-image-generator.service.js';
 
 type StreamPart =
   Awaited<
@@ -132,10 +129,7 @@ describe('BlogAssistantService', () => {
   let db: MongoService;
   let models: {
     posts: Model<Post>;
-    blogs: Model<Blog>;
-    blogRecipes: Model<BlogRecipe>;
     recipes: Model<Recipe>;
-    recipeIngredients: Model<RecipeIngredient>;
     ingredients: Model<Ingredient>;
   };
   let aiUsage: DeepMockProxy<AiUsageService>;
@@ -161,10 +155,7 @@ describe('BlogAssistantService', () => {
     const modelOf = <T>(name: string) => app.get<Model<T>>(getModelToken(name));
     models = {
       posts: modelOf(Post.name),
-      blogs: modelOf(Blog.name),
-      blogRecipes: modelOf(BlogRecipe.name),
       recipes: modelOf(Recipe.name),
-      recipeIngredients: modelOf(RecipeIngredient.name),
       ingredients: modelOf(Ingredient.name),
     };
   });
@@ -187,9 +178,7 @@ describe('BlogAssistantService', () => {
       mockDeep<BlogImageGeneratorService>(),
       aiUsage,
       models.posts,
-      models.blogRecipes,
       models.recipes,
-      models.recipeIngredients,
       models.ingredients,
     );
   });
@@ -305,31 +294,31 @@ describe('BlogAssistantService', () => {
 
   it("grounds the agent in the blog's recipes", async () => {
     const ingredient = await createIngredient(db, { name: 'nấm đùi gà' });
-    const recipe = await createRecipe(
-      db,
-      { title: 'Phở nấm', servings: 2, prepMinutes: 15 },
-      [ingredient.id],
-    );
-    await models.recipeIngredients.updateMany(
-      { recipeId: recipe.id },
-      { $set: { quantity: 200, unit: 'g' } },
-    );
+    const recipe = await createRecipe(db, {
+      title: 'Phở nấm',
+      servings: 2,
+      prepMinutes: 15,
+      ingredients: [
+        {
+          ingredientId: ingredient.id,
+          quantity: 200,
+          unit: 'g',
+          note: null,
+        },
+      ],
+    });
     const blog = await createPost(db, {
       authorId: USER_ID,
       type: PostType.BLOG,
       status: PostStatus.DRAFT,
       publishedAt: null,
-    });
-    await models.blogs.create({
-      _id: blog.id,
-      title: 'Phở',
-      content: 'Nội dung',
-      excerpt: 'Nội dung',
-    });
-    await models.blogRecipes.create({
-      postId: blog.id,
-      recipeId: recipe.id,
-      position: 0,
+      blog: {
+        title: 'Phở',
+        coverImageUrl: null,
+        content: 'Nội dung',
+        excerpt: 'Nội dung',
+        recipeIds: [recipe.id],
+      },
     });
 
     await send({ blogId: blog.id });

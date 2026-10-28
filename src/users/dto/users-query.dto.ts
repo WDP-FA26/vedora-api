@@ -1,8 +1,8 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { AccountStatus } from '../../mongo/models';
+import { AccountStatus } from '../../mongo/models.js';
 import { Transform } from 'class-transformer';
 import { IsEnum, IsOptional, IsString, MaxLength } from 'class-validator';
-import { PaginationQueryDto } from '../../common/pagination';
+import { PaginationQueryDto } from '../../common/pagination/index.js';
 
 export class UsersQueryDto extends PaginationQueryDto {
   @ApiPropertyOptional({ description: 'Search username, fullName or email' })

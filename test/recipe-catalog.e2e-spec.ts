@@ -1,26 +1,25 @@
 import { randomUUID } from 'node:crypto';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import request from 'supertest';
-import type { PaginatedResponseDto } from '../src/common/pagination';
+import type { PaginatedResponseDto } from '../src/common/pagination/index.js';
 import type {
   CatalogRecipeDetailDto,
   CatalogRecipeDto,
-} from '../src/recipes/dto/recipe-catalog.dto';
+} from '../src/recipes/dto/recipe-catalog.dto.js';
 import {
   type Ingredient,
   type Post,
   PostStatus,
   type Recipe,
-  type RecipeIngredient,
   type User,
-} from '../src/mongo/models';
-import { createE2eApp, type E2eApp } from './e2e-app';
+} from '../src/mongo/models.js';
+import { createE2eApp, type E2eApp } from './e2e-app.js';
 import {
   createIngredient,
   createPost,
   createRecipe,
   createUser,
-} from './fixtures';
+} from './fixtures.js';
 
 describe('Recipe catalog (e2e)', () => {
   let e2e: E2eApp;
@@ -40,20 +39,16 @@ describe('Recipe catalog (e2e)', () => {
       aliases: ['đậu phụ'],
     });
     post = await createPost(e2e.mongo, { authorId: user.id });
-    recipe = await createRecipe(
-      e2e.mongo,
-      {
-        title: 'Đậu hũ sốt cà',
-        prepMinutes: 10,
-        cookMinutes: 5,
-        steps: ['Nấu sốt'],
-        postId: post.id,
-      },
-      [tofu.id],
-    );
-    await e2e.mongo.connection
-      .model<RecipeIngredient>('RecipeIngredient')
-      .updateMany({ recipeId: recipe.id }, { $set: { quantity: 200.5 } });
+    recipe = await createRecipe(e2e.mongo, {
+      title: 'Đậu hũ sốt cà',
+      prepMinutes: 10,
+      cookMinutes: 5,
+      steps: ['Nấu sốt'],
+      postId: post.id,
+      ingredients: [
+        { ingredientId: tofu.id, quantity: 200.5, unit: null, note: null },
+      ],
+    });
   });
   afterEach(async () => {
     await e2e.mongo.connection

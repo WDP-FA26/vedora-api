@@ -5,11 +5,11 @@ import {
   createTestMongoUrl,
   dropTestDatabase,
   prepareTestDatabase,
-} from '../../../test/mongo-test-db';
-import { MongoModule } from '../../mongo/mongo.module';
-import { MongoService } from '../../mongo/mongo.service';
-import { AiFeature } from '../../mongo/models';
-import { AiUsageService, bangkokDay } from './ai-usage.service';
+} from '../../../test/mongo-test-db.js';
+import { MongoModule } from '../../mongo/mongo.module.js';
+import { MongoService } from '../../mongo/mongo.service.js';
+import { AiFeature, AiUsage } from '../../mongo/models.js';
+import { AiUsageService, bangkokDay } from './ai-usage.service.js';
 
 const USER_ID = '4a1e32e4-e18e-4dd7-8b4a-246ef2113ff2';
 // 23:30 on 22 October in UTC is already 23 October in Bangkok
@@ -40,8 +40,10 @@ describe('AiUsageService', () => {
     db = app.get(MongoService);
     service = app.get(AiUsageService);
   });
+  const usage = () => db.connection.model<AiUsage>(AiUsage.name);
+
   beforeEach(async () => {
-    await db.db.collection('ai_usage').deleteMany({});
+    await usage().deleteMany({});
   });
   afterAll(async () => {
     await dropTestDatabase(app);
@@ -63,7 +65,7 @@ describe('AiUsageService', () => {
       ).resolves.toBe(true);
       expect(await used(AiFeature.BLOG_IMAGE)).toBe(sent);
     }
-    expect(await db.db.collection('ai_usage').countDocuments()).toBe(1);
+    expect(await usage().countDocuments()).toBe(1);
   });
 
   it('refuses once the allowance is spent', async () => {
@@ -93,7 +95,7 @@ describe('AiUsageService', () => {
     );
     expect(results.filter(Boolean)).toHaveLength(3);
     expect(await used(AiFeature.BLOG_CHAT)).toBe(3);
-    expect(await db.db.collection('ai_usage').countDocuments()).toBe(1);
+    expect(await usage().countDocuments()).toBe(1);
   });
 
   it('gives back a use on the same day, never below zero', async () => {

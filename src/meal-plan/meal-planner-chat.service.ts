@@ -10,26 +10,26 @@ import {
   ToolLoopAgent,
   toUIMessageStream,
 } from 'ai';
-import { cannedReply } from '../ai/chat/canned-reply';
-import { chatErrorCode } from '../ai/chat/errors';
-import { replyFilter } from '../ai/chat/reply-filter';
-import { moderateWithRetry } from '../ai/moderation/moderation';
-import { NUTRITION_POLICY } from '../ai/moderation/policies/nutrition';
+import { cannedReply } from '../ai/chat/canned-reply.js';
+import { chatErrorCode } from '../ai/chat/errors.js';
+import { replyFilter } from '../ai/chat/reply-filter.js';
+import { moderateWithRetry } from '../ai/moderation/moderation.js';
+import { NUTRITION_POLICY } from '../ai/moderation/policies/nutrition.js';
 import {
   chatModel,
   DEFAULT_CHAT_MODEL,
   DEFAULT_MODERATION_MODEL,
-} from '../ai/openrouter';
-import type { ReasoningEffort } from '../ai/reasoning';
-import { searchKnowledgeTool } from '../ai/tools/search-knowledge.tool';
-import { KnowledgeSearchService } from '../knowledge/retrieval/knowledge-search.service';
-import { DietaryService } from '../recipes/dietary.service';
-import type { PlannerMessageDto } from './dto/meal-plan.dto';
-import { MealPlanService } from './meal-plan.service';
-import { plannerInstructions } from './meal-planner.prompt';
-import { PLANNER_REFUSALS } from './meal-planner.refusals';
-import { proposeMealPlanTool } from './tools/propose-meal-plan.tool';
-import { searchRecipesTool } from './tools/search-recipes.tool';
+} from '../ai/openrouter.js';
+import type { ReasoningEffort } from '../ai/reasoning.js';
+import { searchKnowledgeTool } from '../ai/tools/search-knowledge.tool.js';
+import { KnowledgeSearchService } from '../knowledge/retrieval/knowledge-search.service.js';
+import { DietaryService } from '../recipes/dietary.service.js';
+import type { PlannerMessageDto } from './dto/meal-plan.dto.js';
+import { MealPlanService } from './meal-plan.service.js';
+import { plannerInstructions } from './meal-planner.prompt.js';
+import { PLANNER_REFUSALS } from './meal-planner.refusals.js';
+import { proposeMealPlanTool } from './tools/propose-meal-plan.tool.js';
+import { searchRecipesTool } from './tools/search-recipes.tool.js';
 
 // room to search, then propose again after a rejected proposal
 const MAX_STEPS = 8;

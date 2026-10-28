@@ -5,9 +5,9 @@ import {
   Injectable,
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
-import { UserRole } from '../mongo/models';
-import { AuthenticatedRequest } from './auth.types';
-import { ROLES_KEY } from './roles.decorator';
+import { UserRole } from '../mongo/models.js';
+import { AuthenticatedRequest } from './auth.types.js';
+import { ROLES_KEY } from './roles.decorator.js';
 
 /** Run after JwtAuthGuard, which supplies the account's current role. */
 @Injectable()

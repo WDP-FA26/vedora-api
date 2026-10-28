@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
-import { PostStatus } from '../../mongo/models';
+import { PostStatus } from '../../mongo/models.js';
 import { Transform } from 'class-transformer';
 import {
   ArrayMaxSize,
@@ -13,8 +13,8 @@ import {
   MinLength,
   ValidateIf,
 } from 'class-validator';
-import { CursorPaginationQueryDto } from '../../common/pagination';
-import { PostResponseDto } from './post-response.dto';
+import { CursorPaginationQueryDto } from '../../common/pagination/index.js';
+import { PostResponseDto } from './post-response.dto.js';
 
 export const MAX_BLOG_CONTENT = 50_000;
 export const MAX_BLOG_RECIPES = 10;
