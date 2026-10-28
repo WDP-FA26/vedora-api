@@ -42,6 +42,8 @@ Backend starter cho Vedora, sử dụng NestJS, Mongoose (MongoDB, tự host b�
 └── docker-compose.dokploy.yml # Deploy trên Dokploy
 ```
 
+`src/ai` và `src/config` là tầng nền, không được import ngược vào feature nào; chiều phụ thuộc là feature → `ai`/`config`. ESLint chặn việc này (`no-restricted-imports` trong `eslint.config.mjs`), cùng với các đường dẫn cũ như `post-search/`, `ai-usage/` và `posts/ai/`.
+
 ## Chạy local không dùng Docker cho API
 
 Yêu cầu Node.js `>=20.11`, npm và MongoDB chạy dưới dạng replica set (transaction của MongoDB cần replica set). Cách nhanh nhất: `docker compose up -d mongo`.
