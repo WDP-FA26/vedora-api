@@ -5,9 +5,9 @@ import {
   createPaginatedResponse,
   getPaginationArgs,
   PaginatedResponseDto,
-} from '../common/pagination';
-import { AdminMediaDto } from '../media/dto/media-response.dto';
-import { MediaService } from '../media/media.service';
+} from '../../common/pagination';
+import { AdminMediaDto } from '../../media/dto/media-response.dto';
+import { MediaService } from '../../media/media.service';
 import {
   Blog,
   BlogRecipe,
@@ -19,9 +19,9 @@ import {
   PostRepost,
   Recipe,
   User,
-} from '../mongo/models';
-import { AdminPostDto, AdminPostsQueryDto } from './dto/admin-post.dto';
-import { loadPostRelations, type PostRelationModels } from './post-relations';
+} from '../../mongo/models';
+import { AdminPostDto, AdminPostsQueryDto } from '../dto/admin-post.dto';
+import { loadPostRelations, type PostRelationModels } from '../post-relations';
 
 /** Every post whatever its status, for the admin content page. */
 @Injectable()

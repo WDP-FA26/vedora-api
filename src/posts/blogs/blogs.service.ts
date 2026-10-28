@@ -11,8 +11,8 @@ import type { Model } from 'mongoose';
 import {
   afterCursor,
   createCursorPaginatedResponse,
-} from '../common/pagination';
-import { lockDocument } from '../mongo/document-lock';
+} from '../../common/pagination';
+import { lockDocument } from '../../mongo/document-lock';
 import {
   Blog,
   BlogRecipe,
@@ -21,18 +21,18 @@ import {
   PostType,
   Recipe,
   type Stored,
-} from '../mongo/models';
-import { MongoService } from '../mongo/mongo.service';
-import { deleteWithReferences } from '../mongo/relations';
-import { StorageService, StorageTarget } from '../storage/storage.service';
+} from '../../mongo/models';
+import { MongoService } from '../../mongo/mongo.service';
+import { deleteWithReferences } from '../../mongo/relations';
+import { StorageService, StorageTarget } from '../../storage/storage.service';
 import {
   BlogDetailDto,
   CreateBlogDto,
   MyBlogsQueryDto,
   UpdateBlogDto,
-} from './dto/blog.dto';
-import { PostPageDto } from './dto/post-response.dto';
-import { PostsService } from './posts.service';
+} from '../dto/blog.dto';
+import { PostPageDto } from '../dto/post-response.dto';
+import { PostsService } from '../posts.service';
 
 @Injectable()
 export class BlogsService {

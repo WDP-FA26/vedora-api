@@ -7,23 +7,23 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { getModelToken } from '@nestjs/mongoose';
 import { Test } from '@nestjs/testing';
-import { AiFeature } from '../../mongo/models';
+import { AiFeature } from '../../../mongo/models';
 import { simulateReadableStream, type UIMessageChunk } from 'ai';
 import { convertReadableStreamToArray, MockLanguageModelV4 } from 'ai/test';
 import type { Model } from 'mongoose';
 import { type DeepMockProxy, mockDeep } from 'vitest-mock-extended';
-import { AiUsageService } from '../../ai/usage/ai-usage.service';
-import { KnowledgeSearchService } from '../../knowledge/retrieval/knowledge-search.service';
+import { AiUsageService } from '../../../ai/usage/ai-usage.service';
+import { KnowledgeSearchService } from '../../../knowledge/retrieval/knowledge-search.service';
 import {
   createIngredient,
   createPost,
   createRecipe,
-} from '../../../test/fixtures';
+} from '../../../../test/fixtures';
 import {
   createTestMongoUrl,
   dropTestDatabase,
   prepareTestDatabase,
-} from '../../../test/mongo-test-db';
+} from '../../../../test/mongo-test-db';
 import {
   Blog,
   BlogRecipe,
@@ -33,10 +33,10 @@ import {
   PostType,
   Recipe,
   RecipeIngredient,
-} from '../../mongo/models';
-import { MongoModule } from '../../mongo/mongo.module';
-import { MongoService } from '../../mongo/mongo.service';
-import type { BlogAssistantChatDto } from '../dto/blog-ai.dto';
+} from '../../../mongo/models';
+import { MongoModule } from '../../../mongo/mongo.module';
+import { MongoService } from '../../../mongo/mongo.service';
+import type { BlogAssistantChatDto } from '../../dto/blog-ai.dto';
 import { BlogAssistantService } from './blog-assistant.service';
 import { BlogImageGeneratorService } from './blog-image-generator.service';
 

@@ -22,11 +22,14 @@ import {
 import { Throttle } from '@nestjs/throttler';
 import { pipeUIMessageStreamToResponse } from 'ai';
 import type { Response } from 'express';
-import type { AuthenticatedRequest } from '../auth/auth.types';
-import { JwtAuthGuard } from '../auth/jwt-auth.guard';
-import { UserThrottlerGuard } from '../nutrition-chat/user-throttler.guard';
+import type { AuthenticatedRequest } from '../../auth/auth.types';
+import { JwtAuthGuard } from '../../auth/jwt-auth.guard';
+import { UserThrottlerGuard } from '../../nutrition-chat/user-throttler.guard';
 import { BlogAssistantService } from './ai/blog-assistant.service';
-import { BlogAssistantChatDto, BlogAssistantQuotaDto } from './dto/blog-ai.dto';
+import {
+  BlogAssistantChatDto,
+  BlogAssistantQuotaDto,
+} from '../dto/blog-ai.dto';
 
 @ApiTags('blogs')
 @ApiBearerAuth()

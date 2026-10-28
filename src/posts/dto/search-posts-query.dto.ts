@@ -2,7 +2,7 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Transform, Type } from 'class-transformer';
 import { IsInt, IsOptional, IsString, Length, Max, Min } from 'class-validator';
 import { PaginationLimitDto } from '../../common/pagination';
-import { MAX_SEARCH_RESULTS } from '../../post-search/post-search.service';
+import { MAX_SEARCH_RESULTS } from '../search/post-search.service';
 
 export const MAX_SEARCH_QUERY_LENGTH = 200;
 

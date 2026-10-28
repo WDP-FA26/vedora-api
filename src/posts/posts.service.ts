@@ -31,15 +31,12 @@ import {
 } from '../mongo/models';
 import { MongoService } from '../mongo/mongo.service';
 import { deleteWithReferences } from '../mongo/relations';
-import {
-  MAX_FEED_RESULTS,
-  PostFeedService,
-} from '../post-search/post-feed.service';
-import { PostSearchIndexService } from '../post-search/post-search-index.service';
+import { MAX_FEED_RESULTS, PostFeedService } from './search/post-feed.service';
+import { PostSearchIndexService } from './search/post-search-index.service';
 import {
   MAX_SEARCH_RESULTS,
   PostSearchService,
-} from '../post-search/post-search.service';
+} from './search/post-search.service';
 import { CreatePostDto } from './dto/create-post.dto';
 import { FEED_CURSOR, FeedQueryDto } from './dto/feed-query.dto';
 import { ListPostsQueryDto } from './dto/list-posts-query.dto';

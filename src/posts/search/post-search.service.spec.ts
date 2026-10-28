@@ -1,6 +1,6 @@
 import { ConfigService } from '@nestjs/config';
 import { type DeepMockProxy, mockDeep } from 'vitest-mock-extended';
-import { QdrantService } from '../qdrant/qdrant.service';
+import { QdrantService } from '../../qdrant/qdrant.service';
 import { PostEmbeddingsService } from './post-embeddings.service';
 import { PostSearchIndexService } from './post-search-index.service';
 import { PostSearchService } from './post-search.service';

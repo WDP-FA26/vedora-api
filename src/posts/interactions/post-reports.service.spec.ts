@@ -5,12 +5,12 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
-import { createPost, createUser } from '../../test/fixtures';
+import { createPost, createUser } from '../../../test/fixtures';
 import {
   createTestMongoUrl,
   dropTestDatabase,
   prepareTestDatabase,
-} from '../../test/mongo-test-db';
+} from '../../../test/mongo-test-db';
 import {
   type Post,
   PostReportReason,
@@ -18,9 +18,9 @@ import {
   PostStatus,
   type Stored,
   type User,
-} from '../mongo/models';
-import { MongoModule } from '../mongo/mongo.module';
-import { MongoService } from '../mongo/mongo.service';
+} from '../../mongo/models';
+import { MongoModule } from '../../mongo/mongo.module';
+import { MongoService } from '../../mongo/mongo.service';
 import { PostReportsService } from './post-reports.service';
 
 describe('PostReportsService', () => {

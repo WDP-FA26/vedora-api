@@ -8,7 +8,7 @@ import {
   PostRepost,
   type User,
 } from '../mongo/models';
-import { loadBlogSummaries, type BlogQueryModels } from './blog-query';
+import { loadBlogSummaries, type BlogQueryModels } from './blogs/blog-query';
 import type { BlogSummaryDto } from './dto/blog-summary.dto';
 
 /** The collections a post card joins against. */

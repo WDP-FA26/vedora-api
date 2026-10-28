@@ -4,22 +4,22 @@ import { getModelToken } from '@nestjs/mongoose';
 import { Test } from '@nestjs/testing';
 import type { Model } from 'mongoose';
 import { type DeepMockProxy, mockDeep } from 'vitest-mock-extended';
-import { createMedia, createPost, createUser } from '../../test/fixtures';
+import { createMedia, createPost, createUser } from '../../../test/fixtures';
 import {
   createTestMongoUrl,
   dropTestDatabase,
   prepareTestDatabase,
-} from '../../test/mongo-test-db';
+} from '../../../test/mongo-test-db';
 import {
   MediaAsset,
   Post,
   PostStatus,
   PostType,
   type User,
-} from '../mongo/models';
-import { MongoModule } from '../mongo/mongo.module';
-import { MongoService } from '../mongo/mongo.service';
-import { QdrantService } from '../qdrant/qdrant.service';
+} from '../../mongo/models';
+import { MongoModule } from '../../mongo/mongo.module';
+import { MongoService } from '../../mongo/mongo.service';
+import { QdrantService } from '../../qdrant/qdrant.service';
 import { PostEmbeddingsService } from './post-embeddings.service';
 import { chunkText, PostSearchIndexService } from './post-search-index.service';
 

@@ -4,18 +4,18 @@ import { getModelToken } from '@nestjs/mongoose';
 import { Test } from '@nestjs/testing';
 import type { Model } from 'mongoose';
 import { type DeepMockProxy, mockDeep } from 'vitest-mock-extended';
-import { createUser } from '../../test/fixtures';
+import { createUser } from '../../../test/fixtures';
 import {
   createTestMongoUrl,
   dropTestDatabase,
   prepareTestDatabase,
-} from '../../test/mongo-test-db';
-import { Blog } from '../mongo/models';
-import { MongoModule } from '../mongo/mongo.module';
-import { MongoService } from '../mongo/mongo.service';
-import { StorageService, StorageTarget } from '../storage/storage.service';
+} from '../../../test/mongo-test-db';
+import { Blog } from '../../mongo/models';
+import { MongoModule } from '../../mongo/mongo.module';
+import { MongoService } from '../../mongo/mongo.service';
+import { StorageService, StorageTarget } from '../../storage/storage.service';
 import { BlogsService } from './blogs.service';
-import { PostsService } from './posts.service';
+import { PostsService } from '../posts.service';
 
 const STORAGE = 'http://localhost:9000/vedora-blogs';
 

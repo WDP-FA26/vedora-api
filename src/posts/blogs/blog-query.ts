@@ -1,6 +1,6 @@
 import type { Model } from 'mongoose';
-import type { Blog, BlogRecipe, Recipe } from '../mongo/models';
-import type { BlogSummaryDto } from './dto/blog-summary.dto';
+import type { Blog, BlogRecipe, Recipe } from '../../mongo/models';
+import type { BlogSummaryDto } from '../dto/blog-summary.dto';
 
 /** The collections a blog summary joins against. */
 export interface BlogQueryModels {

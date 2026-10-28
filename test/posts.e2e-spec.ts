@@ -1,8 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import request from 'supertest';
 import { mockDeep, mockReset } from 'vitest-mock-extended';
-import { PostSearchIndexService } from '../src/post-search/post-search-index.service';
-import { PostSearchService } from '../src/post-search/post-search.service';
+import { PostSearchIndexService } from '../src/posts/search/post-search-index.service';
+import { PostSearchService } from '../src/posts/search/post-search.service';
 import {
   type Post,
   PostStatus,

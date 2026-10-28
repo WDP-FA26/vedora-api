@@ -1,10 +1,10 @@
 import { Injectable } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
-import { StorageService, StorageTarget } from '../storage/storage.service';
+import { StorageService, StorageTarget } from '../../storage/storage.service';
 import {
   BlogImageUploadDto,
   CreateBlogImageUploadDto,
-} from './dto/blog-image.dto';
+} from '../dto/blog-image.dto';
 
 const EXTENSIONS: Record<CreateBlogImageUploadDto['contentType'], string> = {
   'image/jpeg': 'jpg',

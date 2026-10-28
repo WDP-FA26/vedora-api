@@ -25,7 +25,12 @@ Backend starter cho Vedora, sử dụng NestJS, Mongoose (MongoDB, tự host b�
 │   ├── config/                # Validate biến môi trường
 │   ├── mongo/                 # MongoModule, MongoService, schema và type dùng chung
 │   ├── auth/ users/ profiles/ # Tài khoản, hồ sơ và quan hệ theo dõi
-│   ├── posts/ media/          # Bài viết, blog, video và phụ đề
+│   ├── posts/                 # Bài ngắn, blog, bình luận, tìm kiếm và quản trị
+│   │   ├── blogs/             # Blog, ảnh bìa và trợ lý AI viết bài
+│   │   ├── interactions/      # Bình luận, like và báo cáo
+│   │   ├── admin/             # Duyệt bài và xử lý báo cáo
+│   │   └── search/            # Tìm kiếm và feed "dành cho bạn" trên Qdrant
+│   ├── media/                 # Upload video, webhook, phụ đề Whisper, dọn dẹp định kỳ
 │   ├── recipes/ meal-plan/    # Danh mục công thức, thực đơn và đi chợ
 │   ├── knowledge/ nutrition-chat/
 │   ├── payments/ notifications/ verification/

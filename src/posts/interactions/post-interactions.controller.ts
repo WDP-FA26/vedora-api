@@ -23,21 +23,21 @@ import {
   ApiOperation,
   ApiTags,
 } from '@nestjs/swagger';
-import type { AuthenticatedRequest } from '../auth/auth.types';
-import { JwtAuthGuard } from '../auth/jwt-auth.guard';
-import { CursorPaginationQueryDto } from '../common/pagination';
+import type { AuthenticatedRequest } from '../../auth/auth.types';
+import { JwtAuthGuard } from '../../auth/jwt-auth.guard';
+import { CursorPaginationQueryDto } from '../../common/pagination';
 import {
   CommentBodyDto,
   CommentPageDto,
   CommentResponseDto,
-} from './dto/comment.dto';
+} from '../dto/comment.dto';
 import {
   CreatePostReportDto,
   PostBookmarkResponseDto,
   PostReportDto,
   PostRepostResponseDto,
-} from './dto/post-interaction.dto';
-import { PostLikeResponseDto } from './dto/post-like-response.dto';
+} from '../dto/post-interaction.dto';
+import { PostLikeResponseDto } from '../dto/post-like-response.dto';
 import { PostReportsService } from './post-reports.service';
 import { PostInteractionsService } from './post-interactions.service';
 

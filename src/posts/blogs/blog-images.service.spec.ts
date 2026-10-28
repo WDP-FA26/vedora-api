@@ -1,5 +1,5 @@
 import { mock } from 'vitest-mock-extended';
-import { StorageService, StorageTarget } from '../storage/storage.service';
+import { StorageService, StorageTarget } from '../../storage/storage.service';
 import { BlogImagesService } from './blog-images.service';
 
 describe('BlogImagesService', () => {

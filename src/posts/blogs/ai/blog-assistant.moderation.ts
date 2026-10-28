@@ -1,4 +1,4 @@
-import type { ModerationVerdict } from '../../ai/moderation/moderation';
+import type { ModerationVerdict } from '../../../ai/moderation/moderation';
 
 // Same layout as the nutrition chat's policy, but a writing assistant takes
 // requests on any topic and is meant to insert images and links, so neither

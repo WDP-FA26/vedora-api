@@ -4,13 +4,13 @@ import { NotFoundException } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import type { Model } from 'mongoose';
 import { type DeepMockProxy, mockDeep } from 'vitest-mock-extended';
-import { createMedia, createPost, createUser } from '../../test/fixtures';
+import { createMedia, createPost, createUser } from '../../../test/fixtures';
 import {
   createTestMongoUrl,
   dropTestDatabase,
   prepareTestDatabase,
-} from '../../test/mongo-test-db';
-import { MediaService } from '../media/media.service';
+} from '../../../test/mongo-test-db';
+import { MediaService } from '../../media/media.service';
 import {
   CaptionStatus,
   MediaStatus,
@@ -18,9 +18,9 @@ import {
   PostComment,
   PostLike,
   PostStatus,
-} from '../mongo/models';
-import { MongoModule } from '../mongo/mongo.module';
-import { MongoService } from '../mongo/mongo.service';
+} from '../../mongo/models';
+import { MongoModule } from '../../mongo/mongo.module';
+import { MongoService } from '../../mongo/mongo.service';
 import { AdminPostsService } from './admin-posts.service';
 
 describe('AdminPostsService', () => {

@@ -21,17 +21,17 @@ import {
   toUIMessageStream,
   type UIMessage,
 } from 'ai';
-import { cannedReply } from '../../ai/chat/canned-reply';
-import { chatErrorCode } from '../../ai/chat/errors';
-import { replyFilter } from '../../ai/chat/reply-filter';
-import { moderateWithRetry } from '../../ai/moderation/moderation';
+import { cannedReply } from '../../../ai/chat/canned-reply';
+import { chatErrorCode } from '../../../ai/chat/errors';
+import { replyFilter } from '../../../ai/chat/reply-filter';
+import { moderateWithRetry } from '../../../ai/moderation/moderation';
 import {
   chatModel,
   DEFAULT_CHAT_MODEL,
   DEFAULT_MODERATION_MODEL,
-} from '../../ai/openrouter';
-import { AiUsageService } from '../../ai/usage/ai-usage.service';
-import { KnowledgeSearchService } from '../../knowledge/retrieval/knowledge-search.service';
+} from '../../../ai/openrouter';
+import { AiUsageService } from '../../../ai/usage/ai-usage.service';
+import { KnowledgeSearchService } from '../../../knowledge/retrieval/knowledge-search.service';
 import {
   AiFeature,
   BlogRecipe,
@@ -40,12 +40,12 @@ import {
   PostType,
   Recipe,
   RecipeIngredient,
-} from '../../mongo/models';
+} from '../../../mongo/models';
 import {
   type BlogAssistantChatDto,
   type BlogAssistantQuotaDto,
   MAX_SELECTION,
-} from '../dto/blog-ai.dto';
+} from '../../dto/blog-ai.dto';
 import {
   BLOG_ASSISTANT_POLICY,
   BLOG_ASSISTANT_REFUSALS,

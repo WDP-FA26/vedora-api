@@ -7,8 +7,8 @@ import {
   PostComment,
   PostLike,
   PostStatus,
-} from '../mongo/models';
-import { QdrantService } from '../qdrant/qdrant.service';
+} from '../../mongo/models';
+import { QdrantService } from '../../qdrant/qdrant.service';
 import { DENSE_VECTOR, toEpochSeconds } from './post-search-collection';
 import { PostSearchIndexService } from './post-search-index.service';
 

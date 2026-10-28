@@ -3,12 +3,12 @@ import { getModelToken } from '@nestjs/mongoose';
 import { Test } from '@nestjs/testing';
 import type { Model } from 'mongoose';
 import { type DeepMockProxy, mockDeep } from 'vitest-mock-extended';
-import { createPost, createUser } from '../../test/fixtures';
+import { createPost, createUser } from '../../../test/fixtures';
 import {
   createTestMongoUrl,
   dropTestDatabase,
   prepareTestDatabase,
-} from '../../test/mongo-test-db';
+} from '../../../test/mongo-test-db';
 import {
   Post,
   PostBookmark,
@@ -16,10 +16,10 @@ import {
   PostLike,
   PostStatus,
   type User,
-} from '../mongo/models';
-import { MongoModule } from '../mongo/mongo.module';
-import { MongoService } from '../mongo/mongo.service';
-import { QdrantService } from '../qdrant/qdrant.service';
+} from '../../mongo/models';
+import { MongoModule } from '../../mongo/mongo.module';
+import { MongoService } from '../../mongo/mongo.service';
+import { QdrantService } from '../../qdrant/qdrant.service';
 import { PostFeedService, interleave } from './post-feed.service';
 import { PostSearchIndexService } from './post-search-index.service';
 

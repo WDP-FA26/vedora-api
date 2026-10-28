@@ -3,8 +3,8 @@ import { ConfigService } from '@nestjs/config';
 import { InjectModel } from '@nestjs/mongoose';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import type { Model } from 'mongoose';
-import { MediaAsset, Post, PostStatus, PostType } from '../mongo/models';
-import { QdrantService } from '../qdrant/qdrant.service';
+import { MediaAsset, Post, PostStatus, PostType } from '../../mongo/models';
+import { QdrantService } from '../../qdrant/qdrant.service';
 import { PostEmbeddingsService } from './post-embeddings.service';
 import {
   BM25_FOLDED_VECTOR,

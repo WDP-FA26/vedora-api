@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { QdrantService } from '../qdrant/qdrant.service';
+import { QdrantService } from '../../qdrant/qdrant.service';
 import { PostEmbeddingsService } from './post-embeddings.service';
 import {
   BM25_FOLDED_VECTOR,
