@@ -295,16 +295,12 @@ export class IngredientsService {
   }
 
   private async requireGroups(ids: string[] | undefined): Promise<void> {
-    const found = await allExist(ids ?? [], (groupIds) =>
-      this.groups.countDocuments({ _id: { $in: groupIds } }),
-    );
+    const found = await allExist(this.groups, ids ?? []);
     if (!found) throw unknownReference();
   }
 
   private async requireIngredients(ids: string[] | undefined): Promise<void> {
-    const found = await allExist(ids ?? [], (ingredientIds) =>
-      this.ingredients.countDocuments({ _id: { $in: ingredientIds } }),
-    );
+    const found = await allExist(this.ingredients, ids ?? []);
     if (!found) throw unknownReference();
   }
 

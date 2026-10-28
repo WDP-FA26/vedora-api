@@ -110,12 +110,11 @@ export class DietaryService {
       );
     }
     const [ingredients, groups] = await Promise.all([
-      allExist([...dto.ingredientIds, ...dto.likedIngredientIds], (ids) =>
-        this.ingredients.countDocuments({ _id: { $in: ids } }),
-      ),
-      allExist(dto.groupIds, (ids) =>
-        this.groups.countDocuments({ _id: { $in: ids } }),
-      ),
+      allExist(this.ingredients, [
+        ...dto.ingredientIds,
+        ...dto.likedIngredientIds,
+      ]),
+      allExist(this.groups, dto.groupIds),
     ]);
     if (!ingredients || !groups) {
       throw badRequest(

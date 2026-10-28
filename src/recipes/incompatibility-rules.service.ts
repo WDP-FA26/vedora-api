@@ -204,13 +204,16 @@ export class IncompatibilityRulesService {
       bIngredientId: second.ingredientId,
       bGroupId: second.groupId,
     });
+    // A side names either an ingredient or a group; only the named ones are checked.
+    const ingredientIds: string[] = [];
+    const groupIds: string[] = [];
+    for (const side of [a, b]) {
+      if (side.ingredientId !== null) ingredientIds.push(side.ingredientId);
+      if (side.groupId !== null) groupIds.push(side.groupId);
+    }
     const [ingredients, groups] = await Promise.all([
-      allExist([a.ingredientId, b.ingredientId], (ids) =>
-        this.ingredients.countDocuments({ _id: { $in: ids } }),
-      ),
-      allExist([a.groupId, b.groupId], (ids) =>
-        this.groups.countDocuments({ _id: { $in: ids } }),
-      ),
+      allExist(this.ingredients, ingredientIds),
+      allExist(this.groups, groupIds),
     ]);
     if (!ingredients || !groups) {
       throw badRequest(

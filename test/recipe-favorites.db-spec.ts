@@ -15,6 +15,7 @@ import {
 import { MongoService } from '../src/mongo/mongo.service';
 import { RecipesController } from '../src/recipes/recipes.controller';
 import { RecipeCatalogService } from '../src/recipes/recipe-catalog.service';
+import { RecipeRelationsService } from '../src/recipes/recipe-relations.service';
 import { RecipeFavoritesService } from '../src/recipes/recipe-favorites.service';
 import { IncompatibilityRulesService } from '../src/recipes/incompatibility-rules.service';
 import { DietaryService } from '../src/recipes/dietary.service';
@@ -50,6 +51,7 @@ describe('Recipe favorites with MongoDB', () => {
       providers: [
         RecipeCatalogService,
         RecipeFavoritesService,
+        RecipeRelationsService,
         IncompatibilityRulesService,
         DietaryService,
         {

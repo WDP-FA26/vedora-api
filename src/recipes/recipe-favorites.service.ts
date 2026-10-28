@@ -13,38 +13,23 @@ import {
   PaginationQueryDto,
 } from '../common/pagination';
 import { lockDocument } from '../mongo/document-lock';
-import {
-  Ingredient,
-  Post,
-  PostStatus,
-  Recipe,
-  RecipeFavorite,
-  RecipeIngredient,
-  Stored,
-  User,
-} from '../mongo/models';
+import { Recipe, RecipeFavorite, Stored, User } from '../mongo/models';
 import { MongoService } from '../mongo/mongo.service';
+import { totalMinutes } from './dto/recipe-catalog.dto';
 import {
   FavoriteRecipeDto,
   RecipeFavoriteStateDto,
 } from './dto/recipe-favorite.dto';
-import { IncompatibilityRulesService } from './incompatibility-rules.service';
-import { totalMinutes } from './recipe-catalog.service';
-import { loadRecipes, toRecipeDto } from './recipes.service';
+import { toRecipeCard } from './dto/recipe.dto';
+import { RecipeRelationsService } from './recipe-relations.service';
 
 @Injectable()
 export class RecipeFavoritesService {
   constructor(
     @InjectModel(Recipe.name) private readonly recipes: Model<Recipe>,
-    @InjectModel(RecipeIngredient.name)
-    private readonly recipeIngredients: Model<RecipeIngredient>,
-    @InjectModel(Ingredient.name)
-    private readonly ingredients: Model<Ingredient>,
-    @InjectModel(Post.name) private readonly posts: Model<Post>,
-    @InjectModel(User.name) private readonly users: Model<User>,
     @InjectModel(RecipeFavorite.name)
     private readonly favorites: Model<RecipeFavorite>,
-    private readonly rules: IncompatibilityRulesService,
+    private readonly relations: RecipeRelationsService,
     private readonly mongo: MongoService,
   ) {}
 
@@ -68,34 +53,15 @@ export class RecipeFavoritesService {
     const ordered = rows.flatMap(
       ({ recipeId }) => savedById.get(recipeId) ?? [],
     );
-    const recipes = await loadRecipes(
-      {
-        recipeIngredients: this.recipeIngredients,
-        ingredients: this.ingredients,
-        posts: this.posts,
-        users: this.users,
-      },
-      this.rules,
-      ordered,
-    );
-    const published = await this.posts
-      .find({
-        status: PostStatus.PUBLISHED,
-        _id: {
-          $in: rows.flatMap(({ recipeId }) => {
-            const postId = savedById.get(recipeId)?.postId;
-            return postId ? [postId] : [];
-          }),
-        },
-      })
-      .select('_id')
-      .exec();
-    const publishedIds = new Set(published.map(({ id }) => id));
+    const [recipes, published] = await Promise.all([
+      this.relations.hydrate(ordered),
+      this.relations.publishedPostIds(ordered.map(({ postId }) => postId)),
+    ]);
     return createPaginatedResponse(
       ordered.map((recipe, index) => ({
-        ...toRecipeDto(recipes[index]),
+        ...toRecipeCard(recipes[index]),
         post:
-          recipe.postId && publishedIds.has(recipe.postId)
+          recipe.postId && published.has(recipe.postId)
             ? recipes[index].post
             : null,
         totalMinutes: totalMinutes(recipe),

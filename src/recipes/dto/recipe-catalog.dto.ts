@@ -72,3 +72,13 @@ export class CatalogRecipeDetailDto extends RecipeDetailDto {
   @ApiProperty({ nullable: true, type: Number })
   totalMinutes!: number | null;
 }
+
+/** Prep + cook minutes; null when both are unknown. */
+export function totalMinutes(recipe: {
+  prepMinutes: number | null;
+  cookMinutes: number | null;
+}): number | null {
+  return recipe.prepMinutes === null && recipe.cookMinutes === null
+    ? null
+    : (recipe.prepMinutes ?? 0) + (recipe.cookMinutes ?? 0);
+}

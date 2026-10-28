@@ -13,7 +13,6 @@ import {
   Recipe,
   User,
 } from '../mongo/models';
-import { loadBlogSummaries, type BlogQueryModels } from './blogs/blog-query';
 import type { BlogSummaryDto } from './dto/blog-summary.dto';
 
 /** What a post card shows besides the post itself. */
@@ -27,16 +26,6 @@ export interface PostRelations {
   isLiked: boolean;
   isReposted: boolean;
   isBookmarked: boolean;
-}
-
-/** The collections a post card joins against. */
-interface PostRelationModels extends BlogQueryModels {
-  users: Model<User>;
-  media: Model<MediaAsset>;
-  comments: Model<PostComment>;
-  likes: Model<PostLike>;
-  reposts: Model<PostRepost>;
-  bookmarks: Model<PostBookmark>;
 }
 
 /**
@@ -65,27 +54,12 @@ export class PostRelationsService {
     @InjectModel(Recipe.name) private readonly recipes: Model<Recipe>,
   ) {}
 
-  private get models(): PostRelationModels {
-    return {
-      users: this.users,
-      media: this.media,
-      comments: this.comments,
-      likes: this.likes,
-      reposts: this.reposts,
-      bookmarks: this.bookmarks,
-      blogs: this.blogs,
-      blogRecipes: this.blogRecipes,
-      recipes: this.recipes,
-    };
-  }
-
   /** Relations of `posts`, keyed by post id. */
   async hydrate(
     posts: readonly Post[],
     viewerId?: string,
   ): Promise<Map<string, PostRelations>> {
     if (posts.length === 0) return new Map();
-    const models = this.models;
     const postIds = posts.map(({ id }) => id);
     const inPosts = { postId: { $in: postIds } };
     const viewerPostIds = (rows: { postId: string }[]) =>
@@ -101,23 +75,21 @@ export class PostRelationsService {
       reposted,
       bookmarked,
     ] = await Promise.all([
-      models.users
+      this.users
         .find({ _id: { $in: [...new Set(posts.map((p) => p.authorId))] } })
         .select('username fullName avatarUrl')
         .exec(),
-      models.media.find(inPosts).sort({ position: 1 }).exec(),
-      loadBlogSummaries(models, postIds),
-      countByPost(models.comments, postIds),
-      countByPost(models.likes, postIds),
-      countByPost(models.reposts, postIds),
+      this.media.find(inPosts).sort({ position: 1 }).exec(),
+      this.blogSummaries(postIds),
+      countByPost(this.comments, postIds),
+      countByPost(this.likes, postIds),
+      countByPost(this.reposts, postIds),
+      viewerId ? this.likes.find({ userId: viewerId, ...inPosts }).exec() : [],
       viewerId
-        ? models.likes.find({ userId: viewerId, ...inPosts }).exec()
+        ? this.reposts.find({ userId: viewerId, ...inPosts }).exec()
         : [],
       viewerId
-        ? models.reposts.find({ userId: viewerId, ...inPosts }).exec()
-        : [],
-      viewerId
-        ? models.bookmarks.find({ userId: viewerId, ...inPosts }).exec()
+        ? this.bookmarks.find({ userId: viewerId, ...inPosts }).exec()
         : [],
     ]);
     const authorById = new Map(authors.map((author) => [author.id, author]));
@@ -146,6 +118,60 @@ export class PostRelationsService {
       });
     }
     return relations;
+  }
+
+  /**
+   * Feed reads never load the full article: the summary of each blog post in
+   * `postIds`, with its linked recipes in order. MongoDB has no nested
+   * selects, so the blogs, their recipe links and the recipes are three
+   * queries.
+   */
+  private async blogSummaries(
+    postIds: readonly string[],
+  ): Promise<Map<string, BlogSummaryDto>> {
+    if (postIds.length === 0) return new Map();
+    const ids = [...postIds];
+    const [blogs, links] = await Promise.all([
+      this.blogs
+        .find({ _id: { $in: ids } })
+        .select('title coverImageUrl excerpt')
+        .exec(),
+      this.blogRecipes
+        .find({ postId: { $in: ids } })
+        .sort({ position: 1 })
+        .exec(),
+    ]);
+    const recipes = await this.recipes
+      .find({
+        _id: { $in: [...new Set(links.map(({ recipeId }) => recipeId))] },
+      })
+      .select('title imageUrl')
+      .exec();
+    const recipeById = new Map(recipes.map((recipe) => [recipe.id, recipe]));
+    return new Map(
+      blogs.map((blog) => [
+        blog.id,
+        {
+          title: blog.title,
+          coverImageUrl: blog.coverImageUrl,
+          excerpt: blog.excerpt,
+          recipes: links
+            .filter((link) => link.postId === blog.id)
+            .flatMap(({ recipeId }) => {
+              const recipe = recipeById.get(recipeId);
+              return recipe
+                ? [
+                    {
+                      id: recipe.id,
+                      title: recipe.title,
+                      imageUrl: recipe.imageUrl,
+                    },
+                  ]
+                : [];
+            }),
+        },
+      ]),
+    );
   }
 }
 

@@ -5,6 +5,7 @@ import {
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import type { Model } from 'mongoose';
+import { escapeRegExp } from '../common/text';
 import {
   createPaginatedResponse,
   getPaginationArgs,
@@ -12,22 +13,20 @@ import {
 } from '../common/pagination';
 import {
   Ingredient,
-  Post,
-  PostStatus,
   Recipe,
   RecipeFavorite,
   RecipeIngredient,
-  User,
 } from '../mongo/models';
 import {
   CatalogRecipeDetailDto,
   CatalogRecipeDto,
   RecipeCatalogQueryDto,
+  totalMinutes,
 } from './dto/recipe-catalog.dto';
-import { IncompatibilityRulesService } from './incompatibility-rules.service';
+import { toRecipeCard } from './dto/recipe.dto';
 import { DietaryService } from './dietary.service';
-import { catalogPage } from './recipe-catalog.query';
-import { loadRecipes, toRecipeDto } from './recipes.service';
+import { IncompatibilityRulesService } from './incompatibility-rules.service';
+import { RecipeRelationsService } from './recipe-relations.service';
 
 @Injectable()
 export class RecipeCatalogService {
@@ -37,10 +36,9 @@ export class RecipeCatalogService {
     private readonly recipeIngredients: Model<RecipeIngredient>,
     @InjectModel(Ingredient.name)
     private readonly ingredients: Model<Ingredient>,
-    @InjectModel(Post.name) private readonly posts: Model<Post>,
-    @InjectModel(User.name) private readonly users: Model<User>,
     @InjectModel(RecipeFavorite.name)
     private readonly favorites: Model<RecipeFavorite>,
+    private readonly relations: RecipeRelationsService,
     private readonly rules: IncompatibilityRulesService,
     private readonly dietary: DietaryService,
   ) {}
@@ -54,38 +52,22 @@ export class RecipeCatalogService {
         'Sign in to filter by your dietary profile',
       );
     }
-    const { ids, total } = await catalogPage(
-      {
-        recipes: this.recipes,
-        recipeIngredients: this.recipeIngredients,
-        ingredients: this.ingredients,
-        dietary: this.dietary,
-        rules: this.rules,
-      },
+    const { rows, total } = await this.catalogPage(
       query,
       getPaginationArgs(query),
       userId,
     );
-    const rows = await this.recipes.find({ _id: { $in: ids } }).exec();
-    const byId = new Map(rows.map((row) => [row.id, row]));
-    const ordered = ids.flatMap((id) => byId.get(id) ?? []);
     const [recipes, favoriteIds, publishedPosts] = await Promise.all([
-      loadRecipes(
-        {
-          recipeIngredients: this.recipeIngredients,
-          ingredients: this.ingredients,
-          posts: this.posts,
-          users: this.users,
-        },
-        this.rules,
-        ordered,
+      this.relations.hydrate(rows),
+      this.favoriteIds(
+        rows.map(({ id }) => id),
+        userId,
       ),
-      this.favoriteIds(ids, userId),
-      this.publishedPosts(ordered.map(({ postId }) => postId)),
+      this.relations.publishedPostIds(rows.map(({ postId }) => postId)),
     ]);
     return createPaginatedResponse(
-      ordered.map((row, index) => ({
-        ...toRecipeDto(recipes[index]),
+      rows.map((row, index) => ({
+        ...toRecipeCard(recipes[index]),
         isFavorite: favoriteIds.has(row.id),
         // Admin-authored recipes are public, but their source post may not be.
         post:
@@ -103,18 +85,9 @@ export class RecipeCatalogService {
     const row = await this.recipes.findOne({ _id: id }).exec();
     if (!row) throw new NotFoundException('Recipe not found');
     const [[detail], favoriteIds, publishedPosts] = await Promise.all([
-      loadRecipes(
-        {
-          recipeIngredients: this.recipeIngredients,
-          ingredients: this.ingredients,
-          posts: this.posts,
-          users: this.users,
-        },
-        this.rules,
-        [row],
-      ),
+      this.relations.hydrate([row]),
       this.favoriteIds([id], userId),
-      this.publishedPosts([row.postId]),
+      this.relations.publishedPostIds([row.postId]),
     ]);
     return {
       ...detail,
@@ -122,6 +95,99 @@ export class RecipeCatalogService {
       post: row.postId && publishedPosts.has(row.postId) ? detail.post : null,
       totalMinutes: totalMinutes(row),
     };
+  }
+
+  /**
+   * The recipes of one catalog page, newest first, and how many match in all.
+   * MongoDB has no relation filters, and total minutes and conflicts inside a
+   * recipe are no filter at all, so this reads the ids, times and ingredients
+   * of every recipe the title/description filter leaves and filters them
+   * here. The catalog is admin-curated and small.
+   */
+  private async catalogPage(
+    query: RecipeCatalogQueryDto,
+    paging: { skip: number; take: number },
+    userId?: string,
+  ): Promise<{ rows: Recipe[]; total: number }> {
+    const [rows, links] = await Promise.all([
+      this.recipes
+        .find()
+        // Everything a card and a detail need, so the page renders without
+        // a second read of the recipes it picked.
+        .select(
+          'title description imageUrl servings prepMinutes cookMinutes steps postId updatedAt',
+        )
+        .sort({ updatedAt: -1, _id: -1 })
+        .exec(),
+      this.recipeIngredients.find().select('recipeId ingredientId').exec(),
+    ]);
+    const ingredientsOf = (recipeId: string) =>
+      links
+        .filter((link) => link.recipeId === recipeId)
+        .map(({ ingredientId }) => ingredientId);
+
+    let matching = rows;
+    if (query.q !== undefined) {
+      const matchingIds = await this.matchingRecipeIds(query.q);
+      matching = matching.filter(({ id }) => matchingIds.has(id));
+    }
+    if (query.maxMinutes !== undefined) {
+      const max = query.maxMinutes;
+      // A recipe with both times unknown never matches.
+      matching = matching.filter((row) => {
+        const minutes = totalMinutes(row);
+        return minutes !== null && minutes <= max;
+      });
+    }
+    if (query.suitableForMe && userId) {
+      const avoided = await this.dietary.avoidedIngredientIds(userId);
+      matching = matching.filter(({ id }) =>
+        ingredientsOf(id).every((ingredientId) => !avoided.has(ingredientId)),
+      );
+      const conflicts = await this.rules.findConflictsForEach(
+        matching.map(({ id }) => ingredientsOf(id)),
+      );
+      matching = matching.filter((_, index) => conflicts[index].length === 0);
+    }
+    return {
+      rows: matching.slice(paging.skip, paging.skip + paging.take),
+      total: matching.length,
+    };
+  }
+
+  /** Title, description, or an ingredient whose name or alias contains `text`. */
+  private async matchingRecipeIds(text: string): Promise<Set<string>> {
+    const pattern = escapeRegExp(text);
+    const [byText, matchingIngredients] = await Promise.all([
+      this.recipes
+        .find({
+          $or: [
+            { title: { $regex: pattern, $options: 'i' } },
+            { description: { $regex: pattern, $options: 'i' } },
+          ],
+        })
+        .select('_id')
+        .exec(),
+      this.ingredients
+        .find({
+          $or: [
+            { name: { $regex: pattern, $options: 'i' } },
+            { aliases: { $regex: pattern, $options: 'i' } },
+          ],
+        })
+        .select('_id')
+        .exec(),
+    ]);
+    const byIngredient = await this.recipeIngredients
+      .find({
+        ingredientId: { $in: matchingIngredients.map(({ id }) => id) },
+      })
+      .select('recipeId')
+      .exec();
+    return new Set([
+      ...byText.map(({ id }) => id),
+      ...byIngredient.map(({ recipeId }) => recipeId),
+    ]);
   }
 
   private async favoriteIds(
@@ -135,26 +201,4 @@ export class RecipeCatalogService {
       .exec();
     return new Set(favorites.map(({ recipeId }) => recipeId));
   }
-
-  private async publishedPosts(
-    postIds: (string | null)[],
-  ): Promise<Set<string>> {
-    const posts = await this.posts
-      .find({
-        status: PostStatus.PUBLISHED,
-        _id: { $in: postIds.filter((id) => id !== null) },
-      })
-      .select('_id')
-      .exec();
-    return new Set(posts.map(({ id }) => id));
-  }
-}
-
-export function totalMinutes(recipe: {
-  prepMinutes: number | null;
-  cookMinutes: number | null;
-}): number | null {
-  return recipe.prepMinutes === null && recipe.cookMinutes === null
-    ? null
-    : (recipe.prepMinutes ?? 0) + (recipe.cookMinutes ?? 0);
 }

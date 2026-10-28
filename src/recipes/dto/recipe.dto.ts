@@ -197,3 +197,13 @@ export class RecipeDetailDto extends RecipeDto {
   @ApiProperty({ type: [RecipeIngredientDto] })
   ingredients!: RecipeIngredientDto[];
 }
+
+/** The card fields of a detail, for lists. */
+export function toRecipeCard({
+  description: _description,
+  steps: _steps,
+  ingredients: _ingredients,
+  ...card
+}: RecipeDetailDto): RecipeDto {
+  return card;
+}

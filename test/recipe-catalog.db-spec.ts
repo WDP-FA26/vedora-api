@@ -30,6 +30,7 @@ import type {
 import { RecipeCatalogQueryDto } from '../src/recipes/dto/recipe-catalog.dto';
 import { IncompatibilityRulesService } from '../src/recipes/incompatibility-rules.service';
 import { RecipeCatalogService } from '../src/recipes/recipe-catalog.service';
+import { RecipeRelationsService } from '../src/recipes/recipe-relations.service';
 import { MealPlanService } from '../src/meal-plan/meal-plan.service';
 import { DietaryService } from '../src/recipes/dietary.service';
 import { deleteWithReferences } from '../src/mongo/relations';
@@ -100,6 +101,7 @@ describe('Recipe catalog with MongoDB', () => {
         DietaryService,
         MealPlanService,
         RecipeCatalogService,
+        RecipeRelationsService,
         { provide: MealPlannerChatService, useValue: {} },
         {
           provide: ConfigService,
