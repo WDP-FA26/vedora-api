@@ -1,9 +1,5 @@
-import {
-  ForbiddenException,
-  Injectable,
-  NotFoundException,
-  UnauthorizedException,
-} from '@nestjs/common';
+import { rethrowAsStateConflict } from '../mongo/unique-conflict.js';
+import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { randomUUID } from 'node:crypto';
 import type { ClientSession, Model } from 'mongoose';
@@ -14,6 +10,9 @@ import {
   MyRecipeRatingDto,
   RecipeRatingSummaryDto,
 } from './dto/recipe-rating.dto.js';
+import { ResourceNotFoundException } from '../common/exceptions/resource-not-found.exception.js';
+import { AccessDeniedException } from '../common/exceptions/access-denied.exception.js';
+import { UnauthenticatedException } from '../common/exceptions/unauthenticated.exception.js';
 
 @Injectable()
 export class RecipeRatingsService {
@@ -56,12 +55,16 @@ export class RecipeRatingsService {
         .findOne({ _id: userId })
         .session(session)
         .exec();
-      if (!actor) throw new UnauthorizedException('Account no longer exists');
+      if (!actor)
+        throw new UnauthenticatedException(
+          'UNAUTHORIZED',
+          'Account no longer exists',
+        );
       if (value !== null && !actor.emailVerifiedAt) {
-        throw new ForbiddenException({
-          code: 'EMAIL_NOT_VERIFIED',
-          message: 'Verify your email before rating a recipe',
-        });
+        throw new AccessDeniedException(
+          'EMAIL_NOT_VERIFIED',
+          'Verify your email before rating a recipe',
+        );
       }
 
       await lockDocument(this.mongo, session, 'recipe', recipeId);
@@ -69,12 +72,13 @@ export class RecipeRatingsService {
         .findOne({ _id: recipeId })
         .session(session)
         .exec();
-      if (!recipe) throw new NotFoundException('Recipe not found');
+      if (!recipe)
+        throw new ResourceNotFoundException('NOT_FOUND', 'Recipe not found');
       if (value !== null && recipe.createdById === userId) {
-        throw new ForbiddenException({
-          code: 'SELF_RATING_NOT_ALLOWED',
-          message: 'You cannot rate your own recipe',
-        });
+        throw new AccessDeniedException(
+          'SELF_RATING_NOT_ALLOWED',
+          'You cannot rate your own recipe',
+        );
       }
 
       if (value === null) {
@@ -92,7 +96,14 @@ export class RecipeRatingsService {
             },
             { upsert: true, session },
           )
-          .exec();
+          .exec()
+          .catch((error: unknown) =>
+            rethrowAsStateConflict(
+              error,
+              'RATING_CONFLICT',
+              'The rating changed; reload and try again',
+            ),
+          );
       }
       return {
         ...(await this.aggregate(recipeId, session)),
@@ -106,7 +117,8 @@ export class RecipeRatingsService {
       .findOne({ _id: recipeId })
       .select('_id')
       .exec();
-    if (!recipe) throw new NotFoundException('Recipe not found');
+    if (!recipe)
+      throw new ResourceNotFoundException('NOT_FOUND', 'Recipe not found');
   }
 
   /**

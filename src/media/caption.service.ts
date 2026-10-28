@@ -11,6 +11,7 @@ import {
 } from '../mongo/models.js';
 import { CloudinaryService } from '../cloudinary/cloudinary.service.js';
 import { extractSpeechAudio } from './captions/speech-audio.js';
+import { ExternalServiceException } from '../common/exceptions/external-service.exception.js';
 import {
   languageName,
   TranscriptionService,
@@ -138,7 +139,12 @@ export class CaptionService {
         const response = await fetch(original.url, {
           signal: AbortSignal.timeout(TRACK_TIMEOUT_MS),
         });
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        if (!response.ok) {
+          throw new ExternalServiceException(
+            'cloudinary',
+            `HTTP ${response.status}`,
+          );
+        }
         const transcript = vttText(await response.text());
         await this.mediaAssets.updateOne({ _id: id }, { $set: { transcript } });
         if (postId) {

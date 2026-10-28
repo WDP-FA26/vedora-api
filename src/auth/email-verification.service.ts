@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import type { Model } from 'mongoose';
 import {
@@ -21,6 +21,7 @@ import {
   hashCode,
   hashesMatch,
 } from './one-time-code.js';
+import { ResourceNotFoundException } from '../common/exceptions/resource-not-found.exception.js';
 
 export type { SendResult } from './one-time-code.js';
 
@@ -136,7 +137,7 @@ export class EmailVerificationService {
         { session },
       );
       if (verified.matchedCount !== 1) {
-        throw new NotFoundException('Account not found');
+        throw new ResourceNotFoundException('NOT_FOUND', 'Account not found');
       }
       await this.codes.deleteOne(codeKey(user.id, PURPOSE), { session });
       await this.guesses.deleteOne({ _id: user.email }, { session });

@@ -1,6 +1,6 @@
 import type { INestApplication } from '@nestjs/common';
 import { getModelToken } from '@nestjs/mongoose';
-import { NotFoundException } from '@nestjs/common';
+import { ResourceNotFoundException } from '../../common/exceptions/resource-not-found.exception.js';
 import { Test } from '@nestjs/testing';
 import type { Model } from 'mongoose';
 import { type DeepMockProxy, mockDeep } from 'vitest-mock-extended';
@@ -140,7 +140,7 @@ describe('AdminPostsService', () => {
 
   it('answers 404 for an unknown post', async () => {
     await expect(service.findOne(crypto.randomUUID())).rejects.toBeInstanceOf(
-      NotFoundException,
+      ResourceNotFoundException,
     );
   });
 });

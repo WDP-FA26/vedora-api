@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import type { ClassConstructor } from 'class-transformer';
 import { parsePayload, validatePayload } from '../../common/validation.js';
+import { ExternalServiceException } from '../../common/exceptions/external-service.exception.js';
 import {
   EmbeddingsResponse,
   OcrResponse,
@@ -116,12 +117,13 @@ export class KnowledgeModelsService {
       AbortSignal.timeout(OCR_TIMEOUT_MS),
     );
     // a failed carrier completion still carries the parse
-    const body = parsePayload(OcrResponse, await response.json());
+    const body = parsePayload('openrouter', OcrResponse, await response.json());
     const annotations =
       body.choices?.[0]?.message.annotations ??
       body.error?.metadata?.file_annotations;
     if (!annotations?.length) {
-      throw new Error(
+      throw new ExternalServiceException(
+        'openrouter',
         `OCR returned no parse (${response.status}): ${body.error?.message ?? 'no annotations'}`,
       );
     }
@@ -179,11 +181,12 @@ export class KnowledgeModelsService {
     if (!response.ok) {
       const message = validatePayload(OpenRouterErrorBody, json).value?.error
         ?.message;
-      throw new Error(
+      throw new ExternalServiceException(
+        'openrouter',
         `OpenRouter ${path} failed (${response.status}): ${message ?? 'no message'}`,
       );
     }
-    return parsePayload(responseClass, json);
+    return parsePayload('openrouter', responseClass, json);
   }
 
   private fetch(

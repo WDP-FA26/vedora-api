@@ -134,15 +134,17 @@ describe('Meal plan (e2e)', () => {
       .expect(409);
     expect(response.body).toMatchObject({
       code: 'MEAL_PLAN_INVALID',
-      problems: [
-        {
-          code: 'AVOIDED_INGREDIENT',
-          day: 'MON',
-          recipes: ['Đậu hũ sốt cà'],
-          recipeIds: [recipe.id],
-          ingredients: ['Đậu hũ'],
-        },
-      ],
+      details: {
+        problems: [
+          {
+            code: 'AVOIDED_INGREDIENT',
+            day: 'MON',
+            recipes: ['Đậu hũ sốt cà'],
+            recipeIds: [recipe.id],
+            ingredients: ['Đậu hũ'],
+          },
+        ],
+      },
     });
     expect(await entries()).toBe(0);
   });
@@ -172,7 +174,13 @@ describe('Meal plan (e2e)', () => {
       )
         .send(unknown)
         .expect(method === 'post' ? 200 : 409);
-      expect((response.body as { problems: unknown }).problems).toEqual([
+      // Preview returns 200 with the problems on the body; a save returns 409
+      // with them under `details`.
+      const body = response.body as {
+        problems?: unknown;
+        details?: { problems: unknown };
+      };
+      expect(body.problems ?? body.details?.problems).toEqual([
         {
           code: 'UNKNOWN_RECIPE',
           day: 'MON',

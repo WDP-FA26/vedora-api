@@ -1,4 +1,5 @@
-import { BadRequestException, UnauthorizedException } from '@nestjs/common';
+import { InvalidInputException } from '../common/exceptions/invalid-input.exception.js';
+import { UnauthenticatedException } from '../common/exceptions/unauthenticated.exception.js';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { Test } from '@nestjs/testing';
@@ -197,7 +198,8 @@ describe('AuthService', () => {
     await expect(
       service.login({ username: 'vedora.user', password: PASSWORD }),
     ).rejects.toMatchObject({
-      response: { code: 'EMAIL_NOT_VERIFIED', email: 'hello@vedora.vn' },
+      code: 'EMAIL_NOT_VERIFIED',
+      details: { email: 'hello@vedora.vn' },
     });
     expect(mail.sendVerificationCode).toHaveBeenCalledWith(
       'hello@vedora.vn',
@@ -213,7 +215,7 @@ describe('AuthService', () => {
 
     await expect(
       service.login({ username: 'vedora.user', password: 'WrongPassword123!' }),
-    ).rejects.toBeInstanceOf(UnauthorizedException);
+    ).rejects.toBeInstanceOf(UnauthenticatedException);
     expect(mail.sendVerificationCode).not.toHaveBeenCalled();
   });
 
@@ -248,7 +250,7 @@ describe('AuthService', () => {
           ? { email: 'hello@vedora.vn', code }
           : { email: 'nobody@vedora.vn', code: '123456' },
       ),
-    ).rejects.toBeInstanceOf(BadRequestException);
+    ).rejects.toBeInstanceOf(InvalidInputException);
     expect(await tokens().countDocuments()).toBe(0);
   });
 
@@ -257,7 +259,7 @@ describe('AuthService', () => {
 
     await expect(
       service.verifyEmail({ email: 'hello@vedora.vn', code: '123456' }),
-    ).rejects.toBeInstanceOf(BadRequestException);
+    ).rejects.toBeInstanceOf(InvalidInputException);
     expect(await tokens().countDocuments()).toBe(0);
   });
 
@@ -273,8 +275,8 @@ describe('AuthService', () => {
     await expect(
       service.verifyEmail({ email: 'hello@vedora.vn', code: '123456' }),
     ).rejects.toMatchObject({
-      status: 429,
-      response: { code: 'VERIFY_LIMIT_REACHED' },
+      statusCode: 429,
+      code: 'VERIFY_LIMIT_REACHED',
     });
     expect(await tokens().countDocuments()).toBe(0);
   });
@@ -290,8 +292,8 @@ describe('AuthService', () => {
     await expect(
       service.resendVerification({ email: 'hello@vedora.vn' }),
     ).rejects.toMatchObject({
-      status: 429,
-      response: { code: 'RESEND_LIMIT_REACHED' },
+      statusCode: 429,
+      code: 'RESEND_LIMIT_REACHED',
     });
     expect(mail.sendVerificationCode).not.toHaveBeenCalled();
   });
@@ -334,8 +336,8 @@ describe('AuthService', () => {
     await expect(
       service.forgotPassword({ email: 'hello@vedora.vn' }),
     ).rejects.toMatchObject({
-      status: 429,
-      response: { code: 'RESEND_LIMIT_REACHED' },
+      statusCode: 429,
+      code: 'RESEND_LIMIT_REACHED',
     });
   });
 
@@ -345,7 +347,7 @@ describe('AuthService', () => {
 
     await expect(
       service.forgotPassword({ email: 'hello@vedora.vn' }),
-    ).rejects.toMatchObject({ status: 503 });
+    ).rejects.toMatchObject({ statusCode: 503 });
   });
 
   it('sets the new password and signs out every session after a reset', async () => {
@@ -379,7 +381,7 @@ describe('AuthService', () => {
         code: '000000',
         password: 'NewStrongPassword123!',
       }),
-    ).rejects.toBeInstanceOf(BadRequestException);
+    ).rejects.toBeInstanceOf(InvalidInputException);
     for (const token of await tokens().find().exec()) {
       expect(token.revokedAt).toBeNull();
     }
@@ -392,7 +394,7 @@ describe('AuthService', () => {
         code: '123456',
         password: 'NewStrongPassword123!',
       }),
-    ).rejects.toBeInstanceOf(BadRequestException);
+    ).rejects.toBeInstanceOf(InvalidInputException);
   });
 
   it('rejects resets with 429 once the email is out of guesses', async () => {
@@ -412,8 +414,8 @@ describe('AuthService', () => {
         password: 'NewStrongPassword123!',
       }),
     ).rejects.toMatchObject({
-      status: 429,
-      response: { code: 'VERIFY_LIMIT_REACHED' },
+      statusCode: 429,
+      code: 'VERIFY_LIMIT_REACHED',
     });
     for (const token of await tokens().find().exec()) {
       expect(token.revokedAt).toBeNull();
@@ -484,14 +486,14 @@ describe('AuthService', () => {
 
     await expect(
       service.login({ username: 'vedora.user', password: PASSWORD }),
-    ).rejects.toMatchObject({ response: { code: 'ACCOUNT_SUSPENDED' } });
+    ).rejects.toMatchObject({ code: 'ACCOUNT_SUSPENDED' });
     expect(await tokens().countDocuments()).toBe(0);
   });
 
   it('rejects invalid credentials with a generic error', async () => {
     await expect(
       service.login({ username: 'unknown', password: 'WrongPassword123!' }),
-    ).rejects.toBeInstanceOf(UnauthorizedException);
+    ).rejects.toBeInstanceOf(UnauthenticatedException);
   });
 
   it('returns a new token pair when rotating a refresh token', async () => {
@@ -518,7 +520,7 @@ describe('AuthService', () => {
     await service.logout(issued.token);
 
     await expect(refreshTokens.rotate(issued.token)).rejects.toMatchObject({
-      status: 401,
+      statusCode: 401,
     });
   });
 
@@ -531,6 +533,6 @@ describe('AuthService', () => {
 
     await expect(
       service.login({ username: 'vedora.user', password: PASSWORD }),
-    ).rejects.toBeInstanceOf(UnauthorizedException);
+    ).rejects.toBeInstanceOf(UnauthenticatedException);
   });
 });

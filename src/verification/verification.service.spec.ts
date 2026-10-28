@@ -1,9 +1,7 @@
-import {
-  BadRequestException,
-  ConflictException,
-  NotFoundException,
-  PayloadTooLargeException,
-} from '@nestjs/common';
+import { InvalidInputException } from '../common/exceptions/invalid-input.exception.js';
+import { StateConflictException } from '../common/exceptions/state-conflict.exception.js';
+import { ResourceNotFoundException } from '../common/exceptions/resource-not-found.exception.js';
+import { FileTooLargeException } from '../common/exceptions/file-too-large.exception.js';
 import type { INestApplication } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { randomUUID } from 'node:crypto';
@@ -140,7 +138,7 @@ describe('VerificationService', () => {
           ...dto,
           sizeBytes: 11 * 1024 * 1024,
         }),
-      ).rejects.toBeInstanceOf(PayloadTooLargeException);
+      ).rejects.toBeInstanceOf(FileTooLargeException);
       expect(storage.presignUpload).not.toHaveBeenCalled();
     });
 
@@ -154,7 +152,7 @@ describe('VerificationService', () => {
 
       await expect(
         service.createProofUpload(userId, dto),
-      ).rejects.toMatchObject({ status: 429 });
+      ).rejects.toMatchObject({ statusCode: 429 });
       expect(storage.presignUpload).not.toHaveBeenCalled();
     });
 
@@ -196,7 +194,7 @@ describe('VerificationService', () => {
       await insertProof({ ownerId: adminId });
 
       await expect(service.submit(userId, submission)).rejects.toBeInstanceOf(
-        BadRequestException,
+        InvalidInputException,
       );
       expect(await requests().countDocuments()).toBe(0);
     });
@@ -206,7 +204,7 @@ describe('VerificationService', () => {
       storage.exists.mockResolvedValue(false);
 
       await expect(service.submit(userId, submission)).rejects.toMatchObject({
-        response: { code: 'PROOF_NOT_UPLOADED' },
+        code: 'PROOF_NOT_UPLOADED',
       });
       expect(await requests().countDocuments()).toBe(0);
     });
@@ -219,7 +217,7 @@ describe('VerificationService', () => {
       await insertProof();
 
       await expect(service.submit(userId, submission)).rejects.toMatchObject({
-        response: { code: 'ALREADY_VERIFIED' },
+        code: 'ALREADY_VERIFIED',
       });
       expect(await requests().countDocuments()).toBe(0);
     });
@@ -229,7 +227,7 @@ describe('VerificationService', () => {
       await insertRequest();
 
       await expect(service.submit(userId, submission)).rejects.toMatchObject({
-        response: { code: 'REQUEST_PENDING' },
+        code: 'REQUEST_PENDING',
       });
       expect(await requests().countDocuments()).toBe(1);
       expect(await proofs().findOne({ _id: proofId })).toMatchObject({
@@ -242,7 +240,7 @@ describe('VerificationService', () => {
       await insertProof();
 
       await expect(service.submit(userId, submission)).rejects.toBeInstanceOf(
-        NotFoundException,
+        ResourceNotFoundException,
       );
     });
 
@@ -347,7 +345,7 @@ describe('VerificationService', () => {
 
   it('answers 404 for an unknown request', async () => {
     await expect(service.findOne(randomUUID())).rejects.toBeInstanceOf(
-      NotFoundException,
+      ResourceNotFoundException,
     );
   });
 
@@ -396,7 +394,7 @@ describe('VerificationService', () => {
           decision: VerificationStatus.REJECTED,
           note: 'no',
         }),
-      ).rejects.toBeInstanceOf(ConflictException);
+      ).rejects.toBeInstanceOf(StateConflictException);
     });
 
     it('answers 404 for an unknown request', async () => {
@@ -404,7 +402,7 @@ describe('VerificationService', () => {
         service.review(randomUUID(), adminId, {
           decision: VerificationStatus.APPROVED,
         }),
-      ).rejects.toBeInstanceOf(NotFoundException);
+      ).rejects.toBeInstanceOf(ResourceNotFoundException);
     });
   });
 

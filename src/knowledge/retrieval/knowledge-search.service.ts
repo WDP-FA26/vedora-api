@@ -61,7 +61,7 @@ export class KnowledgeSearchService {
     const candidates = [
       ...new Map(
         points.map(({ payload }) => {
-          const point = parsePayload(KnowledgePointPayload, payload);
+          const point = parsePayload('qdrant', KnowledgePointPayload, payload);
           return [point.text, point];
         }),
       ).values(),

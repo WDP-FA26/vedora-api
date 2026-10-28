@@ -14,10 +14,14 @@ import {
   DietaryRestrictionsDto,
   SaveDietaryRestrictionsDto,
 } from './dto/dietary.dto.js';
+import { ErrorBodyDto } from '../common/exceptions/error-body.dto.js';
 
 @ApiTags('dietary')
 @ApiBearerAuth()
-@ApiUnauthorizedResponse({ description: 'Authentication required' })
+@ApiUnauthorizedResponse({
+  type: ErrorBodyDto,
+  description: 'Authentication required',
+})
 @UseGuards(JwtAuthGuard)
 @Controller('dietary')
 export class DietaryController {

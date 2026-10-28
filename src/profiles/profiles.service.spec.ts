@@ -1,9 +1,7 @@
-import {
-  BadRequestException,
-  ConflictException,
-  NotFoundException,
-  PayloadTooLargeException,
-} from '@nestjs/common';
+import { InvalidInputException } from '../common/exceptions/invalid-input.exception.js';
+import { StateConflictException } from '../common/exceptions/state-conflict.exception.js';
+import { ResourceNotFoundException } from '../common/exceptions/resource-not-found.exception.js';
+import { FileTooLargeException } from '../common/exceptions/file-too-large.exception.js';
 import type { INestApplication } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { randomUUID } from 'node:crypto';
@@ -142,7 +140,7 @@ describe('ProfilesService', () => {
     await createUser(db, { id: userId, emailVerifiedAt: null });
 
     await expect(service.findOne(userId)).rejects.toBeInstanceOf(
-      NotFoundException,
+      ResourceNotFoundException,
     );
   });
 
@@ -151,7 +149,7 @@ describe('ProfilesService', () => {
     await createUser(db, { id: viewerId });
 
     await expect(service.follow(userId, userId)).rejects.toBeInstanceOf(
-      BadRequestException,
+      InvalidInputException,
     );
     await service.follow(userId, viewerId);
     expect(notifications.notify).toHaveBeenCalledWith({
@@ -227,7 +225,7 @@ describe('ProfilesService', () => {
         contentType: 'image/webp',
         sizeBytes: 5 * 1024 * 1024 + 1,
       }),
-    ).rejects.toBeInstanceOf(PayloadTooLargeException);
+    ).rejects.toBeInstanceOf(FileTooLargeException);
     expect(storage.presignUpload).not.toHaveBeenCalled();
   });
 
@@ -238,18 +236,18 @@ describe('ProfilesService', () => {
         contentType: 'image/gif' as 'image/webp',
         sizeBytes: 1000,
       }),
-    ).rejects.toBeInstanceOf(BadRequestException);
+    ).rejects.toBeInstanceOf(InvalidInputException);
   });
 
   it('only activates a confirmed upload owned by the caller', async () => {
     await createUser(db, { id: userId });
 
     await expect(service.activateImage(userId, imageId)).rejects.toBeInstanceOf(
-      NotFoundException,
+      ResourceNotFoundException,
     );
     await insertUpload({ status: 'WAITING_UPLOAD' });
     await expect(service.activateImage(userId, imageId)).rejects.toBeInstanceOf(
-      ConflictException,
+      StateConflictException,
     );
     await uploads().updateOne({ _id: imageId }, { $set: { status: 'READY' } });
 
@@ -266,7 +264,7 @@ describe('ProfilesService', () => {
     await insertUpload({ createdAt: new Date('2026-01-01T00:00:00Z') });
 
     await expect(service.activateImage(userId, imageId)).rejects.toBeInstanceOf(
-      ConflictException,
+      StateConflictException,
     );
   });
 

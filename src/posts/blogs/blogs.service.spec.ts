@@ -1,5 +1,5 @@
 import type { INestApplication } from '@nestjs/common';
-import { BadRequestException } from '@nestjs/common';
+import { InvalidInputException } from '../../common/exceptions/invalid-input.exception.js';
 import { getModelToken } from '@nestjs/mongoose';
 import { Test } from '@nestjs/testing';
 import type { Model } from 'mongoose';
@@ -13,7 +13,10 @@ import {
 import { Post } from '../../mongo/models.js';
 import { MongoModule } from '../../mongo/mongo.module.js';
 import { MongoService } from '../../mongo/mongo.service.js';
-import { StorageService, StorageTarget } from '../../storage/storage.service.js';
+import {
+  StorageService,
+  StorageTarget,
+} from '../../storage/storage.service.js';
 import { BlogsService } from './blogs.service.js';
 import { PostsService } from '../posts.service.js';
 
@@ -86,10 +89,8 @@ describe('BlogsService covers', () => {
   ])('refuses %s before writing', async (_case, url) => {
     const error = await create(url).catch((caught: unknown) => caught);
 
-    expect(error).toBeInstanceOf(BadRequestException);
-    expect((error as BadRequestException).getResponse()).toMatchObject({
-      code: 'BLOG_COVER_NOT_ALLOWED',
-    });
+    expect(error).toBeInstanceOf(InvalidInputException);
+    expect(error).toMatchObject({ code: 'BLOG_COVER_NOT_ALLOWED' });
     expect(await stored()).toEqual([]);
   });
 

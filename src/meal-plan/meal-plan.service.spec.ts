@@ -1,4 +1,4 @@
-import { ConflictException } from '@nestjs/common';
+import { StateConflictException } from '../common/exceptions/state-conflict.exception.js';
 import type { INestApplication } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { randomUUID } from 'node:crypto';
@@ -256,7 +256,7 @@ describe('MealPlanService', () => {
           others: [SPINACH_RECIPE],
         },
       ]),
-    ).rejects.toBeInstanceOf(ConflictException);
+    ).rejects.toBeInstanceOf(StateConflictException);
     expect(await entries().countDocuments()).toBe(0);
   });
 

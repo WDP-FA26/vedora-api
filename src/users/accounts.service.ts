@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import type { Model } from 'mongoose';
 import { hashPassword } from '../auth/password.js';
@@ -11,6 +11,7 @@ import {
   toPublicUser,
 } from './public-user.js';
 import { rethrowUniqueViolation } from './unique-conflict.js';
+import { ResourceNotFoundException } from '../common/exceptions/resource-not-found.exception.js';
 
 /** What a new account may set; everything else starts at its default. */
 export type NewUser = Pick<User, 'username' | 'fullName' | 'email'> &
@@ -106,7 +107,8 @@ export class AccountsService {
           { returnDocument: 'after' },
         )
         .exec();
-      if (!linked) throw new NotFoundException('User not found');
+      if (!linked)
+        throw new ResourceNotFoundException('NOT_FOUND', 'User not found');
       return toPublicUser(linked);
     } catch (error: unknown) {
       rethrowUniqueViolation(error);

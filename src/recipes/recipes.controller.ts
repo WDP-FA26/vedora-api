@@ -42,6 +42,7 @@ import {
   RecipeFavoriteBodyDto,
   RecipeFavoriteStateDto,
 } from './dto/recipe-favorite.dto.js';
+import { ErrorBodyDto } from '../common/exceptions/error-body.dto.js';
 
 @ApiTags('recipes')
 @UseGuards(OptionalJwtAuthGuard)
@@ -60,6 +61,7 @@ export class RecipesController {
   })
   @ApiPaginatedResponse(CatalogRecipeDto)
   @ApiUnauthorizedResponse({
+    type: ErrorBodyDto,
     description: 'Invalid token or anonymous suitableForMe filter',
   })
   list(
@@ -91,8 +93,8 @@ export class RecipesController {
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Save a recipe (idempotent)' })
   @ApiOkResponse({ type: RecipeFavoriteStateDto })
-  @ApiNotFoundResponse()
-  @ApiConflictResponse({ description: 'FAVORITE_CONFLICT' })
+  @ApiNotFoundResponse({ type: ErrorBodyDto })
+  @ApiConflictResponse({ type: ErrorBodyDto, description: 'FAVORITE_CONFLICT' })
   saveFavorite(
     @Param('id', ParseUUIDPipe) id: string,
     @Req() request: AuthenticatedRequest,
@@ -108,8 +110,8 @@ export class RecipesController {
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Remove your saved recipe (idempotent)' })
   @ApiOkResponse({ type: RecipeFavoriteStateDto })
-  @ApiNotFoundResponse()
-  @ApiConflictResponse({ description: 'FAVORITE_CONFLICT' })
+  @ApiNotFoundResponse({ type: ErrorBodyDto })
+  @ApiConflictResponse({ type: ErrorBodyDto, description: 'FAVORITE_CONFLICT' })
   removeFavorite(
     @Param('id', ParseUUIDPipe) id: string,
     @Req() request: AuthenticatedRequest,

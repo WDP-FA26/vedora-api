@@ -1,12 +1,6 @@
-import {
-  BadRequestException,
-  ConflictException,
-  HttpException,
-  HttpStatus,
-  Injectable,
-  Logger,
-  NotFoundException,
-} from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
+import { InvalidInputException } from '../common/exceptions/invalid-input.exception.js';
+import { QuotaReachedException } from '../common/exceptions/quota-reached.exception.js';
 import { ConfigService } from '@nestjs/config';
 import { InjectModel } from '@nestjs/mongoose';
 import type { ClientSession, Model, QueryFilter } from 'mongoose';
@@ -32,6 +26,8 @@ import {
   MediaResponseDto,
 } from './dto/media-response.dto.js';
 import type { CloudinaryNotification } from './dto/cloudinary-notification.js';
+import { ResourceNotFoundException } from '../common/exceptions/resource-not-found.exception.js';
+import { StateConflictException } from '../common/exceptions/state-conflict.exception.js';
 
 const PENDING: readonly MediaStatus[] = [
   MediaStatus.WAITING_UPLOAD,
@@ -125,15 +121,9 @@ export class MediaService {
       status: { $ne: MediaStatus.FAILED },
     });
     if (unattached >= MAX_UNATTACHED_UPLOADS) {
-      throw new HttpException(
-        {
-          statusCode: HttpStatus.TOO_MANY_REQUESTS,
-          error: 'Too Many Requests',
-          code: 'UPLOAD_LIMIT_REACHED',
-          message:
-            'Too many uploads not attached to a post; post or remove them first',
-        },
-        HttpStatus.TOO_MANY_REQUESTS,
+      throw new QuotaReachedException(
+        'UPLOAD_LIMIT_REACHED',
+        'Too many uploads not attached to a post; post or remove them first',
       );
     }
 
@@ -160,7 +150,7 @@ export class MediaService {
       .findOne({ ...LIVE, _id: id, ownerId })
       .exec();
     if (!media) {
-      throw new NotFoundException('Media not found');
+      throw new ResourceNotFoundException('NOT_FOUND', 'Media not found');
     }
     if (!this.cloudinary.webhooksEnabled && PENDING.includes(media.status)) {
       await this.refresh(media);
@@ -175,10 +165,13 @@ export class MediaService {
       .findOne({ ...LIVE, _id: id, ownerId })
       .exec();
     if (!media) {
-      throw new NotFoundException('Media not found');
+      throw new ResourceNotFoundException('NOT_FOUND', 'Media not found');
     }
     if (media.postId) {
-      throw new ConflictException('Media is attached to a post');
+      throw new StateConflictException(
+        'CONFLICT',
+        'Media is attached to a post',
+      );
     }
     await this.discard({ _id: id, postId: null });
   }
@@ -249,12 +242,10 @@ export class MediaService {
         )
         .exec();
       if (claimed.modifiedCount !== 1) {
-        throw new BadRequestException({
-          statusCode: HttpStatus.BAD_REQUEST,
-          error: 'Bad Request',
-          code: 'MEDIA_UNAVAILABLE',
-          message: `Media ${id} can't be attached: it doesn't exist, is used by another post, or failed to process`,
-        });
+        throw new InvalidInputException(
+          'MEDIA_UNAVAILABLE',
+          `Media ${id} can't be attached: it doesn't exist, is used by another post, or failed to process`,
+        );
       }
     }
   }

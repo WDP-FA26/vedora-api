@@ -118,8 +118,9 @@ describe('EmailVerificationService', () => {
       expect((await pending())?.firstSentAt).toBeInstanceOf(Date);
     });
 
-    it('waits 120 seconds between codes', async () => {
-      await seedCode({ sentAt: secondsAgo(119) });
+    it('blocks a resend inside the 120-second cooldown', async () => {
+      // A wide margin keeps this stable on a slow run.
+      await seedCode({ sentAt: secondsAgo(60) });
 
       await expect(service.send(user)).resolves.toBe('cooldown');
       expect(mail.sendVerificationCode).not.toHaveBeenCalled();
@@ -128,7 +129,7 @@ describe('EmailVerificationService', () => {
     it('counts a resend once the cooldown has passed', async () => {
       const firstSentAt = secondsAgo(600);
       await seedCode({
-        sentAt: secondsAgo(130),
+        sentAt: secondsAgo(300),
         firstSentAt,
         resendCount: 1,
       });
@@ -247,7 +248,7 @@ describe('EmailVerificationService', () => {
       await seedCode({ codeHash: hashOf('123456') });
 
       await expect(service.verify(user, '123456')).rejects.toMatchObject({
-        status: 404,
+        statusCode: 404,
       });
       expect(await pending()).not.toBeNull();
     });

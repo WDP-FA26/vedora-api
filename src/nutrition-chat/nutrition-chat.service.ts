@@ -1,8 +1,4 @@
-import {
-  Injectable,
-  Logger,
-  ServiceUnavailableException,
-} from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { type LanguageModel, toUIMessageStream } from 'ai';
 import { cannedReply } from '../ai/chat/canned-reply.js';
@@ -22,6 +18,7 @@ import type { ReasoningEffort } from '../ai/reasoning.js';
 import { KnowledgeSearchService } from '../knowledge/retrieval/knowledge-search.service.js';
 import type { ChatMessageDto } from './dto/nutrition-chat.dto.js';
 import { NutritionAgent } from './nutrition-chat.agent.js';
+import { FeatureUnavailableException } from '../common/exceptions/feature-unavailable.exception.js';
 
 const SEARCH_TIMEOUT_MS = 5000;
 
@@ -117,7 +114,10 @@ export class NutritionChatService {
     } catch (error) {
       if (abortSignal.aborted) throw error;
       this.logger.error(`Moderation failed: ${String(error)}`);
-      throw new ServiceUnavailableException('Moderation is unavailable');
+      throw new FeatureUnavailableException(
+        'SERVICE_UNAVAILABLE',
+        'Moderation is unavailable',
+      );
     }
   }
 }

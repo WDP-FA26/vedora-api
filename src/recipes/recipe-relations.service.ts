@@ -5,7 +5,7 @@ import { Ingredient, Post, PostStatus, Recipe, User } from '../mongo/models.js';
 import { allExist } from '../mongo/references.js';
 import { RecipeDetailDto } from './dto/recipe.dto.js';
 import { IncompatibilityRulesService } from './incompatibility-rules.service.js';
-import { badRequest } from './recipe-errors.js';
+import { InvalidInputException } from '../common/exceptions/invalid-input.exception.js';
 
 /**
  * Reads the collections a recipe card joins: its ingredient names, the source
@@ -125,7 +125,7 @@ export class RecipeRelationsService {
       allExist(this.posts, postIds),
     ]);
     if (!found || !post) {
-      throw badRequest(
+      throw new InvalidInputException(
         'UNKNOWN_REFERENCE',
         'An ingredient or the post in the request does not exist',
       );

@@ -14,11 +14,18 @@ import { Roles } from '../auth/roles.decorator.js';
 import { RolesGuard } from '../auth/roles.guard.js';
 import { AdminDashboardService } from './admin-dashboard.service.js';
 import { DashboardDto, DashboardQueryDto } from './dto/dashboard.dto.js';
+import { ErrorBodyDto } from '../common/exceptions/error-body.dto.js';
 
 @ApiTags('admin')
 @ApiBearerAuth()
-@ApiUnauthorizedResponse({ description: 'Authentication required' })
-@ApiForbiddenResponse({ description: 'ADMIN role required' })
+@ApiUnauthorizedResponse({
+  type: ErrorBodyDto,
+  description: 'Authentication required',
+})
+@ApiForbiddenResponse({
+  type: ErrorBodyDto,
+  description: 'ADMIN role required',
+})
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Roles(UserRole.ADMIN)
 @Controller('admin/dashboard')
@@ -34,6 +41,7 @@ export class AdminDashboardController {
   })
   @ApiOkResponse({ type: DashboardDto })
   @ApiBadRequestResponse({
+    type: ErrorBodyDto,
     description:
       'Invalid/partial date range, more than 90 days or unsupported query field',
   })

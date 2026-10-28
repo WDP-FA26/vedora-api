@@ -40,6 +40,7 @@ import {
 import { PostLikeResponseDto } from '../dto/post-like-response.dto.js';
 import { PostReportsService } from './post-reports.service.js';
 import { PostInteractionsService } from './post-interactions.service.js';
+import { ErrorBodyDto } from '../../common/exceptions/error-body.dto.js';
 
 @ApiTags('post-interactions')
 @Controller('posts/:postId')
@@ -187,7 +188,10 @@ export class PostInteractionsController {
     description: 'One report per account per post; not your own posts.',
   })
   @ApiCreatedResponse({ type: PostReportDto })
-  @ApiConflictResponse({ description: 'ALREADY_REPORTED (see `code`)' })
+  @ApiConflictResponse({
+    type: ErrorBodyDto,
+    description: 'ALREADY_REPORTED (see `code`)',
+  })
   report(
     @Param('postId', ParseUUIDPipe) postId: string,
     @Req() request: AuthenticatedRequest,

@@ -59,7 +59,7 @@ describe('KnowledgeModelsService', () => {
     });
   });
 
-  it('reports OpenRouter errors with their message', async () => {
+  it('keeps OpenRouter error details out of the public message', async () => {
     fetchMock.mockResolvedValue(
       Response.json(
         { error: { message: 'Insufficient credits' } },
@@ -67,9 +67,10 @@ describe('KnowledgeModelsService', () => {
       ),
     );
 
-    await expect(createService().embedQuery('q')).rejects.toThrow(
-      'OpenRouter /embeddings failed (402): Insufficient credits',
-    );
+    await expect(createService().embedQuery('q')).rejects.toMatchObject({
+      message: 'openrouter request failed',
+      reason: 'OpenRouter /embeddings failed (402): Insufficient credits',
+    });
   });
 
   it('reranks best first', async () => {
@@ -192,9 +193,12 @@ describe('KnowledgeModelsService', () => {
         ),
       );
 
-      await expect(createService().ocrPdf(new Uint8Array([1]))).rejects.toThrow(
-        'OCR returned no parse (402): Insufficient credits',
-      );
+      await expect(
+        createService().ocrPdf(new Uint8Array([1])),
+      ).rejects.toMatchObject({
+        message: 'openrouter request failed',
+        reason: 'OCR returned no parse (402): Insufficient credits',
+      });
     });
   });
 });

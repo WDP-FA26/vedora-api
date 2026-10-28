@@ -1,9 +1,7 @@
 import type { INestApplication } from '@nestjs/common';
-import {
-  BadRequestException,
-  ConflictException,
-  NotFoundException,
-} from '@nestjs/common';
+import { InvalidInputException } from '../../common/exceptions/invalid-input.exception.js';
+import { StateConflictException } from '../../common/exceptions/state-conflict.exception.js';
+import { ResourceNotFoundException } from '../../common/exceptions/resource-not-found.exception.js';
 import { Test } from '@nestjs/testing';
 import { createPost, createUser } from '../../../test/fixtures.js';
 import {
@@ -73,18 +71,18 @@ describe('PostReportsService', () => {
   });
 
   it('refuses reports on missing posts and on your own post', async () => {
-    await expect(file(author.id)).rejects.toBeInstanceOf(BadRequestException);
+    await expect(file(author.id)).rejects.toBeInstanceOf(InvalidInputException);
     await db.connection
       .model<Post>(Post.name)
       .updateOne({ _id: post.id }, { $set: { status: PostStatus.PROCESSING } });
-    await expect(file()).rejects.toBeInstanceOf(NotFoundException);
+    await expect(file()).rejects.toBeInstanceOf(ResourceNotFoundException);
     expect(await count('post_reports')).toBe(0);
   });
 
   it('answers 409 ALREADY_REPORTED for a second report', async () => {
     await file();
     await expect(file()).rejects.toMatchObject({
-      response: { code: 'ALREADY_REPORTED' },
+      code: 'ALREADY_REPORTED',
     });
     expect(await count('post_reports')).toBe(1);
   });
@@ -115,9 +113,9 @@ describe('PostReportsService', () => {
     });
     await expect(
       service.review(id, author.id, PostReportStatus.RESOLVED),
-    ).rejects.toBeInstanceOf(ConflictException);
+    ).rejects.toBeInstanceOf(StateConflictException);
     await expect(
       service.review(crypto.randomUUID(), author.id, PostReportStatus.RESOLVED),
-    ).rejects.toBeInstanceOf(NotFoundException);
+    ).rejects.toBeInstanceOf(ResourceNotFoundException);
   });
 });

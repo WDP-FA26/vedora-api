@@ -123,9 +123,9 @@ Ví dụ lỗi thiếu quyền quản trị:
 
 ```json
 {
-  "message": "Insufficient permissions",
-  "error": "Forbidden",
-  "statusCode": 403
+  "statusCode": 403,
+  "code": "FORBIDDEN",
+  "message": "Insufficient permissions"
 }
 ```
 
@@ -133,15 +133,16 @@ Ví dụ USER thao tác tài khoản khác:
 
 ```json
 {
-  "message": "You can only access your own account",
-  "error": "Forbidden",
-  "statusCode": 403
+  "statusCode": 403,
+  "code": "FORBIDDEN",
+  "message": "You can only access your own account"
 }
 ```
 
-Các lỗi này dùng body mặc định của NestJS, không có field `code` riêng. Không áp dụng
-quy tắc xử lý `403` quản trị cho `POST /auth/login`: `EMAIL_NOT_VERIFIED` vẫn thuộc
-luồng xác minh email hiện tại.
+Mọi lỗi dùng cùng cấu trúc `{ statusCode, code, message, details? }`, xem
+[errors.md](errors.md). Không áp dụng quy tắc xử lý `403` quản trị cho
+`POST /auth/login`: `EMAIL_NOT_VERIFIED` (kèm `details.email`) vẫn thuộc luồng xác minh
+email hiện tại.
 
 ## Các việc FE cần tích hợp
 

@@ -1,9 +1,4 @@
-import {
-  BadRequestException,
-  ForbiddenException,
-  Injectable,
-  NotFoundException,
-} from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import type { Model } from 'mongoose';
 import type { AuthenticatedUser } from '../../auth/auth.types.js';
@@ -35,6 +30,9 @@ import {
   PostRepostResponseDto,
 } from '../dto/post-interaction.dto.js';
 import { PostLikeResponseDto } from '../dto/post-like-response.dto.js';
+import { AccessDeniedException } from '../../common/exceptions/access-denied.exception.js';
+import { InvalidInputException } from '../../common/exceptions/invalid-input.exception.js';
+import { ResourceNotFoundException } from '../../common/exceptions/resource-not-found.exception.js';
 
 function toCommentDto(comment: PostComment, author: User): CommentResponseDto {
   return {
@@ -78,7 +76,11 @@ export class PostInteractionsService {
       const cursor = await this.comments
         .findOne({ ...filter, _id: query.cursor })
         .exec();
-      if (!cursor) throw new BadRequestException('Invalid comment cursor');
+      if (!cursor)
+        throw new InvalidInputException(
+          'BAD_REQUEST',
+          'Invalid comment cursor',
+        );
       Object.assign(
         filter,
         afterCursor('createdAt', { value: cursor.createdAt, id: cursor.id }),
@@ -135,7 +137,10 @@ export class PostInteractionsService {
     await this.requirePublishedPost(postId);
     const comment = await this.requireComment(postId, commentId);
     if (comment.authorId !== actor.sub)
-      throw new ForbiddenException('Only the author can edit this comment');
+      throw new AccessDeniedException(
+        'FORBIDDEN',
+        'Only the author can edit this comment',
+      );
     const updated = await this.comments
       .findOneAndUpdate(
         { _id: commentId, postId, authorId: actor.sub },
@@ -143,7 +148,8 @@ export class PostInteractionsService {
         { returnDocument: 'after' },
       )
       .exec();
-    if (!updated) throw new NotFoundException('Comment not found');
+    if (!updated)
+      throw new ResourceNotFoundException('NOT_FOUND', 'Comment not found');
     return this.loadComment(commentId);
   }
 
@@ -159,7 +165,10 @@ export class PostInteractionsService {
       post.authorId !== actor.sub &&
       actor.role !== UserRole.ADMIN
     ) {
-      throw new ForbiddenException('You cannot delete this comment');
+      throw new AccessDeniedException(
+        'FORBIDDEN',
+        'You cannot delete this comment',
+      );
     }
     // A concurrent deletion simply deletes nothing.
     await this.comments.deleteOne({ _id: commentId, postId }).exec();
@@ -246,9 +255,11 @@ export class PostInteractionsService {
 
   private async loadComment(id: string): Promise<CommentResponseDto> {
     const comment = await this.comments.findOne({ _id: id }).exec();
-    if (!comment) throw new NotFoundException('Comment not found');
+    if (!comment)
+      throw new ResourceNotFoundException('NOT_FOUND', 'Comment not found');
     const author = await this.users.findOne({ _id: comment.authorId }).exec();
-    if (!author) throw new NotFoundException('Comment not found');
+    if (!author)
+      throw new ResourceNotFoundException('NOT_FOUND', 'Comment not found');
     return toCommentDto(comment, author);
   }
 
@@ -257,7 +268,8 @@ export class PostInteractionsService {
       .findOne({ _id: postId, status: PostStatus.PUBLISHED })
       .select('authorId')
       .exec();
-    if (!post) throw new NotFoundException('Post not found');
+    if (!post)
+      throw new ResourceNotFoundException('NOT_FOUND', 'Post not found');
     return post;
   }
 
@@ -266,7 +278,8 @@ export class PostInteractionsService {
       .findOne({ _id: commentId, postId })
       .select('authorId')
       .exec();
-    if (!comment) throw new NotFoundException('Comment not found');
+    if (!comment)
+      throw new ResourceNotFoundException('NOT_FOUND', 'Comment not found');
     return comment;
   }
 }

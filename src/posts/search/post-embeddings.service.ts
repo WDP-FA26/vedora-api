@@ -10,6 +10,7 @@ import {
   ValidateNested,
 } from 'class-validator';
 import { parsePayload, validatePayload } from '../../common/validation.js';
+import { ExternalServiceException } from '../../common/exceptions/external-service.exception.js';
 
 const OPENROUTER_API = 'https://openrouter.ai/api/v1';
 const BATCH = 64;
@@ -108,11 +109,12 @@ export class PostEmbeddingsService {
     const json: unknown = await response.json();
     if (!response.ok) {
       const message = validatePayload(ErrorBodyDto, json).value?.error?.message;
-      throw new Error(
+      throw new ExternalServiceException(
+        'openrouter',
         `OpenRouter /embeddings failed (${response.status}): ${message ?? 'no message'}`,
       );
     }
-    return parsePayload(EmbeddingsResponseDto, json)
+    return parsePayload('openrouter', EmbeddingsResponseDto, json)
       .data.map((item, position) => ({
         ...item,
         index: item.index ?? position,

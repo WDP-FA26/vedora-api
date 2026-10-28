@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { randomUUID } from 'node:crypto';
 import type { Model } from 'mongoose';
@@ -17,6 +17,7 @@ import {
   toRecipeCard,
 } from './dto/recipe.dto.js';
 import { RecipeRelationsService } from './recipe-relations.service.js';
+import { ResourceNotFoundException } from '../common/exceptions/resource-not-found.exception.js';
 
 @Injectable()
 export class RecipesService {
@@ -49,7 +50,8 @@ export class RecipesService {
 
   async findOne(id: string): Promise<RecipeDetailDto> {
     const row = await this.recipes.findOne({ _id: id }).exec();
-    if (!row) throw new NotFoundException('Recipe not found');
+    if (!row)
+      throw new ResourceNotFoundException('NOT_FOUND', 'Recipe not found');
     const [recipe] = await this.relations.hydrate([row]);
     return recipe;
   }
@@ -70,7 +72,7 @@ export class RecipesService {
       .updateOne({ _id: id }, { $set: toData(dto) })
       .exec();
     if (updated.matchedCount === 0) {
-      throw new NotFoundException('Recipe not found');
+      throw new ResourceNotFoundException('NOT_FOUND', 'Recipe not found');
     }
     return this.findOne(id);
   }
@@ -79,7 +81,8 @@ export class RecipesService {
     const { deletedCount } = await this.mongo.withTransaction((session) =>
       this.recipes.deleteOne({ _id: id }, { session }).exec(),
     );
-    if (deletedCount === 0) throw new NotFoundException('Recipe not found');
+    if (deletedCount === 0)
+      throw new ResourceNotFoundException('NOT_FOUND', 'Recipe not found');
   }
 }
 

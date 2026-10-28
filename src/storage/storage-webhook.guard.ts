@@ -4,9 +4,9 @@ import {
   ExecutionContext,
   Injectable,
   Logger,
-  UnauthorizedException,
 } from '@nestjs/common';
 import type { Request } from 'express';
+import { UnauthenticatedException } from '../common/exceptions/unauthenticated.exception.js';
 import { StorageService } from './storage.service.js';
 
 @Injectable()
@@ -28,6 +28,6 @@ export class StorageWebhookGuard implements CanActivate {
     )
       return true;
     this.logger.warn(`Rejected a storage event for ${request.path}`);
-    throw new UnauthorizedException();
+    throw new UnauthenticatedException('UNAUTHORIZED', 'Unauthorized');
   }
 }

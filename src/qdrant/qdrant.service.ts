@@ -1,6 +1,7 @@
 import { Injectable, type OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { QdrantClient } from '@qdrant/js-client-rest';
+import { ExternalServiceException } from '../common/exceptions/external-service.exception.js';
 
 /** How long startup waits for Qdrant before refusing to start. */
 const STARTUP_TIMEOUT_MS = 5_000;
@@ -41,7 +42,8 @@ export class QdrantService extends QdrantClient implements OnModuleInit {
       probe.catch(() => undefined);
       await Promise.race([probe, timeout]);
     } catch (error) {
-      throw new Error(
+      throw new ExternalServiceException(
+        'qdrant',
         `Qdrant at ${this.url} is not reachable: ${describeError(error)}`,
         { cause: error },
       );

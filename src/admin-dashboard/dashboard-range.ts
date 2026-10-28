@@ -1,4 +1,4 @@
-import { BadRequestException } from '@nestjs/common';
+import { InvalidInputException } from '../common/exceptions/invalid-input.exception.js';
 
 export const DASHBOARD_TIME_ZONE = 'Asia/Bangkok';
 export const DAY_MS = 86_400_000;
@@ -14,11 +14,10 @@ export interface DashboardRange {
 }
 
 function invalidRange(): never {
-  throw new BadRequestException({
-    code: 'INVALID_DASHBOARD_RANGE',
-    message:
-      'Provide both from/to as valid YYYY-MM-DD dates, in ascending order, spanning at most 90 inclusive days',
-  });
+  throw new InvalidInputException(
+    'INVALID_DASHBOARD_RANGE',
+    'Provide both from/to as valid YYYY-MM-DD dates, in ascending order, spanning at most 90 inclusive days',
+  );
 }
 
 function dayEpoch(value: string): number {

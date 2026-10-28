@@ -1,4 +1,4 @@
-import { ServiceUnavailableException } from '@nestjs/common';
+import { FeatureUnavailableException } from '../common/exceptions/feature-unavailable.exception.js';
 import { ConfigService } from '@nestjs/config';
 import { Test } from '@nestjs/testing';
 import { simulateReadableStream, type UIMessageChunk } from 'ai';
@@ -194,7 +194,7 @@ describe('NutritionChatService', () => {
   it('retries moderation with backoff before giving up', async () => {
     verdict = 'not-a-verdict';
     const chunks = ask('Đậu phụ có bao nhiêu canxi?');
-    await expect(chunks).rejects.toThrow(ServiceUnavailableException);
+    await expect(chunks).rejects.toThrow(FeatureUnavailableException);
     expect(moderator.doGenerateCalls).toHaveLength(3);
   });
 
@@ -202,7 +202,7 @@ describe('NutritionChatService', () => {
     verdict = 'not-a-verdict';
 
     await expect(ask('Đậu phụ có bao nhiêu canxi?')).rejects.toThrow(
-      ServiceUnavailableException,
+      FeatureUnavailableException,
     );
     expect(model.doStreamCalls).toHaveLength(0);
   });

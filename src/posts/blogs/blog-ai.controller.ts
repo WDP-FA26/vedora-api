@@ -13,7 +13,6 @@ import {
   ApiNotFoundResponse,
   ApiOkResponse,
   ApiOperation,
-  ApiProduces,
   ApiServiceUnavailableResponse,
   ApiTags,
   ApiTooManyRequestsResponse,
@@ -30,10 +29,14 @@ import {
   BlogAssistantChatDto,
   BlogAssistantQuotaDto,
 } from '../dto/blog-ai.dto.js';
+import { ErrorBodyDto } from '../../common/exceptions/error-body.dto.js';
 
 @ApiTags('blogs')
 @ApiBearerAuth()
-@ApiUnauthorizedResponse({ description: 'Authentication required' })
+@ApiUnauthorizedResponse({
+  type: ErrorBodyDto,
+  description: 'Authentication required',
+})
 @UseGuards(JwtAuthGuard)
 @Controller('blogs/ai')
 export class BlogAiController {
@@ -56,8 +59,8 @@ export class BlogAiController {
     description:
       'Streams an AI SDK UI message stream (SSE) for `useChat`. Send the editor state with every request. Editor tools (`replaceSelection`, `replaceText`, `insertMarkdown`, `setTitle`, `insertImage`) have no server side: apply them in the editor after the user accepts, answer with `addToolOutput({ applied })`, and let `lastAssistantMessageIsCompleteWithToolCalls` resume the turn. `generateImage` and `editImage` run here and return a stored image URL.',
   })
-  @ApiProduces('text/event-stream')
   @ApiOkResponse({
+    content: { 'text/event-stream': {} },
     description: [
       'UI message stream chunks (`start`, `text-delta`, `tool-input-available`, `tool-output-available`, `finish`, …). A refused message streams one fixed reply whose `start` chunk carries `messageMetadata: { refused: true }`.',
       '',
@@ -73,14 +76,20 @@ export class BlogAiController {
     ].join('\n'),
   })
   @ApiBadRequestResponse({
+    type: ErrorBodyDto,
     description: '`BLOG_AI_INVALID_MESSAGES`: malformed history or tool parts',
   })
-  @ApiNotFoundResponse({ description: '`blogId` is not one of your blogs' })
+  @ApiNotFoundResponse({
+    type: ErrorBodyDto,
+    description: '`blogId` is not one of your blogs',
+  })
   @ApiTooManyRequestsResponse({
+    type: ErrorBodyDto,
     description:
       '`AI_QUOTA_EXCEEDED` when the daily allowance is spent, or more than 30 requests a minute',
   })
   @ApiServiceUnavailableResponse({
+    type: ErrorBodyDto,
     description: 'The moderation model failed or timed out',
   })
   async chat(

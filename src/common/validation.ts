@@ -1,5 +1,9 @@
 import { plainToInstance, type ClassConstructor } from 'class-transformer';
 import { validateSync, type ValidationError } from 'class-validator';
+import {
+  ExternalServiceException,
+  type ExternalService,
+} from './exceptions/external-service.exception.js';
 
 export interface ValidationResult<T> {
   /** The payload as the DTO class, or null when any rule failed. */
@@ -41,12 +45,21 @@ function errorMessages(errors: ValidationError[], path = ''): string[] {
   });
 }
 
-/** `validatePayload`, throwing instead of returning the failures. */
+/**
+ * `validatePayload`, throwing instead of returning the failures. Only for
+ * responses from an external service: a malformed one is that service's fault.
+ */
 export function parsePayload<T extends object>(
+  service: ExternalService,
   cls: ClassConstructor<T>,
   payload: unknown,
 ): T {
   const { value, errors } = validatePayload(cls, payload);
-  if (!value) throw new Error(`Invalid ${cls.name}: ${errors.join('; ')}`);
+  if (!value) {
+    throw new ExternalServiceException(
+      service,
+      `Invalid ${cls.name}: ${errors.join('; ')}`,
+    );
+  }
   return value;
 }

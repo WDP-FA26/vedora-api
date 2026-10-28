@@ -1,4 +1,3 @@
-import { BadRequestException } from '@nestjs/common';
 import { Transform } from 'class-transformer';
 import {
   IsIn,
@@ -11,6 +10,7 @@ import {
   Min,
 } from 'class-validator';
 import { validatePayload } from '../common/validation.js';
+import { InvalidInputException } from '../common/exceptions/invalid-input.exception.js';
 
 /** SePay's "Banking" webhook body, as sent on a completed transfer. */
 class BankWebhookPayload {
@@ -66,7 +66,11 @@ class BankWebhookPayload {
 export function parseBankWebhook(body: unknown) {
   const parsed = validatePayload(BankWebhookPayload, body);
   const data = parsed.value;
-  if (!data) throw new BadRequestException('Invalid SePay Banking payload');
+  if (!data)
+    throw new InvalidInputException(
+      'BAD_REQUEST',
+      'Invalid SePay Banking payload',
+    );
   const localIso = data.transactionDate.replace(' ', 'T');
   const paidAt = new Date(`${localIso}+07:00`);
   // Strict round-trip rejects invalid dates and leap/clock overflows.
@@ -76,6 +80,9 @@ export function parseBankWebhook(body: unknown) {
     new Date(paidAt.getTime() + 7 * 3_600_000).toISOString().slice(0, 19) !==
       localIso
   )
-    throw new BadRequestException('Invalid SePay transactionDate');
+    throw new InvalidInputException(
+      'BAD_REQUEST',
+      'Invalid SePay transactionDate',
+    );
   return { ...data, paidAt, providerTransactionId: `BANK-${data.id}` };
 }

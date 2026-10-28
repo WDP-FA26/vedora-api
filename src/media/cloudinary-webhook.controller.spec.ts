@@ -58,13 +58,13 @@ describe('CloudinaryWebhookController', () => {
   it('rejects notifications signed with another secret', async () => {
     await expect(
       controller.receive(Buffer.from(body), sign(body, { key: 'wrong' })),
-    ).rejects.toMatchObject({ status: 400 });
+    ).rejects.toMatchObject({ statusCode: 400 });
     expect(mediaService.handleNotification).not.toHaveBeenCalled();
   });
 
   it('rejects replays of old notifications', async () => {
     await expect(
       controller.receive(Buffer.from(body), sign(body, { age: 3 * 3600 })),
-    ).rejects.toMatchObject({ status: 400 });
+    ).rejects.toMatchObject({ statusCode: 400 });
   });
 });

@@ -1,4 +1,6 @@
 import { Module } from '@nestjs/common';
+import { APP_FILTER } from '@nestjs/core';
+import { AppExceptionFilter } from './common/exceptions/app-exception.filter.js';
 import { ConfigModule } from '@nestjs/config';
 import { ScheduleModule } from '@nestjs/schedule';
 import { validateEnvironment } from './config/environment.js';
@@ -54,5 +56,6 @@ import { VerificationModule } from './verification/verification.module.js';
     StorageWebhookModule,
   ],
   controllers: [AppController],
+  providers: [{ provide: APP_FILTER, useClass: AppExceptionFilter }],
 })
 export class AppModule {}

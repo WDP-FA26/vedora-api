@@ -1,8 +1,5 @@
-import {
-  Injectable,
-  NotFoundException,
-  UnauthorizedException,
-} from '@nestjs/common';
+import { rethrowAsStateConflict } from '../mongo/unique-conflict.js';
+import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { randomUUID } from 'node:crypto';
 import type { Model } from 'mongoose';
@@ -25,6 +22,8 @@ import {
   RecipeRelationsService,
   sourcePostIds,
 } from './recipe-relations.service.js';
+import { ResourceNotFoundException } from '../common/exceptions/resource-not-found.exception.js';
+import { UnauthenticatedException } from '../common/exceptions/unauthenticated.exception.js';
 
 @Injectable()
 export class RecipeFavoritesService {
@@ -94,8 +93,13 @@ export class RecipeFavoritesService {
         .findOne({ _id: recipeId })
         .session(session)
         .exec();
-      if (!user) throw new UnauthorizedException('Account no longer exists');
-      if (!recipe) throw new NotFoundException('Recipe not found');
+      if (!user)
+        throw new UnauthenticatedException(
+          'UNAUTHORIZED',
+          'Account no longer exists',
+        );
+      if (!recipe)
+        throw new ResourceNotFoundException('NOT_FOUND', 'Recipe not found');
       if (isFavorite) {
         // Duplicate retries preserve the original savedAt and ordering.
         await this.favorites
@@ -104,7 +108,14 @@ export class RecipeFavoritesService {
             { $setOnInsert: { _id: randomUUID(), createdAt: new Date() } },
             { upsert: true, session },
           )
-          .exec();
+          .exec()
+          .catch((error: unknown) =>
+            rethrowAsStateConflict(
+              error,
+              'FAVORITE_CONFLICT',
+              'The favorite changed; reload and try again',
+            ),
+          );
       } else {
         await this.favorites
           .deleteOne({ recipeId, userId }, { session })

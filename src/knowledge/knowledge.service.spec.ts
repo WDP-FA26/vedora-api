@@ -1,9 +1,7 @@
 import type { INestApplication } from '@nestjs/common';
-import {
-  PayloadTooLargeException,
-  ServiceUnavailableException,
-  UnsupportedMediaTypeException,
-} from '@nestjs/common';
+import { FileTooLargeException } from '../common/exceptions/file-too-large.exception.js';
+import { FeatureUnavailableException } from '../common/exceptions/feature-unavailable.exception.js';
+import { UnsupportedFileTypeException } from '../common/exceptions/unsupported-file-type.exception.js';
 import { ConfigService } from '@nestjs/config';
 import { Test } from '@nestjs/testing';
 import { NoSuchKey } from '@aws-sdk/client-s3';
@@ -129,25 +127,28 @@ describe('KnowledgeService', () => {
     it('refuses anything but PDFs', async () => {
       await expect(
         service.createUpload('user', 'anh-mon-an.jpg', 1234),
-      ).rejects.toBeInstanceOf(UnsupportedMediaTypeException);
+      ).rejects.toBeInstanceOf(UnsupportedFileTypeException);
       expect(await documents().countDocuments()).toBe(0);
     });
 
     it('refuses files over MAX_KNOWLEDGE_FILE_MB', async () => {
       await expect(
         service.createUpload('user', 'a.pdf', 50 * 1024 * 1024 + 1),
-      ).rejects.toBeInstanceOf(PayloadTooLargeException);
+      ).rejects.toBeInstanceOf(FileTooLargeException);
       expect(await documents().countDocuments()).toBe(0);
     });
 
     it('creates no document while storage is not configured', async () => {
       storage.presignUpload.mockRejectedValue(
-        new ServiceUnavailableException(),
+        new FeatureUnavailableException(
+          'SERVICE_UNAVAILABLE',
+          'File storage is not configured',
+        ),
       );
 
       await expect(
         service.createUpload('user', 'a.pdf', 1),
-      ).rejects.toBeInstanceOf(ServiceUnavailableException);
+      ).rejects.toBeInstanceOf(FeatureUnavailableException);
       expect(await documents().countDocuments()).toBe(0);
     });
   });

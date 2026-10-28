@@ -5,6 +5,7 @@ import type { ReasoningEffort } from '../../ai/reasoning.js';
 import { generateText, type LanguageModel, Output } from 'ai';
 import { z } from 'zod';
 import { parsePayload, validatePayload } from '../../common/validation.js';
+import { ExternalServiceException } from '../../common/exceptions/external-service.exception.js';
 import { type SpeechAudio, toOriginalTime } from './speech-audio.js';
 import {
   OpenRouterErrorBody,
@@ -105,11 +106,12 @@ export class TranscriptionService {
     if (!response.ok) {
       const message = validatePayload(OpenRouterErrorBody, body).value?.error
         ?.message;
-      throw new Error(
+      throw new ExternalServiceException(
+        'openrouter',
         `Transcription answered ${response.status}${message ? `: ${message}` : ''}`,
       );
     }
-    const result = parsePayload(TranscriptionResponse, body);
+    const result = parsePayload('openrouter', TranscriptionResponse, body);
     const audioEnd = speech.reduce(
       (sum, { start, end }) => sum + end - start,
       0,
@@ -146,7 +148,8 @@ export class TranscriptionService {
       abortSignal: AbortSignal.timeout(TRANSLATE_TIMEOUT_MS),
     });
     if (output.lines.length !== cues.length) {
-      throw new Error(
+      throw new ExternalServiceException(
+        'openrouter',
         `Translation returned ${output.lines.length} lines for ${cues.length} cues`,
       );
     }

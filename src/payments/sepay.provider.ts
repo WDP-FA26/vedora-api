@@ -1,10 +1,8 @@
 import { timingSafeEqual } from 'node:crypto';
-import {
-  Injectable,
-  ServiceUnavailableException,
-  UnauthorizedException,
-} from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { FeatureUnavailableException } from '../common/exceptions/feature-unavailable.exception.js';
+import { UnauthenticatedException } from '../common/exceptions/unauthenticated.exception.js';
 
 export interface BankSnapshot {
   bankCode: string;
@@ -21,10 +19,10 @@ export class SePayProvider {
 
   assertEnabled(): void {
     if (!this.config.get<boolean>('SEPAY_PAYMENT_ENABLED', false))
-      throw new ServiceUnavailableException({
-        code: 'PAYMENTS_DISABLED',
-        message: 'SePay payments are not enabled',
-      });
+      throw new FeatureUnavailableException(
+        'PAYMENTS_DISABLED',
+        'SePay payments are not enabled',
+      );
   }
 
   verifyWebhook(authorization?: string): void {
@@ -38,7 +36,10 @@ export class SePayProvider {
       actual.length !== secret.length ||
       !timingSafeEqual(actual, secret)
     )
-      throw new UnauthorizedException('Invalid SePay webhook credentials');
+      throw new UnauthenticatedException(
+        'UNAUTHORIZED',
+        'Invalid SePay webhook credentials',
+      );
   }
 
   snapshot(paymentCode: string): BankSnapshot {

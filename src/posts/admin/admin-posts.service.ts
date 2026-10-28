@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import type { Model } from 'mongoose';
 import {
@@ -11,6 +11,7 @@ import { MediaService } from '../../media/media.service.js';
 import { type MediaAsset, Post } from '../../mongo/models.js';
 import { AdminPostDto, AdminPostsQueryDto } from '../dto/admin-post.dto.js';
 import { PostRelationsService } from '../post-relations.service.js';
+import { ResourceNotFoundException } from '../../common/exceptions/resource-not-found.exception.js';
 
 /** Every post whatever its status, for the admin content page. */
 @Injectable()
@@ -40,7 +41,8 @@ export class AdminPostsService {
 
   async findOne(id: string): Promise<AdminPostDto> {
     const row = await this.posts.findOne({ _id: id }).exec();
-    if (!row) throw new NotFoundException('Post not found');
+    if (!row)
+      throw new ResourceNotFoundException('NOT_FOUND', 'Post not found');
     const [dto] = await this.toDtos([row]);
     return dto;
   }

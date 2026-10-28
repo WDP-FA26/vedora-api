@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { randomUUID } from 'node:crypto';
 import type { ClientSession, Model } from 'mongoose';
@@ -18,7 +18,9 @@ import {
   SaveIngredientDto,
   SaveIngredientGroupDto,
 } from './dto/ingredient.dto.js';
-import { badRequest, conflict } from './recipe-errors.js';
+import { ResourceNotFoundException } from '../common/exceptions/resource-not-found.exception.js';
+import { StateConflictException } from '../common/exceptions/state-conflict.exception.js';
+import { InvalidInputException } from '../common/exceptions/invalid-input.exception.js';
 
 /** The ingredient catalog and the groups that share incompatibility rules. */
 @Injectable()
@@ -96,7 +98,10 @@ export class IngredientsService {
         )
         .exec();
       if (updated.matchedCount === 0) {
-        throw new NotFoundException('Ingredient not found');
+        throw new ResourceNotFoundException(
+          'NOT_FOUND',
+          'Ingredient not found',
+        );
       }
       const groupIds = dto.groupIds ?? [];
       await this.groups
@@ -128,7 +133,7 @@ export class IngredientsService {
         .session(session)
         .exec();
       if (inUse > 0) {
-        throw conflict(
+        throw new StateConflictException(
           'INGREDIENT_IN_USE',
           'Remove the ingredient from its recipes first',
         );
@@ -137,7 +142,10 @@ export class IngredientsService {
         .deleteOne({ _id: id }, { session })
         .exec();
       if (deletedCount === 0) {
-        throw new NotFoundException('Ingredient not found');
+        throw new ResourceNotFoundException(
+          'NOT_FOUND',
+          'Ingredient not found',
+        );
       }
     });
   }
@@ -203,7 +211,10 @@ export class IngredientsService {
         )
         .exec();
       if (updated.matchedCount === 0) {
-        throw new NotFoundException('Ingredient group not found');
+        throw new ResourceNotFoundException(
+          'NOT_FOUND',
+          'Ingredient group not found',
+        );
       }
     });
     return this.findGroup(id);
@@ -216,7 +227,10 @@ export class IngredientsService {
         .deleteOne({ _id: id }, { session })
         .exec();
       if (deletedCount === 0) {
-        throw new NotFoundException('Ingredient group not found');
+        throw new ResourceNotFoundException(
+          'NOT_FOUND',
+          'Ingredient group not found',
+        );
       }
     });
   }
@@ -230,30 +244,46 @@ export class IngredientsService {
       await this.mongo.withTransaction(run);
     } catch (error: unknown) {
       if (!isUniqueViolation(error)) throw error;
-      throw conflict('NAME_TAKEN', `${subject} name is already used`);
+      throw new StateConflictException(
+        'NAME_TAKEN',
+        `${subject} name is already used`,
+      );
     }
   }
 
   private async requireGroups(ids: string[] | undefined): Promise<void> {
     const found = await allExist(this.groups, ids ?? []);
-    if (!found) throw unknownReference();
+    if (!found)
+      throw new InvalidInputException(
+        'UNKNOWN_REFERENCE',
+        'An id in the request does not exist',
+      );
   }
 
   private async requireIngredients(ids: string[] | undefined): Promise<void> {
     const found = await allExist(this.ingredients, ids ?? []);
-    if (!found) throw unknownReference();
+    if (!found)
+      throw new InvalidInputException(
+        'UNKNOWN_REFERENCE',
+        'An id in the request does not exist',
+      );
   }
 
   private async findIngredient(id: string): Promise<IngredientDto> {
     const row = await this.ingredients.findOne({ _id: id }).exec();
-    if (!row) throw new NotFoundException('Ingredient not found');
+    if (!row)
+      throw new ResourceNotFoundException('NOT_FOUND', 'Ingredient not found');
     const [dto] = await this.toIngredients([row]);
     return dto;
   }
 
   private async findGroup(id: string): Promise<IngredientGroupDto> {
     const row = await this.groups.findOne({ _id: id }).exec();
-    if (!row) throw new NotFoundException('Ingredient group not found');
+    if (!row)
+      throw new ResourceNotFoundException(
+        'NOT_FOUND',
+        'Ingredient group not found',
+      );
     const [dto] = await this.toGroups([row]);
     return dto;
   }
@@ -316,6 +346,3 @@ export class IngredientsService {
     }));
   }
 }
-
-const unknownReference = () =>
-  badRequest('UNKNOWN_REFERENCE', 'An id in the request does not exist');

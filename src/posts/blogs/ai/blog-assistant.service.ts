@@ -1,12 +1,4 @@
-import {
-  BadRequestException,
-  HttpException,
-  HttpStatus,
-  Injectable,
-  Logger,
-  NotFoundException,
-  ServiceUnavailableException,
-} from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectModel } from '@nestjs/mongoose';
 import type { Model } from 'mongoose';
@@ -58,6 +50,10 @@ import {
   blogAssistantTools,
 } from './blog-assistant.tools.js';
 import { BlogImageGeneratorService } from './blog-image-generator.service.js';
+import { FeatureUnavailableException } from '../../../common/exceptions/feature-unavailable.exception.js';
+import { InvalidInputException } from '../../../common/exceptions/invalid-input.exception.js';
+import { QuotaReachedException } from '../../../common/exceptions/quota-reached.exception.js';
+import { ResourceNotFoundException } from '../../../common/exceptions/resource-not-found.exception.js';
 
 // room to search, generate an image and propose a couple of edits
 const MAX_STEPS = 8;
@@ -130,14 +126,9 @@ export class BlogAssistantService {
       : [];
 
     if (!(await this.usage.consume(userId, AiFeature.BLOG_CHAT))) {
-      throw new HttpException(
-        {
-          code: 'AI_QUOTA_EXCEEDED',
-          message: 'You have used all assistant requests for today',
-          statusCode: HttpStatus.TOO_MANY_REQUESTS,
-          error: 'Too Many Requests',
-        },
-        HttpStatus.TOO_MANY_REQUESTS,
+      throw new QuotaReachedException(
+        'AI_QUOTA_EXCEEDED',
+        'You have used all assistant requests for today',
       );
     }
 
@@ -152,7 +143,10 @@ export class BlogAssistantService {
         await this.refund(userId);
         if (abortSignal.aborted) throw error;
         this.logger.error(`Moderation failed: ${String(error)}`);
-        throw new ServiceUnavailableException('Moderation is unavailable');
+        throw new FeatureUnavailableException(
+          'SERVICE_UNAVAILABLE',
+          'Moderation is unavailable',
+        );
       });
       const refusal = blogRefusal(verdict);
       if (refusal) {
@@ -204,7 +198,8 @@ export class BlogAssistantService {
       .findOne({ _id: blogId, authorId: userId, type: PostType.BLOG })
       .select('blog.recipeIds')
       .exec();
-    if (!post) throw new NotFoundException('Blog not found');
+    if (!post)
+      throw new ResourceNotFoundException('NOT_FOUND', 'Blog not found');
     const recipeIds = post.blog?.recipeIds ?? [];
     if (recipeIds.length === 0) return [];
     const recipes = await this.recipes.find({ _id: { $in: recipeIds } }).exec();
@@ -296,12 +291,7 @@ export async function parseMessages(
 }
 
 function invalidMessages(message: string): never {
-  throw new BadRequestException({
-    code: 'BLOG_AI_INVALID_MESSAGES',
-    message,
-    statusCode: 400,
-    error: 'Bad Request',
-  });
+  throw new InvalidInputException('BLOG_AI_INVALID_MESSAGES', message);
 }
 
 function textOf(message: UIMessage): string {

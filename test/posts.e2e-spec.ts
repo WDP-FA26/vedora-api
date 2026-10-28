@@ -102,9 +102,9 @@ describe('Post reads and admin posts (e2e)', () => {
       .auth(userToken, { type: 'bearer' })
       .send({ type: PostType.POST, body: words(251) })
       .expect(400);
-    expect((response.body as { message: string[] }).message).toEqual([
-      'body must be at most 250 words',
-    ]);
+    expect(
+      (response.body as { details: { messages: string[] } }).details.messages,
+    ).toEqual(['body must be at most 250 words']);
   });
 
   it('searches published posts in match order for guests', async () => {

@@ -1,8 +1,6 @@
-import {
-  ForbiddenException,
-  INestApplication,
-  UnauthorizedException,
-} from '@nestjs/common';
+import { INestApplication } from '@nestjs/common';
+import { AccessDeniedException } from '../src/common/exceptions/access-denied.exception.js';
+import { UnauthenticatedException } from '../src/common/exceptions/unauthenticated.exception.js';
 import request from 'supertest';
 import type { App } from 'supertest/types.js';
 import { mockDeep, mockReset } from 'vitest-mock-extended';
@@ -119,7 +117,10 @@ describe('Password login requires Turnstile (HTTP)', () => {
 
   it('preserves the invalid credentials response after a successful challenge', async () => {
     auth.login.mockRejectedValue(
-      new UnauthorizedException('Invalid username or password'),
+      new UnauthenticatedException(
+        'UNAUTHORIZED',
+        'Invalid username or password',
+      ),
     );
     await request(app.getHttpServer())
       .post('/api/v1/auth/login')
@@ -130,10 +131,11 @@ describe('Password login requires Turnstile (HTTP)', () => {
 
   it('preserves the email verification flow after a successful challenge', async () => {
     auth.login.mockRejectedValue(
-      new ForbiddenException({
-        code: 'EMAIL_NOT_VERIFIED',
-        email: 'user@example.test',
-      }),
+      new AccessDeniedException(
+        'EMAIL_NOT_VERIFIED',
+        'Email address is not verified',
+        { email: 'user@example.test' },
+      ),
     );
     const response = await request(app.getHttpServer())
       .post('/api/v1/auth/login')
@@ -141,7 +143,7 @@ describe('Password login requires Turnstile (HTTP)', () => {
       .expect(403);
     expect(response.body).toMatchObject({
       code: 'EMAIL_NOT_VERIFIED',
-      email: 'user@example.test',
+      details: { email: 'user@example.test' },
     });
   });
 });

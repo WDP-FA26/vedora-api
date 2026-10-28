@@ -40,11 +40,18 @@ import {
 } from './dto/ingredient.dto.js';
 import { IncompatibilityRulesService } from './incompatibility-rules.service.js';
 import { IngredientsService } from './ingredients.service.js';
+import { ErrorBodyDto } from '../common/exceptions/error-body.dto.js';
 
 @ApiTags('admin')
 @ApiBearerAuth()
-@ApiUnauthorizedResponse({ description: 'Authentication required' })
-@ApiForbiddenResponse({ description: 'Insufficient account permissions' })
+@ApiUnauthorizedResponse({
+  type: ErrorBodyDto,
+  description: 'Authentication required',
+})
+@ApiForbiddenResponse({
+  type: ErrorBodyDto,
+  description: 'Insufficient account permissions',
+})
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Roles(UserRole.ADMIN)
 @Controller('admin/ingredients')
@@ -91,8 +98,14 @@ export class AdminIngredientsController {
 
 @ApiTags('admin')
 @ApiBearerAuth()
-@ApiUnauthorizedResponse({ description: 'Authentication required' })
-@ApiForbiddenResponse({ description: 'Insufficient account permissions' })
+@ApiUnauthorizedResponse({
+  type: ErrorBodyDto,
+  description: 'Authentication required',
+})
+@ApiForbiddenResponse({
+  type: ErrorBodyDto,
+  description: 'Insufficient account permissions',
+})
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Roles(UserRole.ADMIN)
 @Controller('admin/ingredient-groups')
@@ -139,8 +152,14 @@ export class AdminIngredientGroupsController {
 
 @ApiTags('admin')
 @ApiBearerAuth()
-@ApiUnauthorizedResponse({ description: 'Authentication required' })
-@ApiForbiddenResponse({ description: 'Insufficient account permissions' })
+@ApiUnauthorizedResponse({
+  type: ErrorBodyDto,
+  description: 'Authentication required',
+})
+@ApiForbiddenResponse({
+  type: ErrorBodyDto,
+  description: 'Insufficient account permissions',
+})
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Roles(UserRole.ADMIN)
 @Controller('admin/incompatibility-rules')

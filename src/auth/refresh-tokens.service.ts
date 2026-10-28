@@ -1,4 +1,4 @@
-import { Injectable, UnauthorizedException } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectModel } from '@nestjs/mongoose';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
@@ -7,6 +7,7 @@ import { lockDocument } from '../mongo/document-lock.js';
 import { RefreshToken, User } from '../mongo/models.js';
 import { MongoService } from '../mongo/mongo.service.js';
 import { assertAccountActive } from './account-access.js';
+import { UnauthenticatedException } from '../common/exceptions/unauthenticated.exception.js';
 
 export interface IssuedRefreshToken {
   token: string;
@@ -49,13 +50,19 @@ export class RefreshTokensService {
     const storedToken = await this.tokens.findOne({ tokenHash }).exec();
 
     if (!storedToken) {
-      throw new UnauthorizedException('Invalid refresh token');
+      throw new UnauthenticatedException(
+        'UNAUTHORIZED',
+        'Invalid refresh token',
+      );
     }
 
     const now = new Date();
     if (storedToken.revokedAt) {
       await this.revokeFamily(storedToken.familyId, now);
-      throw new UnauthorizedException('Refresh token reuse detected');
+      throw new UnauthenticatedException(
+        'UNAUTHORIZED',
+        'Refresh token reuse detected',
+      );
     }
 
     if (storedToken.expiresAt <= now) {
@@ -63,7 +70,10 @@ export class RefreshTokensService {
         { _id: storedToken.id, revokedAt: null },
         { $set: { revokedAt: now } },
       );
-      throw new UnauthorizedException('Refresh token expired');
+      throw new UnauthenticatedException(
+        'UNAUTHORIZED',
+        'Refresh token expired',
+      );
     }
 
     const replacementToken = this.generateToken();
@@ -92,7 +102,10 @@ export class RefreshTokensService {
 
     if (!rotated) {
       await this.revokeFamily(storedToken.familyId, now);
-      throw new UnauthorizedException('Refresh token reuse detected');
+      throw new UnauthenticatedException(
+        'UNAUTHORIZED',
+        'Refresh token reuse detected',
+      );
     }
 
     return {
@@ -160,7 +173,11 @@ export class RefreshTokensService {
       .select('status')
       .session(session)
       .exec();
-    if (!user) throw new UnauthorizedException('Account no longer exists');
+    if (!user)
+      throw new UnauthenticatedException(
+        'UNAUTHORIZED',
+        'Account no longer exists',
+      );
     assertAccountActive(user.status);
   }
 

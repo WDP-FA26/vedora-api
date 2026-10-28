@@ -137,8 +137,8 @@ Frontend đã bổ sung ba trường này vào `apiPostSchema` và ánh xạ tro
 | API            | Giao diện hiện tại   |
 | -------------- | -------------------- |
 | `commentCount` | `post.stats.replies` |
-| `likeCount`    | `post.stats.sprouts` |
-| `isLiked`      | `post.sprouted`      |
+| `likeCount`    | `post.stats.likes`   |
+| `isLiked`      | `post.liked`         |
 
 Frontend đã tích hợp:
 
@@ -150,7 +150,7 @@ Frontend đã tích hợp:
   tải lại từ trang đầu để tránh giữ cursor đã bị xóa.
 - `features/posts/components/post-comments-dialog.tsx`: hộp bình luận, nội dung tối đa
   1000 ký tự, nút sửa/xóa theo quyền, xác nhận xóa và hiển thị lỗi/tải lại.
-- `features/home/components/post-card.tsx`: nút phản hồi mở hộp bình luận; nút thả mầm
+- `features/home/components/post-card.tsx`: nút phản hồi mở hộp bình luận; nút thích
   gọi API và lấy số đếm từ response. Khóa thao tác trong lúc gửi để tránh request trùng.
 
 Chỉ bài thật từ API đã `PUBLISHED` bật comment/like. Các bài mẫu minh họa và bài chưa
@@ -165,8 +165,9 @@ xuất bản không gửi request tương tác. API thất bại không làm tă
 | 403  | Không có quyền sửa/xóa comment                                                       |
 | 404  | Bài chưa xuất bản/không tồn tại, comment không tồn tại hoặc thuộc bài khác           |
 
-Lỗi dùng cấu trúc Nest hiện tại `{ statusCode, message, error }`, `message` có thể
-là chuỗi hoặc mảng thông báo validation. Không có mã lỗi nghiệp vụ mới.
+Lỗi dùng cấu trúc `{ statusCode, code, message, details? }`, xem [errors.md](errors.md).
+Validation trả `code: VALIDATION_FAILED` với các thông báo trong `details.messages`.
+Không có mã lỗi nghiệp vụ mới.
 
 Migration mới: `20261002000000_post_comments_and_likes`. Áp dụng trước khi chạy bản API mới:
 

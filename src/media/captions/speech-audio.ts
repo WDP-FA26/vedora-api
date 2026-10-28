@@ -7,6 +7,7 @@ import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import type { ReadableStream } from 'node:stream/web';
 import ffmpegStatic from 'ffmpeg-static';
+import { ExternalServiceException } from '../../common/exceptions/external-service.exception.js';
 
 /** A stretch of the original video, in seconds. */
 export interface Interval {
@@ -156,7 +157,10 @@ async function download(url: string, path: string): Promise<void> {
     signal: AbortSignal.timeout(DOWNLOAD_TIMEOUT_MS),
   });
   if (!response.ok || !response.body) {
-    throw new Error(`Downloading the video answered ${response.status}`);
+    throw new ExternalServiceException(
+      'cloudinary',
+      `Downloading the video answered ${response.status}`,
+    );
   }
   await pipeline(
     Readable.fromWeb(response.body as ReadableStream<Uint8Array>),

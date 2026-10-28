@@ -1,9 +1,7 @@
-import {
-  BadRequestException,
-  HttpException,
-  NotFoundException,
-  type INestApplication,
-} from '@nestjs/common';
+import type { INestApplication } from '@nestjs/common';
+import { QuotaReachedException } from '../../../common/exceptions/quota-reached.exception.js';
+import { InvalidInputException } from '../../../common/exceptions/invalid-input.exception.js';
+import { ResourceNotFoundException } from '../../../common/exceptions/resource-not-found.exception.js';
 import { ConfigService } from '@nestjs/config';
 import { getModelToken } from '@nestjs/mongoose';
 import { Test } from '@nestjs/testing';
@@ -284,9 +282,9 @@ describe('BlogAssistantService', () => {
 
     const error = await send({}).catch((caught: unknown) => caught);
 
-    expect(error).toBeInstanceOf(HttpException);
-    expect((error as HttpException).getStatus()).toBe(429);
-    expect((error as HttpException).getResponse()).toMatchObject({
+    expect(error).toBeInstanceOf(QuotaReachedException);
+    expect(error).toMatchObject({
+      statusCode: 429,
       code: 'AI_QUOTA_EXCEEDED',
     });
     expect(moderator.doGenerateCalls).toHaveLength(0);
@@ -330,7 +328,7 @@ describe('BlogAssistantService', () => {
 
   it("refuses someone else's blog before counting a use", async () => {
     await expect(send({ blogId: BLOG_ID })).rejects.toBeInstanceOf(
-      NotFoundException,
+      ResourceNotFoundException,
     );
     expect(aiUsage.consume).not.toHaveBeenCalled();
   });
@@ -377,7 +375,7 @@ describe('BlogAssistantService', () => {
     ['a message that is too long', [userMessage('a'.repeat(4001))]],
   ])('rejects a history ending with %s', async (_case, messages) => {
     await expect(send({ messages })).rejects.toBeInstanceOf(
-      BadRequestException,
+      InvalidInputException,
     );
     expect(aiUsage.consume).not.toHaveBeenCalled();
   });

@@ -1,8 +1,9 @@
-import { Injectable, ServiceUnavailableException } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { v2 as cloudinary } from 'cloudinary';
 import { z } from 'zod';
 import { createHash, randomUUID, timingSafeEqual } from 'node:crypto';
+import { FeatureUnavailableException } from '../common/exceptions/feature-unavailable.exception.js';
 
 /** Adaptive HLS, built by an eager job right after the upload. */
 export const STREAM_TRANSFORMATION = 'sp_auto/m3u8';
@@ -81,7 +82,10 @@ export class CloudinaryService {
   /** The SDK, configured; throws 503 when Cloudinary isn't set up. */
   require(): typeof cloudinary {
     if (!this.configured) {
-      throw new ServiceUnavailableException('Video uploads are not configured');
+      throw new FeatureUnavailableException(
+        'SERVICE_UNAVAILABLE',
+        'Video uploads are not configured',
+      );
     }
     return cloudinary;
   }

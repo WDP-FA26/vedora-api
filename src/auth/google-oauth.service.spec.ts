@@ -1,8 +1,6 @@
-import {
-  Logger,
-  ServiceUnavailableException,
-  UnauthorizedException,
-} from '@nestjs/common';
+import { Logger } from '@nestjs/common';
+import { FeatureUnavailableException } from '../common/exceptions/feature-unavailable.exception.js';
+import { UnauthenticatedException } from '../common/exceptions/unauthenticated.exception.js';
 import { ConfigService } from '@nestjs/config';
 import { Test } from '@nestjs/testing';
 import { OAuth2Client } from 'google-auth-library';
@@ -89,7 +87,7 @@ describe('GoogleOAuthService', () => {
     getToken.mockRejectedValue(new Error('invalid_grant'));
 
     await expect(service.exchangeCode('bad', verifier)).rejects.toBeInstanceOf(
-      UnauthorizedException,
+      UnauthenticatedException,
     );
   });
 
@@ -97,7 +95,7 @@ describe('GoogleOAuthService', () => {
     mockIdToken({ sub: 'google-sub', email: 'a@b.c', email_verified: false });
 
     await expect(service.exchangeCode('code', verifier)).rejects.toBeInstanceOf(
-      UnauthorizedException,
+      UnauthenticatedException,
     );
   });
 
@@ -105,7 +103,7 @@ describe('GoogleOAuthService', () => {
     const unconfigured = await createService({});
 
     await expect(unconfigured.authorize()).rejects.toBeInstanceOf(
-      ServiceUnavailableException,
+      FeatureUnavailableException,
     );
   });
 });

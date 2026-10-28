@@ -1,7 +1,5 @@
-import {
-  BadRequestException,
-  ServiceUnavailableException,
-} from '@nestjs/common';
+import { InvalidInputException } from '../common/exceptions/invalid-input.exception.js';
+import { FeatureUnavailableException } from '../common/exceptions/feature-unavailable.exception.js';
 import { ConfigService } from '@nestjs/config';
 import {
   BucketAlreadyOwnedByYou,
@@ -75,7 +73,7 @@ describe('StorageService', () => {
           'image/png',
           1,
         ),
-      ).rejects.toBeInstanceOf(ServiceUnavailableException);
+      ).rejects.toBeInstanceOf(FeatureUnavailableException);
     });
   });
 
@@ -186,7 +184,7 @@ describe('StorageService', () => {
 
     it('rejects bodies that are not S3 events', () => {
       expect(() => build().parseEvent(StorageTarget.Knowledge, {})).toThrow(
-        BadRequestException,
+        InvalidInputException,
       );
     });
   });

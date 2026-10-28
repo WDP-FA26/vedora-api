@@ -29,11 +29,18 @@ import {
 import { AdminPostsService } from './admin-posts.service.js';
 import { AdminPostDto, AdminPostsQueryDto } from '../dto/admin-post.dto.js';
 import { PostsService } from '../posts.service.js';
+import { ErrorBodyDto } from '../../common/exceptions/error-body.dto.js';
 
 @ApiTags('admin')
 @ApiBearerAuth()
-@ApiUnauthorizedResponse({ description: 'Authentication required' })
-@ApiForbiddenResponse({ description: 'Insufficient account permissions' })
+@ApiUnauthorizedResponse({
+  type: ErrorBodyDto,
+  description: 'Authentication required',
+})
+@ApiForbiddenResponse({
+  type: ErrorBodyDto,
+  description: 'Insufficient account permissions',
+})
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Roles(UserRole.ADMIN)
 @Controller('admin/posts')

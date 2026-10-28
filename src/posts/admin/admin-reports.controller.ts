@@ -35,11 +35,18 @@ import {
   ReviewPostReportDto,
 } from '../dto/post-interaction.dto.js';
 import { PostReportsService } from '../interactions/post-reports.service.js';
+import { ErrorBodyDto } from '../../common/exceptions/error-body.dto.js';
 
 @ApiTags('admin')
 @ApiBearerAuth()
-@ApiUnauthorizedResponse({ description: 'Authentication required' })
-@ApiForbiddenResponse({ description: 'Insufficient account permissions' })
+@ApiUnauthorizedResponse({
+  type: ErrorBodyDto,
+  description: 'Authentication required',
+})
+@ApiForbiddenResponse({
+  type: ErrorBodyDto,
+  description: 'Insufficient account permissions',
+})
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Roles(UserRole.ADMIN)
 @Controller('admin/reports')
@@ -63,7 +70,10 @@ export class AdminReportsController {
       'Deleting the reported post (DELETE /admin/posts/:id) removes its reports instead.',
   })
   @ApiOkResponse({ type: AdminPostReportDto })
-  @ApiConflictResponse({ description: 'The report was already reviewed' })
+  @ApiConflictResponse({
+    type: ErrorBodyDto,
+    description: 'The report was already reviewed',
+  })
   review(
     @Req() request: AuthenticatedRequest,
     @Param('id', ParseUUIDPipe) id: string,

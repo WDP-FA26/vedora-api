@@ -8,7 +8,7 @@ import {
   DietaryRestrictionsDto,
   SaveDietaryRestrictionsDto,
 } from './dto/dietary.dto.js';
-import { badRequest } from './recipe-errors.js';
+import { InvalidInputException } from '../common/exceptions/invalid-input.exception.js';
 
 /** What a user does not eat (ingredients and whole groups) and the ingredients they like. Never shown to others. */
 @Injectable()
@@ -93,7 +93,7 @@ export class DietaryService {
   ): Promise<DietaryRestrictionsDto> {
     const avoided = new Set(dto.ingredientIds);
     if (dto.likedIngredientIds.some((id) => avoided.has(id))) {
-      throw badRequest(
+      throw new InvalidInputException(
         'CONFLICTING_PREFERENCE',
         'An ingredient cannot be both liked and avoided',
       );
@@ -106,7 +106,7 @@ export class DietaryService {
       allExist(this.groups, dto.groupIds),
     ]);
     if (!ingredients || !groups) {
-      throw badRequest(
+      throw new InvalidInputException(
         'UNKNOWN_REFERENCE',
         'An ingredient or group in the request does not exist',
       );

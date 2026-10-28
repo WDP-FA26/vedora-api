@@ -140,6 +140,20 @@ export class PostsController {
     return this.postsService.listBookmarks(request.user.sub, query);
   }
 
+  @Get('following')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'Published posts from accounts you follow, newest first',
+  })
+  @ApiOkResponse({ type: PostPageDto })
+  listFollowing(
+    @Query() query: CursorPaginationQueryDto,
+    @Req() request: AuthenticatedRequest,
+  ): Promise<PostPageDto> {
+    return this.postsService.listFollowing(request.user.sub, query);
+  }
+
   @Get(':id')
   @UseGuards(OptionalJwtAuthGuard)
   @ApiOperation({

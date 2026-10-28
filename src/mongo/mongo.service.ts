@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { InjectConnection } from '@nestjs/mongoose';
 import type { ClientSession, Connection } from 'mongoose';
+import { FeatureUnavailableException } from '../common/exceptions/feature-unavailable.exception.js';
 
 /**
  * The Mongoose connection shared by every model: starts snapshot transactions.
@@ -16,7 +17,12 @@ export class MongoService {
 
   async ping(): Promise<void> {
     const database = this.connection.db;
-    if (!database) throw new Error('MongoDB connection is not ready');
+    if (!database) {
+      throw new FeatureUnavailableException(
+        'SERVICE_UNAVAILABLE',
+        'MongoDB connection is not ready',
+      );
+    }
     await database.admin().command({ ping: 1 });
   }
 

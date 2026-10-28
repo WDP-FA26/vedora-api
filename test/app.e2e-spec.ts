@@ -55,7 +55,10 @@ describe('Vedora API (e2e)', () => {
         .expect(400);
 
       expect(response.body).toMatchObject({
-        message: ['mediaIds must contain no more than 4 elements'],
+        code: 'VALIDATION_FAILED',
+        details: {
+          messages: ['mediaIds must contain no more than 4 elements'],
+        },
       });
     });
 
@@ -67,7 +70,8 @@ describe('Vedora API (e2e)', () => {
         .expect(400);
 
       expect(response.body).toMatchObject({
-        message: ['property status should not exist'],
+        code: 'VALIDATION_FAILED',
+        details: { messages: ['property status should not exist'] },
       });
     });
 
@@ -118,9 +122,12 @@ describe('Vedora API (e2e)', () => {
         .expect(400);
 
       expect(response.body).toMatchObject({
-        message: [
-          'messages.0.role must be one of the following values: user, assistant',
-        ],
+        code: 'VALIDATION_FAILED',
+        details: {
+          messages: [
+            'messages.0.role must be one of the following values: user, assistant',
+          ],
+        },
       });
     });
 

@@ -127,7 +127,7 @@ describe('MediaService', () => {
     }
     await expect(
       service.createUpload(ownerId, MediaType.VIDEO),
-    ).rejects.toMatchObject({ status: 429 });
+    ).rejects.toMatchObject({ statusCode: 429 });
   });
 
   it('records the upload and waits for the stream', async () => {
@@ -256,7 +256,7 @@ describe('MediaService', () => {
       await addMedia(fields);
 
       await expect(claim([fine.id, mediaId])).rejects.toMatchObject({
-        response: { code: 'MEDIA_UNAVAILABLE' },
+        code: 'MEDIA_UNAVAILABLE',
       });
 
       const stored = await assets().findById(fine.id).exec();
@@ -321,7 +321,7 @@ describe('MediaService', () => {
       await addMedia({ postId });
 
       await expect(service.removeOwned(mediaId, ownerId)).rejects.toMatchObject(
-        { status: 409 },
+        { statusCode: 409 },
       );
     });
 

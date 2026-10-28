@@ -120,7 +120,7 @@ describe('Blogs (HTTP)', () => {
       .expect(400);
     expect(missing.body).toMatchObject({
       code: 'BLOG_RECIPE_NOT_FOUND',
-      recipeIds: [missingId],
+      details: { recipeIds: [missingId] },
     });
     expect(await count('posts')).toBe(0);
   });

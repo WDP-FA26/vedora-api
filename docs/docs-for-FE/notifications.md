@@ -1,6 +1,6 @@
 # Thông báo (Notifications)
 
-Người dùng nhận thông báo khi có người khác **Sprout** (like), bình luận, đăng lại bài của mình hoặc theo dõi mình. Tự thao tác trên nội dung của chính mình không tạo thông báo. Like/repost/follow lặp lại (bật/tắt nhiều lần) chỉ tạo một thông báo.
+Người dùng nhận thông báo khi có người khác **thích** (like), bình luận, đăng lại bài của mình hoặc theo dõi mình. Tự thao tác trên nội dung của chính mình không tạo thông báo. Like/repost/follow lặp lại (bật/tắt nhiều lần) chỉ tạo một thông báo.
 
 Tất cả endpoint cần `Authorization: Bearer <accessToken>`.
 

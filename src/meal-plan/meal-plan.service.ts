@@ -1,9 +1,5 @@
-import {
-  ConflictException,
-  HttpStatus,
-  Injectable,
-  NotFoundException,
-} from '@nestjs/common';
+import { rethrowAsStateConflict } from '../mongo/unique-conflict.js';
+import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { randomUUID } from 'node:crypto';
 import type { HydratedDocument, Model } from 'mongoose';
@@ -29,6 +25,8 @@ import {
   SaveMealDayDto,
   WEEKDAYS,
 } from './dto/meal-plan.dto.js';
+import { ResourceNotFoundException } from '../common/exceptions/resource-not-found.exception.js';
+import { StateConflictException } from '../common/exceptions/state-conflict.exception.js';
 
 /** A recipe with its ingredients and their names. */
 type RecipeRow = Omit<Recipe, 'ingredients'> & {
@@ -178,14 +176,11 @@ export class MealPlanService {
   async apply(userId: string, days: SaveMealDayDto[]): Promise<MealPlanDto> {
     const preview = await this.preview(userId, days);
     if (preview.problems.length > 0) {
-      throw new ConflictException({
-        statusCode: HttpStatus.CONFLICT,
-        error: 'Conflict',
-        code: 'MEAL_PLAN_INVALID',
-        message:
-          'These dishes break a dietary restriction or an incompatibility rule',
-        problems: preview.problems,
-      });
+      throw new StateConflictException(
+        'MEAL_PLAN_INVALID',
+        'These dishes break a dietary restriction or an incompatibility rule',
+        { problems: preview.problems },
+      );
     }
     const entries = preview.days.flatMap(({ day, sections }) =>
       sections.flatMap(({ section, recipes }) =>
@@ -207,7 +202,8 @@ export class MealPlanService {
         .findOne({ _id: userId })
         .session(session)
         .exec();
-      if (!user) throw new NotFoundException('User not found');
+      if (!user)
+        throw new ResourceNotFoundException('NOT_FOUND', 'User not found');
       await this.entries
         .deleteMany(
           { userId, day: { $in: preview.days.map(({ day }) => day) } },
@@ -216,7 +212,15 @@ export class MealPlanService {
         .exec();
       // insertMany rejects an empty list (a day saved empty).
       if (entries.length > 0) {
-        await this.entries.insertMany(entries, { session });
+        await this.entries
+          .insertMany(entries, { session })
+          .catch((error: unknown) =>
+            rethrowAsStateConflict(
+              error,
+              'MEAL_PLAN_CONFLICT',
+              'The meal plan changed; reload it and save again',
+            ),
+          );
       }
       // The timetable as this save left it, not as a following save leaves it.
       return this.entries

@@ -1,5 +1,5 @@
-import { ConflictException } from '@nestjs/common';
 import { isUniqueViolation } from '../mongo/errors.js';
+import { StateConflictException } from '../common/exceptions/state-conflict.exception.js';
 
 /**
  * Rethrows a unique-index rejection as a 409 naming the fields that collided,
@@ -12,7 +12,8 @@ export function rethrowUniqueViolation(error: unknown): never {
     keyPattern && typeof keyPattern === 'object'
       ? Object.keys(keyPattern).join(', ')
       : '';
-  throw new ConflictException(
+  throw new StateConflictException(
+    'CONFLICT',
     `${fields || 'Username or email'} already exists`,
   );
 }

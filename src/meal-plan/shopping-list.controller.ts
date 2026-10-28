@@ -9,12 +9,16 @@ import {
 import type { Response } from 'express';
 import type { AuthenticatedRequest } from '../auth/auth.types.js';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard.js';
-import { ShoppingListDto, ShoppingListQueryDto } from './dto/shopping-list.dto.js';
+import {
+  ShoppingListDto,
+  ShoppingListQueryDto,
+} from './dto/shopping-list.dto.js';
 import { ShoppingListService } from './shopping-list.service.js';
+import { ErrorBodyDto } from '../common/exceptions/error-body.dto.js';
 
 @ApiTags('meal-plan')
 @ApiBearerAuth()
-@ApiUnauthorizedResponse()
+@ApiUnauthorizedResponse({ type: ErrorBodyDto })
 @UseGuards(JwtAuthGuard)
 @Controller('meal-plan/shopping-list')
 export class ShoppingListController {

@@ -1,12 +1,5 @@
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
-import {
-  BadRequestException,
-  ConflictException,
-  Injectable,
-  Logger,
-  NotFoundException,
-  ServiceUnavailableException,
-} from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectModel } from '@nestjs/mongoose';
 import type { ClientSession, Model } from 'mongoose';
@@ -30,16 +23,20 @@ import {
 import { SePayProvider } from './sepay.provider.js';
 import { parseBankWebhook } from './sepay-payload.js';
 import { generatePaymentCode } from './payment-code.js';
-import { PaymentChanged, PaymentEventsService } from './payment-events.service.js';
+import {
+  PaymentChanged,
+  PaymentEventsService,
+} from './payment-events.service.js';
+import { InvalidInputException } from '../common/exceptions/invalid-input.exception.js';
+import { ResourceNotFoundException } from '../common/exceptions/resource-not-found.exception.js';
+import { StateConflictException } from '../common/exceptions/state-conflict.exception.js';
+import { FeatureUnavailableException } from '../common/exceptions/feature-unavailable.exception.js';
 
 const hash = (value: unknown) =>
   createHash('sha256').update(JSON.stringify(value)).digest('hex');
 const membershipExpiry = (startsAt: Date, durationDays: number) =>
   new Date(startsAt.getTime() + durationDays * 86_400_000);
 type Intent = Omit<PaymentIntent, '_id'>;
-const conflict = (code: string, message: string): never => {
-  throw new ConflictException({ code, message });
-};
 
 @Injectable()
 export class PaymentsService {
@@ -155,7 +152,8 @@ export class PaymentsService {
 
   async get(id: string, userId: string): Promise<PaymentDto> {
     const intent = await this.intents.findOne({ _id: id, userId }).exec();
-    if (!intent) throw new NotFoundException('Payment not found');
+    if (!intent)
+      throw new ResourceNotFoundException('NOT_FOUND', 'Payment not found');
     return this.serialize(intent);
   }
 
@@ -166,7 +164,10 @@ export class PaymentsService {
   ): Promise<PaymentDto> {
     this.provider.assertEnabled();
     if (!key || !/^[A-Za-z0-9._:-]{8,200}$/.test(key))
-      throw new BadRequestException('A valid Idempotency-Key is required');
+      throw new InvalidInputException(
+        'BAD_REQUEST',
+        'A valid Idempotency-Key is required',
+      );
     const payloadHash = hash({ planCode });
     const attemptCreate = () =>
       this.mongo.withTransaction(async (session) => {
@@ -177,7 +178,7 @@ export class PaymentsService {
           .exec();
         if (prior) {
           if (prior.payloadHash !== payloadHash)
-            conflict(
+            throw new StateConflictException(
               'IDEMPOTENCY_CONFLICT',
               'This key was used with another request',
             );
@@ -185,7 +186,11 @@ export class PaymentsService {
             .findOne({ _id: prior.intentId })
             .session(session)
             .exec();
-          if (!priorIntent) throw new NotFoundException('Payment not found');
+          if (!priorIntent)
+            throw new ResourceNotFoundException(
+              'NOT_FOUND',
+              'Payment not found',
+            );
           return priorIntent;
         }
         const user = await this.users
@@ -197,14 +202,18 @@ export class PaymentsService {
           user.status !== AccountStatus.ACTIVE ||
           !user.emailVerifiedAt
         )
-          conflict(
+          throw new StateConflictException(
             'ACCOUNT_NOT_PAYABLE',
             'A verified active account is required',
           );
         const plan = this.catalog().plans.find(
           (item) => item.code === planCode,
         );
-        if (!plan) throw new BadRequestException('Unknown billing plan');
+        if (!plan)
+          throw new InvalidInputException(
+            'BAD_REQUEST',
+            'Unknown billing plan',
+          );
         let intent: Intent | null = await this.intents
           .findOne({ activeIntentKey: userId })
           .session(session)
@@ -215,7 +224,7 @@ export class PaymentsService {
             intent.amount.toString() !== plan.priceVnd ||
             intent.durationDays !== plan.durationDays)
         )
-          conflict(
+          throw new StateConflictException(
             'PENDING_PAYMENT_CONFLICT',
             'Continue or cancel the pending payment before creating a different purchase',
           );
@@ -274,11 +283,10 @@ export class PaymentsService {
         if (!codeTaken) throw error;
       }
     }
-    throw new ServiceUnavailableException({
-      code: 'PAYMENT_CODE_UNAVAILABLE',
-      message:
-        'Could not allocate a payment code; retry with the same Idempotency-Key',
-    });
+    throw new FeatureUnavailableException(
+      'PAYMENT_CODE_UNAVAILABLE',
+      'Could not allocate a payment code; retry with the same Idempotency-Key',
+    );
   }
 
   async cancel(id: string, userId: string): Promise<PaymentDto> {
@@ -289,10 +297,11 @@ export class PaymentsService {
         .findOne({ _id: id, userId })
         .session(session)
         .exec();
-      if (!current) throw new NotFoundException('Payment not found');
+      if (!current)
+        throw new ResourceNotFoundException('NOT_FOUND', 'Payment not found');
       if (current.status === PaymentStatus.CANCELLED) return current;
       if (current.status !== PaymentStatus.PENDING)
-        conflict(
+        throw new StateConflictException(
           'PAYMENT_NOT_PENDING',
           'A completed payment cannot be cancelled or refunded here',
         );
@@ -310,7 +319,8 @@ export class PaymentsService {
           { session, returnDocument: 'after' },
         )
         .exec();
-      if (!updated) throw new NotFoundException('Payment not found');
+      if (!updated)
+        throw new ResourceNotFoundException('NOT_FOUND', 'Payment not found');
       changed = true;
       return updated;
     });
@@ -406,7 +416,10 @@ export class PaymentsService {
         )
         .exec();
       if (claimed.modifiedCount !== 1)
-        conflict('CAPTURE_CONFLICT', 'Payment changed; retry callback');
+        throw new StateConflictException(
+          'CAPTURE_CONFLICT',
+          'Payment changed; retry callback',
+        );
       await record('CAPTURED', intent.id);
       changed = { userId: intent.userId, intentId: intent.id };
     });

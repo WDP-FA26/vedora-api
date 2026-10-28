@@ -1,10 +1,7 @@
-import {
-  Injectable,
-  NotFoundException,
-  UnauthorizedException,
-} from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import type { Model } from 'mongoose';
+import { UnauthenticatedException } from '../common/exceptions/unauthenticated.exception.js';
 import { escapeRegExp } from '../common/text.js';
 import {
   createPaginatedResponse,
@@ -25,6 +22,7 @@ import {
   RecipeRelationsService,
   sourcePostIds,
 } from './recipe-relations.service.js';
+import { ResourceNotFoundException } from '../common/exceptions/resource-not-found.exception.js';
 
 @Injectable()
 export class RecipeCatalogService {
@@ -44,7 +42,8 @@ export class RecipeCatalogService {
     userId?: string,
   ): Promise<PaginatedResponseDto<CatalogRecipeDto>> {
     if (query.suitableForMe && !userId) {
-      throw new UnauthorizedException(
+      throw new UnauthenticatedException(
+        'UNAUTHORIZED',
         'Sign in to filter by your dietary profile',
       );
     }
@@ -79,7 +78,8 @@ export class RecipeCatalogService {
 
   async findOne(id: string, userId?: string): Promise<CatalogRecipeDetailDto> {
     const row = await this.recipes.findOne({ _id: id }).exec();
-    if (!row) throw new NotFoundException('Recipe not found');
+    if (!row)
+      throw new ResourceNotFoundException('NOT_FOUND', 'Recipe not found');
     const [[detail], favoriteIds, publishedPosts] = await Promise.all([
       this.relations.hydrate([row]),
       this.favoriteIds([id], userId),

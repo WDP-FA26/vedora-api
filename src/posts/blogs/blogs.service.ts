@@ -1,8 +1,4 @@
-import {
-  BadRequestException,
-  Injectable,
-  NotFoundException,
-} from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { randomUUID } from 'node:crypto';
 import { isURL } from 'class-validator';
@@ -14,7 +10,10 @@ import {
 import { lockDocument } from '../../mongo/document-lock.js';
 import { Post, PostStatus, PostType, Recipe } from '../../mongo/models.js';
 import { MongoService } from '../../mongo/mongo.service.js';
-import { StorageService, StorageTarget } from '../../storage/storage.service.js';
+import {
+  StorageService,
+  StorageTarget,
+} from '../../storage/storage.service.js';
 import {
   BlogDetailDto,
   CreateBlogDto,
@@ -23,6 +22,8 @@ import {
 } from '../dto/blog.dto.js';
 import { PostPageDto } from '../dto/post-response.dto.js';
 import { PostsService } from '../posts.service.js';
+import { InvalidInputException } from '../../common/exceptions/invalid-input.exception.js';
+import { ResourceNotFoundException } from '../../common/exceptions/resource-not-found.exception.js';
 
 @Injectable()
 export class BlogsService {
@@ -72,7 +73,7 @@ export class BlogsService {
       !post ||
       (post.status !== PostStatus.PUBLISHED && post.authorId !== viewerId)
     ) {
-      throw new NotFoundException('Blog not found');
+      throw new ResourceNotFoundException('NOT_FOUND', 'Blog not found');
     }
     return this.toDetail(post, viewerId);
   }
@@ -90,7 +91,8 @@ export class BlogsService {
       const cursor = await this.postsModel
         .findOne({ ...filter, _id: query.cursor })
         .exec();
-      if (!cursor) throw new BadRequestException('Invalid blog cursor');
+      if (!cursor)
+        throw new InvalidInputException('BAD_REQUEST', 'Invalid blog cursor');
       Object.assign(
         filter,
         afterCursor('createdAt', { value: cursor.createdAt, id: cursor.id }),
@@ -114,13 +116,17 @@ export class BlogsService {
     dto: UpdateBlogDto,
   ): Promise<BlogDetailDto> {
     if (Object.values(dto).every((value) => value === undefined))
-      throw new BadRequestException('Provide at least one blog field');
+      throw new InvalidInputException(
+        'BAD_REQUEST',
+        'Provide at least one blog field',
+      );
     this.validateCover(dto.coverImageUrl);
     await this.validateRecipes(dto.recipeIds);
     await this.mongo.withTransaction(async (session) => {
       const current = await this.lockOwned(session, id, authorId);
       const blog = current.blog;
-      if (!blog) throw new NotFoundException('Blog not found');
+      if (!blog)
+        throw new ResourceNotFoundException('NOT_FOUND', 'Blog not found');
       const status: PostStatus =
         (dto.status as PostStatus | undefined) ?? current.status;
       const content = dto.content ?? blog.content;
@@ -178,18 +184,17 @@ export class BlogsService {
       .findOne({ _id: id, authorId, type: PostType.BLOG })
       .session(session)
       .exec();
-    if (!owned) throw new NotFoundException('Blog not found');
+    if (!owned)
+      throw new ResourceNotFoundException('NOT_FOUND', 'Blog not found');
     return owned;
   }
 
   private validatePublication(status: PostStatus, content: string) {
     if (status === PostStatus.PUBLISHED && content.trim().length === 0) {
-      throw new BadRequestException({
-        code: 'BLOG_CONTENT_REQUIRED',
-        message: 'A published blog needs content',
-        statusCode: 400,
-        error: 'Bad Request',
-      });
+      throw new InvalidInputException(
+        'BLOG_CONTENT_REQUIRED',
+        'A published blog needs content',
+      );
     }
   }
 
@@ -202,12 +207,10 @@ export class BlogsService {
     if (!url) return;
     if (isURL(url, { protocols: ['https'], require_protocol: true })) return;
     if (this.storage.keyFromPublicUrl(StorageTarget.Blogs, url)) return;
-    throw new BadRequestException({
-      code: 'BLOG_COVER_NOT_ALLOWED',
-      message: 'A cover must be an https link or an image in blog storage',
-      statusCode: 400,
-      error: 'Bad Request',
-    });
+    throw new InvalidInputException(
+      'BLOG_COVER_NOT_ALLOWED',
+      'A cover must be an https link or an image in blog storage',
+    );
   }
 
   private async validateRecipes(ids?: string[]) {
@@ -219,13 +222,11 @@ export class BlogsService {
     const found = new Set(recipes.map(({ id }) => id));
     const missing = ids.filter((id) => !found.has(id));
     if (missing.length) {
-      throw new BadRequestException({
-        code: 'BLOG_RECIPE_NOT_FOUND',
-        message: 'Some linked recipes do not exist',
-        recipeIds: missing,
-        statusCode: 400,
-        error: 'Bad Request',
-      });
+      throw new InvalidInputException(
+        'BLOG_RECIPE_NOT_FOUND',
+        'Some linked recipes do not exist',
+        { recipeIds: missing },
+      );
     }
   }
 
@@ -240,7 +241,8 @@ export class BlogsService {
     viewerId: string,
   ): Promise<BlogDetailDto> {
     const post = await this.postsModel.findOne({ _id: id }).exec();
-    if (!post) throw new NotFoundException('Blog not found');
+    if (!post)
+      throw new ResourceNotFoundException('NOT_FOUND', 'Blog not found');
     return this.toDetail(post, viewerId);
   }
 
@@ -249,7 +251,8 @@ export class BlogsService {
     viewerId?: string,
   ): Promise<BlogDetailDto> {
     const [response] = await this.posts.toResponses([post], viewerId);
-    if (!response || !post.blog) throw new NotFoundException('Blog not found');
+    if (!response || !post.blog)
+      throw new ResourceNotFoundException('NOT_FOUND', 'Blog not found');
     return {
       ...response,
       content: post.blog.content,

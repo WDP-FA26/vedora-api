@@ -6,7 +6,6 @@ import {
   ParseUUIDPipe,
   Req,
   Sse,
-  UnauthorizedException,
   UseGuards,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
@@ -33,6 +32,8 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard.js';
 import { AccountStatus, User } from '../mongo/models.js';
 import { PaymentEventsService } from './payment-events.service.js';
 import { PaymentsService } from './payments.service.js';
+import { UnauthenticatedException } from '../common/exceptions/unauthenticated.exception.js';
+import { ErrorBodyDto } from '../common/exceptions/error-body.dto.js';
 
 @ApiTags('billing')
 @ApiBearerAuth()
@@ -56,6 +57,7 @@ export class PaymentStreamController {
       'Use fetch with Authorization, not a token in the URL. Events: stream.ready, stream.unavailable, payment.changed, ping, session.expired. Always GET payment after connection/event; events never establish paid state. Heartbeat rechecks JWT/account every 15s.',
   })
   @ApiNotFoundResponse({
+    type: ErrorBodyDto,
     description: 'Payment missing or owned by another account',
   })
   async stream(
@@ -64,7 +66,11 @@ export class PaymentStreamController {
   ): Promise<Observable<MessageEvent>> {
     await this.payments.get(id, request.user.sub);
     const token = extractBearerToken(request.headers.authorization);
-    if (!token) throw new UnauthorizedException('Authentication required');
+    if (!token)
+      throw new UnauthenticatedException(
+        'UNAUTHORIZED',
+        'Authentication required',
+      );
     const live = this.events
       .stream(request.user.sub, id)
       .pipe(

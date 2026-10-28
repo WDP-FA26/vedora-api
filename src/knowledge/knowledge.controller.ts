@@ -27,6 +27,7 @@ import {
   KnowledgeDocumentResponseDto,
 } from './dto/knowledge-document-response.dto.js';
 import { KnowledgeService } from './knowledge.service.js';
+import { ErrorBodyDto } from '../common/exceptions/error-body.dto.js';
 
 // TODO: restrict to admins once users have roles; any signed-in user for now.
 @ApiTags('knowledge')
@@ -47,6 +48,7 @@ export class KnowledgeController {
   })
   @ApiPayloadTooLargeResponse({ description: 'Over MAX_KNOWLEDGE_FILE_MB' })
   @ApiServiceUnavailableResponse({
+    type: ErrorBodyDto,
     description: 'File storage is not configured',
   })
   createUpload(

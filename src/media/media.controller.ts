@@ -27,6 +27,7 @@ import {
   MediaResponseDto,
 } from './dto/media-response.dto.js';
 import { MediaService } from './media.service.js';
+import { ErrorBodyDto } from '../common/exceptions/error-body.dto.js';
 
 @ApiTags('media')
 @ApiBearerAuth()
@@ -42,9 +43,11 @@ export class MediaController {
       'Returns signed Cloudinary upload fields for the browser, and the media ID to pass to POST /posts.',
   })
   @ApiTooManyRequestsResponse({
+    type: ErrorBodyDto,
     description: 'UPLOAD_LIMIT_REACHED: too many uploads not yet posted',
   })
   @ApiServiceUnavailableResponse({
+    type: ErrorBodyDto,
     description: 'Cloudinary is not configured',
   })
   createUpload(
@@ -68,7 +71,10 @@ export class MediaController {
   @Delete(':id')
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ summary: 'Discard an upload that is not attached to a post' })
-  @ApiConflictResponse({ description: 'The media is attached to a post' })
+  @ApiConflictResponse({
+    type: ErrorBodyDto,
+    description: 'The media is attached to a post',
+  })
   async remove(
     @Req() request: AuthenticatedRequest,
     @Param('id', ParseUUIDPipe) id: string,

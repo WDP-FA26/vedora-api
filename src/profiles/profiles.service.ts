@@ -1,16 +1,12 @@
 import { randomUUID } from 'node:crypto';
-import {
-  BadRequestException,
-  ConflictException,
-  Injectable,
-  Logger,
-  NotFoundException,
-  PayloadTooLargeException,
-} from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { InjectModel } from '@nestjs/mongoose';
 import type { Model, QueryFilter } from 'mongoose';
-import { afterCursor, CursorPaginationQueryDto } from '../common/pagination/index.js';
+import {
+  afterCursor,
+  CursorPaginationQueryDto,
+} from '../common/pagination/index.js';
 import { NotificationsService } from '../notifications/notifications.service.js';
 import { isUniqueViolation } from '../mongo/errors.js';
 import {
@@ -33,6 +29,10 @@ import {
   ProfileSummaryDto,
   UpdateProfileDto,
 } from './dto/profile.dto.js';
+import { FileTooLargeException } from '../common/exceptions/file-too-large.exception.js';
+import { InvalidInputException } from '../common/exceptions/invalid-input.exception.js';
+import { ResourceNotFoundException } from '../common/exceptions/resource-not-found.exception.js';
+import { StateConflictException } from '../common/exceptions/state-conflict.exception.js';
 
 const IMAGE_EXTENSIONS: Record<string, string> = {
   'image/jpeg': 'jpg',
@@ -81,7 +81,8 @@ export class ProfilesService {
 
   async updateMe(id: string, dto: UpdateProfileDto): Promise<ProfileDto> {
     const fullName = dto.fullName?.trim();
-    if (fullName === '') throw new BadRequestException('Full name is required');
+    if (fullName === '')
+      throw new InvalidInputException('BAD_REQUEST', 'Full name is required');
     await this.users.updateOne(
       { _id: id },
       {
@@ -109,7 +110,10 @@ export class ProfilesService {
 
   async follow(id: string, followerId: string): Promise<void> {
     if (id === followerId)
-      throw new BadRequestException('You cannot follow yourself');
+      throw new InvalidInputException(
+        'BAD_REQUEST',
+        'You cannot follow yourself',
+      );
     await this.requirePublicUser(id);
     let created = true;
     try {
@@ -193,9 +197,13 @@ export class ProfilesService {
     dto: CreateProfileImageUploadDto,
   ): Promise<ProfileImageUploadDto> {
     if (dto.sizeBytes > MAX_IMAGE_BYTES[dto.kind])
-      throw new PayloadTooLargeException('Profile image is too large');
+      throw new FileTooLargeException(
+        'FILE_TOO_LARGE',
+        'Profile image is too large',
+      );
     const extension = IMAGE_EXTENSIONS[dto.contentType];
-    if (!extension) throw new BadRequestException('Unsupported image type');
+    if (!extension)
+      throw new InvalidInputException('BAD_REQUEST', 'Unsupported image type');
     const id = randomUUID();
     const key = `profiles/${ownerId}/${dto.kind.toLowerCase()}/${id}.${extension}`;
     const upload = await this.storage.presignUpload(
@@ -225,11 +233,15 @@ export class ProfilesService {
 
   async activateImage(ownerId: string, uploadId: string): Promise<ProfileDto> {
     const image = await this.uploads.findOne({ _id: uploadId, ownerId }).exec();
-    if (!image) throw new NotFoundException('Image upload not found');
+    if (!image)
+      throw new ResourceNotFoundException(
+        'NOT_FOUND',
+        'Image upload not found',
+      );
     if (image.status !== ProfileImageStatus.READY)
-      throw new ConflictException('Image upload is not ready');
+      throw new StateConflictException('CONFLICT', 'Image upload is not ready');
     if (image.createdAt.getTime() < Date.now() - ACTIVATE_TTL_MS)
-      throw new ConflictException('Image upload has expired');
+      throw new StateConflictException('CONFLICT', 'Image upload has expired');
     const url = this.storage.publicObjectUrl(
       StorageTarget.Profiles,
       image.storageKey,
@@ -307,7 +319,7 @@ export class ProfilesService {
   private async requirePublicUser(id: string): Promise<User> {
     const user = await this.users.findOne({ _id: id }).exec();
     if (!user?.emailVerifiedAt)
-      throw new NotFoundException('Profile not found');
+      throw new ResourceNotFoundException('NOT_FOUND', 'Profile not found');
     return user;
   }
 

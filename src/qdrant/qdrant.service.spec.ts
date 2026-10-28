@@ -21,8 +21,9 @@ describe('QdrantService.onModuleInit', () => {
       new Error('ECONNREFUSED'),
     );
 
-    await expect(qdrant.onModuleInit()).rejects.toThrow(
-      'Qdrant at http://localhost:6333 is not reachable: ECONNREFUSED',
-    );
+    await expect(qdrant.onModuleInit()).rejects.toMatchObject({
+      message: 'qdrant request failed',
+      reason: 'Qdrant at http://localhost:6333 is not reachable: ECONNREFUSED',
+    });
   });
 });

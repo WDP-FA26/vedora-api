@@ -1,13 +1,9 @@
-import {
-  CanActivate,
-  ExecutionContext,
-  ForbiddenException,
-  Injectable,
-} from '@nestjs/common';
+import { CanActivate, ExecutionContext, Injectable } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { UserRole } from '../mongo/models.js';
 import { AuthenticatedRequest } from './auth.types.js';
 import { ROLES_KEY } from './roles.decorator.js';
+import { AccessDeniedException } from '../common/exceptions/access-denied.exception.js';
 
 /** Run after JwtAuthGuard, which supplies the account's current role. */
 @Injectable()
@@ -23,7 +19,7 @@ export class RolesGuard implements CanActivate {
 
     const request = context.switchToHttp().getRequest<AuthenticatedRequest>();
     if (!request.user || !roles.includes(request.user.role)) {
-      throw new ForbiddenException('Insufficient permissions');
+      throw new AccessDeniedException('FORBIDDEN', 'Insufficient permissions');
     }
     return true;
   }

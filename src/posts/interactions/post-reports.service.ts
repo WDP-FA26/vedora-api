@@ -1,10 +1,4 @@
-import {
-  BadRequestException,
-  ConflictException,
-  HttpStatus,
-  Injectable,
-  NotFoundException,
-} from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import type { Model } from 'mongoose';
 import {
@@ -27,6 +21,9 @@ import {
   PostReportsQueryDto,
   ReportDecision,
 } from '../dto/post-interaction.dto.js';
+import { InvalidInputException } from '../../common/exceptions/invalid-input.exception.js';
+import { ResourceNotFoundException } from '../../common/exceptions/resource-not-found.exception.js';
+import { StateConflictException } from '../../common/exceptions/state-conflict.exception.js';
 
 const toAuthor = (user: User) => ({
   id: user.id,
@@ -64,14 +61,13 @@ export class PostReportsService {
       .findOne({ _id: postId, status: PostStatus.PUBLISHED })
       .select('authorId')
       .exec();
-    if (!post) throw new NotFoundException('Post not found');
+    if (!post)
+      throw new ResourceNotFoundException('NOT_FOUND', 'Post not found');
     if (post.authorId === reporterId) {
-      throw new BadRequestException({
-        statusCode: HttpStatus.BAD_REQUEST,
-        error: 'Bad Request',
-        code: 'OWN_POST',
-        message: 'You cannot report your own post',
-      });
+      throw new InvalidInputException(
+        'OWN_POST',
+        'You cannot report your own post',
+      );
     }
     try {
       const report = await this.reports.create({
@@ -84,12 +80,10 @@ export class PostReportsService {
       return toReportDto(report);
     } catch (error: unknown) {
       if (!isUniqueViolation(error)) throw error;
-      throw new ConflictException({
-        statusCode: HttpStatus.CONFLICT,
-        error: 'Conflict',
-        code: 'ALREADY_REPORTED',
-        message: 'You have already reported this post',
-      });
+      throw new StateConflictException(
+        'ALREADY_REPORTED',
+        'You have already reported this post',
+      );
     }
   }
 
@@ -128,9 +122,13 @@ export class PostReportsService {
       )
       .exec();
     const report = decided ?? (await this.reports.findOne({ _id: id }).exec());
-    if (!report) throw new NotFoundException('Report not found');
+    if (!report)
+      throw new ResourceNotFoundException('NOT_FOUND', 'Report not found');
     if (!decided) {
-      throw new ConflictException('The report was already reviewed');
+      throw new StateConflictException(
+        'CONFLICT',
+        'The report was already reviewed',
+      );
     }
     const [dto] = await this.toAdminDtos([report]);
     return dto;

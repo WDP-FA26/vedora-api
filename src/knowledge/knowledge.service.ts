@@ -1,11 +1,6 @@
 import { randomUUID } from 'node:crypto';
-import {
-  Injectable,
-  Logger,
-  NotFoundException,
-  PayloadTooLargeException,
-  UnsupportedMediaTypeException,
-} from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
+import { FileTooLargeException } from '../common/exceptions/file-too-large.exception.js';
 import { ConfigService } from '@nestjs/config';
 import { InjectModel } from '@nestjs/mongoose';
 import type { Model } from 'mongoose';
@@ -26,6 +21,8 @@ import {
 } from './extractors/document-extractor.js';
 import { PDF_CONTENT_TYPE, PdfExtractor } from './extractors/pdf-extractor.js';
 import { KnowledgeIndexService } from './retrieval/knowledge-index.service.js';
+import { ResourceNotFoundException } from '../common/exceptions/resource-not-found.exception.js';
+import { UnsupportedFileTypeException } from '../common/exceptions/unsupported-file-type.exception.js';
 
 @Injectable()
 export class KnowledgeService {
@@ -50,12 +47,16 @@ export class KnowledgeService {
     sizeBytes: number,
   ): Promise<CreateKnowledgeUploadResponseDto> {
     if (sizeBytes > this.maxBytes) {
-      throw new PayloadTooLargeException(
+      throw new FileTooLargeException(
+        'FILE_TOO_LARGE',
         `Files are limited to ${this.maxBytes / 1024 / 1024} MB`,
       );
     }
     if (!/\.pdf$/i.test(filename)) {
-      throw new UnsupportedMediaTypeException('Only PDF files are supported');
+      throw new UnsupportedFileTypeException(
+        'UNSUPPORTED_FILE_TYPE',
+        'Only PDF files are supported',
+      );
     }
     const id = randomUUID();
     const key = `knowledge/${id}.pdf`;
@@ -187,7 +188,8 @@ export class KnowledgeService {
 
   private async findDocument(id: string): Promise<KnowledgeDocument> {
     const document = await this.documents.findOne({ _id: id }).exec();
-    if (!document) throw new NotFoundException('Document not found');
+    if (!document)
+      throw new ResourceNotFoundException('NOT_FOUND', 'Document not found');
     return document;
   }
 }

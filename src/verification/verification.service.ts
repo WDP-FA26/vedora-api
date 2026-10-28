@@ -1,14 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import {
-  BadRequestException,
-  ConflictException,
-  HttpException,
-  HttpStatus,
-  Injectable,
-  Logger,
-  NotFoundException,
-  PayloadTooLargeException,
-} from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { InjectModel } from '@nestjs/mongoose';
 
@@ -38,6 +29,11 @@ import {
   VerificationRequestDto,
   VerificationRequestsQueryDto,
 } from './dto/verification.dto.js';
+import { FileTooLargeException } from '../common/exceptions/file-too-large.exception.js';
+import { InvalidInputException } from '../common/exceptions/invalid-input.exception.js';
+import { ResourceNotFoundException } from '../common/exceptions/resource-not-found.exception.js';
+import { StateConflictException } from '../common/exceptions/state-conflict.exception.js';
+import { QuotaReachedException } from '../common/exceptions/quota-reached.exception.js';
 
 const IMAGE_EXTENSIONS: Record<string, string> = {
   'image/jpeg': 'jpg',
@@ -49,13 +45,6 @@ const MAX_PROOF_BYTES = 10 * 1024 * 1024;
 const MAX_UNSUBMITTED_PROOFS = 12;
 const CLEANUP_AGE_MS = 48 * 60 * 60 * 1000;
 const PROOF_URL_TTL_SECONDS = 10 * 60;
-
-const pendingConflict = () =>
-  new ConflictException({
-    statusCode: HttpStatus.CONFLICT,
-    code: 'REQUEST_PENDING',
-    message: 'A verification request is already being reviewed',
-  });
 
 @Injectable()
 export class VerificationService {
@@ -76,19 +65,18 @@ export class VerificationService {
     dto: CreateProofUploadDto,
   ): Promise<ProofUploadDto> {
     if (dto.sizeBytes > MAX_PROOF_BYTES)
-      throw new PayloadTooLargeException('Proof image is too large');
+      throw new FileTooLargeException(
+        'FILE_TOO_LARGE',
+        'Proof image is too large',
+      );
     const unsubmitted = await this.proofs.countDocuments({
       ownerId,
       requestId: null,
     });
     if (unsubmitted >= MAX_UNSUBMITTED_PROOFS)
-      throw new HttpException(
-        {
-          statusCode: HttpStatus.TOO_MANY_REQUESTS,
-          code: 'PROOF_LIMIT_REACHED',
-          message: 'Too many unsubmitted proof images; try again later',
-        },
-        HttpStatus.TOO_MANY_REQUESTS,
+      throw new QuotaReachedException(
+        'PROOF_LIMIT_REACHED',
+        'Too many unsubmitted proof images; try again later',
       );
     const id = randomUUID();
     const key = `verifications/${ownerId}/${id}.${IMAGE_EXTENSIONS[dto.contentType]}`;
@@ -110,18 +98,17 @@ export class VerificationService {
       .find({ ownerId: userId, requestId: null, _id: { $in: dto.proofIds } })
       .exec();
     if (proofs.length !== dto.proofIds.length)
-      throw new BadRequestException('Unknown proof image');
+      throw new InvalidInputException('BAD_REQUEST', 'Unknown proof image');
     const uploaded = await Promise.all(
       proofs.map((proof) =>
         this.storage.exists(StorageTarget.Verifications, proof.storageKey),
       ),
     );
     if (uploaded.includes(false))
-      throw new ConflictException({
-        statusCode: HttpStatus.CONFLICT,
-        code: 'PROOF_NOT_UPLOADED',
-        message: 'A proof image has not finished uploading',
-      });
+      throw new StateConflictException(
+        'PROOF_NOT_UPLOADED',
+        'A proof image has not finished uploading',
+      );
 
     const requestId = randomUUID();
     await this.mongo.withTransaction(async (session) => {
@@ -131,18 +118,22 @@ export class VerificationService {
         .findOne({ _id: userId })
         .session(session)
         .exec();
-      if (!user) throw new NotFoundException('User not found');
+      if (!user)
+        throw new ResourceNotFoundException('NOT_FOUND', 'User not found');
       if (user.isProfessional)
-        throw new ConflictException({
-          statusCode: HttpStatus.CONFLICT,
-          code: 'ALREADY_VERIFIED',
-          message: 'This account is already verified',
-        });
+        throw new StateConflictException(
+          'ALREADY_VERIFIED',
+          'This account is already verified',
+        );
       const pending = await this.requests
         .findOne({ userId, status: VerificationStatus.PENDING })
         .session(session)
         .exec();
-      if (pending) throw pendingConflict();
+      if (pending)
+        throw new StateConflictException(
+          'REQUEST_PENDING',
+          'A verification request is already being reviewed',
+        );
       await this.requests.create(
         [
           {
@@ -165,10 +156,14 @@ export class VerificationService {
         { session },
       );
       if (claimed.modifiedCount !== dto.proofIds.length)
-        throw new BadRequestException('Unknown proof image');
+        throw new InvalidInputException('BAD_REQUEST', 'Unknown proof image');
     });
     const request = await this.requests.findOne({ _id: requestId }).exec();
-    if (!request) throw new NotFoundException('Verification request not found');
+    if (!request)
+      throw new ResourceNotFoundException(
+        'NOT_FOUND',
+        'Verification request not found',
+      );
     const [created] = await this.toDtos([request]);
     return created;
   }
@@ -178,7 +173,8 @@ export class VerificationService {
       .findOne({ _id: userId })
       .select('isProfessional')
       .exec();
-    if (!user) throw new NotFoundException('User not found');
+    if (!user)
+      throw new ResourceNotFoundException('NOT_FOUND', 'User not found');
     const latest = await this.requests
       .findOne({ userId })
       .sort({ createdAt: -1 })
@@ -211,7 +207,11 @@ export class VerificationService {
 
   async findOne(id: string): Promise<AdminVerificationRequestDetailDto> {
     const row = await this.requests.findOne({ _id: id }).exec();
-    if (!row) throw new NotFoundException('Verification request not found');
+    if (!row)
+      throw new ResourceNotFoundException(
+        'NOT_FOUND',
+        'Verification request not found',
+      );
     const [[dto], proofs] = await Promise.all([
       this.toAdminDtos([row]),
       this.proofs.find({ requestId: id }).sort({ createdAt: 1, _id: 1 }).exec(),
@@ -256,9 +256,15 @@ export class VerificationService {
         .session(session)
         .exec();
       if (!request)
-        throw new NotFoundException('Verification request not found');
+        throw new ResourceNotFoundException(
+          'NOT_FOUND',
+          'Verification request not found',
+        );
       if (reviewed.modifiedCount === 0)
-        throw new ConflictException('This request was already reviewed');
+        throw new StateConflictException(
+          'CONFLICT',
+          'This request was already reviewed',
+        );
       if (dto.decision === VerificationStatus.APPROVED)
         await this.users.updateOne(
           { _id: request.userId },
@@ -267,7 +273,11 @@ export class VerificationService {
         );
     });
     const row = await this.requests.findOne({ _id: id }).exec();
-    if (!row) throw new NotFoundException('Verification request not found');
+    if (!row)
+      throw new ResourceNotFoundException(
+        'NOT_FOUND',
+        'Verification request not found',
+      );
     const [decided] = await this.toAdminDtos([row]);
     return decided;
   }

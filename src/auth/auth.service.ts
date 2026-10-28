@@ -1,14 +1,4 @@
-import {
-  BadRequestException,
-  ForbiddenException,
-  HttpException,
-  HttpStatus,
-  Injectable,
-  Logger,
-  NotFoundException,
-  ServiceUnavailableException,
-  UnauthorizedException,
-} from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { compare } from 'bcryptjs';
@@ -25,7 +15,10 @@ import {
   VerifyEmailDto,
 } from './dto/email-verification.dto.js';
 import { LoginDto } from './dto/login.dto.js';
-import { ForgotPasswordDto, ResetPasswordDto } from './dto/password-reset.dto.js';
+import {
+  ForgotPasswordDto,
+  ResetPasswordDto,
+} from './dto/password-reset.dto.js';
 import { RegisterDto } from './dto/register.dto.js';
 import {
   EmailVerificationService,
@@ -38,6 +31,12 @@ import {
   IssuedRefreshToken,
   RefreshTokensService,
 } from './refresh-tokens.service.js';
+import { AccessDeniedException } from '../common/exceptions/access-denied.exception.js';
+import { FeatureUnavailableException } from '../common/exceptions/feature-unavailable.exception.js';
+import { InvalidInputException } from '../common/exceptions/invalid-input.exception.js';
+import { QuotaReachedException } from '../common/exceptions/quota-reached.exception.js';
+import { ResourceNotFoundException } from '../common/exceptions/resource-not-found.exception.js';
+import { UnauthenticatedException } from '../common/exceptions/unauthenticated.exception.js';
 
 const DUMMY_PASSWORD_HASH =
   '$2b$12$eMcBdg./eJofytkZPDuoGOyif9iLSXILzYk0MY95Vq6P7M6.c9nTe';
@@ -89,7 +88,10 @@ export class AuthService {
     );
 
     if (!user || !passwordMatches) {
-      throw new UnauthorizedException('Invalid username or password');
+      throw new UnauthenticatedException(
+        'UNAUTHORIZED',
+        'Invalid username or password',
+      );
     }
     if (
       user.status === AccountStatus.SUSPENDED ||
@@ -100,13 +102,11 @@ export class AuthService {
     // Only reached with the right password, so it doesn't reveal the email.
     if (!user.emailVerifiedAt) {
       await this.sendCodeQuietly(user);
-      throw new ForbiddenException({
-        statusCode: 403,
-        error: 'Forbidden',
-        code: 'EMAIL_NOT_VERIFIED',
-        message: 'Email address is not verified',
-        email: user.email,
-      });
+      throw new AccessDeniedException(
+        'EMAIL_NOT_VERIFIED',
+        'Email address is not verified',
+        { email: user.email },
+      );
     }
 
     return this.createAuthResponse(toPublicUser(user));
@@ -119,25 +119,26 @@ export class AuthService {
       (user.status === AccountStatus.SUSPENDED ||
         user.status === AccountStatus.DELETED)
     ) {
-      throw new BadRequestException('Invalid or expired verification code');
+      throw new InvalidInputException(
+        'BAD_REQUEST',
+        'Invalid or expired verification code',
+      );
     }
     const result =
       user && !user.emailVerifiedAt
         ? await this.emailVerificationService.verify(user, dto.code)
         : 'invalid';
     if (result === 'locked') {
-      throw new HttpException(
-        {
-          statusCode: HttpStatus.TOO_MANY_REQUESTS,
-          error: 'Too Many Requests',
-          code: 'VERIFY_LIMIT_REACHED',
-          message: 'Too many wrong codes for this email; try again tomorrow',
-        },
-        HttpStatus.TOO_MANY_REQUESTS,
+      throw new QuotaReachedException(
+        'VERIFY_LIMIT_REACHED',
+        'Too many wrong codes for this email; try again tomorrow',
       );
     }
     if (!user || result !== 'verified') {
-      throw new BadRequestException('Invalid or expired verification code');
+      throw new InvalidInputException(
+        'BAD_REQUEST',
+        'Invalid or expired verification code',
+      );
     }
 
     return this.createAuthResponse(toPublicUser(user));
@@ -156,17 +157,15 @@ export class AuthService {
       result = await this.emailVerificationService.send(user);
     } catch (error) {
       this.logger.error(`Verification email failed: ${String(error)}`);
-      throw new ServiceUnavailableException('Could not send the email');
+      throw new FeatureUnavailableException(
+        'SERVICE_UNAVAILABLE',
+        'Could not send the email',
+      );
     }
     if (result === 'limit') {
-      throw new HttpException(
-        {
-          statusCode: HttpStatus.TOO_MANY_REQUESTS,
-          error: 'Too Many Requests',
-          code: 'RESEND_LIMIT_REACHED',
-          message: 'Verification code resend limit reached; try again later',
-        },
-        HttpStatus.TOO_MANY_REQUESTS,
+      throw new QuotaReachedException(
+        'RESEND_LIMIT_REACHED',
+        'Verification code resend limit reached; try again later',
       );
     }
   }
@@ -184,17 +183,15 @@ export class AuthService {
       result = await this.passwordResetService.send(user);
     } catch (error) {
       this.logger.error(`Password reset email failed: ${String(error)}`);
-      throw new ServiceUnavailableException('Could not send the email');
+      throw new FeatureUnavailableException(
+        'SERVICE_UNAVAILABLE',
+        'Could not send the email',
+      );
     }
     if (result === 'limit') {
-      throw new HttpException(
-        {
-          statusCode: HttpStatus.TOO_MANY_REQUESTS,
-          error: 'Too Many Requests',
-          code: 'RESEND_LIMIT_REACHED',
-          message: 'Password reset code limit reached; try again later',
-        },
-        HttpStatus.TOO_MANY_REQUESTS,
+      throw new QuotaReachedException(
+        'RESEND_LIMIT_REACHED',
+        'Password reset code limit reached; try again later',
       );
     }
   }
@@ -208,18 +205,16 @@ export class AuthService {
       ? await this.passwordResetService.reset(user, dto.code, passwordHash)
       : 'invalid';
     if (result === 'locked') {
-      throw new HttpException(
-        {
-          statusCode: HttpStatus.TOO_MANY_REQUESTS,
-          error: 'Too Many Requests',
-          code: 'VERIFY_LIMIT_REACHED',
-          message: 'Too many wrong codes for this email; try again tomorrow',
-        },
-        HttpStatus.TOO_MANY_REQUESTS,
+      throw new QuotaReachedException(
+        'VERIFY_LIMIT_REACHED',
+        'Too many wrong codes for this email; try again tomorrow',
       );
     }
     if (!user || result !== 'reset') {
-      throw new BadRequestException('Invalid or expired reset code');
+      throw new InvalidInputException(
+        'BAD_REQUEST',
+        'Invalid or expired reset code',
+      );
     }
     // Whoever knew the old password is signed out everywhere.
     await this.refreshTokensService.revokeAllForUser(user.id);
@@ -227,7 +222,8 @@ export class AuthService {
 
   async getCurrentUser(userId: string): Promise<PublicUser> {
     const user = await this.accounts.findPublicById(userId);
-    if (!user) throw new NotFoundException('User not found');
+    if (!user)
+      throw new ResourceNotFoundException('NOT_FOUND', 'User not found');
     assertAccountActive(user.status);
     return user;
   }

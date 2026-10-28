@@ -1,4 +1,5 @@
-import { BadRequestException, ConflictException } from '@nestjs/common';
+import { InvalidInputException } from '../common/exceptions/invalid-input.exception.js';
+import { StateConflictException } from '../common/exceptions/state-conflict.exception.js';
 import type { INestApplication } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { createIngredient } from '../../test/fixtures.js';
@@ -66,7 +67,7 @@ describe('IncompatibilityRulesService', () => {
         b: { kind: 'GROUP', id: 'b1a2d3e4-0000-4000-8000-000000000099' },
         reason: REASON,
       }),
-    ).rejects.toMatchObject({ response: { code: 'UNKNOWN_REFERENCE' } });
+    ).rejects.toMatchObject({ code: 'UNKNOWN_REFERENCE' });
     expect(await rules().countDocuments()).toBe(0);
   });
 
@@ -100,7 +101,7 @@ describe('IncompatibilityRulesService', () => {
         b: { kind: 'INGREDIENT', id: tofu },
         reason: 'x',
       }),
-    ).rejects.toBeInstanceOf(BadRequestException);
+    ).rejects.toBeInstanceOf(InvalidInputException);
     expect(await rules().countDocuments()).toBe(0);
   });
 
@@ -117,7 +118,7 @@ describe('IncompatibilityRulesService', () => {
         b: { kind: 'INGREDIENT', id: tofu },
         reason: 'x',
       }),
-    ).rejects.toBeInstanceOf(ConflictException);
+    ).rejects.toBeInstanceOf(StateConflictException);
     expect(await rules().countDocuments()).toBe(1);
   });
 

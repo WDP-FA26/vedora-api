@@ -1,8 +1,4 @@
-import {
-  Injectable,
-  Logger,
-  ServiceUnavailableException,
-} from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import {
   isStepCount,
@@ -30,6 +26,7 @@ import { plannerInstructions } from './meal-planner.prompt.js';
 import { PLANNER_REFUSALS } from './meal-planner.refusals.js';
 import { proposeMealPlanTool } from './tools/propose-meal-plan.tool.js';
 import { searchRecipesTool } from './tools/search-recipes.tool.js';
+import { FeatureUnavailableException } from '../common/exceptions/feature-unavailable.exception.js';
 
 // room to search, then propose again after a rejected proposal
 const MAX_STEPS = 8;
@@ -88,7 +85,10 @@ export class MealPlannerChatService {
     ).catch((error: unknown) => {
       if (abortSignal.aborted) throw error;
       this.logger.error(`Moderation failed: ${String(error)}`);
-      throw new ServiceUnavailableException('Moderation is unavailable');
+      throw new FeatureUnavailableException(
+        'SERVICE_UNAVAILABLE',
+        'Moderation is unavailable',
+      );
     });
     if (verdict !== 'allow') {
       this.logger.warn(`Moderation answered ${verdict}`);

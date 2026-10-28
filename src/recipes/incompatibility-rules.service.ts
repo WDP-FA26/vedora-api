@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import type { HydratedDocument, Model } from 'mongoose';
 import {
@@ -25,7 +25,9 @@ import {
   SaveIncompatibilityRuleDto,
 } from './dto/ingredient.dto.js';
 import { RecipeConflictDto } from './dto/recipe.dto.js';
-import { badRequest, conflict } from './recipe-errors.js';
+import { ResourceNotFoundException } from '../common/exceptions/resource-not-found.exception.js';
+import { InvalidInputException } from '../common/exceptions/invalid-input.exception.js';
+import { StateConflictException } from '../common/exceptions/state-conflict.exception.js';
 
 type Named = { id: string; name: string };
 
@@ -93,19 +95,21 @@ export class IncompatibilityRulesService {
         { returnDocument: 'after' },
       )
       .exec();
-    if (!updated) throw new NotFoundException('Rule not found');
+    if (!updated)
+      throw new ResourceNotFoundException('NOT_FOUND', 'Rule not found');
     return this.findOne(id);
   }
 
   async remove(id: string): Promise<void> {
     const removed = await this.rules.deleteOne({ _id: id }).exec();
     if (removed.deletedCount === 0)
-      throw new NotFoundException('Rule not found');
+      throw new ResourceNotFoundException('NOT_FOUND', 'Rule not found');
   }
 
   private async findOne(id: string): Promise<IncompatibilityRuleDto> {
     const row = await this.rules.findOne({ _id: id }).exec();
-    if (!row) throw new NotFoundException('Rule not found');
+    if (!row)
+      throw new ResourceNotFoundException('NOT_FOUND', 'Rule not found');
     const [withSides] = await this.attachSides([row]);
     return toDto(withSides);
   }
@@ -195,7 +199,7 @@ export class IncompatibilityRulesService {
     const a = toSide(dto.a);
     const b = toSide(dto.b);
     if (a.ingredientId && a.ingredientId === b.ingredientId) {
-      throw badRequest(
+      throw new InvalidInputException(
         'SAME_INGREDIENT',
         'An ingredient cannot be incompatible with itself',
       );
@@ -218,7 +222,7 @@ export class IncompatibilityRulesService {
       allExist(this.groups, groupIds),
     ]);
     if (!ingredients || !groups) {
-      throw badRequest(
+      throw new InvalidInputException(
         'UNKNOWN_REFERENCE',
         'An id in the request does not exist',
       );
@@ -231,7 +235,10 @@ export class IncompatibilityRulesService {
     if (selfId) filter._id = { $ne: selfId };
     const duplicate = await this.rules.findOne(filter).select('_id').exec();
     if (duplicate) {
-      throw conflict('RULE_EXISTS', 'A rule for this pair already exists');
+      throw new StateConflictException(
+        'RULE_EXISTS',
+        'A rule for this pair already exists',
+      );
     }
     return {
       ...pair(a, b),

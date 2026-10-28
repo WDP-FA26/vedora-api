@@ -1,10 +1,5 @@
-import {
-  BadRequestException,
-  ForbiddenException,
-  HttpStatus,
-  Injectable,
-  NotFoundException,
-} from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
+import { InvalidInputException } from '../common/exceptions/invalid-input.exception.js';
 import { InjectModel } from '@nestjs/mongoose';
 import type { Model } from 'mongoose';
 import { randomUUID } from 'node:crypto';
@@ -18,12 +13,17 @@ import { CloudinaryService } from '../cloudinary/cloudinary.service.js';
 import {
   MediaStatus,
   MediaAsset,
+  Follow,
   Post,
   PostBookmark,
   PostStatus,
+  PostType,
 } from '../mongo/models.js';
 import { MongoService } from '../mongo/mongo.service.js';
-import { MAX_FEED_RESULTS, PostFeedService } from './search/post-feed.service.js';
+import {
+  MAX_FEED_RESULTS,
+  PostFeedService,
+} from './search/post-feed.service.js';
 import { PostSearchIndexService } from './search/post-search-index.service.js';
 import {
   MAX_SEARCH_RESULTS,
@@ -35,6 +35,8 @@ import { ListPostsQueryDto } from './dto/list-posts-query.dto.js';
 import { PostPageDto, PostResponseDto } from './dto/post-response.dto.js';
 import { SearchPostsQueryDto } from './dto/search-posts-query.dto.js';
 import { PostRelationsService } from './post-relations.service.js';
+import { AccessDeniedException } from '../common/exceptions/access-denied.exception.js';
+import { ResourceNotFoundException } from '../common/exceptions/resource-not-found.exception.js';
 
 @Injectable()
 export class PostsService {
@@ -50,6 +52,7 @@ export class PostsService {
     @InjectModel(MediaAsset.name) private readonly media: Model<MediaAsset>,
     @InjectModel(PostBookmark.name)
     private readonly bookmarks: Model<PostBookmark>,
+    @InjectModel(Follow.name) private readonly follows: Model<Follow>,
   ) {}
 
   /**
@@ -60,12 +63,10 @@ export class PostsService {
     const body = dto.body || null;
     const mediaIds = dto.mediaIds ?? [];
     if (!body && mediaIds.length === 0) {
-      throw new BadRequestException({
-        statusCode: HttpStatus.BAD_REQUEST,
-        error: 'Bad Request',
-        code: 'EMPTY_POST',
-        message: 'A post needs text or a video',
-      });
+      throw new InvalidInputException(
+        'EMPTY_POST',
+        'A post needs text or a video',
+      );
     }
 
     const id = randomUUID();
@@ -235,11 +236,50 @@ export class PostsService {
     };
   }
 
+  /** Published posts from the accounts the user follows, newest first. */
+  async listFollowing(
+    userId: string,
+    query: CursorPaginationQueryDto,
+  ): Promise<PostPageDto> {
+    const follows = await this.follows
+      .find({ followerId: userId })
+      .select('followingId')
+      .exec();
+    const authorIds = follows.map(({ followingId }) => followingId);
+    if (authorIds.length === 0) return { items: [], nextCursor: null };
+    const filter: Record<string, unknown> = {
+      authorId: { $in: authorIds },
+      status: PostStatus.PUBLISHED,
+      type: PostType.POST,
+    };
+    if (query.cursor) {
+      // The cursor is the post id; the post gives its place in the order.
+      const cursor = await this.posts
+        .findOne({ _id: query.cursor, authorId: { $in: authorIds } })
+        .exec();
+      if (!cursor) return { items: [], nextCursor: null };
+      Object.assign(
+        filter,
+        afterCursor('createdAt', { value: cursor.createdAt, id: cursor.id }),
+      );
+    }
+    const rows = await this.posts
+      .find(filter)
+      .sort({ createdAt: -1, _id: -1 })
+      .limit(query.limit + 1)
+      .exec();
+    const page = createCursorPaginatedResponse(rows, query.limit);
+    return {
+      items: await this.toResponses(page.items, userId),
+      nextCursor: page.nextCursor,
+    };
+  }
+
   async findOne(id: string, viewerId?: string): Promise<PostResponseDto> {
     const post = await this.posts.findOne({ _id: id }).exec();
     const isAuthor = viewerId !== undefined && post?.authorId === viewerId;
     if (!post || (post.status !== PostStatus.PUBLISHED && !isAuthor)) {
-      throw new NotFoundException('Post not found');
+      throw new ResourceNotFoundException('NOT_FOUND', 'Post not found');
     }
 
     // Without webhooks, the author's polling is what moves the video along.
@@ -269,10 +309,13 @@ export class PostsService {
       .select('authorId')
       .exec();
     if (!post) {
-      throw new NotFoundException('Post not found');
+      throw new ResourceNotFoundException('NOT_FOUND', 'Post not found');
     }
     if (post.authorId !== authorId) {
-      throw new ForbiddenException('Only the author can delete this post');
+      throw new AccessDeniedException(
+        'FORBIDDEN',
+        'Only the author can delete this post',
+      );
     }
     await this.destroy(id);
   }
@@ -281,7 +324,7 @@ export class PostsService {
   async removeAsAdmin(id: string): Promise<void> {
     const post = await this.posts.findOne({ _id: id }).select('_id').exec();
     if (!post) {
-      throw new NotFoundException('Post not found');
+      throw new ResourceNotFoundException('NOT_FOUND', 'Post not found');
     }
     await this.destroy(id);
   }
@@ -301,7 +344,8 @@ export class PostsService {
 
   private async load(id: string, viewerId?: string): Promise<PostResponseDto> {
     const post = await this.posts.findOne({ _id: id }).exec();
-    if (!post) throw new NotFoundException('Post not found');
+    if (!post)
+      throw new ResourceNotFoundException('NOT_FOUND', 'Post not found');
     const [response] = await this.toResponses([post], viewerId);
     return response;
   }

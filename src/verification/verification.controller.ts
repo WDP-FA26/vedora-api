@@ -42,10 +42,14 @@ import {
   VerificationRequestsQueryDto,
 } from './dto/verification.dto.js';
 import { VerificationService } from './verification.service.js';
+import { ErrorBodyDto } from '../common/exceptions/error-body.dto.js';
 
 @ApiTags('verification')
 @ApiBearerAuth()
-@ApiUnauthorizedResponse({ description: 'Authentication required' })
+@ApiUnauthorizedResponse({
+  type: ErrorBodyDto,
+  description: 'Authentication required',
+})
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Controller('verification')
 export class VerificationController {
@@ -78,6 +82,7 @@ export class VerificationController {
   })
   @ApiCreatedResponse({ type: VerificationRequestDto })
   @ApiConflictResponse({
+    type: ErrorBodyDto,
     description:
       'ALREADY_VERIFIED, REQUEST_PENDING or PROOF_NOT_UPLOADED (see `code`)',
   })
@@ -91,7 +96,10 @@ export class VerificationController {
   @Get('requests')
   @Roles(UserRole.ADMIN)
   @ApiOperation({ summary: 'List verification requests (admin only)' })
-  @ApiForbiddenResponse({ description: 'Insufficient account permissions' })
+  @ApiForbiddenResponse({
+    type: ErrorBodyDto,
+    description: 'Insufficient account permissions',
+  })
   @ApiPaginatedResponse(AdminVerificationRequestDto)
   findAll(
     @Query() query: VerificationRequestsQueryDto,
@@ -104,7 +112,10 @@ export class VerificationController {
   @ApiOperation({
     summary: 'Get a request with signed proof image URLs (admin only)',
   })
-  @ApiForbiddenResponse({ description: 'Insufficient account permissions' })
+  @ApiForbiddenResponse({
+    type: ErrorBodyDto,
+    description: 'Insufficient account permissions',
+  })
   @ApiOkResponse({ type: AdminVerificationRequestDetailDto })
   findOne(
     @Param('id', ParseUUIDPipe) id: string,
@@ -119,9 +130,15 @@ export class VerificationController {
     summary: 'Approve or reject a pending request (admin only)',
     description: 'Approving marks the applicant as a professional.',
   })
-  @ApiForbiddenResponse({ description: 'Insufficient account permissions' })
+  @ApiForbiddenResponse({
+    type: ErrorBodyDto,
+    description: 'Insufficient account permissions',
+  })
   @ApiOkResponse({ type: AdminVerificationRequestDto })
-  @ApiConflictResponse({ description: 'The request was already reviewed' })
+  @ApiConflictResponse({
+    type: ErrorBodyDto,
+    description: 'The request was already reviewed',
+  })
   review(
     @Req() request: AuthenticatedRequest,
     @Param('id', ParseUUIDPipe) id: string,

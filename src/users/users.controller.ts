@@ -39,11 +39,18 @@ import { UsersQueryDto } from './dto/users-query.dto.js';
 import { AccountsService } from './accounts.service.js';
 import { type PublicUser } from './public-user.js';
 import { UsersService } from './users.service.js';
+import { ErrorBodyDto } from '../common/exceptions/error-body.dto.js';
 
 @ApiTags('users')
 @ApiBearerAuth()
-@ApiUnauthorizedResponse({ description: 'Authentication required' })
-@ApiForbiddenResponse({ description: 'Insufficient account permissions' })
+@ApiUnauthorizedResponse({
+  type: ErrorBodyDto,
+  description: 'Authentication required',
+})
+@ApiForbiddenResponse({
+  type: ErrorBodyDto,
+  description: 'Insufficient account permissions',
+})
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Controller('users')
 export class UsersController {
@@ -91,7 +98,10 @@ export class UsersController {
   @Patch(':id/role')
   @Roles(UserRole.ADMIN)
   @ApiOperation({ summary: 'Change an account role (admin only)' })
-  @ApiConflictResponse({ description: 'Stale version or final ACTIVE admin' })
+  @ApiConflictResponse({
+    type: ErrorBodyDto,
+    description: 'Stale version or final ACTIVE admin',
+  })
   updateRole(
     @Req() request: AuthenticatedRequest,
     @Param('id', ParseUUIDPipe) id: string,
@@ -106,6 +116,7 @@ export class UsersController {
     summary: 'Suspend or reactivate a verified account (admin only)',
   })
   @ApiConflictResponse({
+    type: ErrorBodyDto,
     description: 'Stale version, invalid transition or final ACTIVE admin',
   })
   updateStatus(
@@ -119,7 +130,10 @@ export class UsersController {
   @Delete(':id')
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ summary: 'Delete your account, or any account as an admin' })
-  @ApiConflictResponse({ description: 'Cannot delete the final ACTIVE admin' })
+  @ApiConflictResponse({
+    type: ErrorBodyDto,
+    description: 'Cannot delete the final ACTIVE admin',
+  })
   async remove(
     @Req() request: AuthenticatedRequest,
     @Param('id', ParseUUIDPipe) id: string,

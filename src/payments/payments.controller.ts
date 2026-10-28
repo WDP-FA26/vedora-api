@@ -39,10 +39,14 @@ import {
 } from './payment.dto.js';
 import { PaymentsService } from './payments.service.js';
 import { SePayWebhookGuard } from './sepay-webhook.guard.js';
+import { ErrorBodyDto } from '../common/exceptions/error-body.dto.js';
 
 @ApiTags('billing')
 @ApiBearerAuth()
-@ApiUnauthorizedResponse({ description: 'Verified ACTIVE account required' })
+@ApiUnauthorizedResponse({
+  type: ErrorBodyDto,
+  description: 'Verified ACTIVE account required',
+})
 @UseGuards(JwtAuthGuard)
 @Controller()
 export class PaymentsController {
@@ -86,12 +90,15 @@ export class PaymentsController {
   })
   @ApiOkResponse({ type: PaymentDto })
   @ApiBadRequestResponse({
+    type: ErrorBodyDto,
     description: 'Invalid plan, key or unsupported amount field',
   })
   @ApiConflictResponse({
+    type: ErrorBodyDto,
     description: 'Key/body conflict or a different pending purchase exists',
   })
   @ApiServiceUnavailableResponse({
+    type: ErrorBodyDto,
     description:
       'Payments disabled or temporary payment-code allocation exhaustion; retain Idempotency-Key when retrying',
   })
@@ -111,6 +118,7 @@ export class PaymentsController {
   })
   @ApiOkResponse({ type: PaymentDto })
   @ApiNotFoundResponse({
+    type: ErrorBodyDto,
     description: 'Missing payment or belongs to another account',
   })
   get(
@@ -128,7 +136,10 @@ export class PaymentsController {
     summary: 'Cancel a pending purchase; never performs a bank refund',
   })
   @ApiOkResponse({ type: PaymentDto })
-  @ApiConflictResponse({ description: 'Completed payment cannot be cancelled' })
+  @ApiConflictResponse({
+    type: ErrorBodyDto,
+    description: 'Completed payment cannot be cancelled',
+  })
   cancel(
     @Param('id', ParseUUIDPipe) id: string,
     @Req() request: AuthenticatedRequest,

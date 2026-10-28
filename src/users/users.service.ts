@@ -1,10 +1,6 @@
-import {
-  ConflictException,
-  ForbiddenException,
-  Injectable,
-  NotFoundException,
-} from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
+import { StateConflictException } from '../common/exceptions/state-conflict.exception.js';
 import type { ClientSession, Model, QueryFilter } from 'mongoose';
 import { assertAccountActive } from '../auth/account-access.js';
 import type { AuthenticatedUser } from '../auth/auth.types.js';
@@ -34,6 +30,8 @@ import {
   toPublicUser,
 } from './public-user.js';
 import { rethrowUniqueViolation } from './unique-conflict.js';
+import { AccessDeniedException } from '../common/exceptions/access-denied.exception.js';
+import { ResourceNotFoundException } from '../common/exceptions/resource-not-found.exception.js';
 
 /**
  * Self-service and admin management of accounts: reading one, editing its
@@ -91,7 +89,8 @@ export class UsersService {
   async findOne(id: string, actor: AuthenticatedUser): Promise<PublicUser> {
     this.assertCanAccess(id, actor);
     const user = await this.accounts.findPublicById(id);
-    if (!user) throw new NotFoundException('User not found');
+    if (!user)
+      throw new ResourceNotFoundException('NOT_FOUND', 'User not found');
     return user;
   }
 
@@ -116,7 +115,8 @@ export class UsersService {
           { returnDocument: 'after' },
         )
         .exec();
-      if (!user) throw new NotFoundException('User not found');
+      if (!user)
+        throw new ResourceNotFoundException('NOT_FOUND', 'User not found');
       return toPublicUser(user);
     } catch (error: unknown) {
       rethrowUniqueViolation(error);
@@ -150,7 +150,10 @@ export class UsersService {
     actor: AuthenticatedUser,
   ): Promise<PublicUser> {
     if (actor.role !== UserRole.ADMIN) {
-      throw new ForbiddenException('Only admins can change user roles');
+      throw new AccessDeniedException(
+        'FORBIDDEN',
+        'Only admins can change user roles',
+      );
     }
     try {
       return await this.withAccountGate(
@@ -189,7 +192,10 @@ export class UsersService {
     actor: AuthenticatedUser,
   ): Promise<PublicUser> {
     if (actor.role !== UserRole.ADMIN)
-      throw new ForbiddenException('Only admins can change account status');
+      throw new AccessDeniedException(
+        'FORBIDDEN',
+        'Only admins can change account status',
+      );
     return this.withAccountGate(id, actor, true, async (target, session) => {
       this.assertVersion(target, dto.expectedVersion);
       if (target.status === dto.status) return toPublicUser(target);
@@ -198,11 +204,10 @@ export class UsersService {
           target.status !== AccountStatus.SUSPENDED) ||
         (dto.status === AccountStatus.ACTIVE && !target.emailVerifiedAt)
       ) {
-        throw new ConflictException({
-          code: 'INVALID_ACCOUNT_TRANSITION',
-          message:
-            'Only verified ACTIVE/SUSPENDED accounts can be suspended or reactivated',
-        });
+        throw new StateConflictException(
+          'INVALID_ACCOUNT_TRANSITION',
+          'Only verified ACTIVE/SUSPENDED accounts can be suspended or reactivated',
+        );
       }
       if (dto.status === AccountStatus.SUSPENDED)
         await this.assertNotLastAdmin(target, session);
@@ -226,16 +231,19 @@ export class UsersService {
 
   private assertCanAccess(id: string, actor: AuthenticatedUser): void {
     if (actor.role !== UserRole.ADMIN && actor.sub !== id) {
-      throw new ForbiddenException('You can only access your own account');
+      throw new AccessDeniedException(
+        'FORBIDDEN',
+        'You can only access your own account',
+      );
     }
   }
 
   private assertVersion(target: User, expectedVersion: number): void {
     if (target.accountVersion !== expectedVersion) {
-      throw new ConflictException({
-        code: 'ACCOUNT_VERSION_CONFLICT',
-        message: 'Account changed; reload it before retrying',
-      });
+      throw new StateConflictException(
+        'ACCOUNT_VERSION_CONFLICT',
+        'Account changed; reload it before retrying',
+      );
     }
   }
 
@@ -253,10 +261,10 @@ export class UsersService {
       { session },
     );
     if (activeAdmins <= 1) {
-      throw new ConflictException({
-        code: 'LAST_ACTIVE_ADMIN',
-        message: 'At least one ACTIVE admin must remain',
-      });
+      throw new StateConflictException(
+        'LAST_ACTIVE_ADMIN',
+        'At least one ACTIVE admin must remain',
+      );
     }
   }
 
@@ -273,7 +281,8 @@ export class UsersService {
         { session, returnDocument: 'after' },
       )
       .exec();
-    if (!updated) throw new NotFoundException('User not found');
+    if (!updated)
+      throw new ResourceNotFoundException('NOT_FOUND', 'User not found');
     return toPublicUser(updated);
   }
 
@@ -321,17 +330,23 @@ export class UsersService {
       }
       const currentActor = await this.findUser(actor.sub, session);
       if (!currentActor)
-        throw new ForbiddenException('Account no longer exists');
+        throw new AccessDeniedException(
+          'FORBIDDEN',
+          'Account no longer exists',
+        );
       assertAccountActive(currentActor.status);
       if (
         (adminOnly || id !== actor.sub) &&
         currentActor.role !== UserRole.ADMIN
       ) {
-        throw new ForbiddenException('Only admins can manage another account');
+        throw new AccessDeniedException(
+          'FORBIDDEN',
+          'Only admins can manage another account',
+        );
       }
       const target = await this.findUser(id, session);
       if (!target || target.status === AccountStatus.DELETED)
-        throw new NotFoundException('User not found');
+        throw new ResourceNotFoundException('NOT_FOUND', 'User not found');
       return operation(target, session);
     });
   }
