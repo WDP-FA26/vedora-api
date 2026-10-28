@@ -18,6 +18,10 @@ export default tseslint.config(
     rules: {
       '@typescript-eslint/no-floating-promises': 'error',
       '@typescript-eslint/no-explicit-any': 'off',
+      '@typescript-eslint/no-unused-vars': [
+        'error',
+        { argsIgnorePattern: '^_', varsIgnorePattern: '^_' },
+      ],
     },
   },
   {
@@ -31,7 +35,132 @@ export default tseslint.config(
       // supertest's `.expect(status)` is an assertion too.
       'vitest/expect-expect': [
         'error',
-        { assertFunctionNames: ['expect', 'request.**.expect'] },
+        {
+          assertFunctionNames: ['expect', 'request.**.expect', '**.expect'],
+        },
+      ],
+    },
+  },
+  // Paths retired by the refactors, so they do not creep back.
+  {
+    files: ['src/**/*.ts'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            {
+              group: ['**/post-search/**'],
+              message: 'Post search now lives in src/posts/search.',
+            },
+            {
+              group: ['**/ai-usage/**'],
+              message: 'AI usage now lives in src/ai/usage.',
+            },
+            {
+              group: ['**/posts/ai/**'],
+              message: 'Blog AI now lives in src/posts/blogs/ai.',
+            },
+          ],
+        },
+      ],
+    },
+  },
+  // The shared AI platform must not depend on any feature: features use it,
+  // never the other way round.
+  {
+    files: ['src/ai/**/*.ts'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            {
+              group: ['**/post-search/**'],
+              message: 'Post search now lives in src/posts/search.',
+            },
+            {
+              group: ['**/ai-usage/**'],
+              message: 'AI usage now lives in src/ai/usage.',
+            },
+            {
+              group: ['**/posts/ai/**'],
+              message: 'Blog AI now lives in src/posts/blogs/ai.',
+            },
+            {
+              group: [
+                '**/auth/**',
+                '**/users/**',
+                '**/profiles/**',
+                '**/posts/**',
+                '**/media/**',
+                '**/recipes/**',
+                '**/meal-plan/**',
+                '**/nutrition-chat/**',
+                '**/payments/**',
+                '**/notifications/**',
+                '**/verification/**',
+                '**/admin-dashboard/**',
+                '**/storage/**',
+                '**/cloudinary/**',
+                '**/mail/**',
+                '**/qdrant/**',
+                '**/database/**',
+              ],
+              message:
+                'src/ai is shared infrastructure; features depend on it, not the other way round.',
+            },
+          ],
+        },
+      ],
+    },
+  },
+  // Config only validates environment variables; it must not pull in a
+  // feature module (the old nutrition-chat enum import was exactly that).
+  {
+    files: ['src/config/**/*.ts'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            {
+              group: ['**/post-search/**'],
+              message: 'Post search now lives in src/posts/search.',
+            },
+            {
+              group: ['**/ai-usage/**'],
+              message: 'AI usage now lives in src/ai/usage.',
+            },
+            {
+              group: ['**/posts/ai/**'],
+              message: 'Blog AI now lives in src/posts/blogs/ai.',
+            },
+            {
+              group: [
+                '**/auth/**',
+                '**/users/**',
+                '**/profiles/**',
+                '**/posts/**',
+                '**/media/**',
+                '**/recipes/**',
+                '**/meal-plan/**',
+                '**/nutrition-chat/**',
+                '**/payments/**',
+                '**/notifications/**',
+                '**/verification/**',
+                '**/admin-dashboard/**',
+                '**/knowledge/**',
+                '**/storage/**',
+                '**/cloudinary/**',
+                '**/qdrant/**',
+                '**/mail/**',
+              ],
+              message:
+                'src/config only reads environment variables; features depend on config, not the other way round.',
+            },
+          ],
+        },
       ],
     },
   },

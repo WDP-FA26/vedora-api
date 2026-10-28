@@ -1,5 +1,5 @@
-import type { DietaryRestrictionsDto } from '../recipes/dto/dietary.dto';
-import type { MealPlanDto } from './dto/meal-plan.dto';
+import type { DietaryRestrictionsDto } from '../recipes/dto/dietary.dto.js';
+import type { MealPlanDto } from './dto/meal-plan.dto.js';
 
 export const DAY_NAMES = {
   MON: 'Thứ Hai',

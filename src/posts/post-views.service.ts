@@ -1,19 +1,20 @@
 import { Injectable, Logger, OnApplicationShutdown } from '@nestjs/common';
+import { InjectModel } from '@nestjs/mongoose';
 import { Interval } from '@nestjs/schedule';
-import { PostStatus, Prisma } from '@prisma/client';
-import { PrismaService } from '../prisma/prisma.service';
+import type { Model } from 'mongoose';
+import { Post, PostStatus } from '../mongo/models.js';
 
 const FLUSH_INTERVAL_MS = 10_000;
 /** The same viewer seeing a post again within this window is one view. */
 const DEDUPE_WINDOW_MS = 30 * 60_000;
 /** Oldest entries are dropped past this, so memory stays bounded under load. */
 const MAX_DEDUPE_ENTRIES = 200_000;
-/** Posts updated per statement, to keep each one short. */
+/** Posts updated per command, to keep each one short. */
 const FLUSH_BATCH_SIZE = 500;
 
 /**
  * Counts post views without a database write per view: views are deduplicated
- * and summed in memory, then added to `posts.view_count` in one statement
+ * and summed in memory, then added to `posts.viewCount` in one command
  * every few seconds (write-behind). The count is eventually consistent and
  * approximate by design: a crash loses the unflushed seconds, and with several
  * API instances each dedupes on its own (their increments still add up).
@@ -26,7 +27,7 @@ export class PostViewsService implements OnApplicationShutdown {
   /** `viewer:post` to when it stops suppressing repeat views; insertion-ordered. */
   private readonly seen = new Map<string, number>();
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(@InjectModel(Post.name) private readonly posts: Model<Post>) {}
 
   /** `viewer` is the user id, or the IP address of a guest. */
   record(viewer: string, postIds: string[], now = Date.now()): void {
@@ -52,15 +53,18 @@ export class PostViewsService implements OnApplicationShutdown {
     for (let start = 0; start < batch.length; start += FLUSH_BATCH_SIZE) {
       const rows = batch.slice(start, start + FLUSH_BATCH_SIZE);
       try {
-        // Raw SQL: one statement for the batch, and `updated_at` stays put.
-        // Ids of deleted or unpublished posts simply match nothing.
-        await this.prisma.$executeRaw`
-          UPDATE "posts" AS p
-          SET "view_count" = p."view_count" + v.views
-          FROM (VALUES ${Prisma.join(
-            rows.map(([id, views]) => Prisma.sql`(${id}::uuid, ${views}::int)`),
-          )}) AS v(id, views)
-          WHERE p."id" = v.id AND p."status" = ${PostStatus.PUBLISHED}::"PostStatus"`;
+        // A bulk write: one round trip for the batch, and `updatedAt` stays
+        // put. Ids of deleted or unpublished posts simply match nothing.
+        await this.posts.bulkWrite(
+          rows.map(([id, views]) => ({
+            updateOne: {
+              filter: { _id: id, status: PostStatus.PUBLISHED },
+              update: { $inc: { viewCount: views } },
+              timestamps: false,
+            },
+          })),
+          { ordered: false },
+        );
       } catch (error) {
         this.logger.warn(
           `Saving views of ${rows.length} posts failed: ${String(error)}; retrying`,

@@ -1,22 +1,20 @@
 import {
-  BadRequestException,
   Controller,
   Headers,
   HttpCode,
   HttpStatus,
   Logger,
   Post,
-  ServiceUnavailableException,
 } from '@nestjs/common';
 import { ApiExcludeController } from '@nestjs/swagger';
 import type { IncomingHttpHeaders } from 'node:http';
-import { CloudinaryService } from '../cloudinary/cloudinary.service';
-import {
-  type CloudinaryNotification,
-  cloudinaryNotification,
-} from './dto/cloudinary-notification';
-import { MediaService } from './media.service';
-import { RawBody } from './raw-body.decorator';
+import { CloudinaryService } from '../cloudinary/cloudinary.service.js';
+import { validatePayload } from '../common/validation.js';
+import { CloudinaryNotification } from './dto/cloudinary-notification.js';
+import { MediaService } from './media.service.js';
+import { RawBody } from './raw-body.decorator.js';
+import { FeatureUnavailableException } from '../common/exceptions/feature-unavailable.exception.js';
+import { InvalidInputException } from '../common/exceptions/invalid-input.exception.js';
 
 /**
  * Cloudinary calls this for upload and eager events. It is public; the
@@ -41,10 +39,13 @@ export class CloudinaryWebhookController {
     @Headers() headers: IncomingHttpHeaders,
   ): Promise<void> {
     if (!this.cloudinary.configured) {
-      throw new ServiceUnavailableException('Cloudinary is not configured');
+      throw new FeatureUnavailableException(
+        'SERVICE_UNAVAILABLE',
+        'Cloudinary is not configured',
+      );
     }
     if (!rawBody) {
-      throw new BadRequestException('Missing body');
+      throw new InvalidInputException('BAD_REQUEST', 'Missing body');
     }
     const notification = this.verify(rawBody.toString('utf8'), headers);
     await this.mediaService.handleNotification(notification);
@@ -62,12 +63,15 @@ export class CloudinaryWebhookController {
       !this.cloudinary.verifyNotification(body, timestamp, signature)
     ) {
       this.logger.warn('Rejected Cloudinary notification: bad signature');
-      throw new BadRequestException('Invalid webhook signature');
+      throw new InvalidInputException(
+        'BAD_REQUEST',
+        'Invalid webhook signature',
+      );
     }
-    const parsed = cloudinaryNotification.safeParse(JSON.parse(body));
-    if (!parsed.success) {
-      throw new BadRequestException('Unexpected notification');
+    const parsed = validatePayload(CloudinaryNotification, JSON.parse(body));
+    if (!parsed.value) {
+      throw new InvalidInputException('BAD_REQUEST', 'Unexpected notification');
     }
-    return parsed.data;
+    return parsed.value;
   }
 }

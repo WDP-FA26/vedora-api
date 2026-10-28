@@ -1,4 +1,4 @@
-import { KnowledgeDocumentFailureReason } from '@prisma/client';
+import { KnowledgeDocumentFailureReason } from '../../mongo/models.js';
 
 /** A file that can't be ingested, with the reason stored on the document. */
 export class DocumentExtractionError extends Error {

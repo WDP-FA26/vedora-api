@@ -47,7 +47,7 @@ Kiểm tra:
 ```powershell
 npm test
 npm run test:e2e
-$env:TEST_DATABASE_URL = "postgresql://postgres:password@localhost:5432/vedora_test"
+$env:TEST_DATABASE_URL = "mongodb://vedora:vedora_local_password@localhost:27017/?authSource=admin&directConnection=true"
 npm run test:db
 npm run build
 npm run lint

@@ -1,6 +1,5 @@
 import { ConfigService } from '@nestjs/config';
-import { z } from 'zod';
-import { KnowledgeModelsService } from './knowledge-models.service';
+import { KnowledgeModelsService } from './knowledge-models.service.js';
 
 const fetchMock = vi.fn<typeof fetch>();
 
@@ -12,7 +11,9 @@ function createService(config: Record<string, unknown> = {}) {
 
 function requestBody(call = 0) {
   const [, init] = fetchMock.mock.calls[call];
-  return z.json().parse(JSON.parse(z.string().parse(init?.body)));
+  const body = init?.body;
+  if (typeof body !== 'string') throw new Error('Expected a JSON string body');
+  return JSON.parse(body) as Record<string, unknown>;
 }
 
 describe('KnowledgeModelsService', () => {
@@ -58,7 +59,7 @@ describe('KnowledgeModelsService', () => {
     });
   });
 
-  it('reports OpenRouter errors with their message', async () => {
+  it('keeps OpenRouter error details out of the public message', async () => {
     fetchMock.mockResolvedValue(
       Response.json(
         { error: { message: 'Insufficient credits' } },
@@ -66,9 +67,10 @@ describe('KnowledgeModelsService', () => {
       ),
     );
 
-    await expect(createService().embedQuery('q')).rejects.toThrow(
-      'OpenRouter /embeddings failed (402): Insufficient credits',
-    );
+    await expect(createService().embedQuery('q')).rejects.toMatchObject({
+      message: 'openrouter request failed',
+      reason: 'OpenRouter /embeddings failed (402): Insufficient credits',
+    });
   });
 
   it('reranks best first', async () => {
@@ -191,9 +193,12 @@ describe('KnowledgeModelsService', () => {
         ),
       );
 
-      await expect(createService().ocrPdf(new Uint8Array([1]))).rejects.toThrow(
-        'OCR returned no parse (402): Insufficient credits',
-      );
+      await expect(
+        createService().ocrPdf(new Uint8Array([1])),
+      ).rejects.toMatchObject({
+        message: 'openrouter request failed',
+        reason: 'OCR returned no parse (402): Insufficient credits',
+      });
     });
   });
 });

@@ -1,5 +1,5 @@
 import type { Request } from 'express';
-import type { UserRole } from '@prisma/client';
+import type { UserRole } from '../mongo/models.js';
 
 export interface JwtPayload {
   sub: string;

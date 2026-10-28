@@ -82,8 +82,7 @@ Migration additive: `20261019130000_recipe_ratings`. Cần chạy migration trư
 khi đưa code mới phục vụ request; không cần seed lại công thức/user.
 
 ```powershell
-npm run prisma:migrate:deploy
-npm run prisma:generate
+npm run start:dev    # Mongoose tự tạo collection/index khi khởi động
 npm run build
 npm run test:e2e -- test/recipe-ratings.e2e-spec.ts
 ```
@@ -92,7 +91,7 @@ PostgreSQL integration tests dùng database test riêng, mỗi suite tạo schem
 ngẫu nhiên rồi dọn schema đó:
 
 ```powershell
-$env:TEST_DATABASE_URL = "postgresql://postgres:password@localhost:5432/vedora_test"
+$env:TEST_DATABASE_URL = "mongodb://vedora:vedora_local_password@localhost:27017/?authSource=admin&directConnection=true"
 npm run test:db -- test/recipe-ratings.db-spec.ts
 ```
 

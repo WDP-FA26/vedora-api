@@ -1,27 +1,31 @@
-import {
-  PayloadTooLargeException,
-  ServiceUnavailableException,
-  UnsupportedMediaTypeException,
-} from '@nestjs/common';
+import type { INestApplication } from '@nestjs/common';
+import { FileTooLargeException } from '../common/exceptions/file-too-large.exception.js';
+import { FeatureUnavailableException } from '../common/exceptions/feature-unavailable.exception.js';
+import { UnsupportedFileTypeException } from '../common/exceptions/unsupported-file-type.exception.js';
 import { ConfigService } from '@nestjs/config';
 import { Test } from '@nestjs/testing';
+import { NoSuchKey } from '@aws-sdk/client-s3';
+import { mockDeep, type DeepMockProxy } from 'vitest-mock-extended';
+import { createUser } from '../../test/fixtures.js';
 import {
-  KnowledgeDocument,
+  createTestMongoUrl,
+  dropTestDatabase,
+  prepareTestDatabase,
+} from '../../test/mongo-test-db.js';
+import { MongoModule } from '../mongo/mongo.module.js';
+import { MongoService } from '../mongo/mongo.service.js';
+import {
+  type KnowledgeDocument,
   KnowledgeDocumentFailureReason,
   KnowledgeDocumentStatus,
-} from '@prisma/client';
-import { NoSuchKey } from '@aws-sdk/client-s3';
-import { type DeepMockProxy, mockDeep } from 'vitest-mock-extended';
-import { PrismaService } from '../prisma/prisma.service';
-import type { PresignedUploadDto } from '../storage/presigned-upload.dto';
-import { StorageService, StorageTarget } from '../storage/storage.service';
-import { DocumentExtractionError } from './extractors/document-extractor';
-import { PdfExtractor } from './extractors/pdf-extractor';
-import { KnowledgeService } from './knowledge.service';
-import { KnowledgeIndexService } from './retrieval/knowledge-index.service';
+} from '../mongo/models.js';
+import type { PresignedUploadDto } from '../storage/presigned-upload.dto.js';
+import { StorageService, StorageTarget } from '../storage/storage.service.js';
+import { DocumentExtractionError } from './extractors/document-extractor.js';
+import { PdfExtractor } from './extractors/pdf-extractor.js';
+import { KnowledgeService } from './knowledge.service.js';
+import { KnowledgeIndexService } from './retrieval/knowledge-index.service.js';
 
-const documentId = '0b8f0c1e-3c55-4c1b-9d0e-2f7f3a9f7a10';
-const key = `knowledge/${documentId}.pdf`;
 const presigned: PresignedUploadDto = {
   url: 'https://storage.vedora.vn/vedora-knowledge/knowledge/d.pdf?X-Amz-Signature=s',
   method: 'PUT',
@@ -29,39 +33,40 @@ const presigned: PresignedUploadDto = {
   expiresAt: new Date('2026-09-28T09:00:00Z'),
 };
 
-const waitingDocument: KnowledgeDocument = {
-  id: documentId,
-  uploadedById: '4a1e32e4-e18e-4dd7-8b4a-246ef2113ff2',
-  title: 'dinh-duong.pdf',
-  contentType: 'application/pdf',
-  storageKey: key,
-  sizeBytes: null,
-  status: KnowledgeDocumentStatus.WAITING_UPLOAD,
-  failureReason: null,
-  sectionCount: null,
-  imageCount: null,
-  createdAt: new Date('2026-09-28T08:00:00Z'),
-  updatedAt: new Date('2026-09-28T08:00:00Z'),
-};
-
 describe('KnowledgeService', () => {
+  let app: INestApplication;
+  let db: MongoService;
   let service: KnowledgeService;
-  let prisma: DeepMockProxy<PrismaService>;
   let extractor: DeepMockProxy<PdfExtractor>;
   let index: DeepMockProxy<KnowledgeIndexService>;
   let storage: DeepMockProxy<StorageService>;
+  let uploaderId: string;
 
-  beforeEach(async () => {
-    vi.clearAllMocks();
-    prisma = mockDeep<PrismaService>();
+  const documents = () =>
+    db.connection.model<KnowledgeDocument>('KnowledgeDocument');
+  /** A document row in `status`, as the upload endpoint leaves it. */
+  const addDocument = (status: KnowledgeDocumentStatus) => {
+    const id = crypto.randomUUID();
+    return documents().create({
+      _id: id,
+      uploadedById: uploaderId,
+      title: 'dinh-duong.pdf',
+      contentType: 'application/pdf',
+      storageKey: `knowledge/${id}.pdf`,
+      status,
+    });
+  };
+  const reload = (id: string) => documents().findById(id).exec();
+
+  beforeAll(async () => {
     extractor = mockDeep<PdfExtractor>();
     index = mockDeep<KnowledgeIndexService>();
     storage = mockDeep<StorageService>();
     const moduleRef = await Test.createTestingModule({
+      imports: [MongoModule.forTest(createTestMongoUrl('knowledgeservice'))],
       providers: [
         KnowledgeService,
         { provide: StorageService, useValue: storage },
-        { provide: PrismaService, useValue: prisma },
         { provide: PdfExtractor, useValue: extractor },
         { provide: KnowledgeIndexService, useValue: index },
         {
@@ -70,18 +75,34 @@ describe('KnowledgeService', () => {
         },
       ],
     }).compile();
-    service = moduleRef.get(KnowledgeService);
+    app = moduleRef.createNestApplication();
+    await app.init();
+    await prepareTestDatabase(app);
+    db = app.get(MongoService);
+    service = app.get(KnowledgeService);
+  });
+  beforeEach(async () => {
+    vi.restoreAllMocks();
+    await db.connection.collections.knowledge_documents.deleteMany({});
+    extractor.extract.mockReset();
+    index.index.mockReset();
+    index.remove.mockReset();
+    storage.presignUpload.mockReset();
+    storage.getBytes.mockReset();
+    storage.delete.mockReset();
+    uploaderId = (await createUser(db)).id;
+  });
+  afterAll(async () => {
+    await dropTestDatabase(app);
+    await app.close();
   });
 
   describe('createUpload', () => {
     it('creates the document with an upload presigned for its key, type and size', async () => {
       storage.presignUpload.mockResolvedValue(presigned);
-      prisma.knowledgeDocument.create.mockImplementation(
-        ({ data }) => Promise.resolve({ ...waitingDocument, ...data }) as never,
-      );
 
       const result = await service.createUpload(
-        waitingDocument.uploadedById!,
+        uploaderId,
         'Dinh Duong.PDF',
         1234,
       );
@@ -93,12 +114,12 @@ describe('KnowledgeService', () => {
         'application/pdf',
         1234,
       );
-      expect(
-        prisma.knowledgeDocument.create.mock.calls[0][0].data,
-      ).toMatchObject({
+      expect(await reload(result.document.id)).toMatchObject({
         title: 'Dinh Duong.PDF',
         contentType: 'application/pdf',
         storageKey,
+        status: KnowledgeDocumentStatus.WAITING_UPLOAD,
+        uploadedById: uploaderId,
       });
       expect(result.upload).toBe(presigned);
     });
@@ -106,75 +127,83 @@ describe('KnowledgeService', () => {
     it('refuses anything but PDFs', async () => {
       await expect(
         service.createUpload('user', 'anh-mon-an.jpg', 1234),
-      ).rejects.toBeInstanceOf(UnsupportedMediaTypeException);
-      expect(prisma.knowledgeDocument.create).not.toHaveBeenCalled();
+      ).rejects.toBeInstanceOf(UnsupportedFileTypeException);
+      expect(await documents().countDocuments()).toBe(0);
     });
 
     it('refuses files over MAX_KNOWLEDGE_FILE_MB', async () => {
       await expect(
         service.createUpload('user', 'a.pdf', 50 * 1024 * 1024 + 1),
-      ).rejects.toBeInstanceOf(PayloadTooLargeException);
-      expect(prisma.knowledgeDocument.create).not.toHaveBeenCalled();
+      ).rejects.toBeInstanceOf(FileTooLargeException);
+      expect(await documents().countDocuments()).toBe(0);
     });
 
     it('creates no document while storage is not configured', async () => {
       storage.presignUpload.mockRejectedValue(
-        new ServiceUnavailableException(),
+        new FeatureUnavailableException(
+          'SERVICE_UNAVAILABLE',
+          'File storage is not configured',
+        ),
       );
 
       await expect(
         service.createUpload('user', 'a.pdf', 1),
-      ).rejects.toBeInstanceOf(ServiceUnavailableException);
-      expect(prisma.knowledgeDocument.create).not.toHaveBeenCalled();
+      ).rejects.toBeInstanceOf(FeatureUnavailableException);
+      expect(await documents().countDocuments()).toBe(0);
     });
   });
 
   describe('markUploaded', () => {
     it('moves a waiting document to PROCESSING and ingests it', async () => {
-      const processing = {
-        ...waitingDocument,
-        status: KnowledgeDocumentStatus.PROCESSING,
-      };
-      prisma.knowledgeDocument.updateManyAndReturn.mockResolvedValue([
-        processing,
-      ]);
+      const waiting = await addDocument(KnowledgeDocumentStatus.WAITING_UPLOAD);
       const ingest = vi.spyOn(service, 'ingest').mockResolvedValue();
 
-      await service.markUploaded(key);
+      await service.markUploaded(waiting.storageKey);
 
-      expect(prisma.knowledgeDocument.updateManyAndReturn).toHaveBeenCalledWith(
-        {
-          where: {
-            storageKey: key,
-            status: KnowledgeDocumentStatus.WAITING_UPLOAD,
-          },
-          data: { status: KnowledgeDocumentStatus.PROCESSING },
-        },
+      expect((await reload(waiting.id))?.status).toBe(
+        KnowledgeDocumentStatus.PROCESSING,
       );
-      expect(ingest).toHaveBeenCalledWith(processing);
+      expect(ingest).toHaveBeenCalledWith(
+        expect.objectContaining({
+          id: waiting.id,
+          status: KnowledgeDocumentStatus.PROCESSING,
+        }),
+      );
     });
 
-    it('does nothing when a redelivered event finds it already moved on', async () => {
-      prisma.knowledgeDocument.updateManyAndReturn.mockResolvedValue([]);
+    it('starts one ingestion when the event is redelivered', async () => {
+      const waiting = await addDocument(KnowledgeDocumentStatus.WAITING_UPLOAD);
+      const ingest = vi.spyOn(service, 'ingest').mockResolvedValue();
+
+      await Promise.all([
+        service.markUploaded(waiting.storageKey),
+        service.markUploaded(waiting.storageKey),
+        service.markUploaded(waiting.storageKey),
+      ]);
+
+      expect(ingest).toHaveBeenCalledTimes(1);
+    });
+
+    it('does nothing when it finds the document already moved on', async () => {
+      const done = await addDocument(KnowledgeDocumentStatus.READY);
       const ingest = vi.spyOn(service, 'ingest');
 
-      await service.markUploaded(key);
+      await service.markUploaded(done.storageKey);
 
       expect(ingest).not.toHaveBeenCalled();
+      expect((await reload(done.id))?.status).toBe(
+        KnowledgeDocumentStatus.READY,
+      );
     });
   });
 
   describe('ingest', () => {
-    const processing = {
-      ...waitingDocument,
-      status: KnowledgeDocumentStatus.PROCESSING,
-    };
-
     beforeEach(() => {
       storage.getBytes.mockResolvedValue(new TextEncoder().encode('%PDF-1.4'));
     });
 
     it('indexes the sections and marks the document READY', async () => {
+      const processing = await addDocument(KnowledgeDocumentStatus.PROCESSING);
       const sections = [
         { text: 'Trang 1', images: [new Uint8Array([1])] },
         { text: 'Trang 2', images: [] },
@@ -186,38 +215,34 @@ describe('KnowledgeService', () => {
 
       expect(storage.getBytes).toHaveBeenCalledWith(
         StorageTarget.Knowledge,
-        key,
+        processing.storageKey,
       );
       expect(extractor.extract).toHaveBeenCalledWith(expect.any(Uint8Array));
-      expect(prisma.knowledgeDocument.update).toHaveBeenCalledWith({
-        where: { id: documentId },
-        data: {
-          status: KnowledgeDocumentStatus.READY,
-          failureReason: null,
-          sectionCount: 2,
-          imageCount: 1,
-          sizeBytes: 8,
-        },
+      expect(await reload(processing.id)).toMatchObject({
+        status: KnowledgeDocumentStatus.READY,
+        failureReason: null,
+        sectionCount: 2,
+        imageCount: 1,
+        sizeBytes: 8,
       });
       expect(index.index).toHaveBeenCalledWith(processing, sections);
     });
 
     it('fails the document when indexing fails', async () => {
+      const processing = await addDocument(KnowledgeDocumentStatus.PROCESSING);
       extractor.extract.mockResolvedValue([{ text: 'Trang 1', images: [] }]);
       index.index.mockRejectedValue(new Error('Qdrant down'));
 
       await service.ingest(processing);
 
-      expect(prisma.knowledgeDocument.update).toHaveBeenCalledWith({
-        where: { id: documentId },
-        data: {
-          status: KnowledgeDocumentStatus.FAILED,
-          failureReason: KnowledgeDocumentFailureReason.INDEXING_FAILED,
-        },
+      expect(await reload(processing.id)).toMatchObject({
+        status: KnowledgeDocumentStatus.FAILED,
+        failureReason: KnowledgeDocumentFailureReason.INDEXING_FAILED,
       });
     });
 
     it('fails the document with the extraction reason', async () => {
+      const processing = await addDocument(KnowledgeDocumentStatus.PROCESSING);
       extractor.extract.mockRejectedValue(
         new DocumentExtractionError(
           KnowledgeDocumentFailureReason.NO_TEXT,
@@ -227,57 +252,59 @@ describe('KnowledgeService', () => {
 
       await service.ingest(processing);
 
-      expect(prisma.knowledgeDocument.update).toHaveBeenCalledWith({
-        where: { id: documentId },
-        data: {
-          status: KnowledgeDocumentStatus.FAILED,
-          failureReason: KnowledgeDocumentFailureReason.NO_TEXT,
-        },
+      expect(await reload(processing.id)).toMatchObject({
+        status: KnowledgeDocumentStatus.FAILED,
+        failureReason: KnowledgeDocumentFailureReason.NO_TEXT,
       });
     });
 
     it('fails the document when its file is gone', async () => {
+      const processing = await addDocument(KnowledgeDocumentStatus.PROCESSING);
       storage.getBytes.mockRejectedValue(
         new NoSuchKey({ message: 'gone', $metadata: {} }),
       );
 
       await service.ingest(processing);
 
-      expect(prisma.knowledgeDocument.update).toHaveBeenCalledWith({
-        where: { id: documentId },
-        data: {
-          status: KnowledgeDocumentStatus.FAILED,
-          failureReason: KnowledgeDocumentFailureReason.UPLOAD_EXPIRED,
-        },
+      expect(await reload(processing.id)).toMatchObject({
+        status: KnowledgeDocumentStatus.FAILED,
+        failureReason: KnowledgeDocumentFailureReason.UPLOAD_EXPIRED,
       });
     });
 
     it('fails the document on unexpected errors', async () => {
+      const processing = await addDocument(KnowledgeDocumentStatus.PROCESSING);
       storage.getBytes.mockRejectedValue(new Error('network down'));
 
       await service.ingest(processing);
 
-      expect(prisma.knowledgeDocument.update).toHaveBeenCalledWith({
-        where: { id: documentId },
-        data: {
-          status: KnowledgeDocumentStatus.FAILED,
-          failureReason: KnowledgeDocumentFailureReason.EXTRACTION_FAILED,
-        },
+      expect(await reload(processing.id)).toMatchObject({
+        status: KnowledgeDocumentStatus.FAILED,
+        failureReason: KnowledgeDocumentFailureReason.EXTRACTION_FAILED,
       });
     });
   });
 
   describe('remove', () => {
     it('deletes the file, the Qdrant points, then the row', async () => {
-      prisma.knowledgeDocument.findUnique.mockResolvedValue(waitingDocument);
+      const waiting = await addDocument(KnowledgeDocumentStatus.WAITING_UPLOAD);
 
-      await service.remove(documentId);
+      await service.remove(waiting.id);
 
-      expect(storage.delete).toHaveBeenCalledWith(StorageTarget.Knowledge, key);
-      expect(index.remove).toHaveBeenCalledWith(documentId);
-      expect(prisma.knowledgeDocument.delete).toHaveBeenCalledWith({
-        where: { id: documentId },
-      });
+      expect(storage.delete).toHaveBeenCalledWith(
+        StorageTarget.Knowledge,
+        waiting.storageKey,
+      );
+      expect(index.remove).toHaveBeenCalledWith(waiting.id);
+      expect(await documents().findById(waiting.id).exec()).toBeNull();
+    });
+
+    it('keeps the row when the file cannot be deleted, to retry from', async () => {
+      const waiting = await addDocument(KnowledgeDocumentStatus.WAITING_UPLOAD);
+      storage.delete.mockRejectedValue(new Error('storage down'));
+
+      await expect(service.remove(waiting.id)).rejects.toThrow('storage down');
+      expect(await documents().findById(waiting.id).exec()).not.toBeNull();
     });
   });
 });

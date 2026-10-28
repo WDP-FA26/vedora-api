@@ -1,6 +1,6 @@
 import { CanActivate, ExecutionContext, Injectable } from '@nestjs/common';
 import type { Request } from 'express';
-import { SePayProvider } from './sepay.provider';
+import { SePayProvider } from './sepay.provider.js';
 
 @Injectable()
 export class SePayWebhookGuard implements CanActivate {

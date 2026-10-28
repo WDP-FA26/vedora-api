@@ -8,7 +8,9 @@ import {
   Sse,
   UseGuards,
 } from '@nestjs/common';
+import { InjectModel } from '@nestjs/mongoose';
 import { JwtService } from '@nestjs/jwt';
+import type { Model } from 'mongoose';
 import {
   ApiBearerAuth,
   ApiNotFoundResponse,
@@ -24,11 +26,14 @@ import {
   takeWhile,
   takeUntil,
 } from 'rxjs';
-import type { AuthenticatedRequest } from '../auth/auth.types';
-import { JwtAuthGuard } from '../auth/jwt-auth.guard';
-import { PrismaService } from '../prisma/prisma.service';
-import { PaymentEventsService } from './payment-events.service';
-import { PaymentsService } from './payments.service';
+import type { AuthenticatedRequest } from '../auth/auth.types.js';
+import { extractBearerToken } from '../auth/bearer-token.js';
+import { JwtAuthGuard } from '../auth/jwt-auth.guard.js';
+import { AccountStatus, User } from '../mongo/models.js';
+import { PaymentEventsService } from './payment-events.service.js';
+import { PaymentsService } from './payments.service.js';
+import { UnauthenticatedException } from '../common/exceptions/unauthenticated.exception.js';
+import { ErrorBodyDto } from '../common/exceptions/error-body.dto.js';
 
 @ApiTags('billing')
 @ApiBearerAuth()
@@ -38,7 +43,7 @@ export class PaymentStreamController {
   constructor(
     private readonly payments: PaymentsService,
     private readonly events: PaymentEventsService,
-    private readonly db: PrismaService,
+    @InjectModel(User.name) private readonly users: Model<User>,
     private readonly jwt: JwtService,
   ) {}
 
@@ -52,6 +57,7 @@ export class PaymentStreamController {
       'Use fetch with Authorization, not a token in the URL. Events: stream.ready, stream.unavailable, payment.changed, ping, session.expired. Always GET payment after connection/event; events never establish paid state. Heartbeat rechecks JWT/account every 15s.',
   })
   @ApiNotFoundResponse({
+    type: ErrorBodyDto,
     description: 'Payment missing or owned by another account',
   })
   async stream(
@@ -59,7 +65,12 @@ export class PaymentStreamController {
     @Req() request: AuthenticatedRequest,
   ): Promise<Observable<MessageEvent>> {
     await this.payments.get(id, request.user.sub);
-    const token = request.headers.authorization!.split(' ')[1];
+    const token = extractBearerToken(request.headers.authorization);
+    if (!token)
+      throw new UnauthenticatedException(
+        'UNAUTHORIZED',
+        'Authentication required',
+      );
     const live = this.events
       .stream(request.user.sub, id)
       .pipe(
@@ -77,11 +88,11 @@ export class PaymentStreamController {
           return { type: 'session.expired', data: {} };
         }
         try {
-          const user = await this.db.user.findUnique({
-            where: { id: request.user.sub },
-            select: { status: true },
-          });
-          if (!user || user.status !== 'ACTIVE')
+          const user = await this.users
+            .findById(request.user.sub)
+            .select('status')
+            .exec();
+          if (!user || user.status !== AccountStatus.ACTIVE)
             return { type: 'session.expired', data: {} };
           return {
             type: 'ping',

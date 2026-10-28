@@ -22,30 +22,37 @@ import {
   ApiTags,
   ApiUnauthorizedResponse,
 } from '@nestjs/swagger';
-import { UserRole } from '@prisma/client';
-import type { AuthenticatedRequest } from '../auth/auth.types';
-import { JwtAuthGuard } from '../auth/jwt-auth.guard';
-import { Roles } from '../auth/roles.decorator';
-import { RolesGuard } from '../auth/roles.guard';
+import { UserRole } from '../mongo/models.js';
+import type { AuthenticatedRequest } from '../auth/auth.types.js';
+import { JwtAuthGuard } from '../auth/jwt-auth.guard.js';
+import { Roles } from '../auth/roles.decorator.js';
+import { RolesGuard } from '../auth/roles.guard.js';
 import {
   ApiPaginatedResponse,
   PaginatedResponseDto,
   PaginationQueryDto,
-} from '../common/pagination';
+} from '../common/pagination/index.js';
 import {
   CheckConflictsDto,
   RecipeConflictDto,
   RecipeDetailDto,
   RecipeDto,
   SaveRecipeDto,
-} from './dto/recipe.dto';
-import { IncompatibilityRulesService } from './incompatibility-rules.service';
-import { RecipesService } from './recipes.service';
+} from './dto/recipe.dto.js';
+import { IncompatibilityRulesService } from './incompatibility-rules.service.js';
+import { RecipesService } from './recipes.service.js';
+import { ErrorBodyDto } from '../common/exceptions/error-body.dto.js';
 
 @ApiTags('admin')
 @ApiBearerAuth()
-@ApiUnauthorizedResponse({ description: 'Authentication required' })
-@ApiForbiddenResponse({ description: 'Insufficient account permissions' })
+@ApiUnauthorizedResponse({
+  type: ErrorBodyDto,
+  description: 'Authentication required',
+})
+@ApiForbiddenResponse({
+  type: ErrorBodyDto,
+  description: 'Insufficient account permissions',
+})
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Roles(UserRole.ADMIN)
 @Controller('admin/recipes')

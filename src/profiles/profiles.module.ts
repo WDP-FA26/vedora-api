@@ -1,8 +1,8 @@
 import { Module } from '@nestjs/common';
-import { NotificationsModule } from '../notifications/notifications.module';
-import { FollowSuggestionsService } from './follow-suggestions.service';
-import { ProfilesController } from './profiles.controller';
-import { ProfilesService } from './profiles.service';
+import { NotificationsModule } from '../notifications/notifications.module.js';
+import { FollowSuggestionsService } from './follow-suggestions.service.js';
+import { ProfilesController } from './profiles.controller.js';
+import { ProfilesService } from './profiles.service.js';
 
 @Module({
   imports: [NotificationsModule],

@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { MealSection, Weekday } from '@prisma/client';
+import { MealSection, Weekday } from '../../mongo/models.js';
 import { Transform } from 'class-transformer';
 import {
   ArrayMaxSize,
@@ -8,7 +8,7 @@ import {
   IsArray,
   IsEnum,
 } from 'class-validator';
-import { WEEKDAYS } from './meal-plan.dto';
+import { WEEKDAYS } from './meal-plan.dto.js';
 
 export class ShoppingListQueryDto {
   @ApiPropertyOptional({

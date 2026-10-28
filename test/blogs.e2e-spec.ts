@@ -1,128 +1,85 @@
-import { createHash } from 'node:crypto';
-import { INestApplication } from '@nestjs/common';
-import { JwtService } from '@nestjs/jwt';
-import { Test } from '@nestjs/testing';
-import { PostStatus, PostType, UserRole } from '@prisma/client';
+import { createHash, randomUUID } from 'node:crypto';
 import request from 'supertest';
-import type { App } from 'supertest/types';
-import { mockDeep, mockReset } from 'vitest-mock-extended';
-import { AppModule } from '../src/app.module';
-import { configureApp } from '../src/app.setup';
-import { PrismaService } from '../src/prisma/prisma.service';
-import { BlogDetailDto, MAX_BLOG_CONTENT } from '../src/posts/dto/blog.dto';
-import { MediaService } from '../src/media/media.service';
-
-const AUTHOR_ID = '0b8f0c1e-3c55-4c1b-9d0e-2f7f3a9f7a10';
-const BLOG_ID = 'f1a2d3e4-0000-4000-8000-000000000001';
-const RECIPE_ID = 'd1a2d3e4-0000-4000-8000-000000000001';
-const now = new Date('2026-10-12T08:00:00Z');
-const row = {
-  id: BLOG_ID,
-  authorId: AUTHOR_ID,
-  type: PostType.BLOG,
-  status: PostStatus.DRAFT,
-  body: null,
-  publishedAt: null,
-  createdAt: now,
-  updatedAt: now,
-  viewCount: 0,
-  searchIndexedAt: null,
-  author: {
-    id: AUTHOR_ID,
-    username: 'chef',
-    fullName: 'Chef',
-    avatarUrl: null,
-  },
-  blog: {
-    title: 'Đậu hũ sốt cà',
-    content: '## Cách làm\nNấu đậu hũ với cà chua.',
-    excerpt: '## Cách làm Nấu đậu hũ với cà chua.',
-    coverImageUrl: null,
-    updatedAt: now,
-    recipes: [{ recipe: { id: RECIPE_ID, title: 'Đậu hũ', imageUrl: null } }],
-  },
-  media: [],
-  likes: [],
-  reposts: [],
-  bookmarks: [],
-  _count: { comments: 0, likes: 0, reposts: 0 },
-};
+import { MediaService } from '../src/media/media.service.js';
+import { MAX_BLOG_CONTENT, BlogDetailDto } from '../src/posts/dto/blog.dto.js';
+import {
+  Post,
+  PostStatus,
+  PostType,
+  type Recipe,
+  type User,
+} from '../src/mongo/models.js';
+import { createE2eApp, type E2eApp } from './e2e-app.js';
+import { createPost, createRecipe, createUser } from './fixtures.js';
 
 describe('Blogs (HTTP)', () => {
-  const prisma = mockDeep<PrismaService>();
-  let app: INestApplication<App>;
+  let e2e: E2eApp;
+  let author: User;
+  let other: User;
   let token: string;
+  let otherToken: string;
+  let recipe: Recipe;
+  const server = () => e2e.app.getHttpServer();
+  const asAuthor = (req: request.Test) => req.auth(token, { type: 'bearer' });
+
+  /** Creates a blog through the API, as the author. */
+  const createBlog = async (fields: object = {}) =>
+    (
+      await asAuthor(request(server()).post('/api/v1/blogs'))
+        .send({
+          title: 'Đậu hũ sốt cà',
+          content: '## Cách làm\nNấu đậu hũ với cà chua.',
+          recipeIds: [recipe.id],
+          ...fields,
+        })
+        .expect(201)
+    ).body as BlogDetailDto;
 
   beforeAll(async () => {
-    const moduleRef = await Test.createTestingModule({ imports: [AppModule] })
-      .overrideProvider(PrismaService)
-      .useValue(prisma)
-      .compile();
-    app = moduleRef.createNestApplication({ rawBody: true });
-    configureApp(app);
-    await app.init();
-    token = await app
-      .get(JwtService)
-      .signAsync({ sub: AUTHOR_ID, username: 'chef' });
+    e2e = await createE2eApp('blogs_e2e');
+    author = await createUser(e2e.mongo, { username: 'chef' });
+    other = await createUser(e2e.mongo, { username: 'other.chef' });
+    [token, otherToken] = await Promise.all([
+      e2e.sign(author),
+      e2e.sign(other),
+    ]);
+    recipe = await createRecipe(e2e.mongo, { title: 'Đậu hũ' });
   });
+  const count = (collection: string) =>
+    e2e.mongo.connection.collections[collection].countDocuments();
 
-  beforeEach(() => {
-    mockReset(prisma);
-    prisma.user.findUnique.mockResolvedValue({
-      status: 'ACTIVE',
-      accountVersion: 0,
-      id: AUTHOR_ID,
-      username: 'chef',
-      role: UserRole.USER,
-    } as never);
-    prisma.$transaction.mockImplementation((run: unknown) =>
-      typeof run === 'function'
-        ? (run as (tx: PrismaService) => Promise<unknown>)(prisma)
-        : Promise.all(run as Promise<unknown>[]),
+  beforeEach(async () => {
+    await e2e.mongo.withTransaction((session) =>
+      e2e.mongo.connection
+        .model<Post>(Post.name)
+        .deleteMany({ authorId: author.id }, { session })
+        .exec(),
     );
-    prisma.post.findUnique.mockResolvedValue(row);
-    prisma.post.findUniqueOrThrow.mockResolvedValue(row);
-    prisma.post.create.mockResolvedValue(row);
-    prisma.post.update.mockResolvedValue(row);
-    prisma.post.findMany.mockResolvedValue([]);
-    prisma.$queryRaw.mockResolvedValue([{ id: BLOG_ID }]);
-    prisma.recipe.findMany.mockResolvedValue([{ id: RECIPE_ID }] as never);
   });
-
   afterAll(async () => {
-    await app.close();
+    await e2e.close();
   });
 
   it.each(['post', 'patch', 'delete'] as const)(
     'requires login to %s a blog',
     async (method) => {
-      await request(app.getHttpServer())
-        [method](`/api/v1/blogs${method === 'post' ? '' : `/${BLOG_ID}`}`)
+      await request(server())
+        [method](`/api/v1/blogs${method === 'post' ? '' : `/${randomUUID()}`}`)
         .send({ title: 'Món chay' })
         .expect(401);
-      expect(prisma.post.create).not.toHaveBeenCalled();
-      expect(prisma.post.update).not.toHaveBeenCalled();
-      expect(prisma.post.delete).not.toHaveBeenCalled();
+      expect(await count('posts')).toBe(0);
     },
   );
 
   it('creates a trimmed title and defaults to a private draft', async () => {
-    const response = await request(app.getHttpServer())
-      .post('/api/v1/blogs')
-      .auth(token, { type: 'bearer' })
+    const response = await asAuthor(request(server()).post('/api/v1/blogs'))
       .send({ title: '  Đậu hũ sốt cà  ' })
       .expect(201);
     expect(response.body).toMatchObject({
-      id: BLOG_ID,
-      status: 'DRAFT',
-      blog: { title: row.blog.title },
-    });
-    expect(prisma.post.create.mock.calls[0][0].data).toMatchObject({
-      authorId: AUTHOR_ID,
-      type: 'BLOG',
       status: 'DRAFT',
       publishedAt: null,
-      blog: { create: { title: row.blog.title, content: '', excerpt: '' } },
+      blog: { title: 'Đậu hũ sốt cà' },
+      content: '',
     });
   });
 
@@ -136,54 +93,47 @@ describe('Blogs (HTTP)', () => {
     { status: 'PROCESSING' },
     { status: null },
     { recipeIds: null },
-    { recipeIds: [RECIPE_ID, RECIPE_ID] },
+    {
+      recipeIds: [
+        'd1a2d3e4-0000-4000-8000-000000000001',
+        'd1a2d3e4-0000-4000-8000-000000000001',
+      ],
+    },
     { recipeIds: ['bad'] },
     { coverImageUrl: 'http://example.com/a.jpg' },
-    { authorId: AUTHOR_ID },
+    { authorId: randomUUID() },
   ])('rejects invalid blog fields: %j', async (fields) => {
-    await request(app.getHttpServer())
-      .post('/api/v1/blogs')
-      .auth(token, { type: 'bearer' })
+    await asAuthor(request(server()).post('/api/v1/blogs'))
       .send({ title: 'Món chay', ...fields })
       .expect(400);
-    expect(prisma.post.create).not.toHaveBeenCalled();
+    expect(await count('posts')).toBe(0);
   });
 
   it('rejects publishing without content and reports missing recipes', async () => {
-    const empty = await request(app.getHttpServer())
-      .post('/api/v1/blogs')
-      .auth(token, { type: 'bearer' })
+    const empty = await asAuthor(request(server()).post('/api/v1/blogs'))
       .send({ title: 'Món', status: 'PUBLISHED', content: '  ' })
       .expect(400);
     expect((empty.body as { code: string }).code).toBe('BLOG_CONTENT_REQUIRED');
-    prisma.recipe.findMany.mockResolvedValue([]);
-    const missing = await request(app.getHttpServer())
-      .post('/api/v1/blogs')
-      .auth(token, { type: 'bearer' })
-      .send({ title: 'Món', recipeIds: [RECIPE_ID] })
+    const missingId = randomUUID();
+    const missing = await asAuthor(request(server()).post('/api/v1/blogs'))
+      .send({ title: 'Món', recipeIds: [missingId] })
       .expect(400);
     expect(missing.body).toMatchObject({
       code: 'BLOG_RECIPE_NOT_FOUND',
-      recipeIds: [RECIPE_ID],
+      details: { recipeIds: [missingId] },
     });
-    expect(prisma.post.create).not.toHaveBeenCalled();
+    expect(await count('posts')).toBe(0);
   });
 
   it('accepts long UTF-8 articles beyond the default JSON parser size', async () => {
     const content = '菜'.repeat(MAX_BLOG_CONTENT);
-    await request(app.getHttpServer())
-      .post('/api/v1/blogs')
-      .auth(token, { type: 'bearer' })
-      .send({ title: 'Long article', content })
-      .expect(201);
-    expect(prisma.post.create.mock.calls[0][0].data).toMatchObject({
-      blog: { create: { content } },
-    });
+    const blog = await createBlog({ title: 'Long article', content });
+    expect(blog.content).toBe(content);
   });
 
   it('preserves the exact request bytes for signed Cloudinary notifications', async () => {
     const handle = vi
-      .spyOn(app.get(MediaService), 'handleNotification')
+      .spyOn(e2e.app.get(MediaService), 'handleNotification')
       .mockResolvedValue();
     const payload = '{ "notification_type": "eager",  "public_id": "x" }';
     const timestamp = String(Math.floor(Date.now() / 1000));
@@ -191,7 +141,7 @@ describe('Blogs (HTTP)', () => {
       .update(payload + timestamp + 'e2e-api-secret')
       .digest('hex');
     try {
-      await request(app.getHttpServer())
+      await request(server())
         .post('/api/v1/webhooks/cloudinary')
         .set('Content-Type', 'application/json')
         .set('x-cld-timestamp', timestamp)
@@ -207,165 +157,137 @@ describe('Blogs (HTTP)', () => {
   });
 
   it('hides drafts from guests and other users on both detail routes', async () => {
+    const draft = await createBlog();
     for (const path of ['blogs', 'posts']) {
-      await request(app.getHttpServer())
-        .get(`/api/v1/${path}/${BLOG_ID}`)
+      await request(server()).get(`/api/v1/${path}/${draft.id}`).expect(404);
+      await request(server())
+        .get(`/api/v1/${path}/${draft.id}`)
+        .auth(otherToken, { type: 'bearer' })
         .expect(404);
-      prisma.post.findUnique.mockResolvedValue({
-        ...row,
-        authorId: RECIPE_ID,
-      });
-      await request(app.getHttpServer())
-        .get(`/api/v1/${path}/${BLOG_ID}`)
-        .auth(token, { type: 'bearer' })
-        .expect(404);
-      prisma.post.findUnique.mockResolvedValue(row);
     }
   });
 
   it('lets the author read draft source without shared caching', async () => {
-    const response = await request(app.getHttpServer())
-      .get(`/api/v1/blogs/${BLOG_ID}`)
-      .auth(token, { type: 'bearer' })
-      .expect(200);
+    const draft = await createBlog();
+    const response = await asAuthor(
+      request(server()).get(`/api/v1/blogs/${draft.id}`),
+    ).expect(200);
     expect(response.headers['cache-control']).toBe('private, no-store');
     expect(response.body).toMatchObject({
-      content: row.blog.content,
-      blog: { recipes: [{ id: RECIPE_ID }] },
+      content: '## Cách làm\nNấu đậu hũ với cà chua.',
+      blog: { recipes: [{ id: recipe.id }] },
     });
     expect(response.body).not.toHaveProperty('authorId');
     expect((response.body as BlogDetailDto).blog).not.toHaveProperty('content');
   });
 
   it('serves published source publicly and rejects invalid supplied tokens', async () => {
-    prisma.post.findUnique.mockResolvedValue({
-      ...row,
-      status: PostStatus.PUBLISHED,
-    });
-    await request(app.getHttpServer())
-      .get(`/api/v1/blogs/${BLOG_ID}`)
-      .expect(200);
-    await request(app.getHttpServer())
-      .get(`/api/v1/blogs/${BLOG_ID}`)
+    const published = await createBlog({ status: 'PUBLISHED' });
+    await request(server()).get(`/api/v1/blogs/${published.id}`).expect(200);
+    await request(server())
+      .get(`/api/v1/blogs/${published.id}`)
       .set('Authorization', 'Bearer invalid')
       .expect(401);
-    await request(app.getHttpServer()).get('/api/v1/blogs/bad-id').expect(400);
-    prisma.post.findUnique.mockResolvedValue({
-      ...row,
+    await request(server()).get('/api/v1/blogs/bad-id').expect(400);
+    const plain = await createPost(e2e.mongo, {
+      authorId: author.id,
       type: PostType.POST,
-      blog: null,
-    } as never);
-    await request(app.getHttpServer())
-      .get(`/api/v1/blogs/${BLOG_ID}`)
-      .expect(404);
+      status: PostStatus.PUBLISHED,
+      viewCount: 0,
+    });
+    await request(server()).get(`/api/v1/blogs/${plain.id}`).expect(404);
   });
 
   it('limits public lists to published blogs and allows a feed type filter', async () => {
-    await request(app.getHttpServer())
-      .get(`/api/v1/blogs?authorId=${AUTHOR_ID}`)
+    const published = await createBlog({ status: 'PUBLISHED' });
+    await createBlog({ title: 'Draft' });
+    const blogs = await request(server())
+      .get(`/api/v1/blogs?authorId=${author.id}`)
       .expect(200);
-    expect(prisma.post.findMany).toHaveBeenLastCalledWith(
-      expect.objectContaining({
-        where: { status: 'PUBLISHED', type: 'BLOG', authorId: AUTHOR_ID },
-      }),
-    );
-    await request(app.getHttpServer())
+    expect(
+      (blogs.body as { items: { id: string }[] }).items.map(({ id }) => id),
+    ).toEqual([published.id]);
+    const feed = await request(server())
       .get('/api/v1/posts?type=BLOG')
       .expect(200);
-    expect(prisma.post.findMany).toHaveBeenLastCalledWith(
-      expect.objectContaining({
-        where: { status: 'PUBLISHED', type: 'BLOG' },
-      }),
-    );
-    await request(app.getHttpServer())
-      .get('/api/v1/posts?type=INVALID')
-      .expect(400);
+    expect(
+      (feed.body as { items: { id: string }[] }).items.map(({ id }) => id),
+    ).toEqual([published.id]);
+    await request(server()).get('/api/v1/posts?type=INVALID').expect(400);
   });
 
   it('lists only the caller drafts and validates draft-list cursors', async () => {
-    await request(app.getHttpServer()).get('/api/v1/blogs/mine').expect(401);
-    const response = await request(app.getHttpServer())
-      .get('/api/v1/blogs/mine?status=DRAFT')
-      .auth(token, { type: 'bearer' })
-      .expect(200);
+    await request(server()).get('/api/v1/blogs/mine').expect(401);
+    const draft = await createBlog();
+    await createBlog({ status: 'PUBLISHED' });
+    const response = await asAuthor(
+      request(server()).get('/api/v1/blogs/mine?status=DRAFT'),
+    ).expect(200);
     expect(response.headers['cache-control']).toBe('private, no-store');
-    expect(prisma.post.findMany).toHaveBeenLastCalledWith(
-      expect.objectContaining({
-        where: { authorId: AUTHOR_ID, type: 'BLOG', status: 'DRAFT' },
-      }),
-    );
-    prisma.post.findFirst.mockResolvedValue(null);
-    await request(app.getHttpServer())
-      .get(`/api/v1/blogs/mine?cursor=${RECIPE_ID}`)
-      .auth(token, { type: 'bearer' })
-      .expect(400);
+    expect(
+      (response.body as { items: { id: string }[] }).items.map(({ id }) => id),
+    ).toEqual([draft.id]);
+    await asAuthor(
+      request(server()).get(`/api/v1/blogs/mine?cursor=${randomUUID()}`),
+    ).expect(400);
   });
 
   it('supports partial edit, clearing a cover and replacing recipe links', async () => {
-    await request(app.getHttpServer())
-      .patch(`/api/v1/blogs/${BLOG_ID}`)
-      .auth(token, { type: 'bearer' })
+    const blog = await createBlog({
+      coverImageUrl: 'https://example.com/a.jpg',
+    });
+    expect(blog.blog?.recipes).toHaveLength(1);
+    const edited = await asAuthor(
+      request(server()).patch(`/api/v1/blogs/${blog.id}`),
+    )
       .send({ coverImageUrl: null, recipeIds: [] })
       .expect(200);
-    expect(prisma.post.update.mock.calls[0][0].data).toMatchObject({
+    expect(edited.body).toMatchObject({
       status: 'DRAFT',
-      blog: {
-        update: {
-          coverImageUrl: null,
-          recipes: { deleteMany: {}, create: [] },
-        },
-      },
+      content: blog.content,
+      blog: { coverImageUrl: null, recipes: [] },
     });
-    await request(app.getHttpServer())
-      .patch(`/api/v1/blogs/${BLOG_ID}`)
-      .auth(token, { type: 'bearer' })
+    await asAuthor(request(server()).patch(`/api/v1/blogs/${blog.id}`))
       .send({ content: null })
       .expect(400);
-    await request(app.getHttpServer())
-      .patch(`/api/v1/blogs/${BLOG_ID}`)
-      .auth(token, { type: 'bearer' })
+    await asAuthor(request(server()).patch(`/api/v1/blogs/${blog.id}`))
       .send({})
       .expect(400);
   });
 
   it('publishes a draft and prevents another author from editing or deleting it', async () => {
-    await request(app.getHttpServer())
-      .patch(`/api/v1/blogs/${BLOG_ID}`)
-      .auth(token, { type: 'bearer' })
+    const draft = await createBlog();
+    const published = await asAuthor(
+      request(server()).patch(`/api/v1/blogs/${draft.id}`),
+    )
       .send({ status: 'PUBLISHED' })
       .expect(200);
-    expect(prisma.post.update.mock.calls[0][0].data.status).toBe('PUBLISHED');
-    expect(prisma.post.update.mock.calls[0][0].data.publishedAt).toBeInstanceOf(
-      Date,
-    );
-    prisma.$queryRaw.mockResolvedValue([]);
-    await request(app.getHttpServer())
-      .patch(`/api/v1/blogs/${BLOG_ID}`)
-      .auth(token, { type: 'bearer' })
+    expect(published.body).toMatchObject({ status: 'PUBLISHED' });
+    expect((published.body as BlogDetailDto).publishedAt).toBeTruthy();
+    await request(server())
+      .patch(`/api/v1/blogs/${draft.id}`)
+      .auth(otherToken, { type: 'bearer' })
       .send({ title: 'Other' })
       .expect(404);
-    await request(app.getHttpServer())
-      .delete(`/api/v1/blogs/${BLOG_ID}`)
-      .auth(token, { type: 'bearer' })
+    await request(server())
+      .delete(`/api/v1/blogs/${draft.id}`)
+      .auth(otherToken, { type: 'bearer' })
       .expect(404);
-    expect(prisma.post.delete).not.toHaveBeenCalled();
+    expect(await count('posts')).toBe(1);
   });
 
   it('blocks draft comments, likes and bookmarks through existing endpoints', async () => {
-    prisma.post.findFirst.mockResolvedValue(null);
-    await request(app.getHttpServer())
-      .post(`/api/v1/posts/${BLOG_ID}/comments`)
-      .auth(token, { type: 'bearer' })
+    const draft = await createBlog();
+    await asAuthor(request(server()).post(`/api/v1/posts/${draft.id}/comments`))
       .send({ body: 'Ngon!' })
       .expect(404);
     for (const interaction of ['like', 'bookmark']) {
-      await request(app.getHttpServer())
-        .put(`/api/v1/posts/${BLOG_ID}/${interaction}`)
-        .auth(token, { type: 'bearer' })
-        .expect(404);
+      await asAuthor(
+        request(server()).put(`/api/v1/posts/${draft.id}/${interaction}`),
+      ).expect(404);
     }
-    expect(prisma.postComment.create).not.toHaveBeenCalled();
-    expect(prisma.postLike.createMany).not.toHaveBeenCalled();
-    expect(prisma.postBookmark.createMany).not.toHaveBeenCalled();
+    expect(await count('post_comments')).toBe(0);
+    expect(await count('post_likes')).toBe(0);
+    expect(await count('post_bookmarks')).toBe(0);
   });
 });

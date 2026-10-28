@@ -1,8 +1,11 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { z } from 'zod';
 
 const VERIFY_URL = 'https://challenges.cloudflare.com/turnstile/v0/siteverify';
 const TIMEOUT_MS = 5000;
+
+const turnstileResultSchema = z.object({ success: z.boolean().optional() });
 
 /** Checks a Cloudflare Turnstile token: proof that a browser, not a script, is asking. */
 @Injectable()
@@ -27,8 +30,8 @@ export class TurnstileService {
         signal: AbortSignal.timeout(TIMEOUT_MS),
       });
       if (!response.ok) return false;
-      const result = (await response.json()) as { success?: boolean };
-      return result.success === true;
+      const result = turnstileResultSchema.safeParse(await response.json());
+      return result.success && result.data.success === true;
     } catch (error) {
       this.logger.error(`Turnstile verification failed: ${String(error)}`);
       return false;

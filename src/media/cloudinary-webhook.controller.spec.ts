@@ -2,10 +2,10 @@ import { createHash } from 'node:crypto';
 import { ConfigService } from '@nestjs/config';
 import { Test } from '@nestjs/testing';
 import { type DeepMockProxy, mockDeep } from 'vitest-mock-extended';
-import { CloudinaryService } from '../cloudinary/cloudinary.service';
-import { CloudinaryWebhookController } from './cloudinary-webhook.controller';
-import { streamBuilt } from './media.fixtures';
-import { MediaService } from './media.service';
+import { CloudinaryService } from '../cloudinary/cloudinary.service.js';
+import { CloudinaryWebhookController } from './cloudinary-webhook.controller.js';
+import { streamBuilt } from './media.fixtures.js';
+import { MediaService } from './media.service.js';
 
 describe('CloudinaryWebhookController', () => {
   const secret = 'test-api-secret';
@@ -58,13 +58,13 @@ describe('CloudinaryWebhookController', () => {
   it('rejects notifications signed with another secret', async () => {
     await expect(
       controller.receive(Buffer.from(body), sign(body, { key: 'wrong' })),
-    ).rejects.toMatchObject({ status: 400 });
+    ).rejects.toMatchObject({ statusCode: 400 });
     expect(mediaService.handleNotification).not.toHaveBeenCalled();
   });
 
   it('rejects replays of old notifications', async () => {
     await expect(
       controller.receive(Buffer.from(body), sign(body, { age: 3 * 3600 })),
-    ).rejects.toMatchObject({ status: 400 });
+    ).rejects.toMatchObject({ statusCode: 400 });
   });
 });

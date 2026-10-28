@@ -20,11 +20,11 @@ import {
   ApiTags,
 } from '@nestjs/swagger';
 import { interval, map, merge, Observable } from 'rxjs';
-import type { AuthenticatedRequest } from '../auth/auth.types';
-import { JwtAuthGuard } from '../auth/jwt-auth.guard';
-import { CursorPaginationQueryDto } from '../common/pagination';
-import { NotificationPageDto, UnreadCountDto } from './dto/notification.dto';
-import { NotificationsService } from './notifications.service';
+import type { AuthenticatedRequest } from '../auth/auth.types.js';
+import { JwtAuthGuard } from '../auth/jwt-auth.guard.js';
+import { CursorPaginationQueryDto } from '../common/pagination/index.js';
+import { NotificationPageDto, UnreadCountDto } from './dto/notification.dto.js';
+import { NotificationsService } from './notifications.service.js';
 
 /** Proxies drop idle connections; a comment frame every 25s keeps it open. */
 const HEARTBEAT_MS = 25_000;

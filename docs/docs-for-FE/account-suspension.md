@@ -104,13 +104,12 @@ tự mở khóa admin đã bị Suspend. DELETED được dành cho lifecycle/au
 xóa hiện tại vẫn xóa cứng, không đổi sang soft delete trong tính năng này.
 
 ```powershell
-npm run prisma:migrate:deploy
-npm run prisma:generate
+npm run start:dev    # Mongoose tự tạo collection/index khi khởi động
 npm run build
 npm run lint
 npm test
 npm run test:e2e
-$env:TEST_DATABASE_URL = "postgresql://user:password@localhost:5432/vedora_test"
+$env:TEST_DATABASE_URL = "mongodb://vedora:vedora_local_password@localhost:27017/?authSource=admin&directConnection=true"
 npm run test:db
 ```
 

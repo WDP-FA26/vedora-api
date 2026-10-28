@@ -1,11 +1,18 @@
 import { Injectable, Logger, OnModuleDestroy } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { createClient } from 'redis';
+import { IsUUID } from 'class-validator';
 import { Observable, Subject } from 'rxjs';
-import { z } from 'zod';
+import { validatePayload } from '../common/validation.js';
 
-const changedSchema = z.object({ userId: z.uuid(), intentId: z.uuid() });
-export type PaymentChanged = z.infer<typeof changedSchema>;
+class PaymentChangedEvent {
+  @IsUUID()
+  userId!: string;
+
+  @IsUUID()
+  intentId!: string;
+}
+export type PaymentChanged = PaymentChangedEvent;
 export type PaymentSignal =
   { type: 'ready' | 'unavailable' } | ({ type: 'changed' } & PaymentChanged);
 type Client = ReturnType<typeof createClient>;
@@ -106,9 +113,12 @@ export class PaymentEventsService implements OnModuleDestroy {
           ]);
           await pair.subscriber.subscribe(this.channel, (raw) => {
             try {
-              const parsed = changedSchema.safeParse(JSON.parse(raw));
-              if (parsed.success && this.pair === pair && !this.stopped)
-                this.signals.next({ type: 'changed', ...parsed.data });
+              const parsed = validatePayload(
+                PaymentChangedEvent,
+                JSON.parse(raw),
+              );
+              if (parsed.value && this.pair === pair && !this.stopped)
+                this.signals.next({ type: 'changed', ...parsed.value });
             } catch {
               /* Ignore malformed bus data; no payload is logged. */
             }

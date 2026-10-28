@@ -1,9 +1,9 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import { IsInt, IsOptional, Max, Min } from 'class-validator';
-import { PaginationLimitDto } from './pagination-limit.dto';
+import { PaginationLimitDto } from './pagination-limit.dto.js';
 
-// Keeps calculated offsets within Prisma's signed 32-bit argument range.
+// Keeps calculated skip values sane before they reach MongoDB.
 export const MAX_PAGE_NUMBER = 1_000_000;
 
 /** Extend this DTO with a collection's filters, never with user-provided skip. */

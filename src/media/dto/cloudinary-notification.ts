@@ -1,27 +1,70 @@
-import { z } from 'zod';
+import { Type } from 'class-transformer';
+import {
+  IsArray,
+  IsNotEmpty,
+  IsNumber,
+  IsOptional,
+  IsString,
+  ValidateNested,
+} from 'class-validator';
+
+export class CloudinaryVideoDetails {
+  @IsOptional()
+  @IsString()
+  dar?: string;
+}
+
+export class CloudinaryEagerResult {
+  @IsOptional()
+  @IsString()
+  transformation?: string;
+
+  @IsOptional()
+  @IsString()
+  status?: string;
+
+  @IsOptional()
+  error?: unknown;
+}
 
 /**
  * The fields we read from a Cloudinary notification. `upload` carries the
  * video's details; `eager` reports the HLS job, one item per transformation.
- * Unknown types (delete, rename, …) pass through and are ignored.
+ * Unknown types (delete, rename, …) pass the other fields and are ignored.
  */
-export const cloudinaryNotification = z.looseObject({
-  notification_type: z.string(),
-  public_id: z.string().optional(),
-  resource_type: z.string().optional(),
-  duration: z.number().optional(),
-  width: z.number().optional(),
-  height: z.number().optional(),
-  video: z.looseObject({ dar: z.string().optional() }).optional(),
-  eager: z
-    .array(
-      z.looseObject({
-        transformation: z.string().optional(),
-        status: z.string().optional(),
-        error: z.unknown().optional(),
-      }),
-    )
-    .optional(),
-});
+export class CloudinaryNotification {
+  @IsString()
+  @IsNotEmpty()
+  notification_type!: string;
 
-export type CloudinaryNotification = z.infer<typeof cloudinaryNotification>;
+  @IsOptional()
+  @IsString()
+  public_id?: string;
+
+  @IsOptional()
+  @IsString()
+  resource_type?: string;
+
+  @IsOptional()
+  @IsNumber()
+  duration?: number;
+
+  @IsOptional()
+  @IsNumber()
+  width?: number;
+
+  @IsOptional()
+  @IsNumber()
+  height?: number;
+
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => CloudinaryVideoDetails)
+  video?: CloudinaryVideoDetails;
+
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => CloudinaryEagerResult)
+  eager?: CloudinaryEagerResult[];
+}

@@ -1,10 +1,4 @@
-import {
-  BadRequestException,
-  Injectable,
-  Logger,
-  OnModuleInit,
-  ServiceUnavailableException,
-} from '@nestjs/common';
+import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import {
   BucketAlreadyExists,
@@ -21,7 +15,9 @@ import {
   S3Client,
 } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
-import type { PresignedUploadDto } from './presigned-upload.dto';
+import type { PresignedUploadDto } from './presigned-upload.dto.js';
+import { FeatureUnavailableException } from '../common/exceptions/feature-unavailable.exception.js';
+import { InvalidInputException } from '../common/exceptions/invalid-input.exception.js';
 
 export enum StorageTarget {
   Knowledge = 'knowledge',
@@ -250,7 +246,7 @@ export class StorageService implements OnModuleInit {
 
   parseEvent(target: StorageTarget, body: StorageEvent): string[] {
     if (!Array.isArray(body?.Records))
-      throw new BadRequestException('Expected an S3 event');
+      throw new InvalidInputException('BAD_REQUEST', 'Expected an S3 event');
     return body.Records.flatMap(({ eventName, s3 }) => {
       const key = s3?.object?.key;
       if (
@@ -266,7 +262,10 @@ export class StorageService implements OnModuleInit {
 
   private require(): StorageClients {
     if (!this.clients)
-      throw new ServiceUnavailableException('File storage is not configured');
+      throw new FeatureUnavailableException(
+        'SERVICE_UNAVAILABLE',
+        'File storage is not configured',
+      );
     return this.clients;
   }
 

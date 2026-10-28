@@ -23,18 +23,18 @@ import type { Response } from 'express';
 import type {
   AuthenticatedRequest,
   OptionalAuthenticatedRequest,
-} from '../auth/auth.types';
-import { JwtAuthGuard } from '../auth/jwt-auth.guard';
-import { OptionalJwtAuthGuard } from '../auth/optional-jwt-auth.guard';
-import { CursorPaginationQueryDto } from '../common/pagination';
-import { CreatePostDto } from './dto/create-post.dto';
-import { FeedQueryDto } from './dto/feed-query.dto';
-import { RecordViewsDto } from './dto/post-interaction.dto';
-import { ListPostsQueryDto } from './dto/list-posts-query.dto';
-import { PostPageDto, PostResponseDto } from './dto/post-response.dto';
-import { SearchPostsQueryDto } from './dto/search-posts-query.dto';
-import { PostViewsService } from './post-views.service';
-import { PostsService } from './posts.service';
+} from '../auth/auth.types.js';
+import { JwtAuthGuard } from '../auth/jwt-auth.guard.js';
+import { OptionalJwtAuthGuard } from '../auth/optional-jwt-auth.guard.js';
+import { CursorPaginationQueryDto } from '../common/pagination/index.js';
+import { CreatePostDto } from './dto/create-post.dto.js';
+import { FeedQueryDto } from './dto/feed-query.dto.js';
+import { RecordViewsDto } from './dto/post-interaction.dto.js';
+import { ListPostsQueryDto } from './dto/list-posts-query.dto.js';
+import { PostPageDto, PostResponseDto } from './dto/post-response.dto.js';
+import { SearchPostsQueryDto } from './dto/search-posts-query.dto.js';
+import { PostViewsService } from './post-views.service.js';
+import { PostsService } from './posts.service.js';
 
 @ApiTags('posts')
 @Controller('posts')
@@ -138,6 +138,20 @@ export class PostsController {
     @Req() request: AuthenticatedRequest,
   ): Promise<PostPageDto> {
     return this.postsService.listBookmarks(request.user.sub, query);
+  }
+
+  @Get('following')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'Published posts from accounts you follow, newest first',
+  })
+  @ApiOkResponse({ type: PostPageDto })
+  listFollowing(
+    @Query() query: CursorPaginationQueryDto,
+    @Req() request: AuthenticatedRequest,
+  ): Promise<PostPageDto> {
+    return this.postsService.listFollowing(request.user.sub, query);
   }
 
   @Get(':id')

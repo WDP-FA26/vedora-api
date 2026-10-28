@@ -17,7 +17,7 @@ import {
   MinLength,
   ValidateNested,
 } from 'class-validator';
-import { NamedRefDto } from './ingredient.dto';
+import { NamedRefDto } from './ingredient.dto.js';
 
 export const MAX_RECIPE_INGREDIENTS = 50;
 export const MAX_RECIPE_STEPS = 50;
@@ -196,4 +196,14 @@ export class RecipeDetailDto extends RecipeDto {
   @ApiProperty({ type: [String] }) steps!: string[];
   @ApiProperty({ type: [RecipeIngredientDto] })
   ingredients!: RecipeIngredientDto[];
+}
+
+/** The card fields of a detail, for lists. */
+export function toRecipeCard({
+  description: _description,
+  steps: _steps,
+  ingredients: _ingredients,
+  ...card
+}: RecipeDetailDto): RecipeDto {
+  return card;
 }

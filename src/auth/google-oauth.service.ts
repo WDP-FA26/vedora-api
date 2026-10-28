@@ -1,13 +1,10 @@
 import { randomBytes } from 'node:crypto';
-import {
-  Injectable,
-  Logger,
-  ServiceUnavailableException,
-  UnauthorizedException,
-} from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { CodeChallengeMethod, OAuth2Client } from 'google-auth-library';
-import { GoogleProfileUser } from './google-auth.types';
+import { GoogleProfileUser } from './google-auth.types.js';
+import { FeatureUnavailableException } from '../common/exceptions/feature-unavailable.exception.js';
+import { UnauthenticatedException } from '../common/exceptions/unauthenticated.exception.js';
 
 export interface GoogleAuthorization {
   /** Google's consent screen URL. */
@@ -36,7 +33,11 @@ export class GoogleOAuthService {
     const redirectUri = configService.get<string>('GOOGLE_CALLBACK_URL', '');
     this.client =
       this.clientId && clientSecret && redirectUri
-        ? new OAuth2Client({ clientId: this.clientId, clientSecret, redirectUri })
+        ? new OAuth2Client({
+            clientId: this.clientId,
+            clientSecret,
+            redirectUri,
+          })
         : null;
   }
 
@@ -70,21 +71,33 @@ export class GoogleOAuthService {
     } catch (error) {
       // invalid_grant: expired or reused code, wrong verifier or redirect URI.
       this.logger.warn(`Google code exchange failed: ${String(error)}`);
-      throw new UnauthorizedException('Google sign-in failed');
+      throw new UnauthenticatedException(
+        'UNAUTHORIZED',
+        'Google sign-in failed',
+      );
     }
     if (!idToken) {
-      throw new UnauthorizedException('Google sign-in failed');
+      throw new UnauthenticatedException(
+        'UNAUTHORIZED',
+        'Google sign-in failed',
+      );
     }
 
     const ticket = await client
       .verifyIdToken({ idToken, audience: this.clientId })
       .catch(() => {
-        throw new UnauthorizedException('Google sign-in failed');
+        throw new UnauthenticatedException(
+          'UNAUTHORIZED',
+          'Google sign-in failed',
+        );
       });
     const payload = ticket.getPayload();
     const email = payload?.email?.trim().toLowerCase();
     if (!payload || !email || payload.email_verified !== true) {
-      throw new UnauthorizedException('Google email is missing or unverified');
+      throw new UnauthenticatedException(
+        'UNAUTHORIZED',
+        'Google email is missing or unverified',
+      );
     }
 
     return {
@@ -96,7 +109,10 @@ export class GoogleOAuthService {
 
   private requireClient(): OAuth2Client {
     if (!this.client) {
-      throw new ServiceUnavailableException('Google OAuth is not configured');
+      throw new FeatureUnavailableException(
+        'SERVICE_UNAVAILABLE',
+        'Google OAuth is not configured',
+      );
     }
     return this.client;
   }

@@ -129,7 +129,7 @@ khi xuất bản lại. Xóa blog xóa cả comment/like/bookmark và liên kế
 | ---- | ----------------------------------------------------------------------- |
 | 400  | Body/query/UUID/cursor không hợp lệ                                     |
 | 400  | `BLOG_CONTENT_REQUIRED`: xuất bản với nội dung rỗng                     |
-| 400  | `BLOG_RECIPE_NOT_FOUND`: ID công thức không tồn tại; có `recipeIds` lỗi |
+| 400  | `BLOG_RECIPE_NOT_FOUND`: ID công thức không tồn tại; các ID lỗi trong `details.recipeIds` |
 | 401  | Thiếu token trên thao tác riêng hoặc token gửi lên không hợp lệ         |
 | 404  | Blog không tồn tại, là post thường hoặc không có quyền đọc/sửa/xóa      |
 
@@ -141,8 +141,7 @@ post và công thức hiện có. Nhánh Blog tách từ `feat/recipe-catalog`, 
 thay đổi catalog khi merge nếu nhánh đó chưa nằm trên main.
 
 ```bash
-npm run prisma:migrate:deploy
-npm run prisma:generate
+npm run start:dev    # Mongoose tự tạo collection/index khi khởi động
 npm test
 npm run test:e2e
 npm run test:db

@@ -1,120 +1,88 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
+import { Injectable } from '@nestjs/common';
+import { InjectModel } from '@nestjs/mongoose';
+import { randomUUID } from 'node:crypto';
+import type { Model } from 'mongoose';
 import {
   createPaginatedResponse,
   getPaginationArgs,
   PaginatedResponseDto,
   PaginationQueryDto,
-} from '../common/pagination';
-import { PrismaService } from '../prisma/prisma.service';
-import type { IngredientConflict } from './conflicts';
-import { RecipeDetailDto, RecipeDto, SaveRecipeDto } from './dto/recipe.dto';
-import { IncompatibilityRulesService } from './incompatibility-rules.service';
-import { badRequest, isPrismaError } from './recipe-errors';
-
-const post = {
-  select: {
-    id: true,
-    status: true,
-    author: { select: { username: true, fullName: true } },
-  },
-} satisfies Prisma.PostDefaultArgs;
-
-export const recipeInclude = {
-  post,
-  ingredients: {
-    select: { ingredientId: true, ingredient: { select: { name: true } } },
-  },
-} satisfies Prisma.RecipeInclude;
-
-export const recipeDetailInclude = {
-  post,
-  ingredients: {
-    include: { ingredient: { select: { name: true } } },
-    orderBy: { position: 'asc' },
-  },
-} satisfies Prisma.RecipeInclude;
-
-type RecipeRow = Prisma.RecipeGetPayload<{ include: typeof recipeInclude }>;
+} from '../common/pagination/index.js';
+import { Recipe } from '../mongo/models.js';
+import { MongoService } from '../mongo/mongo.service.js';
+import {
+  RecipeDetailDto,
+  RecipeDto,
+  SaveRecipeDto,
+  toRecipeCard,
+} from './dto/recipe.dto.js';
+import { RecipeRelationsService } from './recipe-relations.service.js';
+import { ResourceNotFoundException } from '../common/exceptions/resource-not-found.exception.js';
 
 @Injectable()
 export class RecipesService {
   constructor(
-    private readonly prisma: PrismaService,
-    private readonly rules: IncompatibilityRulesService,
+    @InjectModel(Recipe.name) private readonly recipes: Model<Recipe>,
+    private readonly relations: RecipeRelationsService,
+    private readonly mongo: MongoService,
   ) {}
 
   async findAll(
     query: PaginationQueryDto,
   ): Promise<PaginatedResponseDto<RecipeDto>> {
-    const [rows, totalItems] = await this.prisma.$transaction([
-      this.prisma.recipe.findMany({
-        include: recipeInclude,
-        orderBy: [{ updatedAt: 'desc' }, { id: 'desc' }],
-        ...getPaginationArgs(query),
-      }),
-      this.prisma.recipe.count(),
+    const { skip, take } = getPaginationArgs(query);
+    const [rows, totalItems] = await Promise.all([
+      this.recipes
+        .find()
+        .sort({ updatedAt: -1, _id: -1 })
+        .skip(skip)
+        .limit(take)
+        .exec(),
+      this.recipes.countDocuments(),
     ]);
-    const conflicts = await this.rules.findConflictsForEach(
-      rows.map((row) => row.ingredients.map((item) => item.ingredientId)),
-    );
+    const recipes = await this.relations.hydrate(rows);
     return createPaginatedResponse(
-      rows.map((row, index) => toRecipeDto(row, conflicts[index])),
+      recipes.map(toRecipeCard),
       totalItems,
       query,
     );
   }
 
   async findOne(id: string): Promise<RecipeDetailDto> {
-    const row = await this.prisma.recipe.findUnique({
-      where: { id },
-      include: recipeDetailInclude,
-    });
-    if (!row) throw new NotFoundException('Recipe not found');
-    const [conflicts] = await this.rules.findConflictsForEach([
-      row.ingredients.map((item) => item.ingredientId),
-    ]);
-    return toRecipeDetailDto(row, conflicts);
+    const row = await this.recipes.findOne({ _id: id }).exec();
+    if (!row)
+      throw new ResourceNotFoundException('NOT_FOUND', 'Recipe not found');
+    const [recipe] = await this.relations.hydrate([row]);
+    return recipe;
   }
 
   async create(userId: string, dto: SaveRecipeDto): Promise<RecipeDetailDto> {
-    try {
-      const { id } = await this.prisma.recipe.create({
-        data: {
-          ...toData(dto),
-          createdById: userId,
-          ingredients: { create: toIngredientRows(dto) },
-        },
-        select: { id: true },
-      });
-      return await this.findOne(id);
-    } catch (error: unknown) {
-      throw translate(error) ?? error;
-    }
+    await this.relations.assertReferences(dto.ingredients, dto.postId);
+    const recipe = await this.recipes.create({
+      _id: randomUUID(),
+      ...toData(dto),
+      createdById: userId,
+    });
+    return this.findOne(recipe.id);
   }
 
   async update(id: string, dto: SaveRecipeDto): Promise<RecipeDetailDto> {
-    try {
-      await this.prisma.recipe.update({
-        where: { id },
-        data: {
-          ...toData(dto),
-          ingredients: { deleteMany: {}, create: toIngredientRows(dto) },
-        },
-        select: { id: true },
-      });
-      return await this.findOne(id);
-    } catch (error: unknown) {
-      throw translate(error) ?? error;
+    await this.relations.assertReferences(dto.ingredients, dto.postId);
+    const updated = await this.recipes
+      .updateOne({ _id: id }, { $set: toData(dto) })
+      .exec();
+    if (updated.matchedCount === 0) {
+      throw new ResourceNotFoundException('NOT_FOUND', 'Recipe not found');
     }
+    return this.findOne(id);
   }
 
   async remove(id: string): Promise<void> {
-    try {
-      await this.prisma.recipe.delete({ where: { id } });
-    } catch (error: unknown) {
-      throw translate(error) ?? error;
-    }
+    const { deletedCount } = await this.mongo.withTransaction((session) =>
+      this.recipes.deleteOne({ _id: id }, { session }).exec(),
+    );
+    if (deletedCount === 0)
+      throw new ResourceNotFoundException('NOT_FOUND', 'Recipe not found');
   }
 }
 
@@ -126,75 +94,13 @@ function toData(dto: SaveRecipeDto) {
     servings: dto.servings,
     prepMinutes: dto.prepMinutes ?? null,
     cookMinutes: dto.cookMinutes ?? null,
+    ingredients: dto.ingredients.map((item) => ({
+      ingredientId: item.ingredientId,
+      quantity: item.quantity ?? null,
+      unit: item.unit || null,
+      note: item.note || null,
+    })),
     steps: dto.steps,
     postId: dto.postId ?? null,
-  };
-}
-
-function toIngredientRows(dto: SaveRecipeDto) {
-  return dto.ingredients.map((item, position) => ({
-    ingredientId: item.ingredientId,
-    position,
-    quantity: item.quantity ?? null,
-    unit: item.unit || null,
-    note: item.note || null,
-  }));
-}
-
-function translate(error: unknown): Error | undefined {
-  if (isPrismaError(error, 'P2003')) {
-    return badRequest(
-      'UNKNOWN_REFERENCE',
-      'An ingredient or the post in the request does not exist',
-    );
-  }
-  if (isPrismaError(error, 'P2025')) {
-    return new NotFoundException('Recipe not found');
-  }
-  return undefined;
-}
-
-export function toRecipeDto(
-  row: RecipeRow,
-  conflicts: IngredientConflict[],
-): RecipeDto {
-  const names = new Map(
-    row.ingredients.map((item) => [item.ingredientId, item.ingredient.name]),
-  );
-  const named = (id: string) => ({ id, name: names.get(id) ?? '' });
-  return {
-    id: row.id,
-    title: row.title,
-    imageUrl: row.imageUrl,
-    servings: row.servings,
-    prepMinutes: row.prepMinutes,
-    cookMinutes: row.cookMinutes,
-    ingredientCount: row.ingredients.length,
-    conflictCount: conflicts.length,
-    conflicts: conflicts.map(({ ingredientAId, ingredientBId, ...rest }) => ({
-      ...rest,
-      a: named(ingredientAId),
-      b: named(ingredientBId),
-    })),
-    post: row.post ? { id: row.post.id, author: row.post.author } : null,
-    updatedAt: row.updatedAt,
-  };
-}
-
-export function toRecipeDetailDto(
-  row: Prisma.RecipeGetPayload<{ include: typeof recipeDetailInclude }>,
-  conflicts: IngredientConflict[],
-): RecipeDetailDto {
-  return {
-    ...toRecipeDto(row, conflicts),
-    description: row.description,
-    steps: row.steps,
-    ingredients: row.ingredients.map((item) => ({
-      ingredientId: item.ingredientId,
-      name: item.ingredient.name,
-      quantity: item.quantity?.toNumber() ?? null,
-      unit: item.unit,
-      note: item.note,
-    })),
   };
 }

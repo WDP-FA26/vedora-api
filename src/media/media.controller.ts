@@ -19,14 +19,15 @@ import {
   ApiTags,
   ApiTooManyRequestsResponse,
 } from '@nestjs/swagger';
-import type { AuthenticatedRequest } from '../auth/auth.types';
-import { JwtAuthGuard } from '../auth/jwt-auth.guard';
-import { CreateUploadDto } from './dto/create-upload.dto';
+import type { AuthenticatedRequest } from '../auth/auth.types.js';
+import { JwtAuthGuard } from '../auth/jwt-auth.guard.js';
+import { CreateUploadDto } from './dto/create-upload.dto.js';
 import {
   CreateUploadResponseDto,
   MediaResponseDto,
-} from './dto/media-response.dto';
-import { MediaService } from './media.service';
+} from './dto/media-response.dto.js';
+import { MediaService } from './media.service.js';
+import { ErrorBodyDto } from '../common/exceptions/error-body.dto.js';
 
 @ApiTags('media')
 @ApiBearerAuth()
@@ -42,9 +43,11 @@ export class MediaController {
       'Returns signed Cloudinary upload fields for the browser, and the media ID to pass to POST /posts.',
   })
   @ApiTooManyRequestsResponse({
+    type: ErrorBodyDto,
     description: 'UPLOAD_LIMIT_REACHED: too many uploads not yet posted',
   })
   @ApiServiceUnavailableResponse({
+    type: ErrorBodyDto,
     description: 'Cloudinary is not configured',
   })
   createUpload(
@@ -68,7 +71,10 @@ export class MediaController {
   @Delete(':id')
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ summary: 'Discard an upload that is not attached to a post' })
-  @ApiConflictResponse({ description: 'The media is attached to a post' })
+  @ApiConflictResponse({
+    type: ErrorBodyDto,
+    description: 'The media is attached to a post',
+  })
   async remove(
     @Req() request: AuthenticatedRequest,
     @Param('id', ParseUUIDPipe) id: string,

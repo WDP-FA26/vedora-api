@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { AiFeature } from '@prisma/client';
+import { AiFeature } from '../../mongo/models.js';
 import { Type } from 'class-transformer';
 import {
   ArrayMaxSize,
@@ -12,7 +12,7 @@ import {
   MaxLength,
   ValidateNested,
 } from 'class-validator';
-import { MAX_BLOG_CONTENT } from './blog.dto';
+import { MAX_BLOG_CONTENT } from './blog.dto.js';
 
 export const MAX_ASSISTANT_MESSAGES = 40;
 export const MAX_SELECTION = 4000;

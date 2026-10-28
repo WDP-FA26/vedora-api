@@ -7,6 +7,7 @@ import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import type { ReadableStream } from 'node:stream/web';
 import ffmpegStatic from 'ffmpeg-static';
+import { ExternalServiceException } from '../../common/exceptions/external-service.exception.js';
 
 /** A stretch of the original video, in seconds. */
 export interface Interval {
@@ -27,7 +28,10 @@ const DOWNLOAD_TIMEOUT_MS = 5 * 60_000;
 
 /** `FFMPEG_PATH` (the Docker image's ffmpeg), else the npm-bundled binary. */
 function ffmpegPath(): string {
-  return process.env.FFMPEG_PATH || ffmpegStatic || 'ffmpeg';
+  // ffmpeg-static types its CommonJS export as an ES default, which
+  // `nodenext` resolves to the module namespace instead of the path.
+  const bundled = typeof ffmpegStatic === 'string' ? ffmpegStatic : null;
+  return process.env.FFMPEG_PATH || bundled || 'ffmpeg';
 }
 
 /** Thrown when the video has no audio stream at all. */
@@ -153,7 +157,10 @@ async function download(url: string, path: string): Promise<void> {
     signal: AbortSignal.timeout(DOWNLOAD_TIMEOUT_MS),
   });
   if (!response.ok || !response.body) {
-    throw new Error(`Downloading the video answered ${response.status}`);
+    throw new ExternalServiceException(
+      'cloudinary',
+      `Downloading the video answered ${response.status}`,
+    );
   }
   await pipeline(
     Readable.fromWeb(response.body as ReadableStream<Uint8Array>),

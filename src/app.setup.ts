@@ -1,7 +1,36 @@
-import { INestApplication, ValidationPipe } from '@nestjs/common';
+import {
+  INestApplication,
+  ValidationError,
+  ValidationPipe,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import type { ExpressAdapter } from '@nestjs/platform-express';
 import helmet from 'helmet';
+import { InvalidInputException } from './common/exceptions/invalid-input.exception.js';
+
+/**
+ * Flattens class-validator errors into one message list. Nested failures keep
+ * their path, e.g. `messages.0.role must be one of ...`, as Nest reports them.
+ */
+function validationMessages(
+  errors: ValidationError[],
+  parentPath?: string,
+): string[] {
+  const messages: string[] = [];
+  for (const error of errors) {
+    const prefix = parentPath ? `${parentPath}.` : '';
+    messages.push(
+      ...Object.values(error.constraints ?? {}).map(
+        (message) => `${prefix}${message}`,
+      ),
+    );
+    const childPath = parentPath
+      ? `${parentPath}.${error.property}`
+      : error.property;
+    messages.push(...validationMessages(error.children ?? [], childPath));
+  }
+  return messages;
+}
 
 /**
  * HTTP setup shared by `main.ts` and the e2e tests, so tests exercise the
@@ -30,6 +59,14 @@ export function configureApp(app: INestApplication): void {
       whitelist: true,
       forbidNonWhitelisted: true,
       transform: true,
+      exceptionFactory: (errors) => {
+        const messages = validationMessages(errors);
+        return new InvalidInputException(
+          'VALIDATION_FAILED',
+          messages.join('; '),
+          { messages },
+        );
+      },
     }),
   );
 }

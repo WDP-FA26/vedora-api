@@ -1,0 +1,84 @@
+import {
+  Body,
+  Controller,
+  Get,
+  HttpCode,
+  HttpStatus,
+  Param,
+  ParseUUIDPipe,
+  Post,
+  Query,
+  Req,
+  UseGuards,
+} from '@nestjs/common';
+import {
+  ApiBearerAuth,
+  ApiConflictResponse,
+  ApiForbiddenResponse,
+  ApiOkResponse,
+  ApiOperation,
+  ApiTags,
+  ApiUnauthorizedResponse,
+} from '@nestjs/swagger';
+import { UserRole } from '../../mongo/models.js';
+import type { AuthenticatedRequest } from '../../auth/auth.types.js';
+import { JwtAuthGuard } from '../../auth/jwt-auth.guard.js';
+import { Roles } from '../../auth/roles.decorator.js';
+import { RolesGuard } from '../../auth/roles.guard.js';
+import {
+  ApiPaginatedResponse,
+  PaginatedResponseDto,
+} from '../../common/pagination/index.js';
+import {
+  AdminPostReportDto,
+  PostReportsQueryDto,
+  ReviewPostReportDto,
+} from '../dto/post-interaction.dto.js';
+import { PostReportsService } from '../interactions/post-reports.service.js';
+import { ErrorBodyDto } from '../../common/exceptions/error-body.dto.js';
+
+@ApiTags('admin')
+@ApiBearerAuth()
+@ApiUnauthorizedResponse({
+  type: ErrorBodyDto,
+  description: 'Authentication required',
+})
+@ApiForbiddenResponse({
+  type: ErrorBodyDto,
+  description: 'Insufficient account permissions',
+})
+@UseGuards(JwtAuthGuard, RolesGuard)
+@Roles(UserRole.ADMIN)
+@Controller('admin/reports')
+export class AdminReportsController {
+  constructor(private readonly reports: PostReportsService) {}
+
+  @Get()
+  @ApiOperation({ summary: 'List post reports, newest first' })
+  @ApiPaginatedResponse(AdminPostReportDto)
+  findAll(
+    @Query() query: PostReportsQueryDto,
+  ): Promise<PaginatedResponseDto<AdminPostReportDto>> {
+    return this.reports.findAll(query);
+  }
+
+  @Post(':id/review')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Close a pending report',
+    description:
+      'Deleting the reported post (DELETE /admin/posts/:id) removes its reports instead.',
+  })
+  @ApiOkResponse({ type: AdminPostReportDto })
+  @ApiConflictResponse({
+    type: ErrorBodyDto,
+    description: 'The report was already reviewed',
+  })
+  review(
+    @Req() request: AuthenticatedRequest,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: ReviewPostReportDto,
+  ): Promise<AdminPostReportDto> {
+    return this.reports.review(id, request.user.sub, dto.status);
+  }
+}

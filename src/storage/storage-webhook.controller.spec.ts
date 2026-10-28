@@ -1,8 +1,8 @@
 import { mockDeep } from 'vitest-mock-extended';
-import { KnowledgeService } from '../knowledge/knowledge.service';
-import { ProfilesService } from '../profiles/profiles.service';
-import { StorageWebhookController } from './storage-webhook.controller';
-import { StorageService, StorageTarget } from './storage.service';
+import { KnowledgeService } from '../knowledge/knowledge.service.js';
+import { ProfilesService } from '../profiles/profiles.service.js';
+import { StorageWebhookController } from './storage-webhook.controller.js';
+import { StorageService, StorageTarget } from './storage.service.js';
 
 describe('StorageWebhookController', () => {
   const storage = mockDeep<StorageService>();

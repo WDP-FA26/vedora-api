@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { VerificationStatus } from '@prisma/client';
+import { VerificationStatus } from '../../mongo/models.js';
 import { Transform } from 'class-transformer';
 import {
   ArrayMaxSize,
@@ -16,8 +16,8 @@ import {
   MinLength,
   ValidateIf,
 } from 'class-validator';
-import { PaginationQueryDto } from '../../common/pagination';
-import { PresignedUploadDto } from '../../storage/presigned-upload.dto';
+import { PaginationQueryDto } from '../../common/pagination/index.js';
+import { PresignedUploadDto } from '../../storage/presigned-upload.dto.js';
 
 export const PROOF_IMAGE_TYPES = [
   'image/jpeg',

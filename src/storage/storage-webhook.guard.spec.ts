@@ -1,8 +1,9 @@
-import { ExecutionContext, UnauthorizedException } from '@nestjs/common';
+import { ExecutionContext } from '@nestjs/common';
+import { UnauthenticatedException } from '../common/exceptions/unauthenticated.exception.js';
 import { ExecutionContextHost } from '@nestjs/core/helpers/execution-context-host';
 import { mockDeep } from 'vitest-mock-extended';
-import { StorageWebhookGuard } from './storage-webhook.guard';
-import { StorageService } from './storage.service';
+import { StorageWebhookGuard } from './storage-webhook.guard.js';
+import { StorageService } from './storage.service.js';
 
 function contextWith(authorization?: string): ExecutionContext {
   return new ExecutionContextHost([
@@ -28,13 +29,13 @@ describe('StorageWebhookGuard', () => {
     (authorization) => {
       expect(() =>
         guardWith('webhook-token').canActivate(contextWith(authorization)),
-      ).toThrow(UnauthorizedException);
+      ).toThrow(UnauthenticatedException);
     },
   );
 
   it('rejects everything while no token is configured', () => {
     expect(() => guardWith('').canActivate(contextWith('Bearer '))).toThrow(
-      UnauthorizedException,
+      UnauthenticatedException,
     );
   });
 });

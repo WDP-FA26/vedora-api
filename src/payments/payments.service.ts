@@ -1,37 +1,56 @@
-import { createHash, randomBytes } from 'node:crypto';
-import {
-  BadRequestException,
-  ConflictException,
-  Injectable,
-  Logger,
-  NotFoundException,
-  ServiceUnavailableException,
-} from '@nestjs/common';
+import { createHash, randomBytes, randomUUID } from 'node:crypto';
+import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { BillingPlan, PaymentIntent, Prisma } from '@prisma/client';
-import { PrismaService } from '../prisma/prisma.service';
+import { InjectModel } from '@nestjs/mongoose';
+import type { ClientSession, Model } from 'mongoose';
+import { lockDocument } from '../mongo/document-lock.js';
+import { isUniqueViolation } from '../mongo/errors.js';
+import {
+  AccountStatus,
+  BillingPlan,
+  PaymentIntent,
+  PaymentRequest,
+  PaymentStatus,
+  PaymentWebhookReceipt,
+  User,
+} from '../mongo/models.js';
+import { MongoService } from '../mongo/mongo.service.js';
 import {
   BillingCatalogDto,
   BillingOverviewDto,
   PaymentDto,
-} from './payment.dto';
-import { SePayProvider } from './sepay.provider';
-import { parseBankWebhook } from './sepay-payload';
-import { generatePaymentCode } from './payment-code';
-import { PaymentChanged, PaymentEventsService } from './payment-events.service';
+} from './payment.dto.js';
+import { SePayProvider } from './sepay.provider.js';
+import { parseBankWebhook } from './sepay-payload.js';
+import { generatePaymentCode } from './payment-code.js';
+import {
+  PaymentChanged,
+  PaymentEventsService,
+} from './payment-events.service.js';
+import { InvalidInputException } from '../common/exceptions/invalid-input.exception.js';
+import { ResourceNotFoundException } from '../common/exceptions/resource-not-found.exception.js';
+import { StateConflictException } from '../common/exceptions/state-conflict.exception.js';
+import { FeatureUnavailableException } from '../common/exceptions/feature-unavailable.exception.js';
 
-type Tx = Prisma.TransactionClient;
 const hash = (value: unknown) =>
   createHash('sha256').update(JSON.stringify(value)).digest('hex');
-const conflict = (code: string, message: string): never => {
-  throw new ConflictException({ code, message });
-};
+const membershipExpiry = (startsAt: Date, durationDays: number) =>
+  new Date(startsAt.getTime() + durationDays * 86_400_000);
+type Intent = Omit<PaymentIntent, '_id'>;
 
 @Injectable()
 export class PaymentsService {
   private readonly logger = new Logger(PaymentsService.name);
   constructor(
-    private readonly db: PrismaService,
+    private readonly mongo: MongoService,
+    @InjectModel(PaymentIntent.name)
+    private readonly intents: Model<PaymentIntent>,
+    @InjectModel(PaymentRequest.name)
+    private readonly requests: Model<PaymentRequest>,
+    @InjectModel(PaymentWebhookReceipt.name)
+    private readonly receipts: Model<PaymentWebhookReceipt>,
+    @InjectModel(User.name)
+    private readonly users: Model<User>,
     private readonly config: ConfigService,
     private readonly provider: SePayProvider,
     private readonly events: PaymentEventsService,
@@ -54,8 +73,13 @@ export class PaymentsService {
     };
   }
 
-  private async lock(tx: Tx, key: string) {
-    await tx.$queryRaw`SELECT 1 AS locked FROM pg_advisory_xact_lock(hashtextextended(${key}, 0))`;
+  /** Overlapping transactions on one key conflict, and the driver retries. */
+  private async lock(
+    session: ClientSession,
+    kind: 'payer' | 'transaction',
+    id: string,
+  ) {
+    await lockDocument(this.mongo, session, kind, id);
   }
 
   private async notifyCommitted(change: PaymentChanged): Promise<void> {
@@ -68,12 +92,12 @@ export class PaymentsService {
     }
   }
 
-  serialize(intent: PaymentIntent): PaymentDto {
+  serialize(intent: Intent): PaymentDto {
     return {
       id: intent.id,
       planCode: intent.planCode,
       durationDays: intent.durationDays,
-      amount: intent.amount.toFixed(0),
+      amount: intent.amount.toString(),
       currency: intent.currency,
       status: intent.status,
       invoiceNumber: intent.invoiceNumber,
@@ -83,49 +107,53 @@ export class PaymentsService {
       capturedAt: intent.capturedAt?.toISOString() ?? null,
       cancelledAt: intent.cancelledAt?.toISOString() ?? null,
       qr:
-        intent.status === 'PENDING' && this.catalog().paymentsEnabled
-          ? this.provider.qr(intent, intent.amount.toFixed(0))
+        intent.status === PaymentStatus.PENDING &&
+        this.catalog().paymentsEnabled
+          ? this.provider.qr(intent, intent.amount.toString())
           : null,
     };
   }
 
   async overview(userId: string): Promise<BillingOverviewDto> {
-    return this.db.$transaction(
-      async (tx) => {
-        const now = new Date();
-        const membership = await tx.membership.findUnique({
-          where: { userId },
-        });
-        const pending = await tx.paymentIntent.findUnique({
-          where: { activeIntentKey: userId },
-        });
-        const recent = await tx.paymentIntent.findMany({
-          where: { userId },
-          orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
-          take: 20,
-        });
-        return {
-          membership:
-            membership && membership.expiresAt > now
-              ? {
-                  planCode: membership.planCode,
-                  startsAt: membership.startsAt.toISOString(),
-                  expiresAt: membership.expiresAt.toISOString(),
-                }
-              : { planCode: 'FREE', startsAt: null, expiresAt: null },
-          pendingPayment: pending ? this.serialize(pending) : null,
-          recentPayments: recent.map((intent) => this.serialize(intent)),
-        };
-      },
-      { isolationLevel: Prisma.TransactionIsolationLevel.RepeatableRead },
-    );
+    const now = new Date();
+    // The latest capture is the membership; a new purchase replaces it.
+    const [latest, pending, recent] = await Promise.all([
+      this.intents
+        .findOne({ userId, status: PaymentStatus.SUCCEEDED })
+        .sort({ capturedAt: -1, _id: -1 })
+        .exec(),
+      this.intents.findOne({ activeIntentKey: userId }).exec(),
+      this.intents
+        .find({ userId })
+        .sort({ createdAt: -1, _id: -1 })
+        .limit(20)
+        .exec(),
+    ]);
+    const membership = latest?.capturedAt
+      ? {
+          planCode: latest.planCode,
+          startsAt: latest.capturedAt,
+          expiresAt: membershipExpiry(latest.capturedAt, latest.durationDays),
+        }
+      : null;
+    return {
+      membership:
+        membership && membership.expiresAt > now
+          ? {
+              planCode: membership.planCode,
+              startsAt: membership.startsAt.toISOString(),
+              expiresAt: membership.expiresAt.toISOString(),
+            }
+          : { planCode: 'FREE', startsAt: null, expiresAt: null },
+      pendingPayment: pending ? this.serialize(pending) : null,
+      recentPayments: recent.map((intent) => this.serialize(intent)),
+    };
   }
 
   async get(id: string, userId: string): Promise<PaymentDto> {
-    const intent = await this.db.paymentIntent.findFirst({
-      where: { id, userId },
-    });
-    if (!intent) throw new NotFoundException('Payment not found');
+    const intent = await this.intents.findOne({ _id: id, userId }).exec();
+    if (!intent)
+      throw new ResourceNotFoundException('NOT_FOUND', 'Payment not found');
     return this.serialize(intent);
   }
 
@@ -136,43 +164,67 @@ export class PaymentsService {
   ): Promise<PaymentDto> {
     this.provider.assertEnabled();
     if (!key || !/^[A-Za-z0-9._:-]{8,200}$/.test(key))
-      throw new BadRequestException('A valid Idempotency-Key is required');
+      throw new InvalidInputException(
+        'BAD_REQUEST',
+        'A valid Idempotency-Key is required',
+      );
     const payloadHash = hash({ planCode });
     const attemptCreate = () =>
-      this.db.$transaction(async (tx) => {
-        await this.lock(tx, `payer:${userId}`);
-        const prior = await tx.paymentRequest.findUnique({
-          where: { actorId_requestKey: { actorId: userId, requestKey: key } },
-          include: { intent: true },
-        });
+      this.mongo.withTransaction(async (session) => {
+        await this.lock(session, 'payer', userId);
+        const prior = await this.requests
+          .findOne({ actorId: userId, requestKey: key })
+          .session(session)
+          .exec();
         if (prior) {
           if (prior.payloadHash !== payloadHash)
-            conflict(
+            throw new StateConflictException(
               'IDEMPOTENCY_CONFLICT',
               'This key was used with another request',
             );
-          return prior.intent;
+          const priorIntent = await this.intents
+            .findOne({ _id: prior.intentId })
+            .session(session)
+            .exec();
+          if (!priorIntent)
+            throw new ResourceNotFoundException(
+              'NOT_FOUND',
+              'Payment not found',
+            );
+          return priorIntent;
         }
-        const user = await tx.user.findUnique({ where: { id: userId } });
-        if (!user || user.status !== 'ACTIVE' || !user.emailVerifiedAt)
-          conflict(
+        const user = await this.users
+          .findOne({ _id: userId })
+          .session(session)
+          .exec();
+        if (
+          !user ||
+          user.status !== AccountStatus.ACTIVE ||
+          !user.emailVerifiedAt
+        )
+          throw new StateConflictException(
             'ACCOUNT_NOT_PAYABLE',
             'A verified active account is required',
           );
         const plan = this.catalog().plans.find(
           (item) => item.code === planCode,
         );
-        if (!plan) throw new BadRequestException('Unknown billing plan');
-        let intent = await tx.paymentIntent.findUnique({
-          where: { activeIntentKey: userId },
-        });
+        if (!plan)
+          throw new InvalidInputException(
+            'BAD_REQUEST',
+            'Unknown billing plan',
+          );
+        let intent: Intent | null = await this.intents
+          .findOne({ activeIntentKey: userId })
+          .session(session)
+          .exec();
         if (
           intent &&
           (intent.planCode !== planCode ||
-            intent.amount.toFixed(0) !== plan.priceVnd ||
+            intent.amount.toString() !== plan.priceVnd ||
             intent.durationDays !== plan.durationDays)
         )
-          conflict(
+          throw new StateConflictException(
             'PENDING_PAYMENT_CONFLICT',
             'Continue or cancel the pending payment before creating a different purchase',
           );
@@ -180,79 +232,95 @@ export class PaymentsService {
           const paymentCode = generatePaymentCode(
             this.config.get<string>('SEPAY_PAYMENT_CODE_PREFIX', 'VED'),
           );
-          intent = await tx.paymentIntent.create({
-            data: {
-              userId,
-              planCode,
-              amount: plan.priceVnd,
-              durationDays: plan.durationDays,
-              activeIntentKey: userId,
-              paymentCode,
-              invoiceNumber: `VED-${randomBytes(16).toString('hex').toUpperCase()}`,
-              ...this.provider.snapshot(paymentCode),
-            },
-          });
-          await tx.paymentAudit.create({
-            data: { intentId: intent.id, actorId: userId, action: 'CREATED' },
-          });
+          const [created] = await this.intents.create(
+            [
+              {
+                _id: randomUUID(),
+                userId,
+                planCode,
+                amount: BigInt(plan.priceVnd),
+                durationDays: plan.durationDays,
+                currency: 'VND',
+                status: PaymentStatus.PENDING,
+                activeIntentKey: userId,
+                paymentCode,
+                invoiceNumber: `VED-${randomBytes(16).toString('hex').toUpperCase()}`,
+                ...this.provider.snapshot(paymentCode),
+                providerTransactionId: null,
+                providerReference: null,
+                paidAt: null,
+                capturedAt: null,
+                cancelledAt: null,
+              },
+            ],
+            { session },
+          );
+          intent = created;
         }
-        await tx.paymentRequest.create({
-          data: {
-            actorId: userId,
-            requestKey: key,
-            payloadHash,
-            intentId: intent.id,
-          },
-        });
+        await this.requests.create(
+          [
+            {
+              _id: randomUUID(),
+              actorId: userId,
+              requestKey: key,
+              payloadHash,
+              intentId: intent.id,
+            },
+          ],
+          { session },
+        );
         return intent;
       });
     for (let attempt = 0; attempt < 5; attempt++) {
       try {
         return this.serialize(await attemptCreate());
       } catch (error) {
-        // PostgreSQL aborts on a unique violation: retry the whole transaction,
-        // not another insert inside the failed transaction. Other errors escape.
-        if (
-          !(error instanceof Prisma.PrismaClientKnownRequestError) ||
-          error.code !== 'P2002' ||
-          !Array.isArray(error.meta?.target) ||
-          !error.meta.target.includes('payment_code')
-        )
-          throw error;
+        // A duplicate payment code aborts the transaction: retry the whole
+        // transaction with a new code. The driver already retried write
+        // conflicts. Other errors escape.
+        const codeTaken =
+          isUniqueViolation(error) && 'paymentCode' in (error.keyPattern ?? {});
+        if (!codeTaken) throw error;
       }
     }
-    throw new ServiceUnavailableException({
-      code: 'PAYMENT_CODE_UNAVAILABLE',
-      message:
-        'Could not allocate a payment code; retry with the same Idempotency-Key',
-    });
+    throw new FeatureUnavailableException(
+      'PAYMENT_CODE_UNAVAILABLE',
+      'Could not allocate a payment code; retry with the same Idempotency-Key',
+    );
   }
 
   async cancel(id: string, userId: string): Promise<PaymentDto> {
     let changed = false;
-    const intent = await this.db.$transaction(async (tx) => {
-      await this.lock(tx, `payer:${userId}`);
-      const current = await tx.paymentIntent.findFirst({
-        where: { id, userId },
-      });
-      if (!current) throw new NotFoundException('Payment not found');
-      if (current.status === 'CANCELLED') return current;
-      if (current.status !== 'PENDING')
-        conflict(
+    const intent = await this.mongo.withTransaction(async (session) => {
+      await this.lock(session, 'payer', userId);
+      const current = await this.intents
+        .findOne({ _id: id, userId })
+        .session(session)
+        .exec();
+      if (!current)
+        throw new ResourceNotFoundException('NOT_FOUND', 'Payment not found');
+      if (current.status === PaymentStatus.CANCELLED) return current;
+      if (current.status !== PaymentStatus.PENDING)
+        throw new StateConflictException(
           'PAYMENT_NOT_PENDING',
           'A completed payment cannot be cancelled or refunded here',
         );
-      const updated = await tx.paymentIntent.update({
-        where: { id },
-        data: {
-          status: 'CANCELLED',
-          activeIntentKey: null,
-          cancelledAt: new Date(),
-        },
-      });
-      await tx.paymentAudit.create({
-        data: { intentId: id, actorId: userId, action: 'CANCELLED' },
-      });
+      const now = new Date();
+      const updated = await this.intents
+        .findOneAndUpdate(
+          { _id: id },
+          {
+            $set: {
+              status: PaymentStatus.CANCELLED,
+              activeIntentKey: null,
+              cancelledAt: now,
+            },
+          },
+          { session, returnDocument: 'after' },
+        )
+        .exec();
+      if (!updated)
+        throw new ResourceNotFoundException('NOT_FOUND', 'Payment not found');
       changed = true;
       return updated;
     });
@@ -264,100 +332,94 @@ export class PaymentsService {
     const event = parseBankWebhook(body);
     const payloadHash = hash(event);
     let changed: PaymentChanged | undefined;
-    await this.db.$transaction(async (tx) => {
-      // Event lock precedes payer lock consistently. Unique DB keys are the final guard.
-      await this.lock(tx, `transaction:${event.providerTransactionId}`);
+    await this.mongo.withTransaction(async (session) => {
+      // Event lock precedes payer lock consistently. Unique indexes are the final guard.
+      await this.lock(session, 'transaction', event.providerTransactionId);
       const record = async (outcome: string, intentId?: string) => {
-        await tx.paymentWebhookReceipt.create({
-          data: {
-            providerTransactionId: event.providerTransactionId,
-            payloadHash,
-            outcome,
-            intentId,
-          },
-        });
+        await this.receipts.create(
+          [
+            {
+              _id: randomUUID(),
+              providerTransactionId: event.providerTransactionId,
+              payloadHash,
+              outcome,
+              intentId: intentId ?? null,
+            },
+          ],
+          { session },
+        );
       };
       if (event.transferType !== 'in') return record('NOT_INCOMING');
       const paymentCode = event.code?.trim().toUpperCase();
       if (!paymentCode) return record('PAYMENT_CODE_MISSING');
-      const found = await tx.paymentIntent.findUnique({
-        where: { paymentCode },
-      });
+      const found = await this.intents
+        .findOne({ paymentCode })
+        .session(session)
+        .exec();
       if (!found) return record('PAYMENT_INTENT_NOT_FOUND');
-      await this.lock(tx, `payer:${found.userId}`);
-      const intent = await tx.paymentIntent.findUniqueOrThrow({
-        where: { id: found.id },
-      });
+      await this.lock(session, 'payer', found.userId);
+      const intent = await this.intents
+        .findOne({ _id: found.id })
+        .session(session)
+        .exec();
+      if (!intent) return record('PAYMENT_INTENT_NOT_FOUND');
       if (
         event.gateway.toLowerCase() !== intent.bankGateway.toLowerCase() ||
         (event.accountNumber !== intent.accountNumber &&
           event.subAccount !== intent.accountNumber)
       )
         return record('ACCOUNT_MISMATCH', intent.id);
-      if (!intent.amount.equals(String(event.transferAmount)))
+      if (intent.amount !== BigInt(event.transferAmount))
         return record('AMOUNT_MISMATCH', intent.id);
-      const used = await tx.paymentLedger.findUnique({
-        where: { providerTransactionId: event.providerTransactionId },
-      });
+      const used = await this.intents
+        .findOne({ providerTransactionId: event.providerTransactionId })
+        .select('_id')
+        .session(session)
+        .exec();
       if (used)
         return record(
-          used.intentId === intent.id
-            ? 'DUPLICATE'
-            : 'TRANSACTION_ALREADY_USED',
+          used.id === intent.id ? 'DUPLICATE' : 'TRANSACTION_ALREADY_USED',
           intent.id,
         );
-      if (intent.status !== 'PENDING')
+      if (intent.status !== PaymentStatus.PENDING)
         return record(
-          intent.status === 'SUCCEEDED'
+          intent.status === PaymentStatus.SUCCEEDED
             ? 'PAYMENT_INTENT_ALREADY_SUCCEEDED'
             : 'PAYMENT_CANCELLED',
           intent.id,
         );
-      const user = await tx.user.findUnique({ where: { id: intent.userId } });
-      if (!user || user.status !== 'ACTIVE' || !user.emailVerifiedAt)
+      const user = await this.users
+        .findOne({ _id: intent.userId })
+        .session(session)
+        .exec();
+      if (
+        !user ||
+        user.status !== AccountStatus.ACTIVE ||
+        !user.emailVerifiedAt
+      )
         return record('ACCOUNT_UNAVAILABLE', intent.id);
       const capturedAt = new Date();
-      const expiresAt = new Date(
-        capturedAt.getTime() + intent.durationDays * 86_400_000,
-      );
-      const claimed = await tx.paymentIntent.updateMany({
-        where: { id: intent.id, status: 'PENDING' },
-        data: {
-          status: 'SUCCEEDED',
-          activeIntentKey: null,
-          providerTransactionId: event.providerTransactionId,
-          providerReference: event.referenceCode,
-          paidAt: event.paidAt,
-          capturedAt,
-        },
-      });
-      if (claimed.count !== 1)
-        conflict('CAPTURE_CONFLICT', 'Payment changed; retry callback');
-      await tx.paymentLedger.create({
-        data: {
-          intentId: intent.id,
-          userId: intent.userId,
-          providerTransactionId: event.providerTransactionId,
-          amount: intent.amount,
-          planCode: intent.planCode,
-          startsAt: capturedAt,
-          expiresAt,
-        },
-      });
-      const membership = {
-        planCode: intent.planCode,
-        startsAt: capturedAt,
-        expiresAt,
-        paymentId: intent.id,
-      };
-      await tx.membership.upsert({
-        where: { userId: intent.userId },
-        create: { userId: intent.userId, ...membership },
-        update: membership,
-      });
-      await tx.paymentAudit.create({
-        data: { intentId: intent.id, action: 'CAPTURED' },
-      });
+      const claimed = await this.intents
+        .updateOne(
+          { _id: intent.id, status: PaymentStatus.PENDING },
+          {
+            $set: {
+              status: PaymentStatus.SUCCEEDED,
+              activeIntentKey: null,
+              providerTransactionId: event.providerTransactionId,
+              providerReference: event.referenceCode,
+              paidAt: event.paidAt,
+              capturedAt,
+            },
+          },
+          { session },
+        )
+        .exec();
+      if (claimed.modifiedCount !== 1)
+        throw new StateConflictException(
+          'CAPTURE_CONFLICT',
+          'Payment changed; retry callback',
+        );
       await record('CAPTURED', intent.id);
       changed = { userId: intent.userId, intentId: intent.id };
     });

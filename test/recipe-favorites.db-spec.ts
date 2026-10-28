@@ -1,25 +1,40 @@
-import { execFileSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import { join } from 'node:path';
 import { INestApplication } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtModule, JwtService } from '@nestjs/jwt';
 import { Test } from '@nestjs/testing';
-import { Prisma, PrismaClient } from '@prisma/client';
 import request from 'supertest';
-import type { App } from 'supertest/types';
-import { configureApp } from '../src/app.setup';
-import { PrismaService } from '../src/prisma/prisma.service';
-import { RecipesController } from '../src/recipes/recipes.controller';
-import { RecipeCatalogService } from '../src/recipes/recipe-catalog.service';
-import { RecipeFavoritesService } from '../src/recipes/recipe-favorites.service';
-import { IncompatibilityRulesService } from '../src/recipes/incompatibility-rules.service';
-import type { FavoriteRecipeDto } from '../src/recipes/dto/recipe-favorite.dto';
-import type { PaginatedResponseDto } from '../src/common/pagination';
+import type { App } from 'supertest/types.js';
+import { configureApp } from '../src/app.setup.js';
+import { MongoModule } from '../src/mongo/mongo.module.js';
+import {
+  PostStatus,
+  type Recipe,
+  type RecipeFavorite,
+} from '../src/mongo/models.js';
+import { MongoService } from '../src/mongo/mongo.service.js';
+import { RecipesController } from '../src/recipes/recipes.controller.js';
+import { RecipeCatalogService } from '../src/recipes/recipe-catalog.service.js';
+import { RecipeRelationsService } from '../src/recipes/recipe-relations.service.js';
+import { RecipeFavoritesService } from '../src/recipes/recipe-favorites.service.js';
+import { IncompatibilityRulesService } from '../src/recipes/incompatibility-rules.service.js';
+import { DietaryService } from '../src/recipes/dietary.service.js';
+import type { FavoriteRecipeDto } from '../src/recipes/dto/recipe-favorite.dto.js';
+import type { PaginatedResponseDto } from '../src/common/pagination/index.js';
+import {
+  createPost,
+  createRecipe,
+  createUser,
+  deleteWithCascade,
+} from './fixtures.js';
+import {
+  createTestMongoUrl,
+  dropTestDatabase,
+  prepareTestDatabase,
+} from './mongo-test-db.js';
 
-describe('Recipe favorites with PostgreSQL', () => {
-  const schema = `vedora_favorites_test_${randomUUID().replaceAll('-', '')}`;
-  let db: PrismaClient;
+describe('Recipe favorites with MongoDB', () => {
+  let db: MongoService;
   let app: INestApplication<App>;
   let first: string;
   let second: string;
@@ -27,34 +42,18 @@ describe('Recipe favorites with PostgreSQL', () => {
   let secondToken: string;
   let recipes: string[];
   beforeAll(async () => {
-    if (!process.env.TEST_DATABASE_URL)
-      throw new Error(
-        'Set TEST_DATABASE_URL to a disposable PostgreSQL database',
-      );
-    const url = new URL(process.env.TEST_DATABASE_URL);
-    url.searchParams.set('schema', schema);
-    execFileSync(
-      process.execPath,
-      [
-        join(process.cwd(), 'node_modules/prisma/build/index.js'),
-        'migrate',
-        'deploy',
-      ],
-      {
-        env: { ...process.env, DATABASE_URL: url.toString() },
-        stdio: 'pipe',
-        timeout: 45_000,
-      },
-    );
-    db = new PrismaClient({ datasourceUrl: url.toString() });
     const moduleRef = await Test.createTestingModule({
-      imports: [JwtModule.register({ secret: 'favorites-integration-secret' })],
+      imports: [
+        MongoModule.forTest(createTestMongoUrl('favorites')),
+        JwtModule.register({ secret: 'favorites-integration-secret' }),
+      ],
       controllers: [RecipesController],
       providers: [
         RecipeCatalogService,
         RecipeFavoritesService,
+        RecipeRelationsService,
         IncompatibilityRulesService,
-        { provide: PrismaService, useValue: db },
+        DietaryService,
         {
           provide: ConfigService,
           useValue: new ConfigService({ API_PREFIX: 'api/v1' }),
@@ -63,16 +62,15 @@ describe('Recipe favorites with PostgreSQL', () => {
     }).compile();
     app = moduleRef.createNestApplication({ rawBody: true });
     configureApp(app);
-    await app.listen(0, '127.0.0.1');
+    await app.init();
+    await prepareTestDatabase(app);
+    db = app.get(MongoService);
     const users = await Promise.all(
       ['first', 'second'].map((name) =>
-        db.user.create({
-          data: {
-            username: `favorites.${name}`,
-            fullName: name,
-            email: `${name}@favorites.test`,
-            emailVerifiedAt: new Date(),
-          },
+        createUser(db, {
+          username: `favorites.${name}`,
+          fullName: name,
+          email: `${name}@favorites.test`,
         }),
       ),
     );
@@ -86,24 +84,22 @@ describe('Recipe favorites with PostgreSQL', () => {
     );
     recipes = [];
     for (let index = 0; index < 3; index++) {
-      const recipe = await db.recipe.create({
-        data: { title: `Saved recipe ${index}`, servings: 2, steps: ['Cook'] },
+      const recipe = await createRecipe(db, {
+        title: `Saved recipe ${index}`,
       });
       recipes.push(recipe.id);
     }
   });
   beforeEach(async () => {
-    await db.recipeFavorite.deleteMany();
+    await favorites().deleteMany({});
   });
   afterAll(async () => {
+    if (app) await dropTestDatabase(app);
     if (app) await app.close();
-    if (db) {
-      await db.$executeRaw(
-        Prisma.sql`DROP SCHEMA ${Prisma.raw(`"${schema}"`)} CASCADE`,
-      );
-      await db.$disconnect();
-    }
   });
+  const favorites = () => db.connection.model<RecipeFavorite>('RecipeFavorite');
+  const favoriteCount = (userId?: string) =>
+    favorites().countDocuments(userId ? { userId } : {});
   const save = (id: string, token = firstToken) =>
     request(app.getHttpServer())
       .put(`/api/v1/recipes/${id}/favorite`)
@@ -122,13 +118,13 @@ describe('Recipe favorites with PostgreSQL', () => {
       Array.from({ length: 20 }, () => save(recipes[0])),
     );
     expect(responses.map(({ status }) => status)).toEqual(Array(20).fill(200));
-    const original = await db.recipeFavorite.findUniqueOrThrow({
-      where: { recipeId_userId: { recipeId: recipes[0], userId: first } },
-    });
+    const original = await favorites()
+      .findOne({ recipeId: recipes[0], userId: first })
+      .exec();
     await save(recipes[0]).expect(200);
-    expect(await db.recipeFavorite.count()).toBe(1);
-    expect((await db.recipeFavorite.findFirstOrThrow()).createdAt).toEqual(
-      original.createdAt,
+    expect(await favoriteCount()).toBe(1);
+    expect((await favorites().findOne({}).exec())?.createdAt).toEqual(
+      original?.createdAt,
     );
   });
   it('isolates lists, personalized catalog/detail flags and cache by caller', async () => {
@@ -165,9 +161,11 @@ describe('Recipe favorites with PostgreSQL', () => {
   });
   it('paginates equal savedAt timestamps using recipe ID as a stable tie breaker', async () => {
     for (const id of recipes) await save(id).expect(200);
-    await db.recipeFavorite.updateMany({
-      data: { createdAt: new Date('2026-10-19T00:00:00Z') },
-    });
+    await favorites().updateMany(
+      { userId: first },
+      { $set: { createdAt: new Date('2026-10-19T00:00:00Z') } },
+      { timestamps: false, overwriteImmutable: true },
+    );
     const one = (await list(firstToken, '?limit=2').expect(200))
       .body as PaginatedResponseDto<FavoriteRecipeDto>;
     const two = (await list(firstToken, '?limit=2&page=2').expect(200))
@@ -194,50 +192,48 @@ describe('Recipe favorites with PostgreSQL', () => {
     ]);
     expect(responses.map(({ status }) => status)).toEqual([200, 200]);
     expect((await list().expect(200)).body).toMatchObject({ items: [] });
-    expect(await db.recipeFavorite.count({ where: { userId: second } })).toBe(
-      1,
-    );
+    expect(await favoriteCount(second)).toBe(1);
   });
   it('does not leak a private source post through favorites', async () => {
-    const post = await db.post.create({
-      data: { authorId: first, status: 'PROCESSING', body: 'private' },
+    const post = await createPost(db, {
+      authorId: first,
+      status: PostStatus.PROCESSING,
+      body: 'private',
+      publishedAt: null,
     });
-    await db.recipe.update({
-      where: { id: recipes[0] },
-      data: { postId: post.id },
-    });
+    await db.connection
+      .model<Recipe>('Recipe')
+      .updateOne({ _id: recipes[0] }, { $set: { postId: post.id } });
     await save(recipes[0]).expect(200);
     const response = (await list().expect(200))
       .body as PaginatedResponseDto<FavoriteRecipeDto>;
     expect(response.items[0].post).toBeNull();
     expect(response.items[0]).not.toHaveProperty('createdById');
-    await db.post.delete({ where: { id: post.id } });
+    await deleteWithCascade(db, 'posts', post.id);
   });
   it('rejects an injected owner and keeps all mutations on the authenticated account', async () => {
     await save(recipes[0]).send({ userId: second }).expect(400);
     await list(firstToken, `?userId=${second}`).expect(400);
-    expect(await db.recipeFavorite.count()).toBe(0);
+    expect(await favoriteCount()).toBe(0);
   });
   it('cleans relations after recipe or account deletion and rejects missing recipes', async () => {
-    const recipe = await db.recipe.create({
-      data: { title: 'Delete me', servings: 1, steps: ['Cook'] },
-    });
+    const recipe = await createRecipe(db, { title: 'Delete me', servings: 1 });
     await save(recipe.id).expect(200);
-    await db.recipe.delete({ where: { id: recipe.id } });
+    await deleteWithCascade(db, 'recipes', recipe.id);
     await save(recipe.id).expect(404);
     await remove(recipe.id).expect(404);
-    expect(await db.recipeFavorite.count()).toBe(0);
-    const user = await db.user.create({
-      data: {
-        username: 'favorites.deleted',
-        fullName: 'Deleted',
-        email: 'deleted@favorites.test',
-      },
+    expect(await favoriteCount()).toBe(0);
+    const user = await createUser(db, {
+      username: 'favorites.deleted',
+      fullName: 'Deleted',
+      email: 'deleted@favorites.test',
     });
-    await db.recipeFavorite.create({
-      data: { userId: user.id, recipeId: recipes[0] },
+    await favorites().create({
+      _id: randomUUID(),
+      userId: user.id,
+      recipeId: recipes[0],
     });
-    await db.user.delete({ where: { id: user.id } });
-    expect(await db.recipeFavorite.count()).toBe(0);
+    await deleteWithCascade(db, 'users', user.id);
+    expect(await favoriteCount()).toBe(0);
   });
 });

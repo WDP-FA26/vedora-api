@@ -1,8 +1,8 @@
 import type {
   CursorPaginatedResponseDto,
   PaginatedResponseDto,
-} from './paginated-response.dto';
-import type { PaginationQueryDto } from './pagination-query.dto';
+} from './paginated-response.dto.js';
+import type { PaginationQueryDto } from './pagination-query.dto.js';
 
 /** Only derive database offsets from a validated page/limit query. */
 export function getPaginationArgs(

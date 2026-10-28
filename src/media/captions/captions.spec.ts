@@ -1,11 +1,11 @@
-import { parseSilences, speechIntervals, toOriginalTime } from './speech-audio';
+import { parseSilences, speechIntervals, toOriginalTime } from './speech-audio.js';
 import {
   languageCode,
   languageName,
   splitLongCue,
   translationTarget,
-} from './transcription.service';
-import { toVtt, vttText } from './vtt';
+} from './transcription.service.js';
+import { toVtt, vttText } from './vtt.js';
 
 describe('silence removal', () => {
   const log = [

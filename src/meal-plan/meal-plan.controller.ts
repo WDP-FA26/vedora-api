@@ -22,21 +22,25 @@ import {
 } from '@nestjs/swagger';
 import { pipeUIMessageStreamToResponse } from 'ai';
 import type { Response } from 'express';
-import type { AuthenticatedRequest } from '../auth/auth.types';
-import { JwtAuthGuard } from '../auth/jwt-auth.guard';
-import { UserThrottlerGuard } from '../nutrition-chat/user-throttler.guard';
+import type { AuthenticatedRequest } from '../auth/auth.types.js';
+import { JwtAuthGuard } from '../auth/jwt-auth.guard.js';
+import { UserThrottlerGuard } from '../nutrition-chat/user-throttler.guard.js';
 import {
   MealPlanDto,
   MealPlanPreviewDto,
   MealPlannerChatDto,
   SaveMealDaysDto,
-} from './dto/meal-plan.dto';
-import { MealPlanService } from './meal-plan.service';
-import { MealPlannerChatService } from './meal-planner-chat.service';
+} from './dto/meal-plan.dto.js';
+import { MealPlanService } from './meal-plan.service.js';
+import { MealPlannerChatService } from './meal-planner-chat.service.js';
+import { ErrorBodyDto } from '../common/exceptions/error-body.dto.js';
 
 @ApiTags('meal-plan')
 @ApiBearerAuth()
-@ApiUnauthorizedResponse({ description: 'Authentication required' })
+@ApiUnauthorizedResponse({
+  type: ErrorBodyDto,
+  description: 'Authentication required',
+})
 @UseGuards(JwtAuthGuard)
 @Controller('meal-plan')
 export class MealPlanController {
@@ -75,6 +79,7 @@ export class MealPlanController {
   })
   @ApiOkResponse({ type: MealPlanDto })
   @ApiConflictResponse({
+    type: ErrorBodyDto,
     description:
       '`MEAL_PLAN_INVALID` with problems, or `MEAL_PLAN_CONFLICT`: preview again before retrying',
   })
@@ -92,8 +97,12 @@ export class MealPlanController {
     description:
       'Streams the reply as an AI SDK UI message stream (SSE) for `useChat`. Its `proposeMealPlan` tool output is a checked proposal; save it with `PUT /meal-plan/days`.',
   })
-  @ApiTooManyRequestsResponse({ description: 'More than 10 messages a minute' })
+  @ApiTooManyRequestsResponse({
+    type: ErrorBodyDto,
+    description: 'More than 10 messages a minute',
+  })
   @ApiServiceUnavailableResponse({
+    type: ErrorBodyDto,
     description: 'The moderation model failed or timed out',
   })
   async chat(

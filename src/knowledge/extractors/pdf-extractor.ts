@@ -1,11 +1,11 @@
 import { createHash } from 'node:crypto';
 import { Injectable, Logger } from '@nestjs/common';
-import { KnowledgeDocumentFailureReason } from '@prisma/client';
-import { KnowledgeModelsService } from '../retrieval/knowledge-models.service';
+import { KnowledgeDocumentFailureReason } from '../../mongo/models.js';
+import { KnowledgeModelsService } from '../retrieval/knowledge-models.service.js';
 import {
   DocumentExtractionError,
   type ExtractedSection,
-} from './document-extractor';
+} from './document-extractor.js';
 
 type MuPdf = typeof import('mupdf');
 type MuPdfDocument = InstanceType<MuPdf['Document']>;

@@ -1,94 +1,106 @@
-import { PrismaClient, User, UserRole } from '@prisma/client';
+import type { INestApplication } from '@nestjs/common';
+import { Test } from '@nestjs/testing';
 import { hash } from 'bcryptjs';
-import { mockDeep } from 'vitest-mock-extended';
-import { seedDatabase } from './seed';
+import { createUser } from '../../test/fixtures.js';
+import {
+  createTestMongoUrl,
+  dropTestDatabase,
+  prepareTestDatabase,
+} from '../../test/mongo-test-db.js';
+import { MongoModule } from '../mongo/mongo.module.js';
+import { AccountStatus, type User, UserRole } from '../mongo/models.js';
+import { MongoService } from '../mongo/mongo.service.js';
+import { seedDatabase } from './seed.js';
 
 describe('Admin bootstrap', () => {
-  beforeEach(() => {
-    vi.stubEnv('SEED_USER_PASSWORD', 'StrongPassword123!');
-  });
-  afterEach(() => vi.unstubAllEnvs());
+  let app: INestApplication;
+  let mongo: MongoService;
+  let legacyHash: string;
 
-  const legacyAdmin: User = {
-    id: 'c9ee4d58-ce10-4572-bd39-952a310ace87',
-    username: 'vedora.admin',
-    fullName: 'Vedora Admin',
-    email: 'admin@vedora.local',
-    bio: null,
-    avatarUrl: null,
-    coverUrl: null,
-    isProfessional: false,
-    role: UserRole.USER,
-    status: 'ACTIVE',
-    accountVersion: 0,
-    passwordHash: 'existing-password-hash',
-    googleId: null,
-    emailVerifiedAt: new Date(),
-    createdAt: new Date(),
-    updatedAt: new Date(),
-  };
+  const seedAccount = (fields: Partial<User> = {}) =>
+    createUser(mongo, {
+      username: 'vedora.admin',
+      fullName: 'Vedora Admin',
+      email: 'admin@vedora.local',
+      passwordHash: legacyHash,
+      ...fields,
+    });
+  const seeded = () =>
+    mongo.connection
+      .model<User>('User')
+      .findOne({ email: 'admin@vedora.local' })
+      .exec();
+  const users = () => mongo.connection.model<User>('User');
 
   beforeAll(async () => {
-    legacyAdmin.passwordHash = await hash('StrongPassword123!', 4);
+    const moduleRef = await Test.createTestingModule({
+      imports: [MongoModule.forTest(createTestMongoUrl('seed'))],
+    }).compile();
+    app = moduleRef.createNestApplication();
+    await app.init();
+    await prepareTestDatabase(app);
+    mongo = app.get(MongoService);
+    legacyHash = await hash('StrongPassword123!', 4);
+  });
+  beforeEach(async () => {
+    vi.stubEnv('SEED_USER_PASSWORD', 'StrongPassword123!');
+    await users().deleteMany({});
+  });
+  afterEach(() => vi.unstubAllEnvs());
+  afterAll(async () => {
+    await dropTestDatabase(app);
+    await app.close();
   });
 
   it('creates the bootstrap account with admin access', async () => {
-    const prisma = mockDeep<PrismaClient>();
-    prisma.user.findUnique.mockResolvedValue(null);
-    await seedDatabase(prisma);
-    const [created] = prisma.user.create.mock.calls[0];
-    expect(created.data).toMatchObject({
+    await seedDatabase(mongo);
+    expect(await seeded()).toMatchObject({
       username: 'vedora.admin',
       role: UserRole.ADMIN,
+      status: AccountStatus.ACTIVE,
     });
+  });
+
+  it('is safe to run again', async () => {
+    await seedDatabase(mongo);
+    await seedDatabase(mongo);
+    expect(await users().countDocuments()).toBe(1);
   });
 
   it('does not reactivate an existing suspended seed admin', async () => {
-    const prisma = mockDeep<PrismaClient>();
-    prisma.user.findUnique.mockResolvedValue({
-      ...legacyAdmin,
+    await seedAccount({
       role: UserRole.ADMIN,
-      status: 'SUSPENDED',
+      status: AccountStatus.SUSPENDED,
     });
-    await seedDatabase(prisma);
-    expect(prisma.user.update.mock.calls[0][0].data).not.toHaveProperty(
-      'status',
-    );
+    await seedDatabase(mongo);
+    expect((await seeded())?.status).toBe(AccountStatus.SUSPENDED);
   });
 
   it('promotes the legacy seed account without resetting its password', async () => {
-    const prisma = mockDeep<PrismaClient>();
-    prisma.user.findUnique.mockResolvedValue(legacyAdmin);
-    await seedDatabase(prisma);
-    const [updated] = prisma.user.update.mock.calls[0];
-    expect(updated.data).toMatchObject({ role: UserRole.ADMIN });
-    expect(updated.data).not.toHaveProperty('passwordHash');
+    await seedAccount();
+    await seedDatabase(mongo);
+    expect(await seeded()).toMatchObject({
+      role: UserRole.ADMIN,
+      passwordHash: legacyHash,
+    });
   });
 
   it('refuses a verified account that claimed the seed identity with another password', async () => {
-    const prisma = mockDeep<PrismaClient>();
-    prisma.user.findUnique.mockResolvedValue({
-      ...legacyAdmin,
-      passwordHash: await hash('AnotherPassword123!', 4),
-    });
-    await expect(seedDatabase(prisma)).rejects.toThrow(
+    await seedAccount({ passwordHash: await hash('AnotherPassword123!', 4) });
+    await expect(seedDatabase(mongo)).rejects.toThrow(
       'refusing to grant admin access',
     );
-    expect(prisma.user.update).not.toHaveBeenCalled();
+    expect((await seeded())?.role).toBe(UserRole.USER);
   });
 
-  it.each([
-    { ...legacyAdmin, emailVerifiedAt: null },
-    { ...legacyAdmin, username: 'someone.else' },
-  ])(
-    'refuses to promote an untrusted account at the seed email',
-    async (user) => {
-      const prisma = mockDeep<PrismaClient>();
-      prisma.user.findUnique.mockResolvedValue(user);
-      await expect(seedDatabase(prisma)).rejects.toThrow(
+  it.each([{ emailVerifiedAt: null }, { username: 'someone.else' }])(
+    'refuses to promote an untrusted account at the seed email: %j',
+    async (fields) => {
+      await seedAccount(fields);
+      await expect(seedDatabase(mongo)).rejects.toThrow(
         'refusing to grant admin access',
       );
-      expect(prisma.user.update).not.toHaveBeenCalled();
+      expect((await seeded())?.role).toBe(UserRole.USER);
     },
   );
 });

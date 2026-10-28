@@ -1,6 +1,14 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { z } from 'zod';
+import type { ClassConstructor } from 'class-transformer';
+import { parsePayload, validatePayload } from '../../common/validation.js';
+import { ExternalServiceException } from '../../common/exceptions/external-service.exception.js';
+import {
+  EmbeddingsResponse,
+  OcrResponse,
+  OpenRouterErrorBody,
+  RerankResponse,
+} from './openrouter.dto.js';
 
 type EmbeddingInput = string | { image: Uint8Array };
 
@@ -17,50 +25,6 @@ const OCR_TIMEOUT_MS = 5 * 60_000;
 // file-parser only runs inside a chat completion; this cheap model receives
 // the parsed text and its reply is discarded
 const OCR_CARRIER_MODEL = 'google/gemini-3.1-flash-lite';
-
-const errorBody = z.object({
-  error: z.object({ message: z.string() }).optional(),
-});
-const embeddingsResponse = z.object({
-  data: z.array(
-    z.object({ index: z.number().optional(), embedding: z.array(z.number()) }),
-  ),
-});
-const rerankResponse = z.object({
-  results: z.array(
-    z.object({ index: z.number(), relevance_score: z.number() }),
-  ),
-});
-const fileAnnotations = z.array(
-  z.object({
-    type: z.literal('file'),
-    file: z.object({
-      content: z.array(
-        z.union([
-          z.object({ type: z.literal('text'), text: z.string() }),
-          z.object({ type: z.literal('image_url') }),
-        ]),
-      ),
-    }),
-  }),
-);
-const ocrResponse = z.object({
-  choices: z
-    .array(
-      z.object({
-        message: z.object({ annotations: fileAnnotations.optional() }),
-      }),
-    )
-    .optional(),
-  error: z
-    .object({
-      message: z.string(),
-      metadata: z
-        .object({ file_annotations: fileAnnotations.optional() })
-        .optional(),
-    })
-    .optional(),
-});
 
 // plain fetch: the AI SDK embeds text only, and @openrouter/sdk neither
 // honours abort signals nor returns OCR annotations
@@ -118,7 +82,7 @@ export class KnowledgeModelsService {
     const { results } = await this.post(
       '/rerank',
       { model: this.rerankModel, query, documents, top_n: topN },
-      rerankResponse,
+      RerankResponse,
       signal,
     );
     return results.map(({ index, relevance_score }) => ({
@@ -153,17 +117,20 @@ export class KnowledgeModelsService {
       AbortSignal.timeout(OCR_TIMEOUT_MS),
     );
     // a failed carrier completion still carries the parse
-    const body = ocrResponse.parse(await response.json());
+    const body = parsePayload('openrouter', OcrResponse, await response.json());
     const annotations =
       body.choices?.[0]?.message.annotations ??
       body.error?.metadata?.file_annotations;
     if (!annotations?.length) {
-      throw new Error(
+      throw new ExternalServiceException(
+        'openrouter',
         `OCR returned no parse (${response.status}): ${body.error?.message ?? 'no annotations'}`,
       );
     }
     return annotations[0].file.content
-      .flatMap((part) => (part.type === 'text' ? [part.text] : []))
+      .flatMap((part) =>
+        part.type === 'text' && part.text !== undefined ? [part.text] : [],
+      )
       .filter((text) => !/^\s*<\/?file\b/.test(text))
       .map((text) => text.replace(/!\[[^\]]*\]\([^)]*\)/g, '').trim());
   }
@@ -191,30 +158,35 @@ export class KnowledgeModelsService {
           ],
         })),
       },
-      embeddingsResponse,
+      EmbeddingsResponse,
       signal,
     );
     return data
-      .map((item, position) => ({ ...item, index: item.index ?? position }))
+      .map((item, position) => ({
+        embedding: item.embedding,
+        index: item.index ?? position,
+      }))
       .sort((a, b) => a.index - b.index)
       .map(({ embedding }) => embedding);
   }
 
-  private async post<T>(
+  private async post<T extends object>(
     path: string,
     body: object,
-    schema: z.ZodType<T>,
+    responseClass: ClassConstructor<T>,
     signal: AbortSignal,
   ): Promise<T> {
     const response = await this.fetch(path, body, signal);
-    const json = z.json().parse(await response.json());
+    const json: unknown = await response.json();
     if (!response.ok) {
-      const message = errorBody.safeParse(json).data?.error?.message;
-      throw new Error(
+      const message = validatePayload(OpenRouterErrorBody, json).value?.error
+        ?.message;
+      throw new ExternalServiceException(
+        'openrouter',
         `OpenRouter ${path} failed (${response.status}): ${message ?? 'no message'}`,
       );
     }
-    return schema.parse(json);
+    return parsePayload('openrouter', responseClass, json);
   }
 
   private fetch(

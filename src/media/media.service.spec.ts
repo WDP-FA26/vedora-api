@@ -1,44 +1,65 @@
+import type { INestApplication } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Test } from '@nestjs/testing';
+import type { ClientSession } from 'mongoose';
+import type { MockInstance } from 'vitest';
+import { createMedia, createPost, createUser } from '../../test/fixtures.js';
 import {
-  MediaAsset,
+  createTestMongoUrl,
+  dropTestDatabase,
+  prepareTestDatabase,
+} from '../../test/mongo-test-db.js';
+import { CloudinaryService } from '../cloudinary/cloudinary.service.js';
+import { MongoModule } from '../mongo/mongo.module.js';
+import { MongoService } from '../mongo/mongo.service.js';
+import {
+  CaptionStatus,
+  type MediaAsset,
   MediaFailureReason,
   MediaStatus,
   MediaType,
+  type Post,
   PostStatus,
-} from '@prisma/client';
-import type { MockInstance } from 'vitest';
-import { type DeepMockProxy, mockDeep } from 'vitest-mock-extended';
-import { CloudinaryService } from '../cloudinary/cloudinary.service';
-import { PrismaService } from '../prisma/prisma.service';
-import { CaptionService } from './caption.service';
-import { MediaService } from './media.service';
+} from '../mongo/models.js';
+import { CaptionService } from './caption.service.js';
 import {
   mediaId,
   ownerId,
-  pendingMedia,
   publicId,
   streamBuilt,
   uploaded,
-  waitingMedia,
-} from './media.fixtures';
+} from './media.fixtures.js';
+import { MediaService } from './media.service.js';
 
 describe('MediaService', () => {
+  let app: INestApplication;
+  let db: MongoService;
   let service: MediaService;
-  let prisma: DeepMockProxy<PrismaService>;
-  let captions: DeepMockProxy<CaptionService>;
   let findVideo: MockInstance<CloudinaryService['findVideo']>;
   let deleteMedia: MockInstance<CloudinaryService['deleteMedia']>;
+  let schedule: ReturnType<typeof vi.fn>;
+  let postId: string;
 
-  beforeEach(async () => {
-    prisma = mockDeep<PrismaService>();
-    captions = mockDeep<CaptionService>();
+  const assets = () => db.connection.model<MediaAsset>('MediaAsset');
+  const posts = () => db.connection.model<Post>('Post');
+  const media = () => assets().findById(mediaId).exec();
+  const post = () => posts().findById(postId).exec();
+  /** The row the upload endpoint leaves, in `fields`. */
+  const addMedia = (fields: Partial<MediaAsset> = {}) =>
+    createMedia(db, { id: mediaId, publicId, ownerId, ...fields });
+  const claim = (ids: string[]) =>
+    db.withTransaction((session: ClientSession) =>
+      service.claimForPost(session, ownerId, postId, ids),
+    );
+
+  beforeAll(async () => {
+    schedule = vi.fn();
     const moduleRef = await Test.createTestingModule({
+      imports: [MongoModule.forTest(createTestMongoUrl('mediaservice'))],
       providers: [
         MediaService,
         CloudinaryService,
-        { provide: PrismaService, useValue: prisma },
-        { provide: CaptionService, useValue: captions },
+        { provide: CaptionService, useValue: { schedule } },
         {
           provide: ConfigService,
           useValue: new ConfigService({
@@ -50,158 +71,216 @@ describe('MediaService', () => {
         },
       ],
     }).compile();
-    service = moduleRef.get(MediaService);
-    // The real CloudinaryService signs and builds URLs; only its API calls are mocked.
-    const cloudinary = moduleRef.get(CloudinaryService);
+    app = moduleRef.createNestApplication();
+    await app.init();
+    await prepareTestDatabase(app);
+    db = app.get(MongoService);
+    service = app.get(MediaService);
+    // The real CloudinaryService signs and builds URLs; only its API calls
+    // are mocked.
+    const cloudinary = app.get(CloudinaryService);
     findVideo = vi.spyOn(cloudinary, 'findVideo').mockResolvedValue(null);
     deleteMedia = vi.spyOn(cloudinary, 'deleteMedia').mockResolvedValue();
-
-    prisma.mediaAsset.findUnique.mockResolvedValue(waitingMedia);
-    prisma.mediaAsset.findFirst.mockResolvedValue(pendingMedia);
-    prisma.mediaAsset.findUniqueOrThrow.mockResolvedValue(pendingMedia);
-    prisma.mediaAsset.updateMany.mockResolvedValue({ count: 1 });
-    prisma.post.updateMany.mockResolvedValue({ count: 1 });
+    await createUser(db, { id: ownerId });
+  });
+  beforeEach(async () => {
+    await assets().deleteMany({});
+    await posts().deleteMany({});
+    schedule.mockClear();
+    findVideo.mockReset();
+    findVideo.mockResolvedValue(null);
+    deleteMedia.mockReset();
+    deleteMedia.mockResolvedValue();
+    postId = (
+      await createPost(db, {
+        authorId: ownerId,
+        status: PostStatus.PROCESSING,
+        publishedAt: null,
+      })
+    ).id;
+  });
+  afterAll(async () => {
+    await dropTestDatabase(app);
+    await app.close();
   });
 
   it('signs an upload that pins the public ID and the HLS job', async () => {
-    prisma.mediaAsset.count.mockResolvedValue(0);
-    prisma.mediaAsset.create.mockImplementation(
-      ({ data }) =>
-        ({ ...waitingMedia, ...data }) as unknown as ReturnType<
-          typeof prisma.mediaAsset.create
-        >,
-    );
+    const created = await service.createUpload(ownerId, MediaType.VIDEO);
 
-    const { media, upload } = await service.createUpload(
-      ownerId,
-      MediaType.VIDEO,
-    );
-
-    expect(media.publicId).toBe(`vedora/videos/${media.id}`);
-    expect(upload.url).toBe(
+    expect(created.media.publicId).toBe(`vedora/videos/${created.media.id}`);
+    expect(created.upload.url).toBe(
       'https://api.cloudinary.com/v1_1/demo/video/upload',
     );
-    expect(upload.fields).toMatchObject({
-      public_id: media.publicId,
+    expect(created.upload.fields).toMatchObject({
+      public_id: created.media.publicId,
       eager: 'sp_auto/m3u8',
       eager_async: 'true',
       api_key: 'key',
     });
-    expect(upload.fields.signature).toMatch(/^[0-9a-f]{40}$/);
+    expect(created.upload.fields.signature).toMatch(/^[0-9a-f]{40}$/);
+    expect(await assets().countDocuments()).toBe(1);
+  });
+
+  it('limits the uploads one account may leave unattached', async () => {
+    for (let upload = 0; upload < 5; upload++) {
+      await service.createUpload(ownerId, MediaType.VIDEO);
+    }
+    await expect(
+      service.createUpload(ownerId, MediaType.VIDEO),
+    ).rejects.toMatchObject({ statusCode: 429 });
   });
 
   it('records the upload and waits for the stream', async () => {
+    await addMedia({ postId });
+
     await service.handleNotification(uploaded(42));
 
-    expect(prisma.mediaAsset.updateMany).toHaveBeenCalledWith({
-      where: { id: mediaId, status: MediaStatus.WAITING_UPLOAD },
-      data: {
-        status: MediaStatus.PROCESSING,
-        durationSec: 42,
-        aspectRatio: '9:16',
-      },
+    expect(await media()).toMatchObject({
+      status: MediaStatus.PROCESSING,
+      durationSec: 42,
+      aspectRatio: '9:16',
     });
-    expect(prisma.post.updateMany).not.toHaveBeenCalled();
+    expect((await post())?.status).toBe(PostStatus.PROCESSING);
   });
 
   it('marks media READY and publishes its post once the stream is built', async () => {
-    await service.handleNotification(streamBuilt());
-
-    const [update] = prisma.mediaAsset.updateMany.mock.calls[0];
-    expect(update.data).toEqual({ status: MediaStatus.READY });
-    const [publish] = prisma.post.updateMany.mock.calls[1];
-    expect(publish.data).toMatchObject({ status: PostStatus.PUBLISHED });
-    expect(captions.schedule).toHaveBeenCalled();
-  });
-
-  it('reads the upload details when the stream finishes first', async () => {
-    prisma.mediaAsset.findFirst.mockResolvedValue(waitingMedia);
-    findVideo.mockResolvedValue({ public_id: publicId, duration: 42 });
+    await addMedia({ postId, status: MediaStatus.PROCESSING });
 
     await service.handleNotification(streamBuilt());
 
-    expect(findVideo).toHaveBeenCalledWith(publicId);
-    const statuses = prisma.mediaAsset.updateMany.mock.calls.map(
-      ([call]) => call.data.status,
-    );
-    expect(statuses).toEqual([MediaStatus.PROCESSING, MediaStatus.READY]);
+    expect((await media())?.status).toBe(MediaStatus.READY);
+    expect(await post()).toMatchObject({
+      status: PostStatus.PUBLISHED,
+      publishedAt: expect.any(Date) as Date,
+    });
+    expect(schedule).toHaveBeenCalled();
   });
 
-  it('ignores a replayed stream notification for media that is already READY', async () => {
-    prisma.mediaAsset.findFirst.mockResolvedValue({
-      ...pendingMedia,
-      status: MediaStatus.READY,
-    });
+  it('waits for every video of a post before publishing it', async () => {
+    await addMedia({ postId, status: MediaStatus.PROCESSING });
+    await createMedia(db, { postId, status: MediaStatus.PROCESSING });
 
     await service.handleNotification(streamBuilt());
 
-    expect(prisma.mediaAsset.updateMany).not.toHaveBeenCalled();
-    expect(prisma.post.updateMany).not.toHaveBeenCalled();
+    expect((await media())?.status).toBe(MediaStatus.READY);
+    expect((await post())?.status).toBe(PostStatus.PROCESSING);
   });
 
-  it('ignores files outside the videos folder', async () => {
-    await service.handleNotification({
-      ...uploaded(42),
-      public_id: 'someone-else/clip',
-    });
+  it('fails the post when one of its videos fails', async () => {
+    await addMedia({ postId, status: MediaStatus.PROCESSING });
+    await createMedia(db, { postId, status: MediaStatus.READY });
 
-    expect(prisma.mediaAsset.findUnique).not.toHaveBeenCalled();
-  });
-
-  it('fails videos over the duration limit and deletes them', async () => {
-    prisma.mediaAsset.findFirst.mockResolvedValue(waitingMedia);
-
-    await service.handleNotification(uploaded(181));
-
-    const [update] = prisma.mediaAsset.updateMany.mock.calls[0];
-    expect(update.data).toEqual({
-      status: MediaStatus.FAILED,
-      failureReason: MediaFailureReason.TOO_LONG,
-    });
-    const [fail] = prisma.post.updateMany.mock.calls[0];
-    expect(fail.data).toEqual({ status: PostStatus.FAILED });
-    expect(deleteMedia).toHaveBeenCalledWith(mediaId, false);
-  });
-
-  it('fails a video whose stream could not be built', async () => {
     await service.handleNotification({
       ...streamBuilt(),
       eager: [{ status: 'failed' }],
     });
 
-    const [update] = prisma.mediaAsset.updateMany.mock.calls[0];
-    expect(update.data).toEqual({
+    expect(await media()).toMatchObject({
       status: MediaStatus.FAILED,
       failureReason: MediaFailureReason.ENCODING_FAILED,
     });
+    expect((await post())?.status).toBe(PostStatus.FAILED);
+  });
+
+  it('reads the upload details when the stream finishes first', async () => {
+    await addMedia({ postId });
+    findVideo.mockResolvedValue({ public_id: publicId, duration: 42 });
+
+    await service.handleNotification(streamBuilt());
+
+    expect(findVideo).toHaveBeenCalledWith(publicId);
+    expect(await media()).toMatchObject({
+      status: MediaStatus.READY,
+      durationSec: 42,
+    });
+  });
+
+  it('ignores a replayed stream notification for media that is already READY', async () => {
+    await addMedia({ postId, status: MediaStatus.READY });
+
+    await service.handleNotification(streamBuilt());
+
+    expect((await media())?.status).toBe(MediaStatus.READY);
+    expect(schedule).not.toHaveBeenCalled();
+  });
+
+  it('ignores files outside the videos folder', async () => {
+    await addMedia();
+
+    await service.handleNotification({
+      ...uploaded(42),
+      public_id: 'someone-else/clip',
+    });
+
+    expect((await media())?.status).toBe(MediaStatus.WAITING_UPLOAD);
+    expect(deleteMedia).not.toHaveBeenCalled();
+  });
+
+  it('fails videos over the duration limit and deletes them', async () => {
+    await addMedia({ postId });
+
+    await service.handleNotification(uploaded(181));
+
+    expect(await media()).toMatchObject({
+      status: MediaStatus.FAILED,
+      failureReason: MediaFailureReason.TOO_LONG,
+    });
+    expect((await post())?.status).toBe(PostStatus.FAILED);
+    expect(deleteMedia).toHaveBeenCalledWith(mediaId, false);
   });
 
   it('deletes a file whose row is already gone', async () => {
-    prisma.mediaAsset.findUnique.mockResolvedValue(null);
-
     await service.handleNotification(uploaded(42));
 
     expect(deleteMedia).toHaveBeenCalledWith(mediaId, false);
-    expect(prisma.mediaAsset.updateMany).not.toHaveBeenCalled();
+    expect(await assets().countDocuments()).toBe(0);
+  });
+
+  describe('attaching to a post', () => {
+    it('gives each upload its position in the post', async () => {
+      const second = await createMedia(db, { ownerId });
+      await addMedia();
+
+      await claim([mediaId, second.id]);
+
+      const attached = await assets().find({ postId }).sort({ position: 1 });
+      expect(attached.map(({ id }) => id)).toEqual([mediaId, second.id]);
+    });
+
+    it.each([
+      ['someone else’s upload', { ownerId: 'someone-else' }],
+      ['an upload another post uses', { postId: 'another-post' }],
+      ['a failed upload', { status: MediaStatus.FAILED }],
+    ])('refuses %s and attaches nothing', async (_case, fields) => {
+      const fine = await createMedia(db, { ownerId });
+      await addMedia(fields);
+
+      await expect(claim([fine.id, mediaId])).rejects.toMatchObject({
+        code: 'MEDIA_UNAVAILABLE',
+      });
+
+      const stored = await assets().findById(fine.id).exec();
+      expect(stored?.postId).toBeNull();
+    });
   });
 
   describe('polling without notifications', () => {
     it('publishes once the Admin API lists the HLS stream', async () => {
+      const row = await addMedia({ postId, status: MediaStatus.PROCESSING });
       findVideo.mockResolvedValue({
         public_id: publicId,
         duration: 42,
         derived: [{ transformation: 'sp_auto/pg_1/m3u8', format: 'm3u8' }],
       });
-      prisma.mediaAsset.findUnique.mockResolvedValue(pendingMedia);
 
-      await service.refresh(pendingMedia);
+      await service.refresh(row);
 
-      const [update] = prisma.mediaAsset.updateMany.mock.calls[0];
-      expect(update.data).toEqual({ status: MediaStatus.READY });
+      expect((await media())?.status).toBe(MediaStatus.READY);
+      expect((await post())?.status).toBe(PostStatus.PUBLISHED);
     });
 
     it('asks the Admin API at most every 15 seconds per video', async () => {
-      const fresh = { ...waitingMedia, createdAt: new Date() };
+      const fresh = await addMedia();
       await service.refresh(fresh);
       await service.refresh(fresh);
 
@@ -209,12 +288,17 @@ describe('MediaService', () => {
     });
 
     it('times out an upload whose file never arrived', async () => {
-      prisma.mediaAsset.findFirst.mockResolvedValue(waitingMedia);
+      const row = await createMedia(db, { postId });
+      // `createdAt` is immutable to Mongoose, so backdate it as stored.
+      await assets().updateOne(
+        { _id: row.id },
+        { $set: { createdAt: new Date('2026-09-24T00:00:00Z') } },
+        { timestamps: false, overwriteImmutable: true },
+      );
 
-      await service.refresh(waitingMedia);
+      await service.refresh((await assets().findById(row.id).exec())!);
 
-      const [update] = prisma.mediaAsset.updateMany.mock.calls[0];
-      expect(update.data).toEqual({
+      expect(await assets().findById(row.id).exec()).toMatchObject({
         status: MediaStatus.FAILED,
         failureReason: MediaFailureReason.UPLOAD_TIMED_OUT,
       });
@@ -222,58 +306,78 @@ describe('MediaService', () => {
   });
 
   describe('discarding', () => {
-    const discarded: MediaAsset = {
-      ...pendingMedia,
-      discardedAt: new Date('2026-09-25T00:00:00.000Z'),
-    };
+    const old = new Date('2026-09-24T00:00:00Z');
 
     it('hides the upload, deletes it from Cloudinary, then drops the row', async () => {
-      prisma.mediaAsset.findMany.mockResolvedValue([pendingMedia]);
+      await addMedia({ status: MediaStatus.PROCESSING, createdAt: old });
 
       await service.removeOwned(mediaId, ownerId);
 
-      const [mark] = prisma.mediaAsset.updateMany.mock.calls[0];
-      expect(mark.data.discardedAt).toBeInstanceOf(Date);
       expect(deleteMedia).toHaveBeenCalledWith(mediaId, false);
-      expect(prisma.mediaAsset.deleteMany).toHaveBeenCalledWith({
-        where: { id: mediaId, discardedAt: { not: null } },
-      });
+      expect(await assets().countDocuments()).toBe(0);
+    });
+
+    it('refuses to discard an upload a post uses', async () => {
+      await addMedia({ postId });
+
+      await expect(service.removeOwned(mediaId, ownerId)).rejects.toMatchObject(
+        { statusCode: 409 },
+      );
     });
 
     it('also deletes the captions of a transcribed video', async () => {
-      await service.purge({ ...discarded, captionStatus: 'READY' });
+      const row = await addMedia({
+        captionStatus: CaptionStatus.READY,
+        discardedAt: old,
+      });
+
+      await service.purge(row);
 
       expect(deleteMedia).toHaveBeenCalledWith(mediaId, true);
     });
 
     it('keeps the row while its upload could still finish', async () => {
-      const gone = await service.purge({
-        ...discarded,
+      const row = await addMedia({
         status: MediaStatus.WAITING_UPLOAD,
-        createdAt: new Date(),
+        discardedAt: old,
       });
+      await assets().updateOne(
+        { _id: row.id },
+        { $set: { createdAt: new Date() } },
+        { timestamps: false, overwriteImmutable: true },
+      );
+
+      const gone = await service.purge(
+        (await assets().findById(row.id).exec())!,
+      );
 
       expect(gone).toBe(false);
       expect(deleteMedia).toHaveBeenCalled();
-      expect(prisma.mediaAsset.deleteMany).not.toHaveBeenCalled();
+      expect(await assets().countDocuments()).toBe(1);
     });
 
     it('keeps the row for a retry when deletion fails', async () => {
+      const row = await addMedia({ discardedAt: old, createdAt: old });
       deleteMedia.mockRejectedValue(new Error('Cloudinary down'));
 
-      await service.purge(discarded);
+      await service.purge(row);
 
-      expect(prisma.mediaAsset.deleteMany).not.toHaveBeenCalled();
+      expect(await assets().countDocuments()).toBe(1);
     });
 
     it('deletes a file that finished uploading after the discard', async () => {
-      prisma.mediaAsset.findUnique.mockResolvedValue(discarded);
+      await addMedia({
+        postId,
+        discardedAt: old,
+        createdAt: old,
+        status: MediaStatus.READY,
+      });
 
       await service.handleNotification(uploaded(42));
 
       expect(deleteMedia).toHaveBeenCalledWith(mediaId, false);
-      expect(prisma.mediaAsset.deleteMany).toHaveBeenCalled();
-      expect(prisma.post.updateMany).not.toHaveBeenCalled();
+      expect(await assets().countDocuments()).toBe(0);
+      expect((await post())?.status).toBe(PostStatus.PROCESSING);
     });
   });
 });

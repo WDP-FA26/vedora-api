@@ -24,23 +24,29 @@ import {
   ApiTags,
   ApiUnauthorizedResponse,
 } from '@nestjs/swagger';
-import type { AuthenticatedRequest } from '../auth/auth.types';
-import { JwtAuthGuard } from '../auth/jwt-auth.guard';
-import { Roles } from '../auth/roles.decorator';
-import { RolesGuard } from '../auth/roles.guard';
-import { PrismaService } from '../prisma/prisma.service';
+import { InjectModel } from '@nestjs/mongoose';
+import type { Model } from 'mongoose';
+import type { AuthenticatedRequest } from '../auth/auth.types.js';
+import { JwtAuthGuard } from '../auth/jwt-auth.guard.js';
+import { Roles } from '../auth/roles.decorator.js';
+import { RolesGuard } from '../auth/roles.guard.js';
+import { PaymentWebhookReceipt, UserRole } from '../mongo/models.js';
 import {
   BillingCatalogDto,
   BillingOverviewDto,
   CreatePaymentDto,
   PaymentDto,
-} from './payment.dto';
-import { PaymentsService } from './payments.service';
-import { SePayWebhookGuard } from './sepay-webhook.guard';
+} from './payment.dto.js';
+import { PaymentsService } from './payments.service.js';
+import { SePayWebhookGuard } from './sepay-webhook.guard.js';
+import { ErrorBodyDto } from '../common/exceptions/error-body.dto.js';
 
 @ApiTags('billing')
 @ApiBearerAuth()
-@ApiUnauthorizedResponse({ description: 'Verified ACTIVE account required' })
+@ApiUnauthorizedResponse({
+  type: ErrorBodyDto,
+  description: 'Verified ACTIVE account required',
+})
 @UseGuards(JwtAuthGuard)
 @Controller()
 export class PaymentsController {
@@ -84,12 +90,15 @@ export class PaymentsController {
   })
   @ApiOkResponse({ type: PaymentDto })
   @ApiBadRequestResponse({
+    type: ErrorBodyDto,
     description: 'Invalid plan, key or unsupported amount field',
   })
   @ApiConflictResponse({
+    type: ErrorBodyDto,
     description: 'Key/body conflict or a different pending purchase exists',
   })
   @ApiServiceUnavailableResponse({
+    type: ErrorBodyDto,
     description:
       'Payments disabled or temporary payment-code allocation exhaustion; retain Idempotency-Key when retrying',
   })
@@ -109,6 +118,7 @@ export class PaymentsController {
   })
   @ApiOkResponse({ type: PaymentDto })
   @ApiNotFoundResponse({
+    type: ErrorBodyDto,
     description: 'Missing payment or belongs to another account',
   })
   get(
@@ -126,7 +136,10 @@ export class PaymentsController {
     summary: 'Cancel a pending purchase; never performs a bank refund',
   })
   @ApiOkResponse({ type: PaymentDto })
-  @ApiConflictResponse({ description: 'Completed payment cannot be cancelled' })
+  @ApiConflictResponse({
+    type: ErrorBodyDto,
+    description: 'Completed payment cannot be cancelled',
+  })
   cancel(
     @Param('id', ParseUUIDPipe) id: string,
     @Req() request: AuthenticatedRequest,
@@ -185,10 +198,13 @@ export class SePayWebhookController {
 @ApiTags('billing-admin')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard, RolesGuard)
-@Roles('ADMIN')
+@Roles(UserRole.ADMIN)
 @Controller('admin/payments')
 export class PaymentReconciliationController {
-  constructor(private readonly db: PrismaService) {}
+  constructor(
+    @InjectModel(PaymentWebhookReceipt.name)
+    private readonly webhookReceipts: Model<PaymentWebhookReceipt>,
+  ) {}
 
   @Get('webhook-receipts')
   @Header('Cache-Control', 'private, no-store')
@@ -197,10 +213,28 @@ export class PaymentReconciliationController {
     summary:
       'Latest 50 sanitized webhook outcomes for reconciliation (admin only)',
   })
-  receipts() {
-    return this.db.paymentWebhookReceipt.findMany({
-      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
-      take: 50,
-    });
+  async receipts() {
+    const rows = await this.webhookReceipts
+      .find()
+      .sort({ createdAt: -1, _id: -1 })
+      .limit(50)
+      .exec();
+    return rows.map(
+      ({
+        id,
+        providerTransactionId,
+        payloadHash,
+        outcome,
+        intentId,
+        createdAt,
+      }) => ({
+        id,
+        providerTransactionId,
+        payloadHash,
+        outcome,
+        intentId,
+        createdAt,
+      }),
+    );
   }
 }

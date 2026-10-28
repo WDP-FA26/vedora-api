@@ -1,6 +1,6 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { IsOptional, IsUUID } from 'class-validator';
-import { PaginationLimitDto } from './pagination-limit.dto';
+import { PaginationLimitDto } from './pagination-limit.dto.js';
 
 /** UUID cursor for collections whose primary key is a UUID v4, such as posts. */
 export class CursorPaginationQueryDto extends PaginationLimitDto {

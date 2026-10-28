@@ -1,6 +1,6 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { IsString, Matches, MaxLength, MinLength } from 'class-validator';
-import { ResendVerificationDto } from './email-verification.dto';
+import { ResendVerificationDto } from './email-verification.dto.js';
 
 export class ForgotPasswordDto extends ResendVerificationDto {}
 

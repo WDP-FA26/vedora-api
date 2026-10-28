@@ -1,22 +1,32 @@
-import { execFileSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import { join } from 'node:path';
 import { INestApplication } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtModule, JwtService } from '@nestjs/jwt';
 import { Test } from '@nestjs/testing';
-import { Prisma, PrismaClient } from '@prisma/client';
+import {
+  type MealPlanEntry,
+  MealSection,
+  type Recipe,
+  UserRole,
+  Weekday,
+} from '../src/mongo/models.js';
 import request from 'supertest';
-import type { App } from 'supertest/types';
-import { configureApp } from '../src/app.setup';
-import { PrismaService } from '../src/prisma/prisma.service';
-import { ShoppingListController } from '../src/meal-plan/shopping-list.controller';
-import { ShoppingListService } from '../src/meal-plan/shopping-list.service';
-import type { ShoppingListDto } from '../src/meal-plan/dto/shopping-list.dto';
+import type { App } from 'supertest/types.js';
+import { configureApp } from '../src/app.setup.js';
+import { MongoModule } from '../src/mongo/mongo.module.js';
+import { MongoService } from '../src/mongo/mongo.service.js';
+import { ShoppingListController } from '../src/meal-plan/shopping-list.controller.js';
+import { ShoppingListService } from '../src/meal-plan/shopping-list.service.js';
+import type { ShoppingListDto } from '../src/meal-plan/dto/shopping-list.dto.js';
+import { createIngredient, createRecipe, createUser } from './fixtures.js';
+import {
+  createTestMongoUrl,
+  dropTestDatabase,
+  prepareTestDatabase,
+} from './mongo-test-db.js';
 
-describe('Shopping list with PostgreSQL', () => {
-  const schema = `vedora_shopping_test_${randomUUID().replaceAll('-', '')}`;
-  let db: PrismaClient;
+describe('Shopping list with MongoDB', () => {
+  let db: MongoService;
   let app: INestApplication<App>;
   let first: string;
   let second: string;
@@ -26,34 +36,14 @@ describe('Shopping list with PostgreSQL', () => {
   let otherIngredientId: string;
   let recipes: string[];
   beforeAll(async () => {
-    if (!process.env.TEST_DATABASE_URL)
-      throw new Error(
-        'Set TEST_DATABASE_URL to a disposable PostgreSQL database',
-      );
-    const url = new URL(process.env.TEST_DATABASE_URL);
-    url.searchParams.set('schema', schema);
-    execFileSync(
-      process.execPath,
-      [
-        join(process.cwd(), 'node_modules/prisma/build/index.js'),
-        'migrate',
-        'deploy',
-      ],
-      {
-        env: { ...process.env, DATABASE_URL: url.toString() },
-        stdio: 'pipe',
-        timeout: 45_000,
-      },
-    );
-    db = new PrismaClient({ datasourceUrl: url.toString() });
     const mod = await Test.createTestingModule({
       imports: [
+        MongoModule.forTest(createTestMongoUrl('shopping')),
         JwtModule.register({ secret: 'shopping-integration-test-secret' }),
       ],
       controllers: [ShoppingListController],
       providers: [
         ShoppingListService,
-        { provide: PrismaService, useValue: db },
         {
           provide: ConfigService,
           useValue: new ConfigService({ API_PREFIX: 'api/v1' }),
@@ -62,17 +52,16 @@ describe('Shopping list with PostgreSQL', () => {
     }).compile();
     app = mod.createNestApplication({ rawBody: true });
     configureApp(app);
-    await app.listen(0, '127.0.0.1');
+    await app.init();
+    await prepareTestDatabase(app);
+    db = app.get(MongoService);
     const users = await Promise.all(
       ['first', 'second'].map((name) =>
-        db.user.create({
-          data: {
-            username: `shopping.${name}`,
-            fullName: name,
-            email: `${name}@shopping.test`,
-            emailVerifiedAt: new Date(),
-            role: name === 'second' ? 'ADMIN' : 'USER',
-          },
+        createUser(db, {
+          username: `shopping.${name}`,
+          fullName: name,
+          email: `${name}@shopping.test`,
+          role: name === 'second' ? UserRole.ADMIN : UserRole.USER,
         }),
       ),
     );
@@ -82,11 +71,8 @@ describe('Shopping list with PostgreSQL', () => {
         app.get(JwtService).signAsync({ sub: u.id, username: u.username }),
       ),
     );
-    ingredientId = (await db.ingredient.create({ data: { name: 'Đậu hũ' } }))
-      .id;
-    otherIngredientId = (
-      await db.ingredient.create({ data: { name: 'Cà rốt' } })
-    ).id;
+    ingredientId = (await createIngredient(db, { name: 'Đậu hũ' })).id;
+    otherIngredientId = (await createIngredient(db, { name: 'Cà rốt' })).id;
     recipes = [];
     const sources = [
       { quantity: '0.10', unit: 'g', servings: 2, note: 'sliced' },
@@ -102,66 +88,69 @@ describe('Shopping list with PostgreSQL', () => {
       { quantity: '5.00', unit: 'cái', servings: 2, note: null },
     ];
     for (const [index, source] of sources.entries()) {
-      const recipe = await db.recipe.create({
-        data: {
-          title: `Shopping dish ${index}`,
-          servings: source.servings,
-          steps: ['Cook'],
-          ingredients: {
-            create: {
-              ingredientId: index === 5 ? otherIngredientId : ingredientId,
-              position: 0,
-              quantity: source.quantity,
-              unit: source.unit,
-              note: source.note,
-            },
+      const recipe = await createRecipe(db, {
+        title: `Shopping dish ${index}`,
+        servings: source.servings,
+        ingredients: [
+          {
+            ingredientId: index === 5 ? otherIngredientId : ingredientId,
+            quantity: source.quantity === null ? null : Number(source.quantity),
+            unit: source.unit,
+            note: source.note,
           },
-        },
+        ],
       });
       recipes.push(recipe.id);
     }
   });
   beforeEach(async () => {
-    await db.mealPlanEntry.deleteMany();
-    await db.recipe.update({
-      where: { id: recipes[0] },
-      data: { servings: 2 },
-    });
-    await db.recipeIngredient.update({
-      where: { recipeId_ingredientId: { recipeId: recipes[0], ingredientId } },
-      data: { quantity: '0.10' },
-    });
+    await db.connection.collections.meal_plan_entries.deleteMany({});
+    await db.connection
+      .model<Recipe>('Recipe')
+      .updateOne(
+        { _id: recipes[0], 'ingredients.ingredientId': ingredientId },
+        { $set: { servings: 2, 'ingredients.$.quantity': 0.1 } },
+      );
     const slots = [
-      { day: 'MON', section: 'BREAKFAST', recipeId: recipes[0] },
-      { day: 'MON', section: 'LUNCH', recipeId: recipes[0] },
-      { day: 'MON', section: 'DINNER', recipeId: recipes[1] },
-      { day: 'MON', section: 'OTHER', recipeId: recipes[2] },
-      { day: 'TUE', section: 'LUNCH', recipeId: recipes[3] },
-      { day: 'WED', section: 'OTHER', recipeId: recipes[4] },
-      { day: 'THU', section: 'DINNER', recipeId: recipes[5] },
-    ] as const;
-    await db.mealPlanEntry.createMany({
-      data: slots.map((slot) => ({ ...slot, userId: first, position: 0 })),
-    });
-    await db.mealPlanEntry.create({
-      data: {
-        userId: second,
-        day: 'MON',
-        section: 'LUNCH',
-        recipeId: recipes[1],
-        position: 0,
+      {
+        day: Weekday.MON,
+        section: MealSection.BREAKFAST,
+        recipeId: recipes[0],
       },
+      { day: Weekday.MON, section: MealSection.LUNCH, recipeId: recipes[0] },
+      { day: Weekday.MON, section: MealSection.DINNER, recipeId: recipes[1] },
+      { day: Weekday.MON, section: MealSection.OTHER, recipeId: recipes[2] },
+      { day: Weekday.TUE, section: MealSection.LUNCH, recipeId: recipes[3] },
+      { day: Weekday.WED, section: MealSection.OTHER, recipeId: recipes[4] },
+      { day: Weekday.THU, section: MealSection.DINNER, recipeId: recipes[5] },
+    ] as const;
+    await db.connection.model<MealPlanEntry>('MealPlanEntry').insertMany(
+      slots.map((slot) => ({
+        _id: randomUUID(),
+        ...slot,
+        userId: first,
+        position: 0,
+      })),
+    );
+    await plan({
+      userId: second,
+      day: Weekday.MON,
+      section: MealSection.LUNCH,
+      recipeId: recipes[1],
     });
   });
   afterAll(async () => {
+    if (app) await dropTestDatabase(app);
     if (app) await app.close();
-    if (db) {
-      await db.$executeRaw(
-        Prisma.sql`DROP SCHEMA ${Prisma.raw(`"${schema}"`)} CASCADE`,
-      );
-      await db.$disconnect();
-    }
   });
+  const entriesModel = () =>
+    db.connection.model<MealPlanEntry>('MealPlanEntry');
+  const plan = (entry: Omit<MealPlanEntry, 'id' | '_id' | 'position'>) =>
+    entriesModel().create({
+      _id: randomUUID(),
+      position: 0,
+      ...entry,
+    });
   const get = (query = '', token = firstToken) =>
     request(app.getHttpServer())
       .get(`/api/v1/meal-plan/shopping-list${query}`)
@@ -197,14 +186,11 @@ describe('Shopping list with PostgreSQL', () => {
     expect(response.headers['cache-control']).toBe('private, no-store');
   });
   it('counts a repeated recipe independently on another weekday', async () => {
-    await db.mealPlanEntry.create({
-      data: {
-        userId: first,
-        day: 'FRI',
-        section: 'OTHER',
-        recipeId: recipes[0],
-        position: 0,
-      },
+    await plan({
+      userId: first,
+      day: Weekday.FRI,
+      section: MealSection.OTHER,
+      recipeId: recipes[0],
     });
     const data = (await get().expect(200)).body as ShoppingListDto;
     const grams = data.items.find(
@@ -215,8 +201,8 @@ describe('Shopping list with PostgreSQL', () => {
     const friday = (await get('?days=FRI').expect(200)).body as ShoppingListDto;
     expect(friday.items[0].knownQuantity).toBe('0.10');
     expect(friday.items[0].contributions[0]).toMatchObject({
-      day: 'FRI',
-      section: 'OTHER',
+      day: Weekday.FRI,
+      section: MealSection.OTHER,
       servings: 2,
     });
   });
@@ -270,55 +256,57 @@ describe('Shopping list with PostgreSQL', () => {
     await get(`?userId=${first}`, secondToken).expect(400);
   });
   it('returns an empty list for an empty own plan and does not change any stored plan', async () => {
-    const before = await db.mealPlanEntry.findMany({
-      orderBy: { userId: 'asc' },
-    });
+    const stored = () =>
+      entriesModel().find().sort({ userId: 1, _id: 1 }).exec();
+    const before = await stored();
     await get().expect(200);
-    expect(
-      await db.mealPlanEntry.findMany({ orderBy: { userId: 'asc' } }),
-    ).toEqual(before);
-    await db.mealPlanEntry.deleteMany({ where: { userId: first } });
+    expect(await stored()).toEqual(before);
+    await entriesModel().deleteMany({ userId: first });
     expect((await get().expect(200)).body).toMatchObject({ items: [] });
   });
+  // Writers in transactions, as the services write related documents.
+  const entries = () => db.connection.model<MealPlanEntry>('MealPlanEntry');
+  const recipesModel = () => db.connection.model<Recipe>('Recipe');
+
   it('does not mix a prior timetable with newer ingredient data', async () => {
-    await db.mealPlanEntry.deleteMany({ where: { userId: first, day: 'MON' } });
-    await db.mealPlanEntry.create({
-      data: {
-        userId: first,
-        day: 'MON',
-        section: 'LUNCH',
-        recipeId: recipes[0],
-        position: 0,
-      },
+    await entriesModel().deleteMany({ userId: first, day: Weekday.MON });
+    await plan({
+      userId: first,
+      day: Weekday.MON,
+      section: MealSection.LUNCH,
+      recipeId: recipes[0],
     });
     const writer = (async () => {
       for (let index = 0; index < 10; index++) {
         const switched = index % 2 === 0;
-        await db.$transaction(async (tx) => {
-          await tx.mealPlanEntry.deleteMany({
-            where: { userId: first, day: 'MON' },
-          });
-          await tx.recipeIngredient.update({
-            where: {
-              recipeId_ingredientId: { recipeId: recipes[0], ingredientId },
-            },
-            data: { quantity: switched ? '0.90' : '0.10' },
-          });
-          await tx.recipeIngredient.update({
-            where: {
-              recipeId_ingredientId: { recipeId: recipes[1], ingredientId },
-            },
-            data: { quantity: switched ? '0.80' : '0.20' },
-          });
-          await tx.mealPlanEntry.create({
-            data: {
-              userId: first,
-              day: 'MON',
-              section: 'LUNCH',
-              recipeId: recipes[switched ? 1 : 0],
-              position: 0,
-            },
-          });
+        await db.withTransaction(async (session) => {
+          await entries().deleteMany(
+            { userId: first, day: Weekday.MON },
+            { session },
+          );
+          await recipesModel().updateOne(
+            { _id: recipes[0], 'ingredients.ingredientId': ingredientId },
+            { $set: { 'ingredients.$.quantity': switched ? 0.9 : 0.1 } },
+            { session },
+          );
+          await recipesModel().updateOne(
+            { _id: recipes[1], 'ingredients.ingredientId': ingredientId },
+            { $set: { 'ingredients.$.quantity': switched ? 0.8 : 0.2 } },
+            { session },
+          );
+          await entries().create(
+            [
+              {
+                _id: randomUUID(),
+                userId: first,
+                day: Weekday.MON,
+                section: MealSection.LUNCH,
+                recipeId: recipes[switched ? 1 : 0],
+                position: 0,
+              },
+            ],
+            { session },
+          );
         });
       }
     })();
@@ -343,15 +331,18 @@ describe('Shopping list with PostgreSQL', () => {
     const writer = (async () => {
       for (let index = 0; index < 10; index++) {
         const servings = index % 2 === 0 ? 4 : 2;
-        await db.$transaction([
-          db.recipe.update({ where: { id: recipes[0] }, data: { servings } }),
-          db.recipeIngredient.update({
-            where: {
-              recipeId_ingredientId: { recipeId: recipes[0], ingredientId },
+        await db.withTransaction(async (session) => {
+          await recipesModel().updateOne(
+            { _id: recipes[0], 'ingredients.ingredientId': ingredientId },
+            {
+              $set: {
+                servings,
+                'ingredients.$.quantity': servings === 4 ? 0.2 : 0.1,
+              },
             },
-            data: { quantity: servings === 4 ? '0.20' : '0.10' },
-          }),
-        ]);
+            { session },
+          );
+        });
       }
     })();
     const reads = await Promise.all(

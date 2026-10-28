@@ -1,8 +1,8 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { PostStatus, PostType } from '@prisma/client';
-import { CursorPaginatedResponseDto } from '../../common/pagination';
-import { MediaResponseDto } from '../../media/dto/media-response.dto';
-import { BlogSummaryDto } from './blog-summary.dto';
+import { PostStatus, PostType } from '../../mongo/models.js';
+import { CursorPaginatedResponseDto } from '../../common/pagination/index.js';
+import { MediaResponseDto } from '../../media/dto/media-response.dto.js';
+import { BlogSummaryDto } from './blog-summary.dto.js';
 
 export class PostAuthorDto {
   @ApiProperty({ format: 'uuid' })

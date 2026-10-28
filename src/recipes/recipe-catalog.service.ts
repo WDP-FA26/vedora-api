@@ -1,34 +1,40 @@
-import {
-  Injectable,
-  NotFoundException,
-  UnauthorizedException,
-} from '@nestjs/common';
-import { PostStatus, Prisma } from '@prisma/client';
+import { Injectable } from '@nestjs/common';
+import { InjectModel } from '@nestjs/mongoose';
+import type { Model } from 'mongoose';
+import { UnauthenticatedException } from '../common/exceptions/unauthenticated.exception.js';
+import { escapeRegExp } from '../common/text.js';
 import {
   createPaginatedResponse,
   getPaginationArgs,
   PaginatedResponseDto,
-} from '../common/pagination';
-import { PrismaService } from '../prisma/prisma.service';
+} from '../common/pagination/index.js';
+import { Ingredient, Recipe, RecipeFavorite } from '../mongo/models.js';
 import {
   CatalogRecipeDetailDto,
   CatalogRecipeDto,
   RecipeCatalogQueryDto,
-} from './dto/recipe-catalog.dto';
-import { IncompatibilityRulesService } from './incompatibility-rules.service';
-import { catalogWhere } from './recipe-catalog.query';
+  totalMinutes,
+} from './dto/recipe-catalog.dto.js';
+import { toRecipeCard } from './dto/recipe.dto.js';
+import { DietaryService } from './dietary.service.js';
+import { IncompatibilityRulesService } from './incompatibility-rules.service.js';
 import {
-  recipeDetailInclude,
-  recipeInclude,
-  toRecipeDetailDto,
-  toRecipeDto,
-} from './recipes.service';
+  RecipeRelationsService,
+  sourcePostIds,
+} from './recipe-relations.service.js';
+import { ResourceNotFoundException } from '../common/exceptions/resource-not-found.exception.js';
 
 @Injectable()
 export class RecipeCatalogService {
   constructor(
-    private readonly prisma: PrismaService,
+    @InjectModel(Recipe.name) private readonly recipes: Model<Recipe>,
+    @InjectModel(Ingredient.name)
+    private readonly ingredients: Model<Ingredient>,
+    @InjectModel(RecipeFavorite.name)
+    private readonly favorites: Model<RecipeFavorite>,
+    private readonly relations: RecipeRelationsService,
     private readonly rules: IncompatibilityRulesService,
+    private readonly dietary: DietaryService,
   ) {}
 
   async list(
@@ -36,102 +42,141 @@ export class RecipeCatalogService {
     userId?: string,
   ): Promise<PaginatedResponseDto<CatalogRecipeDto>> {
     if (query.suitableForMe && !userId) {
-      throw new UnauthorizedException(
+      throw new UnauthenticatedException(
+        'UNAUTHORIZED',
         'Sign in to filter by your dietary profile',
       );
     }
-    const where = catalogWhere(query, userId);
-    const { skip, take } = getPaginationArgs(query);
-    return this.prisma.$transaction(
-      async (tx) => {
-        const [ids, [count]] = await Promise.all([
-          tx.$queryRaw<{ id: string }[]>(Prisma.sql`
-          SELECT r.id FROM recipes r ${where}
-          ORDER BY r.updated_at DESC, r.id DESC LIMIT ${take} OFFSET ${skip}
-        `),
-          tx.$queryRaw<{ total: bigint }[]>(Prisma.sql`
-          SELECT COUNT(*) AS total FROM recipes r ${where}
-        `),
-        ]);
-        const rows =
-          ids.length > 0
-            ? await tx.recipe.findMany({
-                where: { id: { in: ids.map(({ id }) => id) } },
-                include: recipeInclude,
-              })
-            : [];
-        const byId = new Map(rows.map((row) => [row.id, row]));
-        const favorites =
-          userId && ids.length
-            ? await tx.recipeFavorite.findMany({
-                where: { userId, recipeId: { in: ids.map(({ id }) => id) } },
-                select: { recipeId: true },
-              })
-            : [];
-        const favoriteIds = new Set(favorites.map(({ recipeId }) => recipeId));
-        const ordered = ids.map(({ id }) => byId.get(id)!);
-        const conflicts = await this.rules.findConflictsForEach(
-          ordered.map((row) =>
-            row.ingredients.map(({ ingredientId }) => ingredientId),
-          ),
-          tx,
-        );
-        return createPaginatedResponse(
-          ordered.map((row, index) => {
-            const recipe = toRecipeDto(row, conflicts[index]);
-            return {
-              ...recipe,
-              isFavorite: favoriteIds.has(row.id),
-              // Admin-authored recipes are public, but their source post may not be.
-              post:
-                row.post?.status === PostStatus.PUBLISHED ? recipe.post : null,
-              totalMinutes: totalMinutes(row),
-            };
-          }),
-          Number(count.total),
-          query,
-        );
-      },
-      { isolationLevel: Prisma.TransactionIsolationLevel.RepeatableRead },
+    const { rows, total } = await this.catalogPage(
+      query,
+      getPaginationArgs(query),
+      userId,
+    );
+    const [recipes, favoriteIds, publishedPosts] = await Promise.all([
+      this.relations.hydrate(rows),
+      this.favoriteIds(
+        rows.map(({ id }) => id),
+        userId,
+      ),
+      this.relations.publishedPostIds(sourcePostIds(rows)),
+    ]);
+    return createPaginatedResponse(
+      rows.map((row, index) => ({
+        ...toRecipeCard(recipes[index]),
+        isFavorite: favoriteIds.has(row.id),
+        // Admin-authored recipes are public, but their source post may not be.
+        post:
+          row.postId && publishedPosts.has(row.postId)
+            ? recipes[index].post
+            : null,
+        totalMinutes: totalMinutes(row),
+      })),
+      total,
+      query,
     );
   }
 
   async findOne(id: string, userId?: string): Promise<CatalogRecipeDetailDto> {
-    return this.prisma.$transaction(
-      async (tx) => {
-        const row = await tx.recipe.findUnique({
-          where: { id },
-          include: recipeDetailInclude,
-        });
-        if (!row) throw new NotFoundException('Recipe not found');
-        const [conflicts] = await this.rules.findConflictsForEach(
-          [row.ingredients.map(({ ingredientId }) => ingredientId)],
-          tx,
-        );
-        const favorite = userId
-          ? await tx.recipeFavorite.findUnique({
-              where: { recipeId_userId: { recipeId: id, userId } },
-              select: { recipeId: true },
-            })
-          : null;
-        const detail = toRecipeDetailDto(row, conflicts);
-        return {
-          ...detail,
-          isFavorite: favorite !== null,
-          post: row.post?.status === PostStatus.PUBLISHED ? detail.post : null,
-          totalMinutes: totalMinutes(row),
-        };
-      },
-      { isolationLevel: Prisma.TransactionIsolationLevel.RepeatableRead },
-    );
+    const row = await this.recipes.findOne({ _id: id }).exec();
+    if (!row)
+      throw new ResourceNotFoundException('NOT_FOUND', 'Recipe not found');
+    const [[detail], favoriteIds, publishedPosts] = await Promise.all([
+      this.relations.hydrate([row]),
+      this.favoriteIds([id], userId),
+      this.relations.publishedPostIds(sourcePostIds([row])),
+    ]);
+    return {
+      ...detail,
+      isFavorite: favoriteIds.has(id),
+      post: row.postId && publishedPosts.has(row.postId) ? detail.post : null,
+      totalMinutes: totalMinutes(row),
+    };
   }
-}
 
-export function totalMinutes(recipe: {
-  prepMinutes: number | null;
-  cookMinutes: number | null;
-}): number | null {
-  return recipe.prepMinutes === null && recipe.cookMinutes === null
-    ? null
-    : (recipe.prepMinutes ?? 0) + (recipe.cookMinutes ?? 0);
+  /**
+   * The recipes of one catalog page, newest first, and how many match in all.
+   */
+  private async catalogPage(
+    query: RecipeCatalogQueryDto,
+    paging: { skip: number; take: number },
+    userId?: string,
+  ): Promise<{ rows: Recipe[]; total: number }> {
+    let matching = await this.recipes
+      .find()
+      .select(
+        'title description imageUrl servings prepMinutes cookMinutes ingredients steps postId updatedAt',
+      )
+      .sort({ updatedAt: -1, _id: -1 })
+      .exec();
+
+    if (query.q !== undefined) {
+      const matchingIds = await this.matchingRecipeIds(query.q);
+      matching = matching.filter(({ id }) => matchingIds.has(id));
+    }
+    if (query.maxMinutes !== undefined) {
+      const max = query.maxMinutes;
+      // A recipe with both times unknown never matches.
+      matching = matching.filter((row) => {
+        const minutes = totalMinutes(row);
+        return minutes !== null && minutes <= max;
+      });
+    }
+    if (query.suitableForMe && userId) {
+      const avoided = await this.dietary.avoidedIngredientIds(userId);
+      matching = matching.filter(({ ingredients }) =>
+        ingredients.every(({ ingredientId }) => !avoided.has(ingredientId)),
+      );
+      const conflicts = await this.rules.findConflictsForEach(
+        matching.map(({ ingredients }) =>
+          ingredients.map(({ ingredientId }) => ingredientId),
+        ),
+      );
+      matching = matching.filter((_, index) => conflicts[index].length === 0);
+    }
+    return {
+      rows: matching.slice(paging.skip, paging.skip + paging.take),
+      total: matching.length,
+    };
+  }
+
+  /** Title, description, or an ingredient whose name or alias contains `text`. */
+  private async matchingRecipeIds(text: string): Promise<Set<string>> {
+    const pattern = escapeRegExp(text);
+    const matchingIngredients = await this.ingredients
+      .find({
+        $or: [
+          { name: { $regex: pattern, $options: 'i' } },
+          { aliases: { $regex: pattern, $options: 'i' } },
+        ],
+      })
+      .select('_id')
+      .exec();
+    const rows = await this.recipes
+      .find({
+        $or: [
+          { title: { $regex: pattern, $options: 'i' } },
+          { description: { $regex: pattern, $options: 'i' } },
+          {
+            'ingredients.ingredientId': {
+              $in: matchingIngredients.map(({ id }) => id),
+            },
+          },
+        ],
+      })
+      .select('_id')
+      .exec();
+    return new Set(rows.map(({ id }) => id));
+  }
+
+  private async favoriteIds(
+    recipeIds: string[],
+    userId?: string,
+  ): Promise<Set<string>> {
+    if (!userId) return new Set();
+    const favorites = await this.favorites
+      .find({ userId, recipeId: { $in: recipeIds } })
+      .select('recipeId')
+      .exec();
+    return new Set(favorites.map(({ recipeId }) => recipeId));
+  }
 }

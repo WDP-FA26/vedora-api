@@ -21,37 +21,49 @@ import {
   ApiTags,
   ApiUnauthorizedResponse,
 } from '@nestjs/swagger';
-import { UserRole } from '@prisma/client';
-import type { AuthenticatedRequest } from '../auth/auth.types';
-import { JwtAuthGuard } from '../auth/jwt-auth.guard';
-import { UserResponseDto } from '../auth/dto/auth-response.dto';
+import { UserRole } from '../mongo/models.js';
+import type { AuthenticatedRequest } from '../auth/auth.types.js';
+import { JwtAuthGuard } from '../auth/jwt-auth.guard.js';
+import { UserResponseDto } from '../auth/dto/auth-response.dto.js';
 import {
   ApiPaginatedResponse,
   PaginatedResponseDto,
-} from '../common/pagination';
-import { Roles } from '../auth/roles.decorator';
-import { RolesGuard } from '../auth/roles.guard';
-import { CreateUserDto } from './dto/create-user.dto';
-import { UpdateUserDto } from './dto/update-user.dto';
-import { UpdateUserRoleDto } from './dto/update-user-role.dto';
-import { UpdateUserStatusDto } from './dto/update-user-status.dto';
-import { UsersQueryDto } from './dto/users-query.dto';
-import { PublicUser, UsersService } from './users.service';
+} from '../common/pagination/index.js';
+import { Roles } from '../auth/roles.decorator.js';
+import { RolesGuard } from '../auth/roles.guard.js';
+import { CreateUserDto } from './dto/create-user.dto.js';
+import { UpdateUserDto } from './dto/update-user.dto.js';
+import { UpdateUserRoleDto } from './dto/update-user-role.dto.js';
+import { UpdateUserStatusDto } from './dto/update-user-status.dto.js';
+import { UsersQueryDto } from './dto/users-query.dto.js';
+import { AccountsService } from './accounts.service.js';
+import { type PublicUser } from './public-user.js';
+import { UsersService } from './users.service.js';
+import { ErrorBodyDto } from '../common/exceptions/error-body.dto.js';
 
 @ApiTags('users')
 @ApiBearerAuth()
-@ApiUnauthorizedResponse({ description: 'Authentication required' })
-@ApiForbiddenResponse({ description: 'Insufficient account permissions' })
+@ApiUnauthorizedResponse({
+  type: ErrorBodyDto,
+  description: 'Authentication required',
+})
+@ApiForbiddenResponse({
+  type: ErrorBodyDto,
+  description: 'Insufficient account permissions',
+})
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Controller('users')
 export class UsersController {
-  constructor(private readonly usersService: UsersService) {}
+  constructor(
+    private readonly usersService: UsersService,
+    private readonly accounts: AccountsService,
+  ) {}
 
   @Post()
   @Roles(UserRole.ADMIN)
   @ApiOperation({ summary: 'Create a user (admin only)' })
   create(@Body() dto: CreateUserDto): Promise<PublicUser> {
-    return this.usersService.createWithPassword(dto);
+    return this.accounts.createWithPassword(dto);
   }
 
   @Get()
@@ -86,7 +98,10 @@ export class UsersController {
   @Patch(':id/role')
   @Roles(UserRole.ADMIN)
   @ApiOperation({ summary: 'Change an account role (admin only)' })
-  @ApiConflictResponse({ description: 'Stale version or final ACTIVE admin' })
+  @ApiConflictResponse({
+    type: ErrorBodyDto,
+    description: 'Stale version or final ACTIVE admin',
+  })
   updateRole(
     @Req() request: AuthenticatedRequest,
     @Param('id', ParseUUIDPipe) id: string,
@@ -101,6 +116,7 @@ export class UsersController {
     summary: 'Suspend or reactivate a verified account (admin only)',
   })
   @ApiConflictResponse({
+    type: ErrorBodyDto,
     description: 'Stale version, invalid transition or final ACTIVE admin',
   })
   updateStatus(
@@ -114,7 +130,10 @@ export class UsersController {
   @Delete(':id')
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ summary: 'Delete your account, or any account as an admin' })
-  @ApiConflictResponse({ description: 'Cannot delete the final ACTIVE admin' })
+  @ApiConflictResponse({
+    type: ErrorBodyDto,
+    description: 'Cannot delete the final ACTIVE admin',
+  })
   async remove(
     @Req() request: AuthenticatedRequest,
     @Param('id', ParseUUIDPipe) id: string,

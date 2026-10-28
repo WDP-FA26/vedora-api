@@ -21,18 +21,19 @@ import {
   ApiUnauthorizedResponse,
 } from '@nestjs/swagger';
 import type { Response } from 'express';
-import type { AuthenticatedRequest } from '../auth/auth.types';
-import { JwtAuthGuard } from '../auth/jwt-auth.guard';
-import { OptionalJwtAuthGuard } from '../auth/optional-jwt-auth.guard';
+import type { AuthenticatedRequest } from '../auth/auth.types.js';
+import { JwtAuthGuard } from '../auth/jwt-auth.guard.js';
+import { OptionalJwtAuthGuard } from '../auth/optional-jwt-auth.guard.js';
 import {
   MyRecipeRatingDto,
   RecipeRatingSummaryDto,
   SetRecipeRatingDto,
-} from './dto/recipe-rating.dto';
-import { RecipeRatingsService } from './recipe-ratings.service';
+} from './dto/recipe-rating.dto.js';
+import { RecipeRatingsService } from './recipe-ratings.service.js';
+import { ErrorBodyDto } from '../common/exceptions/error-body.dto.js';
 
 @ApiTags('recipe-ratings')
-@ApiNotFoundResponse({ description: 'Recipe not found' })
+@ApiNotFoundResponse({ type: ErrorBodyDto, description: 'Recipe not found' })
 @Controller('recipes/:recipeId')
 export class RecipeRatingsController {
   constructor(private readonly ratings: RecipeRatingsService) {}
@@ -40,6 +41,7 @@ export class RecipeRatingsController {
   @Get('ratings/summary')
   @UseGuards(OptionalJwtAuthGuard)
   @ApiUnauthorizedResponse({
+    type: ErrorBodyDto,
     description: 'A supplied token is invalid or expired',
   })
   @ApiOperation({
@@ -56,7 +58,7 @@ export class RecipeRatingsController {
   @Get('rating')
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
-  @ApiUnauthorizedResponse()
+  @ApiUnauthorizedResponse({ type: ErrorBodyDto })
   @ApiOperation({ summary: 'Read your own score and the current summary' })
   @ApiOkResponse({ type: MyRecipeRatingDto })
   mine(
@@ -71,11 +73,13 @@ export class RecipeRatingsController {
   @Put('rating')
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
-  @ApiUnauthorizedResponse()
+  @ApiUnauthorizedResponse({ type: ErrorBodyDto })
   @ApiForbiddenResponse({
+    type: ErrorBodyDto,
     description: 'SELF_RATING_NOT_ALLOWED or EMAIL_NOT_VERIFIED',
   })
   @ApiConflictResponse({
+    type: ErrorBodyDto,
     description: 'RATING_CONFLICT; reload before retrying',
   })
   @ApiOperation({ summary: 'Set your integer score from 1 to 5 (idempotent)' })
@@ -93,8 +97,9 @@ export class RecipeRatingsController {
   @Delete('rating')
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
-  @ApiUnauthorizedResponse()
+  @ApiUnauthorizedResponse({ type: ErrorBodyDto })
   @ApiConflictResponse({
+    type: ErrorBodyDto,
     description: 'RATING_CONFLICT; reload before retrying',
   })
   @ApiOperation({

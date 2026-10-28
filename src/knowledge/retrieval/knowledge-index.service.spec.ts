@@ -1,8 +1,8 @@
 import { ConfigService } from '@nestjs/config';
 import { type DeepMockProxy, mockDeep } from 'vitest-mock-extended';
-import { QdrantService } from '../../qdrant/qdrant.service';
-import { KnowledgeIndexService } from './knowledge-index.service';
-import { KnowledgeModelsService } from './knowledge-models.service';
+import { QdrantService } from '../../qdrant/qdrant.service.js';
+import { KnowledgeIndexService } from './knowledge-index.service.js';
+import { KnowledgeModelsService } from './knowledge-models.service.js';
 
 const document = { id: 'doc-1', title: 'dinh-duong.pdf' };
 

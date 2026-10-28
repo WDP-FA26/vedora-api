@@ -1,46 +1,44 @@
-import {
-  ConflictException,
-  ForbiddenException,
-  Injectable,
-  NotFoundException,
-  UnauthorizedException,
-} from '@nestjs/common';
-import { Prisma } from '@prisma/client';
-import { PrismaService } from '../prisma/prisma.service';
+import { rethrowAsStateConflict } from '../mongo/unique-conflict.js';
+import { Injectable } from '@nestjs/common';
+import { InjectModel } from '@nestjs/mongoose';
+import { randomUUID } from 'node:crypto';
+import type { ClientSession, Model } from 'mongoose';
+import { lockDocument } from '../mongo/document-lock.js';
+import { Recipe, RecipeRating, User } from '../mongo/models.js';
+import { MongoService } from '../mongo/mongo.service.js';
 import {
   MyRecipeRatingDto,
   RecipeRatingSummaryDto,
-} from './dto/recipe-rating.dto';
+} from './dto/recipe-rating.dto.js';
+import { ResourceNotFoundException } from '../common/exceptions/resource-not-found.exception.js';
+import { AccessDeniedException } from '../common/exceptions/access-denied.exception.js';
+import { UnauthenticatedException } from '../common/exceptions/unauthenticated.exception.js';
 
 @Injectable()
 export class RecipeRatingsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    @InjectModel(Recipe.name) private readonly recipes: Model<Recipe>,
+    @InjectModel(RecipeRating.name)
+    private readonly recipeRatings: Model<RecipeRating>,
+    @InjectModel(User.name) private readonly users: Model<User>,
+    private readonly mongo: MongoService,
+  ) {}
 
   async summary(recipeId: string): Promise<RecipeRatingSummaryDto> {
-    return this.prisma.$transaction(
-      async (tx) => {
-        await this.requireRecipe(tx, recipeId);
-        return this.aggregate(tx, recipeId);
-      },
-      { isolationLevel: Prisma.TransactionIsolationLevel.RepeatableRead },
-    );
+    await this.requireRecipe(recipeId);
+    return this.aggregate(recipeId);
   }
 
   async mine(recipeId: string, userId: string): Promise<MyRecipeRatingDto> {
-    return this.prisma.$transaction(
-      async (tx) => {
-        await this.requireRecipe(tx, recipeId);
-        const rating = await tx.recipeRating.findUnique({
-          where: { recipeId_userId: { recipeId, userId } },
-          select: { value: true },
-        });
-        return {
-          ...(await this.aggregate(tx, recipeId)),
-          myRating: rating?.value ?? null,
-        };
-      },
-      { isolationLevel: Prisma.TransactionIsolationLevel.RepeatableRead },
-    );
+    await this.requireRecipe(recipeId);
+    const rating = await this.recipeRatings
+      .findOne({ recipeId, userId })
+      .select('value')
+      .exec();
+    return {
+      ...(await this.aggregate(recipeId)),
+      myRating: rating?.value ?? null,
+    };
   }
 
   /** Caller identity comes from the guard. null removes the caller's score. */
@@ -49,94 +47,122 @@ export class RecipeRatingsService {
     userId: string,
     value: number | null,
   ): Promise<MyRecipeRatingDto> {
-    try {
-      return await this.prisma.$transaction(
-        async (tx) => {
-          // Account -> recipe lock order. Account updates/deletion cannot race
-          // verification, and concurrent scores on a recipe settle sequentially.
-          const [actor] = await tx.$queryRaw<
-            { id: string; emailVerifiedAt: Date | null }[]
-          >`
-          SELECT id, email_verified_at AS "emailVerifiedAt"
-          FROM users WHERE id = ${userId}::uuid FOR SHARE
-        `;
-          if (!actor)
-            throw new UnauthorizedException('Account no longer exists');
-          if (value !== null && !actor.emailVerifiedAt) {
-            throw new ForbiddenException({
-              code: 'EMAIL_NOT_VERIFIED',
-              message: 'Verify your email before rating a recipe',
-            });
-          }
-
-          const [recipe] = await tx.$queryRaw<
-            { id: string; createdById: string | null }[]
-          >`
-          SELECT id, created_by_id AS "createdById"
-          FROM recipes WHERE id = ${recipeId}::uuid FOR UPDATE
-        `;
-          if (!recipe) throw new NotFoundException('Recipe not found');
-          if (value !== null && recipe.createdById === userId) {
-            throw new ForbiddenException({
-              code: 'SELF_RATING_NOT_ALLOWED',
-              message: 'You cannot rate your own recipe',
-            });
-          }
-
-          if (value === null) {
-            await tx.recipeRating.deleteMany({ where: { recipeId, userId } });
-          } else {
-            await tx.recipeRating.upsert({
-              where: { recipeId_userId: { recipeId, userId } },
-              create: { recipeId, userId, value },
-              update: { value },
-            });
-          }
-          return { ...(await this.aggregate(tx, recipeId)), myRating: value };
-        },
-        { isolationLevel: Prisma.TransactionIsolationLevel.ReadCommitted },
-      );
-    } catch (error) {
-      if (
-        error instanceof Prisma.PrismaClientKnownRequestError &&
-        ['P2002', 'P2003', 'P2034'].includes(error.code)
-      ) {
-        throw new ConflictException({
-          code: 'RATING_CONFLICT',
-          message: 'The recipe or rating changed; reload before retrying',
-        });
+    return this.mongo.withTransaction(async (session) => {
+      // Account -> recipe lock order. Account updates/deletion cannot race
+      // verification, and concurrent scores on a recipe settle sequentially.
+      await lockDocument(this.mongo, session, 'user', userId);
+      const actor = await this.users
+        .findOne({ _id: userId })
+        .session(session)
+        .exec();
+      if (!actor)
+        throw new UnauthenticatedException(
+          'UNAUTHORIZED',
+          'Account no longer exists',
+        );
+      if (value !== null && !actor.emailVerifiedAt) {
+        throw new AccessDeniedException(
+          'EMAIL_NOT_VERIFIED',
+          'Verify your email before rating a recipe',
+        );
       }
-      throw error;
-    }
-  }
 
-  private async requireRecipe(tx: Prisma.TransactionClient, recipeId: string) {
-    const recipe = await tx.recipe.findUnique({
-      where: { id: recipeId },
-      select: { id: true },
+      await lockDocument(this.mongo, session, 'recipe', recipeId);
+      const recipe = await this.recipes
+        .findOne({ _id: recipeId })
+        .session(session)
+        .exec();
+      if (!recipe)
+        throw new ResourceNotFoundException('NOT_FOUND', 'Recipe not found');
+      if (value !== null && recipe.createdById === userId) {
+        throw new AccessDeniedException(
+          'SELF_RATING_NOT_ALLOWED',
+          'You cannot rate your own recipe',
+        );
+      }
+
+      if (value === null) {
+        await this.recipeRatings
+          .deleteOne({ recipeId, userId }, { session })
+          .exec();
+      } else {
+        const now = new Date();
+        await this.recipeRatings
+          .updateOne(
+            { recipeId, userId },
+            {
+              $set: { value, updatedAt: now },
+              $setOnInsert: { _id: randomUUID(), createdAt: now },
+            },
+            { upsert: true, session },
+          )
+          .exec()
+          .catch((error: unknown) =>
+            rethrowAsStateConflict(
+              error,
+              'RATING_CONFLICT',
+              'The rating changed; reload and try again',
+            ),
+          );
+      }
+      return {
+        ...(await this.aggregate(recipeId, session)),
+        myRating: value,
+      };
     });
-    if (!recipe) throw new NotFoundException('Recipe not found');
   }
 
+  private async requireRecipe(recipeId: string) {
+    const recipe = await this.recipes
+      .findOne({ _id: recipeId })
+      .select('_id')
+      .exec();
+    if (!recipe)
+      throw new ResourceNotFoundException('NOT_FOUND', 'Recipe not found');
+  }
+
+  /**
+   * The count and mean of the recipe's scores. No stored aggregate to drift
+   * under retries/account deletion. Until the account lifecycle feature
+   * exists, verified email is the eligibility gate. Inside `set` it runs in
+   * the transaction, so the result includes that write.
+   */
   private async aggregate(
-    tx: Prisma.TransactionClient,
     recipeId: string,
+    session?: ClientSession,
   ): Promise<RecipeRatingSummaryDto> {
-    // No stored aggregate to drift under retries/account deletion. Until the
-    // account lifecycle feature exists, verified email is the eligibility gate.
-    const stats = await tx.recipeRating.aggregate({
-      where: { recipeId, user: { emailVerifiedAt: { not: null } } },
-      _count: { value: true },
-      _sum: { value: true },
-    });
-    const ratingCount = stats._count.value;
+    const [stats] = await this.recipeRatings
+      .aggregate<{ count: number; sum: number }>(
+        [
+          { $match: { recipeId } },
+          {
+            $lookup: {
+              from: 'users',
+              localField: 'userId',
+              foreignField: '_id',
+              as: 'user',
+            },
+          },
+          { $match: { 'user.emailVerifiedAt': { $ne: null } } },
+          {
+            $group: {
+              _id: null,
+              count: { $sum: 1 },
+              sum: { $sum: '$value' },
+            },
+          },
+        ],
+        { session },
+      )
+      .exec();
+    const ratingCount = stats?.count ?? 0;
     return {
       recipeId,
       ratingCount,
       averageRating:
         ratingCount === 0
           ? null
-          : Math.round((stats._sum.value! * 10) / ratingCount) / 10,
+          : Math.round((stats.sum * 10) / ratingCount) / 10,
     };
   }
 }

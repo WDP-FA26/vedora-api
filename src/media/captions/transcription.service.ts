@@ -1,11 +1,17 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { createOpenRouter } from '@openrouter/ai-sdk-provider';
+import { chatModel, DEFAULT_CHAT_MODEL } from '../../ai/openrouter.js';
+import type { ReasoningEffort } from '../../ai/reasoning.js';
 import { generateText, type LanguageModel, Output } from 'ai';
 import { z } from 'zod';
-import type { ReasoningEffort } from '../../nutrition-chat/nutrition-chat.agent';
-import { type SpeechAudio, toOriginalTime } from './speech-audio';
-import type { Cue } from './vtt';
+import { parsePayload, validatePayload } from '../../common/validation.js';
+import { ExternalServiceException } from '../../common/exceptions/external-service.exception.js';
+import { type SpeechAudio, toOriginalTime } from './speech-audio.js';
+import {
+  OpenRouterErrorBody,
+  TranscriptionResponse,
+} from './transcription.dto.js';
+import type { Cue } from './vtt.js';
 
 const OPENROUTER_API = 'https://openrouter.ai/api/v1';
 const TRANSCRIBE_TIMEOUT_MS = 3 * 60_000;
@@ -40,24 +46,8 @@ const LANGUAGE_CODES: Record<string, string> = {
   english: 'en',
 };
 
-const errorBody = z.object({
-  error: z.object({ message: z.string() }).optional(),
-});
-const transcriptionResponse = z.object({
-  text: z.string(),
-  language: z.string().optional(),
-  segments: z
-    .array(
-      z.object({
-        start: z.number(),
-        end: z.number(),
-        text: z.string(),
-        avg_logprob: z.number().optional(),
-        no_speech_prob: z.number().optional(),
-      }),
-    )
-    .optional(),
-});
+// zod stays for the AI SDK's structured output; the HTTP bodies above are
+// class-validator DTOs.
 const translationOutput = z.object({ lines: z.array(z.string()) });
 
 export interface Transcript {
@@ -83,18 +73,17 @@ export class TranscriptionService {
       'TRANSCRIPTION_MODEL',
       'openai/whisper-large-v3',
     );
-    this.translationModel = createOpenRouter({ apiKey: this.apiKey })(
-      configService.get<string>('OPENROUTER_MODEL', 'openrouter/auto'),
-      {
-        reasoning: {
-          effort: configService.get<ReasoningEffort>(
-            'OPENROUTER_REASONING_EFFORT',
-            'low',
-          ),
-          exclude: true,
-        },
-      },
-    );
+    this.translationModel = chatModel({
+      apiKey: this.apiKey,
+      modelId: configService.get<string>(
+        'OPENROUTER_MODEL',
+        DEFAULT_CHAT_MODEL,
+      ),
+      reasoningEffort: configService.get<ReasoningEffort>(
+        'OPENROUTER_REASONING_EFFORT',
+        'low',
+      ),
+    });
   }
 
   async transcribe({ audio, speech }: SpeechAudio): Promise<Transcript> {
@@ -115,12 +104,14 @@ export class TranscriptionService {
     });
     const body: unknown = await response.json().catch(() => null);
     if (!response.ok) {
-      const message = errorBody.safeParse(body).data?.error?.message;
-      throw new Error(
+      const message = validatePayload(OpenRouterErrorBody, body).value?.error
+        ?.message;
+      throw new ExternalServiceException(
+        'openrouter',
         `Transcription answered ${response.status}${message ? `: ${message}` : ''}`,
       );
     }
-    const result = transcriptionResponse.parse(body);
+    const result = parsePayload('openrouter', TranscriptionResponse, body);
     const audioEnd = speech.reduce(
       (sum, { start, end }) => sum + end - start,
       0,
@@ -157,7 +148,8 @@ export class TranscriptionService {
       abortSignal: AbortSignal.timeout(TRANSLATE_TIMEOUT_MS),
     });
     if (output.lines.length !== cues.length) {
-      throw new Error(
+      throw new ExternalServiceException(
+        'openrouter',
         `Translation returned ${output.lines.length} lines for ${cues.length} cues`,
       );
     }

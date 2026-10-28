@@ -2,19 +2,19 @@ import { randomUUID } from 'node:crypto';
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { chunkdown } from 'chunkdown';
-import { QdrantService } from '../../qdrant/qdrant.service';
-import type { ExtractedSection } from '../extractors/document-extractor';
+import { QdrantService } from '../../qdrant/qdrant.service.js';
+import type { ExtractedSection } from '../extractors/document-extractor.js';
 import {
   BM25_FOLDED_VECTOR,
   BM25_VECTOR,
   bm25,
   DENSE_VECTOR,
   type KnowledgePointPayload,
-} from './knowledge-collection';
+} from './knowledge-collection.js';
 import {
   documentText,
   KnowledgeModelsService,
-} from './knowledge-models.service';
+} from './knowledge-models.service.js';
 
 const CHUNK_CHARS = 1000;
 const UPSERT_BATCH = 64;

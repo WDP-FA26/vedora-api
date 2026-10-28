@@ -1,42 +1,42 @@
-import {
-  BadRequestException,
-  ForbiddenException,
-  HttpException,
-  HttpStatus,
-  Injectable,
-  Logger,
-  NotFoundException,
-  ServiceUnavailableException,
-  UnauthorizedException,
-} from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { compare } from 'bcryptjs';
 import { randomBytes } from 'node:crypto';
-import { AccountStatus, User } from '@prisma/client';
-import { assertAccountActive } from './account-access';
-import { PublicUser, UsersService } from '../users/users.service';
-import { JwtPayload } from './auth.types';
-import { AuthResponseDto } from './dto/auth-response.dto';
+import { AccountStatus } from '../mongo/models.js';
+import { assertAccountActive } from './account-access.js';
+import { AccountsService } from '../users/accounts.service.js';
+import { type PublicUser, toPublicUser } from '../users/public-user.js';
+import { JwtPayload } from './auth.types.js';
+import { AuthResponseDto } from './dto/auth-response.dto.js';
 import {
   ResendVerificationDto,
   VerificationRequiredDto,
   VerifyEmailDto,
-} from './dto/email-verification.dto';
-import { LoginDto } from './dto/login.dto';
-import { ForgotPasswordDto, ResetPasswordDto } from './dto/password-reset.dto';
-import { RegisterDto } from './dto/register.dto';
+} from './dto/email-verification.dto.js';
+import { LoginDto } from './dto/login.dto.js';
+import {
+  ForgotPasswordDto,
+  ResetPasswordDto,
+} from './dto/password-reset.dto.js';
+import { RegisterDto } from './dto/register.dto.js';
 import {
   EmailVerificationService,
   SendResult,
-} from './email-verification.service';
-import { hashPassword } from './password';
-import { PasswordResetService } from './password-reset.service';
-import { GoogleProfileUser } from './google-auth.types';
+} from './email-verification.service.js';
+import { hashPassword } from './password.js';
+import { PasswordResetService } from './password-reset.service.js';
+import { GoogleProfileUser } from './google-auth.types.js';
 import {
   IssuedRefreshToken,
   RefreshTokensService,
-} from './refresh-tokens.service';
+} from './refresh-tokens.service.js';
+import { AccessDeniedException } from '../common/exceptions/access-denied.exception.js';
+import { FeatureUnavailableException } from '../common/exceptions/feature-unavailable.exception.js';
+import { InvalidInputException } from '../common/exceptions/invalid-input.exception.js';
+import { QuotaReachedException } from '../common/exceptions/quota-reached.exception.js';
+import { ResourceNotFoundException } from '../common/exceptions/resource-not-found.exception.js';
+import { UnauthenticatedException } from '../common/exceptions/unauthenticated.exception.js';
 
 const DUMMY_PASSWORD_HASH =
   '$2b$12$eMcBdg./eJofytkZPDuoGOyif9iLSXILzYk0MY95Vq6P7M6.c9nTe';
@@ -50,7 +50,7 @@ export class AuthService {
   private readonly accessTokenTtl: number;
 
   constructor(
-    private readonly usersService: UsersService,
+    private readonly accounts: AccountsService,
     private readonly jwtService: JwtService,
     private readonly refreshTokensService: RefreshTokensService,
     private readonly emailVerificationService: EmailVerificationService,
@@ -63,11 +63,11 @@ export class AuthService {
   /** Creates an unverified account and emails a code. No tokens until verified. */
   async register(dto: RegisterDto): Promise<VerificationRequiredDto> {
     const passwordHash = await hashPassword(dto.password);
-    await this.usersService.deleteStaleUnverified(
+    await this.accounts.deleteStaleUnverified(
       dto,
       new Date(Date.now() - UNVERIFIED_ACCOUNT_TTL_MS),
     );
-    const user = await this.usersService.create({
+    const user = await this.accounts.create({
       username: dto.username,
       passwordHash,
       fullName: dto.fullName,
@@ -81,14 +81,17 @@ export class AuthService {
   async login(
     dto: Pick<LoginDto, 'username' | 'password'>,
   ): Promise<AuthResponseDto> {
-    const user = await this.usersService.findByUsername(dto.username);
+    const user = await this.accounts.findByUsername(dto.username);
     const passwordMatches = await compare(
       dto.password,
       user?.passwordHash ?? DUMMY_PASSWORD_HASH,
     );
 
     if (!user || !passwordMatches) {
-      throw new UnauthorizedException('Invalid username or password');
+      throw new UnauthenticatedException(
+        'UNAUTHORIZED',
+        'Invalid username or password',
+      );
     }
     if (
       user.status === AccountStatus.SUSPENDED ||
@@ -99,47 +102,46 @@ export class AuthService {
     // Only reached with the right password, so it doesn't reveal the email.
     if (!user.emailVerifiedAt) {
       await this.sendCodeQuietly(user);
-      throw new ForbiddenException({
-        statusCode: 403,
-        error: 'Forbidden',
-        code: 'EMAIL_NOT_VERIFIED',
-        message: 'Email address is not verified',
-        email: user.email,
-      });
+      throw new AccessDeniedException(
+        'EMAIL_NOT_VERIFIED',
+        'Email address is not verified',
+        { email: user.email },
+      );
     }
 
-    return this.createAuthResponse(this.toPublicUser(user));
+    return this.createAuthResponse(toPublicUser(user));
   }
 
   async verifyEmail(dto: VerifyEmailDto): Promise<AuthResponseDto> {
-    const user = await this.usersService.findByEmail(dto.email);
+    const user = await this.accounts.findByEmail(dto.email);
     if (
       user &&
       (user.status === AccountStatus.SUSPENDED ||
         user.status === AccountStatus.DELETED)
     ) {
-      throw new BadRequestException('Invalid or expired verification code');
+      throw new InvalidInputException(
+        'BAD_REQUEST',
+        'Invalid or expired verification code',
+      );
     }
     const result =
       user && !user.emailVerifiedAt
         ? await this.emailVerificationService.verify(user, dto.code)
         : 'invalid';
     if (result === 'locked') {
-      throw new HttpException(
-        {
-          statusCode: HttpStatus.TOO_MANY_REQUESTS,
-          error: 'Too Many Requests',
-          code: 'VERIFY_LIMIT_REACHED',
-          message: 'Too many wrong codes for this email; try again tomorrow',
-        },
-        HttpStatus.TOO_MANY_REQUESTS,
+      throw new QuotaReachedException(
+        'VERIFY_LIMIT_REACHED',
+        'Too many wrong codes for this email; try again tomorrow',
       );
     }
     if (!user || result !== 'verified') {
-      throw new BadRequestException('Invalid or expired verification code');
+      throw new InvalidInputException(
+        'BAD_REQUEST',
+        'Invalid or expired verification code',
+      );
     }
 
-    return this.createAuthResponse(this.toPublicUser(user));
+    return this.createAuthResponse(toPublicUser(user));
   }
 
   /**
@@ -147,7 +149,7 @@ export class AuthService {
    * which addresses exist. Only a pending sign-up can hit the resend limit.
    */
   async resendVerification(dto: ResendVerificationDto): Promise<void> {
-    const user = await this.usersService.findByEmail(dto.email);
+    const user = await this.accounts.findByEmail(dto.email);
     if (!user || user.emailVerifiedAt) return;
 
     let result: SendResult;
@@ -155,17 +157,15 @@ export class AuthService {
       result = await this.emailVerificationService.send(user);
     } catch (error) {
       this.logger.error(`Verification email failed: ${String(error)}`);
-      throw new ServiceUnavailableException('Could not send the email');
+      throw new FeatureUnavailableException(
+        'SERVICE_UNAVAILABLE',
+        'Could not send the email',
+      );
     }
     if (result === 'limit') {
-      throw new HttpException(
-        {
-          statusCode: HttpStatus.TOO_MANY_REQUESTS,
-          error: 'Too Many Requests',
-          code: 'RESEND_LIMIT_REACHED',
-          message: 'Verification code resend limit reached; try again later',
-        },
-        HttpStatus.TOO_MANY_REQUESTS,
+      throw new QuotaReachedException(
+        'RESEND_LIMIT_REACHED',
+        'Verification code resend limit reached; try again later',
       );
     }
   }
@@ -175,7 +175,7 @@ export class AuthService {
    * emails, so it can't be used to probe which addresses exist.
    */
   async forgotPassword(dto: ForgotPasswordDto): Promise<void> {
-    const user = await this.usersService.findByEmail(dto.email);
+    const user = await this.accounts.findByEmail(dto.email);
     if (!user) return;
 
     let result: SendResult;
@@ -183,17 +183,15 @@ export class AuthService {
       result = await this.passwordResetService.send(user);
     } catch (error) {
       this.logger.error(`Password reset email failed: ${String(error)}`);
-      throw new ServiceUnavailableException('Could not send the email');
+      throw new FeatureUnavailableException(
+        'SERVICE_UNAVAILABLE',
+        'Could not send the email',
+      );
     }
     if (result === 'limit') {
-      throw new HttpException(
-        {
-          statusCode: HttpStatus.TOO_MANY_REQUESTS,
-          error: 'Too Many Requests',
-          code: 'RESEND_LIMIT_REACHED',
-          message: 'Password reset code limit reached; try again later',
-        },
-        HttpStatus.TOO_MANY_REQUESTS,
+      throw new QuotaReachedException(
+        'RESEND_LIMIT_REACHED',
+        'Password reset code limit reached; try again later',
       );
     }
   }
@@ -202,31 +200,30 @@ export class AuthService {
   async resetPassword(dto: ResetPasswordDto): Promise<void> {
     // Hashed first, so an over-long password is rejected before using a guess.
     const passwordHash = await hashPassword(dto.password);
-    const user = await this.usersService.findByEmail(dto.email);
+    const user = await this.accounts.findByEmail(dto.email);
     const result = user
       ? await this.passwordResetService.reset(user, dto.code, passwordHash)
       : 'invalid';
     if (result === 'locked') {
-      throw new HttpException(
-        {
-          statusCode: HttpStatus.TOO_MANY_REQUESTS,
-          error: 'Too Many Requests',
-          code: 'VERIFY_LIMIT_REACHED',
-          message: 'Too many wrong codes for this email; try again tomorrow',
-        },
-        HttpStatus.TOO_MANY_REQUESTS,
+      throw new QuotaReachedException(
+        'VERIFY_LIMIT_REACHED',
+        'Too many wrong codes for this email; try again tomorrow',
       );
     }
     if (!user || result !== 'reset') {
-      throw new BadRequestException('Invalid or expired reset code');
+      throw new InvalidInputException(
+        'BAD_REQUEST',
+        'Invalid or expired reset code',
+      );
     }
     // Whoever knew the old password is signed out everywhere.
     await this.refreshTokensService.revokeAllForUser(user.id);
   }
 
   async getCurrentUser(userId: string): Promise<PublicUser> {
-    const user = await this.usersService.findPublicById(userId);
-    if (!user) throw new NotFoundException('User not found');
+    const user = await this.accounts.findPublicById(userId);
+    if (!user)
+      throw new ResourceNotFoundException('NOT_FOUND', 'User not found');
     assertAccountActive(user.status);
     return user;
   }
@@ -242,13 +239,13 @@ export class AuthService {
   }
 
   async googleLogin(profile: GoogleProfileUser): Promise<AuthResponseDto> {
-    const googleUser = await this.usersService.findByGoogleId(profile.googleId);
+    const googleUser = await this.accounts.findByGoogleId(profile.googleId);
     if (googleUser) {
       assertAccountActive(googleUser.status);
-      return this.createAuthResponse(this.toPublicUser(googleUser));
+      return this.createAuthResponse(toPublicUser(googleUser));
     }
 
-    const existingUser = await this.usersService.findByEmail(profile.email);
+    const existingUser = await this.accounts.findByEmail(profile.email);
     if (existingUser) {
       if (
         existingUser.status === AccountStatus.SUSPENDED ||
@@ -256,7 +253,7 @@ export class AuthService {
       ) {
         assertAccountActive(existingUser.status);
       }
-      const user = await this.usersService.linkGoogleAccount(
+      const user = await this.accounts.linkGoogleAccount(
         existingUser,
         profile.googleId,
       );
@@ -271,7 +268,7 @@ export class AuthService {
       return this.createAuthResponse(user);
     }
 
-    const user = await this.usersService.create({
+    const user = await this.accounts.create({
       username: `g.${randomBytes(12).toString('hex')}`,
       googleId: profile.googleId,
       fullName: profile.fullName,
@@ -314,20 +311,6 @@ export class AuthService {
       accessTokenExpiresIn: this.accessTokenTtl,
       refreshTokenExpiresIn: refreshToken.expiresIn,
       user,
-    };
-  }
-
-  private toPublicUser(user: User): PublicUser {
-    return {
-      id: user.id,
-      username: user.username,
-      fullName: user.fullName,
-      email: user.email,
-      role: user.role,
-      status: user.status,
-      accountVersion: user.accountVersion,
-      createdAt: user.createdAt,
-      updatedAt: user.updatedAt,
     };
   }
 }

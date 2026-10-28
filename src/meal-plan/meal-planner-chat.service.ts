@@ -1,28 +1,32 @@
-import {
-  Injectable,
-  Logger,
-  ServiceUnavailableException,
-} from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { createOpenRouter } from '@openrouter/ai-sdk-provider';
 import {
-  createUIMessageStream,
   isStepCount,
   type LanguageModel,
   ToolLoopAgent,
   toUIMessageStream,
 } from 'ai';
-import { KnowledgeSearchService } from '../knowledge/retrieval/knowledge-search.service';
-import { chatErrorCode } from '../nutrition-chat/nutrition-chat.service';
-import { replyFilter } from '../nutrition-chat/reply-filter';
-import { searchKnowledgeTool } from '../nutrition-chat/tools/search-knowledge.tool';
-import { DietaryService } from '../recipes/dietary.service';
-import type { PlannerMessageDto } from './dto/meal-plan.dto';
-import { MealPlanService } from './meal-plan.service';
-import { plannerInstructions } from './meal-planner.prompt';
-import { moderatePlannerMessage, PLANNER_REFUSALS } from './planner-moderation';
-import { proposeMealPlanTool } from './tools/propose-meal-plan.tool';
-import { searchRecipesTool } from './tools/search-recipes.tool';
+import { cannedReply } from '../ai/chat/canned-reply.js';
+import { chatErrorCode } from '../ai/chat/errors.js';
+import { replyFilter } from '../ai/chat/reply-filter.js';
+import { moderateWithRetry } from '../ai/moderation/moderation.js';
+import { NUTRITION_POLICY } from '../ai/moderation/policies/nutrition.js';
+import {
+  chatModel,
+  DEFAULT_CHAT_MODEL,
+  DEFAULT_MODERATION_MODEL,
+} from '../ai/openrouter.js';
+import type { ReasoningEffort } from '../ai/reasoning.js';
+import { searchKnowledgeTool } from '../ai/tools/search-knowledge.tool.js';
+import { KnowledgeSearchService } from '../knowledge/retrieval/knowledge-search.service.js';
+import { DietaryService } from '../recipes/dietary.service.js';
+import type { PlannerMessageDto } from './dto/meal-plan.dto.js';
+import { MealPlanService } from './meal-plan.service.js';
+import { plannerInstructions } from './meal-planner.prompt.js';
+import { PLANNER_REFUSALS } from './meal-planner.refusals.js';
+import { proposeMealPlanTool } from './tools/propose-meal-plan.tool.js';
+import { searchRecipesTool } from './tools/search-recipes.tool.js';
+import { FeatureUnavailableException } from '../common/exceptions/feature-unavailable.exception.js';
 
 // room to search, then propose again after a rejected proposal
 const MAX_STEPS = 8;
@@ -46,25 +50,26 @@ export class MealPlannerChatService {
     private readonly dietary: DietaryService,
     private readonly knowledge: KnowledgeSearchService,
   ) {
-    const openRouter = createOpenRouter({
-      apiKey: configService.getOrThrow<string>('OPENROUTER_API_KEY'),
-    });
-    this.moderationModel = openRouter(
-      configService.get<string>(
+    const apiKey = configService.getOrThrow<string>('OPENROUTER_API_KEY');
+    this.moderationModel = chatModel({
+      apiKey,
+      modelId: configService.get<string>(
         'OPENROUTER_MODERATION_MODEL',
-        'openai/gpt-oss-safeguard-20b',
+        DEFAULT_MODERATION_MODEL,
       ),
-      { reasoning: { effort: 'low', exclude: true } },
-    );
-    this.model = openRouter(
-      configService.get<string>('OPENROUTER_MODEL', 'openrouter/auto'),
-      {
-        reasoning: {
-          effort: configService.get('OPENROUTER_REASONING_EFFORT', 'low'),
-          exclude: true,
-        },
-      },
-    );
+      reasoningEffort: 'low',
+    });
+    this.model = chatModel({
+      apiKey,
+      modelId: configService.get<string>(
+        'OPENROUTER_MODEL',
+        DEFAULT_CHAT_MODEL,
+      ),
+      reasoningEffort: configService.get<ReasoningEffort>(
+        'OPENROUTER_REASONING_EFFORT',
+        'low',
+      ),
+    });
   }
 
   async stream(
@@ -72,14 +77,18 @@ export class MealPlannerChatService {
     messages: PlannerMessageDto[],
     abortSignal: AbortSignal,
   ) {
-    const verdict = await moderatePlannerMessage(
+    const verdict = await moderateWithRetry(
       this.moderationModel,
       messages.at(-1)?.text ?? '',
       abortSignal,
+      NUTRITION_POLICY,
     ).catch((error: unknown) => {
       if (abortSignal.aborted) throw error;
       this.logger.error(`Moderation failed: ${String(error)}`);
-      throw new ServiceUnavailableException('Moderation is unavailable');
+      throw new FeatureUnavailableException(
+        'SERVICE_UNAVAILABLE',
+        'Moderation is unavailable',
+      );
     });
     if (verdict !== 'allow') {
       this.logger.warn(`Moderation answered ${verdict}`);
@@ -122,16 +131,4 @@ export class MealPlannerChatService {
       },
     });
   }
-}
-
-function cannedReply(text: string) {
-  return createUIMessageStream({
-    execute: ({ writer }) => {
-      writer.write({ type: 'start', messageMetadata: { refused: true } });
-      writer.write({ type: 'text-start', id: 'reply' });
-      writer.write({ type: 'text-delta', id: 'reply', delta: text });
-      writer.write({ type: 'text-end', id: 'reply' });
-      writer.write({ type: 'finish', finishReason: 'stop' });
-    },
-  });
 }

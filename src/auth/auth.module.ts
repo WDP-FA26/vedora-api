@@ -1,17 +1,17 @@
 import { Global, Module } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtModule } from '@nestjs/jwt';
-import { UsersModule } from '../users/users.module';
-import { AuthController } from './auth.controller';
-import { AuthService } from './auth.service';
-import { JwtAuthGuard } from './jwt-auth.guard';
-import { OptionalJwtAuthGuard } from './optional-jwt-auth.guard';
-import { RefreshTokensService } from './refresh-tokens.service';
-import { GoogleOAuthService } from './google-oauth.service';
-import { EmailVerificationService } from './email-verification.service';
-import { PasswordResetService } from './password-reset.service';
-import { RolesGuard } from './roles.guard';
-import { TurnstileService } from '../nutrition-chat/guest/turnstile.service';
+import { UsersModule } from '../users/users.module.js';
+import { AuthController } from './auth.controller.js';
+import { AuthService } from './auth.service.js';
+import { JwtAuthGuard } from './jwt-auth.guard.js';
+import { OptionalJwtAuthGuard } from './optional-jwt-auth.guard.js';
+import { RefreshTokensService } from './refresh-tokens.service.js';
+import { GoogleOAuthService } from './google-oauth.service.js';
+import { EmailVerificationService } from './email-verification.service.js';
+import { PasswordResetService } from './password-reset.service.js';
+import { RolesGuard } from './roles.guard.js';
+import { TurnstileService } from '../nutrition-chat/guest/turnstile.service.js';
 
 @Global()
 @Module({

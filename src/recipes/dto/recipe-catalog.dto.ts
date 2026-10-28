@@ -10,8 +10,8 @@ import {
   Min,
   MinLength,
 } from 'class-validator';
-import { PaginationQueryDto } from '../../common/pagination';
-import { RecipeDetailDto, RecipeDto } from './recipe.dto';
+import { PaginationQueryDto } from '../../common/pagination/index.js';
+import { RecipeDetailDto, RecipeDto } from './recipe.dto.js';
 
 export class RecipeCatalogQueryDto extends PaginationQueryDto {
   @ApiPropertyOptional({
@@ -71,4 +71,14 @@ export class CatalogRecipeDetailDto extends RecipeDetailDto {
   isFavorite!: boolean;
   @ApiProperty({ nullable: true, type: Number })
   totalMinutes!: number | null;
+}
+
+/** Prep + cook minutes; null when both are unknown. */
+export function totalMinutes(recipe: {
+  prepMinutes: number | null;
+  cookMinutes: number | null;
+}): number | null {
+  return recipe.prepMinutes === null && recipe.cookMinutes === null
+    ? null
+    : (recipe.prepMinutes ?? 0) + (recipe.cookMinutes ?? 0);
 }

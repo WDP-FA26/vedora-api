@@ -1,16 +1,70 @@
 import { Injectable } from '@nestjs/common';
-import { AccountStatus, Prisma, UserRole } from '@prisma/client';
-import { PrismaService } from '../prisma/prisma.service';
-import { DAY_MS, resolveDashboardRange } from './dashboard-range';
+import { InjectModel } from '@nestjs/mongoose';
+import type { Model, PipelineStage } from 'mongoose';
+import {
+  AccountStatus,
+  Post,
+  PostReport,
+  PostReportStatus,
+  PostStatus,
+  PostType,
+  Recipe,
+  User,
+  UserRole,
+} from '../mongo/models.js';
+import { DAY_MS, resolveDashboardRange } from './dashboard-range.js';
 import {
   DashboardDayDto,
   DashboardDto,
   DashboardQueryDto,
   UNAVAILABLE_DASHBOARD_METRICS,
-} from './dto/dashboard.dto';
+} from './dto/dashboard.dto.js';
 
 type DayCounts = Omit<DashboardDayDto, 'date'>;
-type DatabaseDay = { date: string } & Record<keyof DayCounts, bigint>;
+type DatabaseDay = { date: string } & Record<keyof DayCounts, number>;
+type DayCount = { _id: string; count: number };
+type StatusCount = { _id: AccountStatus; count: number };
+type DayAggregator = {
+  aggregate<T>(pipeline: PipelineStage[]): { exec(): Promise<T[]> };
+};
+
+/** Pipeline counting the matching documents per Asia/Bangkok calendar day. */
+const dailyCounts = (
+  dateField: string,
+  match: Record<string, unknown>,
+): PipelineStage[] => [
+  { $match: match },
+  {
+    $group: {
+      _id: {
+        $dateToString: {
+          format: '%Y-%m-%d',
+          date: `$${dateField}`,
+          timezone: 'Asia/Bangkok',
+        },
+      },
+      count: { $sum: 1 },
+    },
+  },
+];
+
+/** Joins the per-event results (`[{ _id: 'YYYY-MM-DD', count }]`) by day. */
+function mergeDays(
+  results: Record<keyof DayCounts, DayCount[]>,
+): DatabaseDay[] {
+  const days = new Map<string, DatabaseDay>();
+  for (const key of Object.keys(results) as (keyof DayCounts)[]) {
+    for (const entry of results[key]) {
+      const row = days.get(entry._id) ?? {
+        date: entry._id,
+        ...emptyCounts(),
+      };
+      row[key] = entry.count;
+      days.set(entry._id, row);
+    }
+  }
+  return [...days.values()];
+}
 const emptyCounts = (): DayCounts => ({
   newMembers: 0,
   publishedPosts: 0,
@@ -22,121 +76,156 @@ const emptyCounts = (): DayCounts => ({
 
 @Injectable()
 export class AdminDashboardService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    @InjectModel(User.name) private readonly users: Model<User>,
+    @InjectModel(Post.name) private readonly posts: Model<Post>,
+    @InjectModel(PostReport.name)
+    private readonly postReports: Model<PostReport>,
+    @InjectModel(Recipe.name) private readonly recipes: Model<Recipe>,
+  ) {}
 
   async get(query: DashboardQueryDto): Promise<DashboardDto> {
     const range = resolveDashboardRange(query);
     const { start, endExclusive, ...publicRange } = range;
-    return this.prisma.$transaction(
-      async (tx) => {
-        const members = await tx.user.groupBy({
-          by: ['status'],
-          where: {
+    {
+      const members = await this.users
+        .aggregate<StatusCount>([
+          {
+            $match: {
+              role: UserRole.USER,
+              status: { $ne: AccountStatus.DELETED },
+            },
+          },
+          { $group: { _id: '$status', count: { $sum: 1 } } },
+        ])
+        .exec();
+      const pendingReports = await this.postReports
+        .countDocuments({ status: PostReportStatus.PENDING })
+        .exec();
+      const recipesCreated = await this.recipes
+        .countDocuments({ createdAt: { $gte: start, $lt: endExclusive } })
+        .exec();
+      // Only aggregate values cross the DB boundary: each event kind is
+      // grouped by Asia/Bangkok day in the database; there is no per-day
+      // query or PII.
+      const bounds = { $gte: start, $lt: endExclusive };
+      const days = (
+        model: DayAggregator,
+        pipeline: PipelineStage[],
+      ): Promise<DayCount[]> => model.aggregate<DayCount>(pipeline).exec();
+      const [
+        newMembers,
+        publishedPosts,
+        publishedBlogs,
+        reportsCreated,
+        resolvedReports,
+        dismissedReports,
+      ] = await Promise.all([
+        days(
+          this.users,
+          dailyCounts('createdAt', {
             role: UserRole.USER,
-            status: { not: AccountStatus.DELETED },
+            status: { $ne: AccountStatus.DELETED },
+            createdAt: bounds,
+          }),
+        ),
+        days(
+          this.posts,
+          dailyCounts('publishedAt', {
+            status: PostStatus.PUBLISHED,
+            type: PostType.POST,
+            publishedAt: bounds,
+          }),
+        ),
+        days(
+          this.posts,
+          dailyCounts('publishedAt', {
+            status: PostStatus.PUBLISHED,
+            type: PostType.BLOG,
+            publishedAt: bounds,
+          }),
+        ),
+        days(this.postReports, dailyCounts('createdAt', { createdAt: bounds })),
+        days(
+          this.postReports,
+          dailyCounts('reviewedAt', {
+            status: PostReportStatus.RESOLVED,
+            reviewedAt: bounds,
+          }),
+        ),
+        days(
+          this.postReports,
+          dailyCounts('reviewedAt', {
+            status: PostReportStatus.DISMISSED,
+            reviewedAt: bounds,
+          }),
+        ),
+      ]);
+      const rows = mergeDays({
+        newMembers,
+        publishedPosts,
+        publishedBlogs,
+        reportsCreated,
+        resolvedReports,
+        dismissedReports,
+      });
+      const byDate = new Map(rows.map((row) => [row.date, row]));
+      const totals = emptyCounts();
+      const daily = Array.from(
+        { length: range.dayCount },
+        (_, index): DashboardDayDto => {
+          const date = new Date(
+            Date.parse(`${range.from}T00:00:00Z`) + index * DAY_MS,
+          )
+            .toISOString()
+            .slice(0, 10);
+          const row = byDate.get(date);
+          const counts = emptyCounts();
+          for (const key of Object.keys(counts) as (keyof DayCounts)[]) {
+            const value = Number(row?.[key] ?? 0);
+            if (!Number.isSafeInteger(value))
+              throw new Error('Dashboard aggregate exceeds safe integer range');
+            counts[key] = value;
+            totals[key] += value;
+          }
+          return { date, ...counts };
+        },
+      );
+      const count = (status: AccountStatus) =>
+        members.find((group) => group._id === status)?.count ?? 0;
+      const active = count(AccountStatus.ACTIVE),
+        suspended = count(AccountStatus.SUSPENDED),
+        pendingEmail = count(AccountStatus.PENDING_EMAIL);
+      return {
+        generatedAt: new Date().toISOString(),
+        range: publicRange,
+        snapshot: {
+          members: {
+            total: active + suspended + pendingEmail,
+            active,
+            suspended,
+            pendingEmail,
           },
-          _count: { _all: true },
-        });
-        const pendingReports = await tx.postReport.count({
-          where: { status: 'PENDING' },
-        });
-        const recipesCreated = await tx.recipe.count({
-          where: { createdAt: { gte: start, lt: endExclusive } },
-        });
-        // Only aggregate values cross the DB boundary. Four event scans are
-        // combined into one daily grouping; there is no per-day query or PII.
-        // Prisma DateTime columns are UTC timestamp WITHOUT time zone.
-        const rows = await tx.$queryRaw<DatabaseDay[]>(Prisma.sql`
-        SELECT to_char(occurred_at AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Bangkok', 'YYYY-MM-DD') AS date,
-          COUNT(*) FILTER (WHERE event = 'MEMBER') AS "newMembers",
-          COUNT(*) FILTER (WHERE event = 'POST') AS "publishedPosts",
-          COUNT(*) FILTER (WHERE event = 'BLOG') AS "publishedBlogs",
-          COUNT(*) FILTER (WHERE event = 'REPORT') AS "reportsCreated",
-          COUNT(*) FILTER (WHERE event = 'RESOLVED') AS "resolvedReports",
-          COUNT(*) FILTER (WHERE event = 'DISMISSED') AS "dismissedReports"
-        FROM (
-          SELECT "createdAt" AS occurred_at, 'MEMBER'::text AS event FROM users
-          WHERE role = 'USER' AND status <> 'DELETED'
-            AND "createdAt" >= (${start}::timestamptz AT TIME ZONE 'UTC')
-            AND "createdAt" < (${endExclusive}::timestamptz AT TIME ZONE 'UTC')
-          UNION ALL
-          SELECT published_at, type::text FROM posts
-          WHERE status = 'PUBLISHED'
-            AND published_at >= (${start}::timestamptz AT TIME ZONE 'UTC')
-            AND published_at < (${endExclusive}::timestamptz AT TIME ZONE 'UTC')
-          UNION ALL
-          SELECT created_at, 'REPORT'::text FROM post_reports
-          WHERE created_at >= (${start}::timestamptz AT TIME ZONE 'UTC')
-            AND created_at < (${endExclusive}::timestamptz AT TIME ZONE 'UTC')
-          UNION ALL
-          SELECT reviewed_at, status::text FROM post_reports
-          WHERE status IN ('RESOLVED', 'DISMISSED')
-            AND reviewed_at >= (${start}::timestamptz AT TIME ZONE 'UTC')
-            AND reviewed_at < (${endExclusive}::timestamptz AT TIME ZONE 'UTC')
-        ) activity
-        GROUP BY date ORDER BY date
-      `);
-        const byDate = new Map(rows.map((row) => [row.date, row]));
-        const totals = emptyCounts();
-        const daily = Array.from(
-          { length: range.dayCount },
-          (_, index): DashboardDayDto => {
-            const date = new Date(
-              Date.parse(`${range.from}T00:00:00Z`) + index * DAY_MS,
-            )
-              .toISOString()
-              .slice(0, 10);
-            const row = byDate.get(date);
-            const counts = emptyCounts();
-            for (const key of Object.keys(counts) as (keyof DayCounts)[]) {
-              const value = Number(row?.[key] ?? 0);
-              if (!Number.isSafeInteger(value))
-                throw new Error(
-                  'Dashboard aggregate exceeds safe integer range',
-                );
-              counts[key] = value;
-              totals[key] += value;
-            }
-            return { date, ...counts };
+          pendingReports,
+        },
+        period: {
+          newMembers: totals.newMembers,
+          publishedContent: {
+            posts: totals.publishedPosts,
+            blogs: totals.publishedBlogs,
+            total: totals.publishedPosts + totals.publishedBlogs,
           },
-        );
-        const count = (status: AccountStatus) =>
-          members.find((group) => group.status === status)?._count._all ?? 0;
-        const active = count(AccountStatus.ACTIVE),
-          suspended = count(AccountStatus.SUSPENDED),
-          pendingEmail = count(AccountStatus.PENDING_EMAIL);
-        return {
-          generatedAt: new Date().toISOString(),
-          range: publicRange,
-          snapshot: {
-            members: {
-              total: active + suspended + pendingEmail,
-              active,
-              suspended,
-              pendingEmail,
-            },
-            pendingReports,
+          recipesCreated,
+          reportsCreated: totals.reportsCreated,
+          reportDecisions: {
+            resolved: totals.resolvedReports,
+            dismissed: totals.dismissedReports,
+            total: totals.resolvedReports + totals.dismissedReports,
           },
-          period: {
-            newMembers: totals.newMembers,
-            publishedContent: {
-              posts: totals.publishedPosts,
-              blogs: totals.publishedBlogs,
-              total: totals.publishedPosts + totals.publishedBlogs,
-            },
-            recipesCreated,
-            reportsCreated: totals.reportsCreated,
-            reportDecisions: {
-              resolved: totals.resolvedReports,
-              dismissed: totals.dismissedReports,
-              total: totals.resolvedReports + totals.dismissedReports,
-            },
-          },
-          daily,
-          unavailableMetrics: [...UNAVAILABLE_DASHBOARD_METRICS],
-        };
-      },
-      { isolationLevel: Prisma.TransactionIsolationLevel.RepeatableRead },
-    );
+        },
+        daily,
+        unavailableMetrics: [...UNAVAILABLE_DASHBOARD_METRICS],
+      };
+    }
   }
 }

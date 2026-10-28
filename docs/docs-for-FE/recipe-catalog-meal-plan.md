@@ -155,7 +155,7 @@ cùng ngày thì request được xử lý sau thay toàn bộ ngày, không g�
 khác ngày thì giữ cả hai thay đổi. FE vẫn cần gửi đầy đủ bốn phần của ngày.
 Chưa có `expectedVersion`: đây không phải cơ chế phát hiện bản nháp cũ giữa hai tab.
 
-`recipeIds` có ở cả response GET, preview và lỗi lưu `MEAL_PLAN_INVALID`:
+`recipeIds` có ở cả response GET, preview và trong `details.problems` của lỗi lưu `MEAL_PLAN_INVALID`:
 
 - `AVOIDED_INGREDIENT`: ID công thức chứa nguyên liệu tránh.
 - `DAY_CONFLICT`: ID các công thức tham gia xung đột, tương ứng với tên trong `recipes`.
@@ -164,8 +164,8 @@ Chưa có `expectedVersion`: đây không phải cơ chế phát hiện bản nh
 
 Nếu database phát hiện xung đột ghi/tham chiếu, API trả `409 MEAL_PLAN_CONFLICT`;
 FE tải lại thực đơn và preview trước khi thử lưu lại. Không dựa vào trường
-`problems` cho mã lỗi này. Các lỗi validation nghiệp vụ vẫn trả
-`409 MEAL_PLAN_INVALID` với `problems`.
+`details.problems` cho mã lỗi này. Các lỗi validation nghiệp vụ vẫn trả
+`409 MEAL_PLAN_INVALID` với `details.problems`.
 
 ## Lỗi cần xử lý
 
@@ -174,7 +174,7 @@ FE tải lại thực đơn và preview trước khi thử lưu lại. Không d�
 | `400` | Query/body/UUID sai hoặc tham số không hỗ trợ             |
 | `401` | Token sai, thiếu token trên API thực đơn hoặc lọc cá nhân |
 | `404` | Công thức không tồn tại                                   |
-| `409` | `MEAL_PLAN_INVALID` kèm `problems`; `MEAL_PLAN_CONFLICT` cần tải lại và preview |
+| `409` | `MEAL_PLAN_INVALID` kèm `details.problems`; `MEAL_PLAN_CONFLICT` cần tải lại và preview |
 
 Xác nhận hành vi FE hỏi ngày 19/10/2026:
 
@@ -197,7 +197,7 @@ Test PostgreSQL thực cho tìm kiếm, tổng thời gian, phân trang, xung đ
 các request HTTP lưu thực đơn đồng thời:
 
 ```powershell
-$env:TEST_DATABASE_URL = "postgresql://postgres:password@localhost:5432/vedora_test"
+$env:TEST_DATABASE_URL = "mongodb://vedora:vedora_local_password@localhost:27017/?authSource=admin&directConnection=true"
 npm run test:db
 ```
 

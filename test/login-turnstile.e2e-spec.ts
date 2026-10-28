@@ -1,20 +1,15 @@
-import {
-  ForbiddenException,
-  INestApplication,
-  UnauthorizedException,
-} from '@nestjs/common';
-import { Test } from '@nestjs/testing';
+import { INestApplication } from '@nestjs/common';
+import { AccessDeniedException } from '../src/common/exceptions/access-denied.exception.js';
+import { UnauthenticatedException } from '../src/common/exceptions/unauthenticated.exception.js';
 import request from 'supertest';
-import type { App } from 'supertest/types';
+import type { App } from 'supertest/types.js';
 import { mockDeep, mockReset } from 'vitest-mock-extended';
-import { AppModule } from '../src/app.module';
-import { configureApp } from '../src/app.setup';
-import { AuthService } from '../src/auth/auth.service';
-import { PrismaService } from '../src/prisma/prisma.service';
-import { TurnstileService } from '../src/nutrition-chat/guest/turnstile.service';
+import { AuthService } from '../src/auth/auth.service.js';
+import { TurnstileService } from '../src/nutrition-chat/guest/turnstile.service.js';
+import { AccountStatus, UserRole } from '../src/mongo/models.js';
+import { createE2eApp, type E2eApp } from './e2e-app.js';
 
 describe('Password login requires Turnstile (HTTP)', () => {
-  const prisma = mockDeep<PrismaService>();
   const auth = mockDeep<AuthService>();
   const turnstile = mockDeep<TurnstileService>();
   const credentials = {
@@ -22,24 +17,21 @@ describe('Password login requires Turnstile (HTTP)', () => {
     password: 'StrongPassword123!',
   };
   const body = { ...credentials, turnstileToken: 'fresh-turnstile-token' };
+  let e2e: E2eApp;
   let app: INestApplication<App>;
 
   beforeAll(async () => {
-    const moduleRef = await Test.createTestingModule({ imports: [AppModule] })
-      .overrideProvider(PrismaService)
-      .useValue(prisma)
-      .overrideProvider(AuthService)
-      .useValue(auth)
-      .overrideProvider(TurnstileService)
-      .useValue(turnstile)
-      .compile();
-    app = moduleRef.createNestApplication({ rawBody: true });
-    configureApp(app);
-    await app.init();
+    e2e = await createE2eApp('turnstile_e2e', (builder) =>
+      builder
+        .overrideProvider(AuthService)
+        .useValue(auth)
+        .overrideProvider(TurnstileService)
+        .useValue(turnstile),
+    );
+    app = e2e.app;
   });
 
   beforeEach(() => {
-    mockReset(prisma);
     mockReset(auth);
     mockReset(turnstile);
     turnstile.verify.mockResolvedValue(true);
@@ -54,15 +46,15 @@ describe('Password login requires Turnstile (HTTP)', () => {
         username: credentials.username,
         fullName: 'Vedora User',
         email: 'user@example.test',
-        role: 'USER',
-        status: 'ACTIVE',
+        role: UserRole.USER,
+        status: AccountStatus.ACTIVE,
         accountVersion: 0,
         createdAt: new Date(),
         updatedAt: new Date(),
       },
     });
   });
-  afterAll(async () => app?.close());
+  afterAll(async () => e2e?.close());
 
   it.each([undefined, null, '', '   ', 123, 'x'.repeat(2049)])(
     'rejects a missing/malformed token before verification or login: %j',
@@ -84,7 +76,6 @@ describe('Password login requires Turnstile (HTTP)', () => {
       .expect(403);
     expect(response.body).toMatchObject({ code: 'CAPTCHA_FAILED' });
     expect(auth.login).not.toHaveBeenCalled();
-    expect(prisma.user.findUnique).not.toHaveBeenCalled();
   });
 
   it('verifies the token before issuing a normal auth response', async () => {
@@ -126,7 +117,10 @@ describe('Password login requires Turnstile (HTTP)', () => {
 
   it('preserves the invalid credentials response after a successful challenge', async () => {
     auth.login.mockRejectedValue(
-      new UnauthorizedException('Invalid username or password'),
+      new UnauthenticatedException(
+        'UNAUTHORIZED',
+        'Invalid username or password',
+      ),
     );
     await request(app.getHttpServer())
       .post('/api/v1/auth/login')
@@ -137,10 +131,11 @@ describe('Password login requires Turnstile (HTTP)', () => {
 
   it('preserves the email verification flow after a successful challenge', async () => {
     auth.login.mockRejectedValue(
-      new ForbiddenException({
-        code: 'EMAIL_NOT_VERIFIED',
-        email: 'user@example.test',
-      }),
+      new AccessDeniedException(
+        'EMAIL_NOT_VERIFIED',
+        'Email address is not verified',
+        { email: 'user@example.test' },
+      ),
     );
     const response = await request(app.getHttpServer())
       .post('/api/v1/auth/login')
@@ -148,7 +143,7 @@ describe('Password login requires Turnstile (HTTP)', () => {
       .expect(403);
     expect(response.body).toMatchObject({
       code: 'EMAIL_NOT_VERIFIED',
-      email: 'user@example.test',
+      details: { email: 'user@example.test' },
     });
   });
 });

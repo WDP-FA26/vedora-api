@@ -1,7 +1,7 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { NotificationType } from '@prisma/client';
-import { CursorPaginatedResponseDto } from '../../common/pagination';
-import { PostAuthorDto } from '../../posts/dto/post-response.dto';
+import { NotificationType } from '../../mongo/models.js';
+import { CursorPaginatedResponseDto } from '../../common/pagination/index.js';
+import { PostAuthorDto } from '../../posts/dto/post-response.dto.js';
 
 export class NotificationDto {
   @ApiProperty({ format: 'uuid' })

@@ -215,7 +215,7 @@ hiện nút "Thử lại" (`regenerate()`).
 ## Migration và kiểm tra
 
 ```bash
-npx prisma migrate deploy   # bảng ai_usage
+npm run start:dev    # Mongoose tự tạo collection ai_usage khi khởi động
 npm test -- src/posts/ai src/ai-usage
 ```
 

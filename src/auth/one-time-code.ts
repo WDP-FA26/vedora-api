@@ -1,5 +1,7 @@
 import { createHash, randomInt, timingSafeEqual } from 'node:crypto';
-import { PrismaService } from '../prisma/prisma.service';
+import type { Model } from 'mongoose';
+import { EmailVerificationGuesses, OneTimeCodePurpose } from '../mongo/models.js';
+import { isUniqueViolation } from '../mongo/errors.js';
 
 // Rules shared by the six-digit codes we email: verification and password
 // reset. Guesses are capped per code and per email per day (15 in 10^6), and
@@ -25,6 +27,12 @@ export type PendingCode = {
   firstSentAt: Date;
   resendCount: number;
 };
+
+/** The unique key of a user's pending code for `purpose`. */
+export const codeKey = (userId: string, purpose: OneTimeCodePurpose) => ({
+  userId,
+  purpose,
+});
 
 export function generateCode(): string {
   return randomInt(0, 1_000_000).toString().padStart(6, '0');
@@ -70,24 +78,26 @@ export function checkResend(
  * conditional write, so parallel guesses can't slip past the cap.
  */
 export async function countGuess(
-  prisma: PrismaService,
+  guesses: Model<EmailVerificationGuesses>,
   email: string,
 ): Promise<boolean> {
   const now = new Date();
-  await prisma.emailVerificationGuesses.createMany({
-    data: [{ email, windowStart: now }],
-    skipDuplicates: true,
-  });
-  await prisma.emailVerificationGuesses.updateMany({
-    where: {
-      email,
-      windowStart: { lte: new Date(now.getTime() - GUESS_WINDOW_MS) },
+  try {
+    await guesses.create({ _id: email, guesses: 0, windowStart: now });
+  } catch (error) {
+    // The row already exists, or a parallel guess just created it.
+    if (!isUniqueViolation(error)) throw error;
+  }
+  await guesses.updateOne(
+    {
+      _id: email,
+      windowStart: { $lte: new Date(now.getTime() - GUESS_WINDOW_MS) },
     },
-    data: { guesses: 0, windowStart: now },
-  });
-  const counted = await prisma.emailVerificationGuesses.updateMany({
-    where: { email, guesses: { lt: MAX_GUESSES_PER_EMAIL } },
-    data: { guesses: { increment: 1 } },
-  });
-  return counted.count === 1;
+    { $set: { guesses: 0, windowStart: now } },
+  );
+  const counted = await guesses.updateOne(
+    { _id: email, guesses: { $lt: MAX_GUESSES_PER_EMAIL } },
+    { $inc: { guesses: 1 } },
+  );
+  return counted.modifiedCount === 1;
 }
