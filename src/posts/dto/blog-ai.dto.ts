@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { AiFeature } from '@prisma/client';
+import { AiFeature } from '../../mongo/models';
 import { Type } from 'class-transformer';
 import {
   ArrayMaxSize,

@@ -18,6 +18,10 @@ export default tseslint.config(
     rules: {
       '@typescript-eslint/no-floating-promises': 'error',
       '@typescript-eslint/no-explicit-any': 'off',
+      '@typescript-eslint/no-unused-vars': [
+        'error',
+        { argsIgnorePattern: '^_', varsIgnorePattern: '^_' },
+      ],
     },
   },
   {
@@ -31,7 +35,9 @@ export default tseslint.config(
       // supertest's `.expect(status)` is an assertion too.
       'vitest/expect-expect': [
         'error',
-        { assertFunctionNames: ['expect', 'request.**.expect'] },
+        {
+          assertFunctionNames: ['expect', 'request.**.expect', '**.expect'],
+        },
       ],
     },
   },

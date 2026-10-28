@@ -2,15 +2,40 @@ import {
   BadRequestException,
   HttpException,
   NotFoundException,
+  type INestApplication,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { AiFeature } from '@prisma/client';
+import { getModelToken } from '@nestjs/mongoose';
+import { Test } from '@nestjs/testing';
+import { AiFeature } from '../../mongo/models';
 import { simulateReadableStream, type UIMessageChunk } from 'ai';
 import { convertReadableStreamToArray, MockLanguageModelV4 } from 'ai/test';
+import type { Model } from 'mongoose';
 import { type DeepMockProxy, mockDeep } from 'vitest-mock-extended';
 import { AiUsageService } from '../../ai-usage/ai-usage.service';
 import { KnowledgeSearchService } from '../../knowledge/retrieval/knowledge-search.service';
-import { PrismaService } from '../../prisma/prisma.service';
+import {
+  createIngredient,
+  createPost,
+  createRecipe,
+} from '../../../test/fixtures';
+import {
+  createTestMongoUrl,
+  dropTestDatabase,
+  prepareTestDatabase,
+} from '../../../test/mongo-test-db';
+import {
+  Blog,
+  BlogRecipe,
+  Ingredient,
+  Post,
+  PostStatus,
+  PostType,
+  Recipe,
+  RecipeIngredient,
+} from '../../mongo/models';
+import { MongoModule } from '../../mongo/mongo.module';
+import { MongoService } from '../../mongo/mongo.service';
 import type { BlogAssistantChatDto } from '../dto/blog-ai.dto';
 import { BlogAssistantService } from './blog-assistant.service';
 import { BlogImageGeneratorService } from './blog-image-generator.service';
@@ -103,7 +128,16 @@ const replyText = (chunks: UIMessageChunk[]) =>
     .join('');
 
 describe('BlogAssistantService', () => {
-  let prisma: DeepMockProxy<PrismaService>;
+  let app: INestApplication;
+  let db: MongoService;
+  let models: {
+    posts: Model<Post>;
+    blogs: Model<Blog>;
+    blogRecipes: Model<BlogRecipe>;
+    recipes: Model<Recipe>;
+    recipeIngredients: Model<RecipeIngredient>;
+    ingredients: Model<Ingredient>;
+  };
   let aiUsage: DeepMockProxy<AiUsageService>;
   let service: BlogAssistantService;
 
@@ -116,21 +150,47 @@ describe('BlogAssistantService', () => {
       ),
     );
 
+  beforeAll(async () => {
+    const moduleRef = await Test.createTestingModule({
+      imports: [MongoModule.forTest(createTestMongoUrl('blogassistant'))],
+    }).compile();
+    app = moduleRef.createNestApplication();
+    await app.init();
+    await prepareTestDatabase(app);
+    db = app.get(MongoService);
+    const modelOf = <T>(name: string) => app.get<Model<T>>(getModelToken(name));
+    models = {
+      posts: modelOf(Post.name),
+      blogs: modelOf(Blog.name),
+      blogRecipes: modelOf(BlogRecipe.name),
+      recipes: modelOf(Recipe.name),
+      recipeIngredients: modelOf(RecipeIngredient.name),
+      ingredients: modelOf(Ingredient.name),
+    };
+  });
+  afterAll(async () => {
+    await dropTestDatabase(app);
+    await app.close();
+  });
+
   beforeEach(() => {
     steps = [];
     verdict = 'allow';
     model.doStreamCalls.length = 0;
     moderator.doGenerateCalls.length = 0;
-    prisma = mockDeep<PrismaService>();
     aiUsage = mockDeep<AiUsageService>();
     aiUsage.consume.mockResolvedValue(true);
     aiUsage.refund.mockResolvedValue();
     service = new BlogAssistantService(
       new ConfigService({ OPENROUTER_API_KEY: 'key' }),
-      prisma,
       mockDeep<KnowledgeSearchService>(),
       mockDeep<BlogImageGeneratorService>(),
       aiUsage,
+      models.posts,
+      models.blogRecipes,
+      models.recipes,
+      models.recipeIngredients,
+      models.ingredients,
     );
   });
 
@@ -244,43 +304,42 @@ describe('BlogAssistantService', () => {
   });
 
   it("grounds the agent in the blog's recipes", async () => {
-    prisma.post.findFirst.mockResolvedValue({
-      blog: {
-        recipes: [
-          {
-            recipe: {
-              title: 'Phở nấm',
-              servings: 2,
-              prepMinutes: 15,
-              cookMinutes: null,
-              ingredients: [
-                {
-                  quantity: { toString: () => '200' },
-                  unit: 'g',
-                  ingredient: { name: 'nấm đùi gà' },
-                },
-              ],
-            },
-          },
-        ],
-      },
-    } as never);
-
-    await send({ blogId: BLOG_ID });
-
-    expect(prisma.post.findFirst).toHaveBeenCalledWith(
-      expect.objectContaining({
-        where: { id: BLOG_ID, authorId: USER_ID, type: 'BLOG' },
-      }),
+    const ingredient = await createIngredient(db, { name: 'nấm đùi gà' });
+    const recipe = await createRecipe(
+      db,
+      { title: 'Phở nấm', servings: 2, prepMinutes: 15 },
+      [ingredient.id],
     );
+    await models.recipeIngredients.updateMany(
+      { recipeId: recipe.id },
+      { $set: { quantity: 200, unit: 'g' } },
+    );
+    const blog = await createPost(db, {
+      authorId: USER_ID,
+      type: PostType.BLOG,
+      status: PostStatus.DRAFT,
+      publishedAt: null,
+    });
+    await models.blogs.create({
+      _id: blog.id,
+      title: 'Phở',
+      content: 'Nội dung',
+      excerpt: 'Nội dung',
+    });
+    await models.blogRecipes.create({
+      postId: blog.id,
+      recipeId: recipe.id,
+      position: 0,
+    });
+
+    await send({ blogId: blog.id });
+
     expect(model.doStreamCalls[0].prompt[0].content).toContain(
       '- Phở nấm (2 người ăn, sơ chế 15 phút): 200 g nấm đùi gà',
     );
   });
 
   it("refuses someone else's blog before counting a use", async () => {
-    prisma.post.findFirst.mockResolvedValue(null);
-
     await expect(send({ blogId: BLOG_ID })).rejects.toBeInstanceOf(
       NotFoundException,
     );

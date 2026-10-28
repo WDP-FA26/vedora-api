@@ -1,7 +1,25 @@
 import { ConflictException } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
-import { type DeepMockProxy, mockDeep } from 'vitest-mock-extended';
-import { PrismaService } from '../prisma/prisma.service';
+import type { INestApplication } from '@nestjs/common';
+import { Test } from '@nestjs/testing';
+import { randomUUID } from 'node:crypto';
+import {
+  createIngredient,
+  createRecipe,
+  createUser,
+} from '../../test/fixtures';
+import {
+  createTestMongoUrl,
+  dropTestDatabase,
+  prepareTestDatabase,
+} from '../../test/mongo-test-db';
+import { MongoModule } from '../mongo/mongo.module';
+import {
+  type IncompatibilityRule,
+  type MealPlanEntry,
+  MealSection,
+  Weekday,
+} from '../mongo/models';
+import { MongoService } from '../mongo/mongo.service';
 import { DietaryService } from '../recipes/dietary.service';
 import { IncompatibilityRulesService } from '../recipes/incompatibility-rules.service';
 import { MealPlanService } from './meal-plan.service';
@@ -10,99 +28,128 @@ const USER_ID = '4a1e32e4-e18e-4dd7-8b4a-246ef2113ff2';
 const TOFU_ID = 'a1a2d3e4-0000-4000-8000-000000000001';
 const SPINACH_ID = 'a1a2d3e4-0000-4000-8000-000000000002';
 const RICE_ID = 'a1a2d3e4-0000-4000-8000-000000000003';
-
-function recipe(id: string, title: string, ingredients: [string, string][]) {
-  return {
-    id,
-    title,
-    servings: 2,
-    prepMinutes: 10,
-    cookMinutes: 5,
-    steps: ['Nấu'],
-    ingredients: ingredients.map(([ingredientId, name]) => ({
-      ingredientId,
-      quantity: null,
-      unit: null,
-      note: null,
-      ingredient: { name },
-    })),
-  };
-}
-
-const tofuDish = recipe(
-  'd1a2d3e4-0000-4000-8000-000000000001',
-  'Đậu hũ sốt cà',
-  [[TOFU_ID, 'Đậu hũ']],
-);
-const spinachSoup = recipe(
-  'd1a2d3e4-0000-4000-8000-000000000002',
-  'Canh rau bina',
-  [[SPINACH_ID, 'Rau bina']],
-);
-const rice = recipe('d1a2d3e4-0000-4000-8000-000000000003', 'Cơm gạo lứt', [
-  [RICE_ID, 'Gạo lứt'],
-]);
-const rule = {
-  id: 'c1a2d3e4-0000-4000-8000-000000000001',
-  aIngredientId: TOFU_ID,
-  aGroupId: null,
-  bIngredientId: SPINACH_ID,
-  bGroupId: null,
-  reason: 'Oxalat cản hấp thu canxi',
-  source: null,
-  createdAt: new Date(),
-  updatedAt: new Date(),
-};
+const TOFU_RECIPE = 'd1a2d3e4-0000-4000-8000-000000000001';
+const SPINACH_RECIPE = 'd1a2d3e4-0000-4000-8000-000000000002';
+const RICE_RECIPE = 'd1a2d3e4-0000-4000-8000-000000000003';
+const RULE_ID = 'c1a2d3e4-0000-4000-8000-000000000001';
+const REASON = 'Oxalat cản hấp thu canxi';
 
 describe('MealPlanService', () => {
-  let prisma: DeepMockProxy<PrismaService>;
+  let app: INestApplication;
+  let mongo: MongoService;
   let service: MealPlanService;
 
-  function saved(...meals: { day: string; section: string; recipe: object }[]) {
-    prisma.mealPlanEntry.findMany.mockResolvedValue(meals as never);
-  }
+  const entries = () => mongo.connection.model<MealPlanEntry>('MealPlanEntry');
+  const users = () => mongo.connection.model('User');
+  const rules = () =>
+    mongo.connection.model<IncompatibilityRule>('IncompatibilityRule');
 
-  beforeEach(() => {
-    prisma = mockDeep<PrismaService>();
-    prisma.$transaction.mockImplementation((run: unknown) =>
-      (run as (tx: PrismaService) => Promise<unknown>)(prisma),
+  const saved = (
+    day: Weekday,
+    section: MealSection,
+    recipeId: string,
+  ): Promise<unknown> =>
+    entries().create({
+      _id: randomUUID(),
+      userId: USER_ID,
+      day,
+      section,
+      recipeId,
+      position: 0,
+    });
+
+  beforeAll(async () => {
+    const moduleRef = await Test.createTestingModule({
+      imports: [MongoModule.forTest(createTestMongoUrl('mealplan'))],
+      providers: [MealPlanService, DietaryService, IncompatibilityRulesService],
+    }).compile();
+    app = moduleRef.createNestApplication();
+    await app.init();
+    await prepareTestDatabase(app);
+    mongo = app.get(MongoService);
+    service = app.get(MealPlanService);
+  });
+  beforeEach(async () => {
+    for (const collection of [
+      'meal_plan_entries',
+      'recipes',
+      'recipe_ingredients',
+      'ingredients',
+      'ingredient_groups',
+      'ingredient_group_members',
+      'incompatibility_rules',
+      'users',
+    ]) {
+      await mongo.db.collection(collection).deleteMany({});
+    }
+    await createUser(mongo, { id: USER_ID, username: 'plan.user' });
+    await createIngredient(mongo, { id: TOFU_ID, name: 'Đậu hũ' });
+    await createIngredient(mongo, { id: SPINACH_ID, name: 'Rau bina' });
+    await createIngredient(mongo, { id: RICE_ID, name: 'Gạo lứt' });
+    await createRecipe(
+      mongo,
+      {
+        id: TOFU_RECIPE,
+        title: 'Đậu hũ sốt cà',
+        prepMinutes: 10,
+        cookMinutes: 5,
+        steps: ['Nấu'],
+      },
+      [TOFU_ID],
     );
-    prisma.$queryRaw.mockResolvedValue([{ id: USER_ID }]);
-    service = new MealPlanService(
-      prisma,
-      new DietaryService(prisma),
-      new IncompatibilityRulesService(prisma),
+    await createRecipe(
+      mongo,
+      {
+        id: SPINACH_RECIPE,
+        title: 'Canh rau bina',
+        prepMinutes: 10,
+        cookMinutes: 5,
+        steps: ['Nấu'],
+      },
+      [SPINACH_ID],
     );
-    saved();
-    prisma.recipe.findMany.mockResolvedValue([
-      tofuDish,
-      spinachSoup,
-      rice,
-    ] as never);
-    prisma.userAvoidedIngredient.findMany.mockResolvedValue([]);
-    prisma.ingredientGroupMember.findMany.mockResolvedValue([]);
-    prisma.incompatibilityRule.findMany.mockResolvedValue([rule]);
+    await createRecipe(
+      mongo,
+      {
+        id: RICE_RECIPE,
+        title: 'Cơm gạo lứt',
+        prepMinutes: 10,
+        cookMinutes: 5,
+        steps: ['Nấu'],
+      },
+      [RICE_ID],
+    );
+    await rules().create({
+      _id: RULE_ID,
+      aIngredientId: TOFU_ID,
+      bIngredientId: SPINACH_ID,
+      reason: REASON,
+    });
+  });
+  afterAll(async () => {
+    await dropTestDatabase(app);
+    await app.close();
   });
 
   it('rejects incompatible ingredients in two sections of one day', async () => {
     const { problems } = await service.preview(USER_ID, [
       {
-        day: 'MON',
+        day: Weekday.MON,
         breakfast: [],
-        lunch: [tofuDish.id],
+        lunch: [TOFU_RECIPE],
         dinner: [],
-        others: [spinachSoup.id],
+        others: [SPINACH_RECIPE],
       },
     ]);
 
     expect(problems).toEqual([
       {
         code: 'DAY_CONFLICT',
-        day: 'MON',
+        day: Weekday.MON,
         recipes: ['Đậu hũ sốt cà', 'Canh rau bina'],
-        recipeIds: [tofuDish.id, spinachSoup.id],
+        recipeIds: [TOFU_RECIPE, SPINACH_RECIPE],
         ingredients: ['Đậu hũ', 'Rau bina'],
-        reason: 'Oxalat cản hấp thu canxi',
+        reason: REASON,
       },
     ]);
   });
@@ -110,16 +157,16 @@ describe('MealPlanService', () => {
   it('allows incompatible ingredients on different days', async () => {
     const { problems, days } = await service.preview(USER_ID, [
       {
-        day: 'MON',
+        day: Weekday.MON,
         breakfast: [],
-        lunch: [tofuDish.id],
+        lunch: [TOFU_RECIPE],
         dinner: [],
         others: [],
       },
       {
-        day: 'TUE',
+        day: Weekday.TUE,
         breakfast: [],
-        lunch: [spinachSoup.id],
+        lunch: [SPINACH_RECIPE],
         dinner: [],
         others: [],
       },
@@ -130,16 +177,17 @@ describe('MealPlanService', () => {
   });
 
   it('rejects a recipe with an ingredient the user avoids', async () => {
-    prisma.userAvoidedIngredient.findMany.mockResolvedValue([
-      { ingredientId: TOFU_ID },
-    ] as never);
+    await users().updateOne(
+      { _id: USER_ID },
+      { $set: { avoidedIngredientIds: [TOFU_ID] } },
+    );
 
     const { problems } = await service.preview(USER_ID, [
       {
-        day: 'WED',
-        breakfast: [rice.id],
+        day: Weekday.WED,
+        breakfast: [RICE_RECIPE],
         lunch: [],
-        dinner: [tofuDish.id],
+        dinner: [TOFU_RECIPE],
         others: [],
       },
     ]);
@@ -147,28 +195,26 @@ describe('MealPlanService', () => {
     expect(problems).toEqual([
       expect.objectContaining({
         code: 'AVOIDED_INGREDIENT',
-        day: 'WED',
+        day: Weekday.WED,
         recipes: ['Đậu hũ sốt cà'],
-        recipeIds: [tofuDish.id],
+        recipeIds: [TOFU_RECIPE],
         ingredients: ['Đậu hũ'],
       }),
     ]);
   });
 
   it('lets a dish be removed from a day that already clashes', async () => {
-    saved(
-      { day: 'MON', section: 'LUNCH', recipe: tofuDish },
-      { day: 'MON', section: 'DINNER', recipe: spinachSoup },
-      { day: 'MON', section: 'OTHER', recipe: rice },
-    );
+    await saved(Weekday.MON, MealSection.LUNCH, TOFU_RECIPE);
+    await saved(Weekday.MON, MealSection.DINNER, SPINACH_RECIPE);
+    await saved(Weekday.MON, MealSection.OTHER, RICE_RECIPE);
 
     const { problems, days } = await service.preview(USER_ID, [
       {
-        day: 'MON',
+        day: Weekday.MON,
         breakfast: [],
-        lunch: [tofuDish.id],
+        lunch: [TOFU_RECIPE],
         dinner: [],
-        others: [spinachSoup.id],
+        others: [SPINACH_RECIPE],
       },
     ]);
 
@@ -179,13 +225,13 @@ describe('MealPlanService', () => {
   });
 
   it('reports a recipe that does not exist', async () => {
-    prisma.recipe.findMany.mockResolvedValue([]);
+    const missing = 'd1a2d3e4-0000-4000-8000-000000000099';
 
     const { problems } = await service.preview(USER_ID, [
       {
-        day: 'MON',
-        breakfast: [rice.id],
-        lunch: [rice.id, tofuDish.id],
+        day: Weekday.MON,
+        breakfast: [RICE_RECIPE],
+        lunch: [RICE_RECIPE, missing],
         dinner: [],
         others: [],
       },
@@ -194,9 +240,9 @@ describe('MealPlanService', () => {
     expect(problems).toEqual([
       expect.objectContaining({
         code: 'UNKNOWN_RECIPE',
-        day: 'MON',
+        day: Weekday.MON,
         recipes: [],
-        recipeIds: [rice.id, tofuDish.id],
+        recipeIds: [missing],
       }),
     ]);
   });
@@ -205,75 +251,56 @@ describe('MealPlanService', () => {
     await expect(
       service.apply(USER_ID, [
         {
-          day: 'MON',
+          day: Weekday.MON,
           breakfast: [],
-          lunch: [tofuDish.id],
+          lunch: [TOFU_RECIPE],
           dinner: [],
-          others: [spinachSoup.id],
+          others: [SPINACH_RECIPE],
         },
       ]),
     ).rejects.toBeInstanceOf(ConflictException);
-    expect(prisma.mealPlanEntry.deleteMany).not.toHaveBeenCalled();
-    expect(prisma.mealPlanEntry.createMany).not.toHaveBeenCalled();
+    expect(await entries().countDocuments()).toBe(0);
   });
 
-  it.each(['P2002', 'P2003', 'P2034'])(
-    'returns a retryable conflict for %s',
-    async (code) => {
-      prisma.mealPlanEntry.createMany.mockRejectedValue(
-        new Prisma.PrismaClientKnownRequestError('conflict', {
-          code,
-          clientVersion: '6.12.0',
-        }),
-      );
-      await expect(
-        service.apply(USER_ID, [
-          {
-            day: 'MON',
-            breakfast: [],
-            lunch: [rice.id],
-            dinner: [],
-            others: [],
-          },
-        ]),
-      ).rejects.toMatchObject({
-        response: { statusCode: 409, code: 'MEAL_PLAN_CONFLICT' },
-      });
-    },
-  );
-
   it('replaces the listed days only, keeping the order', async () => {
+    await saved(Weekday.WED, MealSection.LUNCH, SPINACH_RECIPE);
+
     await service.apply(USER_ID, [
       {
-        day: 'MON',
+        day: Weekday.MON,
         breakfast: [],
-        lunch: [rice.id, tofuDish.id],
+        lunch: [RICE_RECIPE, TOFU_RECIPE],
         dinner: [],
         others: [],
       },
-      { day: 'TUE', breakfast: [], lunch: [], dinner: [], others: [] },
+      {
+        day: Weekday.TUE,
+        breakfast: [],
+        lunch: [],
+        dinner: [],
+        others: [],
+      },
     ]);
 
-    expect(prisma.mealPlanEntry.deleteMany).toHaveBeenCalledWith({
-      where: { userId: USER_ID, day: { in: ['MON', 'TUE'] } },
+    const monday = await entries()
+      .find({ userId: USER_ID, day: Weekday.MON })
+      .sort({ position: 1 });
+    expect(monday.map(({ recipeId }) => recipeId)).toEqual([
+      RICE_RECIPE,
+      TOFU_RECIPE,
+    ]);
+    expect(monday[0]).toMatchObject({
+      section: MealSection.LUNCH,
+      position: 0,
     });
-    expect(prisma.mealPlanEntry.createMany).toHaveBeenCalledWith({
-      data: [
-        {
-          userId: USER_ID,
-          day: 'MON',
-          section: 'LUNCH',
-          recipeId: rice.id,
-          position: 0,
-        },
-        {
-          userId: USER_ID,
-          day: 'MON',
-          section: 'LUNCH',
-          recipeId: tofuDish.id,
-          position: 1,
-        },
-      ],
+    expect(monday[1]).toMatchObject({
+      section: MealSection.LUNCH,
+      position: 1,
     });
+    const wednesday = await entries().findOne({
+      userId: USER_ID,
+      day: Weekday.WED,
+    });
+    expect(wednesday).toMatchObject({ recipeId: SPINACH_RECIPE });
   });
 });

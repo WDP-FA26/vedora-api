@@ -1,5 +1,4 @@
 import { ConfigService } from '@nestjs/config';
-import { z } from 'zod';
 import { KnowledgeModelsService } from './knowledge-models.service';
 
 const fetchMock = vi.fn<typeof fetch>();
@@ -12,7 +11,9 @@ function createService(config: Record<string, unknown> = {}) {
 
 function requestBody(call = 0) {
   const [, init] = fetchMock.mock.calls[call];
-  return z.json().parse(JSON.parse(z.string().parse(init?.body)));
+  const body = init?.body;
+  if (typeof body !== 'string') throw new Error('Expected a JSON string body');
+  return JSON.parse(body) as Record<string, unknown>;
 }
 
 describe('KnowledgeModelsService', () => {

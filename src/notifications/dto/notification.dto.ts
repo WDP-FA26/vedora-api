@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { NotificationType } from '@prisma/client';
+import { NotificationType } from '../../mongo/models';
 import { CursorPaginatedResponseDto } from '../../common/pagination';
 import { PostAuthorDto } from '../../posts/dto/post-response.dto';
 

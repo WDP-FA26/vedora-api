@@ -1,21 +1,36 @@
-import { execFileSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import { join } from 'node:path';
-import { PostType, PrismaClient } from '@prisma/client';
+import type { INestApplication } from '@nestjs/common';
+import { Test } from '@nestjs/testing';
+import { mockDeep } from 'vitest-mock-extended';
 import { MediaService } from '../src/media/media.service';
 import { CloudinaryService } from '../src/cloudinary/cloudinary.service';
+import { PostStatus, PostType } from '../src/mongo/models';
+import { MongoModule } from '../src/mongo/mongo.module';
+import { MongoService } from '../src/mongo/mongo.service';
+import { deleteWithReferences } from '../src/mongo/relations';
 import { PostFeedService } from '../src/post-search/post-feed.service';
 import { PostSearchIndexService } from '../src/post-search/post-search-index.service';
 import { PostSearchService } from '../src/post-search/post-search.service';
-import { PrismaService } from '../src/prisma/prisma.service';
 import { BlogsService } from '../src/posts/blogs.service';
 import { PostInteractionsService } from '../src/posts/post-interactions.service';
 import { PostsService } from '../src/posts/posts.service';
-import type { StorageService } from '../src/storage/storage.service';
+import { NotificationsService } from '../src/notifications/notifications.service';
+import { StorageService } from '../src/storage/storage.service';
+import {
+  createPost,
+  createRecipe,
+  createUser,
+  deleteWithCascade,
+} from './fixtures';
+import {
+  createTestMongoUrl,
+  dropTestDatabase,
+  prepareTestDatabase,
+} from './mongo-test-db';
 
-describe('Blog lifecycle with PostgreSQL', () => {
-  const schema = `vedora_blog_test_${randomUUID().replaceAll('-', '')}`;
-  let prisma: PrismaClient;
+describe('Blog lifecycle with MongoDB', () => {
+  let app: INestApplication;
+  let db: MongoService;
   let blogs: BlogsService;
   let posts: PostsService;
   let interactions: PostInteractionsService;
@@ -23,75 +38,72 @@ describe('Blog lifecycle with PostgreSQL', () => {
   let otherId: string;
   let recipeIds: string[];
 
+  const count = (collection: string) =>
+    db.db.collection(collection).countDocuments();
+
   beforeAll(async () => {
-    const base = process.env.TEST_DATABASE_URL;
-    if (!base)
-      throw new Error(
-        'Set TEST_DATABASE_URL to a disposable PostgreSQL database',
-      );
-    const url = new URL(base);
-    url.searchParams.set('schema', schema);
-    execFileSync(
-      process.execPath,
-      [
-        join(process.cwd(), 'node_modules/prisma/build/index.js'),
-        'migrate',
-        'deploy',
+    const moduleRef = await Test.createTestingModule({
+      imports: [MongoModule.forTest(createTestMongoUrl('blog'))],
+      providers: [
+        PostsService,
+        BlogsService,
+        PostInteractionsService,
+        { provide: MediaService, useValue: mockDeep<MediaService>() },
+        {
+          provide: CloudinaryService,
+          useValue: { webhooksEnabled: true },
+        },
+        {
+          provide: PostSearchIndexService,
+          useValue: mockDeep<PostSearchIndexService>(),
+        },
+        { provide: PostSearchService, useValue: mockDeep<PostSearchService>() },
+        { provide: PostFeedService, useValue: mockDeep<PostFeedService>() },
+        {
+          provide: StorageService,
+          useValue: { keyFromPublicUrl: () => null },
+        },
+        {
+          provide: NotificationsService,
+          useValue: { notify: () => Promise.resolve() },
+        },
       ],
-      {
-        env: { ...process.env, DATABASE_URL: url.toString() },
-        stdio: 'pipe',
-        timeout: 45_000,
-      },
-    );
-    prisma = new PrismaClient({ datasourceUrl: url.toString() });
-    const db = prisma as PrismaService;
-    // Blog posts have no attached videos; no external media operations occur.
-    posts = new PostsService(
-      db,
-      {} as MediaService,
-      {} as CloudinaryService,
-      {} as PostSearchIndexService,
-      {} as PostSearchService,
-      {} as PostFeedService,
-    );
-    blogs = new BlogsService(db, posts, {
-      keyFromPublicUrl: () => null,
-    } as unknown as StorageService);
-    interactions = new PostInteractionsService(db);
-    const author = await prisma.user.create({
-      data: {
-        username: 'blog.author',
-        fullName: 'Author',
-        email: 'blog.author@example.test',
-      },
+    }).compile();
+    app = moduleRef.createNestApplication();
+    await app.init();
+    await prepareTestDatabase(app);
+    db = app.get(MongoService);
+    posts = app.get(PostsService);
+    blogs = app.get(BlogsService);
+    interactions = app.get(PostInteractionsService);
+    const author = await createUser(db, {
+      username: 'blog.author',
+      fullName: 'Author',
+      email: 'blog.author@example.test',
     });
-    const other = await prisma.user.create({
-      data: {
-        username: 'blog.other',
-        fullName: 'Other',
-        email: 'blog.other@example.test',
-      },
+    const other = await createUser(db, {
+      username: 'blog.other',
+      fullName: 'Other',
+      email: 'blog.other@example.test',
     });
     authorId = author.id;
     otherId = other.id;
     recipeIds = [];
     for (const title of ['Đậu hũ', 'Canh rau']) {
-      const recipe = await prisma.recipe.create({
-        data: { title, servings: 2, steps: ['Nấu'] },
-      });
+      const recipe = await createRecipe(db, { title, steps: ['Nấu'] });
       recipeIds.push(recipe.id);
     }
   });
 
   beforeEach(async () => {
-    await prisma?.post.deleteMany();
+    await db.withTransaction((session) =>
+      deleteWithReferences(db.db, session, 'posts', {}),
+    );
   });
 
   afterAll(async () => {
-    if (!prisma) return;
-    await prisma.$executeRawUnsafe(`DROP SCHEMA IF EXISTS "${schema}" CASCADE`);
-    await prisma.$disconnect();
+    await dropTestDatabase(app);
+    await app.close();
   });
 
   it('keeps a draft private and out of all public feeds until published', async () => {
@@ -173,7 +185,7 @@ describe('Blog lifecycle with PostgreSQL', () => {
     await expect(
       blogs.create(authorId, { title: 'Bad link', recipeIds: [randomUUID()] }),
     ).rejects.toThrow();
-    expect(await prisma.post.count()).toBe(1);
+    expect(await count('posts')).toBe(1);
   });
 
   it('rejects non-owner edits/deletes and wrong post types without modifying them', async () => {
@@ -187,16 +199,14 @@ describe('Blog lifecycle with PostgreSQL', () => {
     await expect(blogs.remove(draft.id, otherId)).rejects.toThrow(
       'Blog not found',
     );
-    const short = await prisma.post.create({
-      data: { authorId, type: 'POST', status: 'PUBLISHED', body: 'Short post' },
-    });
+    const short = await createPost(db, { authorId, body: 'Short post' });
     await expect(
       blogs.update(short.id, authorId, { title: 'Wrong type' }),
     ).rejects.toThrow('Blog not found');
     await expect(blogs.remove(short.id, authorId)).rejects.toThrow(
       'Blog not found',
     );
-    expect(await prisma.post.count()).toBe(2);
+    expect(await count('posts')).toBe(2);
   });
 
   it('supports existing comments, likes, bookmarks and author feed on a published blog', async () => {
@@ -264,9 +274,9 @@ describe('Blog lifecycle with PostgreSQL', () => {
       blogs.update(article.id, authorId, { content: '', status: 'DRAFT' }),
     ]);
     const saved = await blogs.findOne(article.id, authorId);
-    expect(saved.status === 'PUBLISHED' && saved.content.trim() === '').toBe(
-      false,
-    );
+    expect(
+      saved.status === PostStatus.PUBLISHED && saved.content.trim() === '',
+    ).toBe(false);
     expect(results.some((result) => result.status === 'fulfilled')).toBe(true);
     await expect(
       blogs.update(article.id, authorId, { status: 'PUBLISHED' }),
@@ -304,30 +314,32 @@ describe('Blog lifecycle with PostgreSQL', () => {
     await interactions.setLike(article.id, otherId, true);
     await interactions.setBookmark(article.id, otherId, true);
     await blogs.remove(article.id, authorId);
-    expect(await prisma.blog.count()).toBe(0);
-    expect(await prisma.blogRecipe.count()).toBe(0);
-    expect(await prisma.postComment.count()).toBe(0);
-    expect(await prisma.postLike.count()).toBe(0);
-    expect(await prisma.postBookmark.count()).toBe(0);
-    expect(await prisma.recipe.count()).toBe(2);
+    expect(await count('blogs')).toBe(0);
+    expect(await count('blog_recipes')).toBe(0);
+    expect(await count('post_comments')).toBe(0);
+    expect(await count('post_likes')).toBe(0);
+    expect(await count('post_bookmarks')).toBe(0);
+    expect(await count('recipes')).toBe(2);
     await expect(blogs.findOne(article.id, authorId)).rejects.toThrow(
       'Blog not found',
     );
   });
 
   it('removes only the recipe link when a catalog recipe is deleted', async () => {
-    const recipe = await prisma.recipe.create({
-      data: { title: 'Temporary', servings: 1, steps: [] },
+    const recipe = await createRecipe(db, {
+      title: 'Temporary',
+      servings: 1,
+      steps: [],
     });
     const article = await blogs.create(authorId, {
       title: 'Keep blog',
       content: 'Instructions',
       recipeIds: [recipe.id],
     });
-    await prisma.recipe.delete({ where: { id: recipe.id } });
+    await deleteWithCascade(db, 'recipes', recipe.id);
     expect((await blogs.findOne(article.id, authorId)).blog?.recipes).toEqual(
       [],
     );
-    expect(await prisma.blog.count()).toBe(1);
+    expect(await count('blogs')).toBe(1);
   });
 });

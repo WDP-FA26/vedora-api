@@ -8,7 +8,9 @@ import {
   Sse,
   UseGuards,
 } from '@nestjs/common';
+import { InjectModel } from '@nestjs/mongoose';
 import { JwtService } from '@nestjs/jwt';
+import type { Model } from 'mongoose';
 import {
   ApiBearerAuth,
   ApiNotFoundResponse,
@@ -26,7 +28,7 @@ import {
 } from 'rxjs';
 import type { AuthenticatedRequest } from '../auth/auth.types';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
-import { PrismaService } from '../prisma/prisma.service';
+import { AccountStatus, User } from '../mongo/models';
 import { PaymentEventsService } from './payment-events.service';
 import { PaymentsService } from './payments.service';
 
@@ -38,7 +40,7 @@ export class PaymentStreamController {
   constructor(
     private readonly payments: PaymentsService,
     private readonly events: PaymentEventsService,
-    private readonly db: PrismaService,
+    @InjectModel(User.name) private readonly users: Model<User>,
     private readonly jwt: JwtService,
   ) {}
 
@@ -77,11 +79,11 @@ export class PaymentStreamController {
           return { type: 'session.expired', data: {} };
         }
         try {
-          const user = await this.db.user.findUnique({
-            where: { id: request.user.sub },
-            select: { status: true },
-          });
-          if (!user || user.status !== 'ACTIVE')
+          const user = await this.users
+            .findById(request.user.sub)
+            .select('status')
+            .exec();
+          if (!user || user.status !== AccountStatus.ACTIVE)
             return { type: 'session.expired', data: {} };
           return {
             type: 'ping',

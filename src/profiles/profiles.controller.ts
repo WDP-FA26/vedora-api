@@ -23,7 +23,7 @@ import {
   ApiOperation,
   ApiTags,
 } from '@nestjs/swagger';
-import { ProfileImageKind } from '@prisma/client';
+import { ProfileImageKind } from '../mongo/models';
 import type { AuthenticatedRequest } from '../auth/auth.types';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CursorPaginationQueryDto } from '../common/pagination';

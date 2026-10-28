@@ -1,8 +1,9 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { InjectModel } from '@nestjs/mongoose';
 import { Cron, CronExpression } from '@nestjs/schedule';
-import { PostStatus, PostType, Prisma } from '@prisma/client';
-import { PrismaService } from '../prisma/prisma.service';
+import type { Model } from 'mongoose';
+import { MediaAsset, Post, PostStatus, PostType } from '../mongo/models';
 import { QdrantService } from '../qdrant/qdrant.service';
 import { PostEmbeddingsService } from './post-embeddings.service';
 import {
@@ -28,10 +29,10 @@ const CHUNK_LENGTH = 1500;
 export const SEARCHABLE_POST = {
   type: PostType.POST,
   status: PostStatus.PUBLISHED,
-} satisfies Prisma.PostWhereInput;
+} as const;
 
 /**
- * Keeps the Qdrant post collection in step with Postgres. A post is indexed
+ * Keeps the Qdrant post collection in step with MongoDB. A post is indexed
  * once it is published; `searchIndexedAt` records that, so posts published
  * while OpenRouter or Qdrant was down are caught up by the cron.
  */
@@ -44,10 +45,11 @@ export class PostSearchIndexService {
   private drainAgain = false;
 
   constructor(
-    private readonly prisma: PrismaService,
     private readonly qdrant: QdrantService,
     private readonly embeddings: PostEmbeddingsService,
     configService: ConfigService,
+    @InjectModel(Post.name) private readonly posts: Model<Post>,
+    @InjectModel(MediaAsset.name) private readonly media: Model<MediaAsset>,
   ) {
     this.collection = configService.get<string>(
       'QDRANT_POSTS_COLLECTION',
@@ -118,29 +120,29 @@ export class PostSearchIndexService {
 
   private async indexBatch(): Promise<number> {
     await this.ensureCollection();
-    const posts = await this.prisma.post.findMany({
-      where: { ...SEARCHABLE_POST, searchIndexedAt: null },
-      orderBy: [{ publishedAt: 'asc' }, { id: 'asc' }],
-      take: BATCH_SIZE,
-      select: {
-        id: true,
-        authorId: true,
-        body: true,
-        publishedAt: true,
-        updatedAt: true,
-        media: {
-          where: { transcript: { not: null } },
-          orderBy: { position: 'asc' },
-          select: { transcript: true },
-        },
-      },
-    });
-    if (posts.length === 0) return 0;
+    const rows = await this.posts
+      .find({ ...SEARCHABLE_POST, searchIndexedAt: null })
+      .sort({ publishedAt: 1, _id: 1 })
+      .limit(BATCH_SIZE)
+      .exec();
+    if (rows.length === 0) return 0;
+    const media = await this.media
+      .find({
+        postId: { $in: rows.map(({ id }) => id) },
+        transcript: { $ne: null },
+      })
+      .sort({ position: 1 })
+      .select('postId transcript')
+      .exec();
+    const posts = rows.map((post) => ({
+      post,
+      media: media.filter(({ postId }) => postId === post.id),
+    }));
 
     const texts = posts
-      .map((post) => {
-        const text = postText(post);
-        return { ...post, text, chunks: chunkText(text) };
+      .map(({ post, media: attached }) => {
+        const text = postText({ body: post.body, media: attached });
+        return { post, text, chunks: chunkText(text) };
       })
       .filter(({ chunks }) => chunks.length > 0);
     if (texts.length > 0) {
@@ -154,32 +156,36 @@ export class PostSearchIndexService {
       );
       await this.qdrant.upsert(this.collection, {
         wait: true,
-        points: texts.map(({ id, authorId, publishedAt, text }, index) => ({
-          id,
-          vector: {
-            [DENSE_VECTOR]: vectors[index],
-            [BM25_VECTOR]: bm25(text, false),
-            [BM25_FOLDED_VECTOR]: bm25(text, true),
-          },
-          payload: {
-            postId: id,
-            authorId,
-            publishedAt: toEpochSeconds(publishedAt ?? new Date()),
-          } satisfies PostPointPayload,
-        })),
+        points: texts.map(
+          ({ post, text }, index) =>
+            ({
+              id: post.id,
+              vector: {
+                [DENSE_VECTOR]: vectors[index],
+                [BM25_VECTOR]: bm25(text, false),
+                [BM25_FOLDED_VECTOR]: bm25(text, true),
+              },
+              payload: {
+                postId: post.id,
+                authorId: post.authorId,
+                publishedAt: toEpochSeconds(post.publishedAt ?? new Date()),
+              } satisfies PostPointPayload,
+            }) as const,
+        ),
       });
     }
     // Only posts unchanged since they were read: one whose captioning
     // finished meanwhile was marked for indexing again, with its transcript.
     const indexedAt = new Date();
-    await this.prisma.$transaction(
-      posts.map(({ id, updatedAt }) =>
-        this.prisma.post.updateMany({
-          where: { id, updatedAt },
-          data: { searchIndexedAt: indexedAt },
-        }),
-      ),
-    );
+    // A post edited since it was read keeps waiting for the next batch.
+    for (const { post } of posts) {
+      await this.posts
+        .updateOne(
+          { _id: post.id, updatedAt: post.updatedAt },
+          { $set: { searchIndexedAt: indexedAt } },
+        )
+        .exec();
+    }
     return posts.length;
   }
 
@@ -216,12 +222,14 @@ export class PostSearchIndexService {
       wait: true,
     });
     // A new (or recreated) collection is empty: index every post again.
-    const { count } = await this.prisma.post.updateMany({
-      where: { searchIndexedAt: { not: null } },
-      data: { searchIndexedAt: null },
-    });
+    const { modifiedCount } = await this.posts
+      .updateMany(
+        { searchIndexedAt: { $ne: null } },
+        { $set: { searchIndexedAt: null } },
+      )
+      .exec();
     this.logger.log(
-      `Created Qdrant collection ${this.collection}; reindexing ${count} posts`,
+      `Created Qdrant collection ${this.collection}; reindexing ${modifiedCount} posts`,
     );
   }
 }

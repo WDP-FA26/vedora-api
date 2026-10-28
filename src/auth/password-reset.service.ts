@@ -1,12 +1,21 @@
 import { Injectable } from '@nestjs/common';
-import { AccountStatus } from '@prisma/client';
+import { InjectModel } from '@nestjs/mongoose';
+import type { Model } from 'mongoose';
+import {
+  AccountStatus,
+  EmailVerificationGuesses,
+  OneTimeCode,
+  OneTimeCodePurpose,
+  User,
+} from '../mongo/models';
 import { MailService } from '../mail/mail.service';
-import { PrismaService } from '../prisma/prisma.service';
+import { MongoService } from '../mongo/mongo.service';
 import {
   CODE_TTL_MS,
   MAX_ATTEMPTS,
   SendResult,
   checkResend,
+  codeKey,
   countGuess,
   generateCode,
   hashCode,
@@ -21,10 +30,16 @@ export type ResetResult = 'reset' | 'invalid' | 'locked';
  * codes (`one-time-code.ts`). Their guesses count against the same per-email
  * budget, so switching between the two flows doesn't buy more guesses.
  */
+const PURPOSE = OneTimeCodePurpose.PASSWORD_RESET;
+
 @Injectable()
 export class PasswordResetService {
   constructor(
-    private readonly prisma: PrismaService,
+    @InjectModel(OneTimeCode.name) private readonly codes: Model<OneTimeCode>,
+    @InjectModel(EmailVerificationGuesses.name)
+    private readonly guesses: Model<EmailVerificationGuesses>,
+    @InjectModel(User.name) private readonly users: Model<User>,
+    private readonly mongo: MongoService,
     private readonly mailService: MailService,
   ) {}
 
@@ -35,9 +50,7 @@ export class PasswordResetService {
    */
   async send(user: { id: string; email: string }): Promise<SendResult> {
     const now = new Date();
-    const pending = await this.prisma.passwordResetCode.findUnique({
-      where: { userId: user.id },
-    });
+    const pending = await this.codes.findOne(codeKey(user.id, PURPOSE)).exec();
     const resend = checkResend(pending, now);
     if (!resend.allowed) return resend.reason;
 
@@ -50,23 +63,32 @@ export class PasswordResetService {
       firstSentAt: resend.firstSentAt,
       resendCount: resend.resendCount,
     };
-    await this.prisma.passwordResetCode.upsert({
-      where: { userId: user.id },
-      create: { userId: user.id, ...data },
-      update: data,
-    });
+    await this.codes.findOneAndUpdate(
+      codeKey(user.id, PURPOSE),
+      {
+        $set: data,
+        $setOnInsert: { userId: user.id, purpose: PURPOSE },
+      },
+      { upsert: true, returnDocument: 'after' },
+    );
 
     try {
       await this.mailService.sendPasswordResetCode(user.email, code);
     } catch (error) {
-      await (pending
-        ? this.prisma.passwordResetCode.update({
-            where: { userId: user.id },
-            data: pending,
-          })
-        : this.prisma.passwordResetCode.deleteMany({
-            where: { userId: user.id },
-          }));
+      if (pending) {
+        await this.codes.updateOne(codeKey(user.id, PURPOSE), {
+          $set: {
+            codeHash: pending.codeHash,
+            attempts: pending.attempts,
+            expiresAt: pending.expiresAt,
+            sentAt: pending.sentAt,
+            firstSentAt: pending.firstSentAt,
+            resendCount: pending.resendCount,
+          },
+        });
+      } else {
+        await this.codes.deleteOne(codeKey(user.id, PURPOSE));
+      }
       throw error;
     }
     return 'sent';
@@ -82,48 +104,52 @@ export class PasswordResetService {
     code: string,
     passwordHash: string,
   ): Promise<ResetResult> {
-    if (!(await countGuess(this.prisma, user.email))) return 'locked';
+    if (!(await countGuess(this.guesses, user.email))) return 'locked';
 
     // Count the attempt before comparing, so parallel guesses can't exceed the cap.
-    const counted = await this.prisma.passwordResetCode.updateMany({
-      where: {
-        userId: user.id,
-        attempts: { lt: MAX_ATTEMPTS },
-        expiresAt: { gt: new Date() },
+    const counted = await this.codes.updateOne(
+      {
+        ...codeKey(user.id, PURPOSE),
+        attempts: { $lt: MAX_ATTEMPTS },
+        expiresAt: { $gt: new Date() },
       },
-      data: { attempts: { increment: 1 } },
-    });
-    if (counted.count !== 1) return 'invalid';
+      { $inc: { attempts: 1 } },
+    );
+    if (counted.modifiedCount !== 1) return 'invalid';
 
-    const pending = await this.prisma.passwordResetCode.findUnique({
-      where: { userId: user.id },
-    });
+    const pending = await this.codes.findOne(codeKey(user.id, PURPOSE)).exec();
     const codeHash = pending?.codeHash ?? '';
     if (!hashesMatch(codeHash, this.hash(user.id, code))) return 'invalid';
 
     // Deleting the code by its hash makes it single use: of two parallel
     // resets with the right code, only one gets to change the password.
-    const applied = await this.prisma.$transaction(async (tx) => {
-      const used = await tx.passwordResetCode.deleteMany({
-        where: { userId: user.id, codeHash },
-      });
-      if (used.count !== 1) return false;
-      await tx.user.update({
-        where: { id: user.id },
-        data: {
-          passwordHash,
-          emailVerifiedAt: user.emailVerifiedAt ?? new Date(),
+    const applied = await this.mongo.withTransaction(async (session) => {
+      const used = await this.codes.deleteOne(
+        { userId: user.id, purpose: PURPOSE, codeHash },
+        { session },
+      );
+      if (used.deletedCount !== 1) return false;
+      const now = new Date();
+      const updated = await this.users.updateOne(
+        { _id: user.id },
+        {
+          $set: {
+            passwordHash,
+            emailVerifiedAt: user.emailVerifiedAt ?? now,
+          },
         },
-      });
+        { session },
+      );
+      if (updated.matchedCount !== 1) return false;
       // Email ownership can activate a pending signup, never a suspension.
-      await tx.user.updateMany({
-        where: { id: user.id, status: AccountStatus.PENDING_EMAIL },
-        data: { status: AccountStatus.ACTIVE },
-      });
-      await tx.emailVerificationCode.deleteMany({ where: { userId: user.id } });
-      await tx.emailVerificationGuesses.deleteMany({
-        where: { email: user.email },
-      });
+      await this.users.updateOne(
+        { _id: user.id, status: AccountStatus.PENDING_EMAIL },
+        { $set: { status: AccountStatus.ACTIVE } },
+        { session },
+      );
+      // The pending verification code is moot now.
+      await this.codes.deleteMany({ userId: user.id }, { session });
+      await this.guesses.deleteOne({ _id: user.email }, { session });
       return true;
     });
     return applied ? 'reset' : 'invalid';

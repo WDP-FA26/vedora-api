@@ -1,4 +1,4 @@
-import { z } from 'zod';
+import { IsIn, IsNumber, IsString } from 'class-validator';
 
 export const DENSE_VECTOR = 'dense';
 export const BM25_VECTOR = 'bm25';
@@ -16,12 +16,23 @@ export function bm25(text: string, folded: boolean) {
   };
 }
 
-export const knowledgePointPayload = z.object({
-  documentId: z.string(),
-  title: z.string(),
-  page: z.number(),
-  kind: z.enum(['text', 'image']),
-  text: z.string(),
-});
+/** The payload stored with every Qdrant point of the knowledge base. */
+export class KnowledgePointPayload {
+  /** Qdrant treats a payload as an open map. */
+  [key: string]: unknown;
 
-export type KnowledgePointPayload = z.infer<typeof knowledgePointPayload>;
+  @IsString()
+  documentId!: string;
+
+  @IsString()
+  title!: string;
+
+  @IsNumber()
+  page!: number;
+
+  @IsIn(['text', 'image'])
+  kind!: 'text' | 'image';
+
+  @IsString()
+  text!: string;
+}

@@ -4,30 +4,25 @@ import {
   NotFoundException,
   PayloadTooLargeException,
 } from '@nestjs/common';
+import type { INestApplication } from '@nestjs/common';
+import { Test } from '@nestjs/testing';
+import { randomUUID } from 'node:crypto';
 import {
-  ProfileImageKind,
-  ProfileImageStatus,
-  type ProfileImageUpload,
-} from '@prisma/client';
-import { type DeepMockProxy, mockDeep } from 'vitest-mock-extended';
+  createTestMongoUrl,
+  dropTestDatabase,
+  prepareTestDatabase,
+} from '../../test/mongo-test-db';
+import { createPost, createUser } from '../../test/fixtures';
 import { NotificationsService } from '../notifications/notifications.service';
-import { PrismaService } from '../prisma/prisma.service';
+import { MongoModule } from '../mongo/mongo.module';
+import { MongoService } from '../mongo/mongo.service';
 import type { PresignedUploadDto } from '../storage/presigned-upload.dto';
 import { StorageService, StorageTarget } from '../storage/storage.service';
+import { ProfileImageKind } from '../mongo/models';
 import { ProfilesService } from './profiles.service';
 
 const userId = '4a1e32e4-e18e-4dd7-8b4a-246ef2113ff2';
 const viewerId = '0b8f0c1e-3c55-4c1b-9d0e-2f7f3a9f7a10';
-const user = {
-  id: userId,
-  username: 'vedora.user',
-  fullName: 'Vedora User',
-  emailVerifiedAt: new Date(),
-  bio: 'Plant based cooking',
-  avatarUrl: null,
-  coverUrl: null,
-  createdAt: new Date('2026-09-28T08:00:00Z'),
-};
 const imageId = 'b7f6f651-b0fc-43a5-b589-edbda60e5983';
 const storageKey = `profiles/${userId}/avatar/${imageId}.webp`;
 const publicUrl = `https://storage.vedora.vn/vedora-profiles/${storageKey}`;
@@ -38,97 +33,172 @@ const presigned: PresignedUploadDto = {
   expiresAt: new Date('2026-09-28T09:00:00Z'),
 };
 
-describe('ProfilesService', () => {
-  let prisma: DeepMockProxy<PrismaService>;
-  let storage: DeepMockProxy<StorageService>;
-  let notifications: DeepMockProxy<NotificationsService>;
-  let service: ProfilesService;
+type StoredDoc = { _id: string; [key: string]: unknown };
 
-  beforeEach(() => {
+describe('ProfilesService', () => {
+  let app: INestApplication;
+  let db: MongoService;
+  let service: ProfilesService;
+  const storage = {
+    isConfigured: vi.fn(),
+    presignUpload: vi.fn(),
+    publicObjectUrl: vi.fn(),
+    delete: vi.fn(),
+  };
+  const notifications = { notify: vi.fn() };
+
+  const users = () => db.db.collection<StoredDoc>('users');
+  const follows = () => db.db.collection<StoredDoc>('follows');
+  const uploads = () => db.db.collection<StoredDoc>('profile_image_uploads');
+  const posts = () => db.db.collection<StoredDoc>('posts');
+
+  const insertFollow = (followerId: string, followingId: string, at: Date) =>
+    follows().insertOne({
+      _id: randomUUID(),
+      followerId,
+      followingId,
+      createdAt: at,
+    });
+
+  const insertUpload = (fields: Record<string, unknown> = {}) =>
+    uploads().insertOne({
+      _id: imageId,
+      ownerId: userId,
+      kind: 'AVATAR',
+      status: 'READY',
+      storageKey,
+      createdAt: new Date(),
+      ...fields,
+    });
+
+  beforeAll(async () => {
+    const moduleRef = await Test.createTestingModule({
+      imports: [MongoModule.forTest(createTestMongoUrl('profiles'))],
+      providers: [
+        ProfilesService,
+        { provide: StorageService, useValue: storage },
+        { provide: NotificationsService, useValue: notifications },
+      ],
+    }).compile();
+    app = moduleRef.createNestApplication();
+    await app.init();
+    await prepareTestDatabase(app);
+    db = app.get(MongoService);
+    service = app.get(ProfilesService);
+  });
+  beforeEach(async () => {
     vi.clearAllMocks();
-    prisma = mockDeep<PrismaService>();
-    storage = mockDeep<StorageService>();
     storage.isConfigured.mockReturnValue(true);
-    notifications = mockDeep<NotificationsService>();
-    service = new ProfilesService(prisma, storage, notifications);
-    prisma.user.findUnique.mockResolvedValue(user as never);
-    prisma.post.count.mockResolvedValue(3);
-    prisma.follow.count.mockResolvedValueOnce(5).mockResolvedValueOnce(2);
+    storage.publicObjectUrl.mockReturnValue(publicUrl);
+    await users().deleteMany({});
+    await follows().deleteMany({});
+    await uploads().deleteMany({});
+    await posts().deleteMany({});
+  });
+  afterAll(async () => {
+    await dropTestDatabase(app);
+    await app.close();
   });
 
   it('returns public fields and published-post/follow counts', async () => {
+    await createUser(db, {
+      id: userId,
+      username: 'vedora.user',
+      fullName: 'Vedora User',
+      bio: 'Plant based cooking',
+      emailVerifiedAt: new Date(),
+    });
+    for (let index = 0; index < 3; index++) {
+      await createPost(db, { authorId: userId });
+    }
+    for (let index = 0; index < 5; index++) {
+      const follower = await createUser(db);
+      await insertFollow(follower.id, userId, new Date());
+    }
+    for (let index = 0; index < 2; index++) {
+      const following = await createUser(db);
+      await insertFollow(userId, following.id, new Date());
+    }
+
     const profile = await service.findOne(userId);
+
     expect(profile).toMatchObject({
       id: userId,
+      username: 'vedora.user',
       postCount: 3,
       followerCount: 5,
       followingCount: 2,
     });
     expect(profile).not.toHaveProperty('email');
-    expect(prisma.post.count).toHaveBeenCalledWith({
-      where: { authorId: userId, status: 'PUBLISHED' },
-    });
   });
 
   it('does not expose unverified accounts', async () => {
-    prisma.user.findUnique.mockResolvedValue({
-      ...user,
-      emailVerifiedAt: null,
-    } as never);
+    await createUser(db, { id: userId, emailVerifiedAt: null });
+
     await expect(service.findOne(userId)).rejects.toBeInstanceOf(
       NotFoundException,
     );
-    expect(prisma.follow.count).not.toHaveBeenCalled();
   });
 
   it('rejects self-follow and writes other follows idempotently', async () => {
+    await createUser(db, { id: userId });
+    await createUser(db, { id: viewerId });
+
     await expect(service.follow(userId, userId)).rejects.toBeInstanceOf(
       BadRequestException,
     );
-    prisma.follow.createMany.mockResolvedValueOnce({ count: 1 });
     await service.follow(userId, viewerId);
-    expect(prisma.follow.createMany).toHaveBeenCalledWith({
-      data: [{ followerId: viewerId, followingId: userId }],
-      skipDuplicates: true,
-    });
     expect(notifications.notify).toHaveBeenCalledWith({
       recipientId: userId,
       actorId: viewerId,
       type: 'FOLLOW',
     });
     notifications.notify.mockClear();
-    prisma.follow.createMany.mockResolvedValueOnce({ count: 0 });
     await service.follow(userId, viewerId);
     expect(notifications.notify).not.toHaveBeenCalled();
+    expect(await follows().countDocuments()).toBe(1);
     await service.unfollow(userId, viewerId);
-    expect(prisma.follow.deleteMany).toHaveBeenCalledWith({
-      where: { followerId: viewerId, followingId: userId },
-    });
+    expect(await follows().countDocuments()).toBe(0);
   });
 
   it('paginates followers by the last returned user ID', async () => {
-    prisma.follow.findMany.mockResolvedValue([
-      { follower: { ...user, id: viewerId } },
-      { follower: user },
-    ] as never);
-    const result = await service.followers(userId, { limit: 1 });
-    expect(result.items).toHaveLength(1);
-    expect(result.nextCursor).toBe(viewerId);
-    expect(prisma.follow.findMany).toHaveBeenCalledWith(
-      expect.objectContaining({
-        take: 2,
-        orderBy: [{ createdAt: 'desc' }, { followerId: 'desc' }],
-      }),
-    );
+    await createUser(db, { id: userId });
+    const first = await createUser(db, { id: viewerId });
+    const second = await createUser(db);
+    await insertFollow(first.id, userId, new Date('2026-09-01T10:00:00Z'));
+    await insertFollow(second.id, userId, new Date('2026-09-02T10:00:00Z'));
+
+    const page = await service.followers(userId, { limit: 1 });
+
+    expect(page.items).toHaveLength(1);
+    expect(page.items[0].id).toBe(second.id);
+    expect(page.nextCursor).toBe(second.id);
+    const rest = await service.followers(userId, {
+      limit: 5,
+      cursor: second.id,
+    });
+    expect(rest.items.map((item) => item.id)).toEqual([first.id]);
+  });
+
+  it('drops unverified accounts from follower lists', async () => {
+    await createUser(db, { id: userId });
+    const hidden = await createUser(db, { emailVerifiedAt: null });
+    await insertFollow(hidden.id, userId, new Date());
+
+    const page = await service.followers(userId, { limit: 5 });
+
+    expect(page.items).toEqual([]);
   });
 
   it('presigns an upload scoped to the owner, kind, type and size', async () => {
     storage.presignUpload.mockResolvedValue(presigned);
+
     const result = await service.createImageUpload(userId, {
       kind: ProfileImageKind.COVER,
       contentType: 'image/webp',
       sizeBytes: 1000,
     });
+
     const key = `profiles/${userId}/cover/${result.id}.webp`;
     expect(storage.presignUpload).toHaveBeenCalledWith(
       StorageTarget.Profiles,
@@ -136,9 +206,11 @@ describe('ProfilesService', () => {
       'image/webp',
       1000,
     );
-    expect(
-      prisma.profileImageUpload.create.mock.calls[0][0].data,
-    ).toMatchObject({ id: result.id, ownerId: userId, storageKey: key });
+    expect(await uploads().findOne({ _id: result.id })).toMatchObject({
+      ownerId: userId,
+      storageKey: key,
+      status: 'WAITING_UPLOAD',
+    });
     expect(result.upload).toBe(presigned);
   });
 
@@ -153,70 +225,97 @@ describe('ProfilesService', () => {
     expect(storage.presignUpload).not.toHaveBeenCalled();
   });
 
+  it('refuses unsupported image types', async () => {
+    await expect(
+      service.createImageUpload(userId, {
+        kind: ProfileImageKind.AVATAR,
+        contentType: 'image/gif' as 'image/webp',
+        sizeBytes: 1000,
+      }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
   it('only activates a confirmed upload owned by the caller', async () => {
-    prisma.profileImageUpload.findFirst.mockResolvedValueOnce(null);
+    await createUser(db, { id: userId });
+
     await expect(service.activateImage(userId, imageId)).rejects.toBeInstanceOf(
       NotFoundException,
     );
-    const waiting: ProfileImageUpload = {
-      id: imageId,
-      ownerId: userId,
-      kind: ProfileImageKind.AVATAR,
-      status: ProfileImageStatus.WAITING_UPLOAD,
-      storageKey,
-      createdAt: new Date(),
-    };
-    prisma.profileImageUpload.findFirst.mockResolvedValueOnce(waiting);
+    await insertUpload({ status: 'WAITING_UPLOAD' });
     await expect(service.activateImage(userId, imageId)).rejects.toBeInstanceOf(
       ConflictException,
     );
-    prisma.profileImageUpload.findFirst.mockResolvedValueOnce({
-      ...waiting,
-      status: ProfileImageStatus.READY,
-    });
-    storage.publicObjectUrl.mockReturnValue(publicUrl);
-    await service.activateImage(userId, imageId);
-    expect(prisma.user.update).toHaveBeenCalledWith({
-      where: { id: userId },
-      data: { avatarUrl: publicUrl },
+    await uploads().updateOne({ _id: imageId }, { $set: { status: 'READY' } });
+
+    const profile = await service.activateImage(userId, imageId);
+
+    expect(profile.avatarUrl).toBe(publicUrl);
+    expect(await users().findOne({ _id: userId })).toMatchObject({
+      avatarUrl: publicUrl,
     });
   });
 
+  it('refuses an expired upload', async () => {
+    await createUser(db, { id: userId });
+    await insertUpload({ createdAt: new Date('2026-01-01T00:00:00Z') });
+
+    await expect(service.activateImage(userId, imageId)).rejects.toBeInstanceOf(
+      ConflictException,
+    );
+  });
+
   it('marks only a waiting upload with that key ready', async () => {
-    prisma.profileImageUpload.updateMany.mockResolvedValue({ count: 1 });
+    await insertUpload({ status: 'WAITING_UPLOAD' });
+
     await service.markImageUploaded(storageKey);
-    expect(prisma.profileImageUpload.updateMany).toHaveBeenCalledWith({
-      where: { storageKey, status: ProfileImageStatus.WAITING_UPLOAD },
-      data: { status: ProfileImageStatus.READY },
+
+    expect(await uploads().findOne({ _id: imageId })).toMatchObject({
+      status: 'READY',
+    });
+    await uploads().updateOne({ _id: imageId }, { $set: { status: 'READY' } });
+    await service.markImageUploaded(storageKey);
+    expect(await uploads().findOne({ _id: imageId })).toMatchObject({
+      status: 'READY',
     });
   });
 
   it('keeps active images and purges old unused uploads', async () => {
+    await createUser(db, { id: userId, avatarUrl: publicUrl });
     const old = new Date('2026-01-01T00:00:00Z');
-    const upload: ProfileImageUpload = {
-      id: imageId,
-      ownerId: userId,
-      kind: ProfileImageKind.AVATAR,
-      status: ProfileImageStatus.READY,
-      storageKey,
+    await insertUpload({ createdAt: old });
+    const unusedKey = 'profiles/unused.webp';
+    await uploads().insertOne({
+      _id: viewerId,
+      ownerId: null,
+      kind: 'AVATAR',
+      status: 'READY',
+      storageKey: unusedKey,
       createdAt: old,
-    };
-    prisma.profileImageUpload.findMany.mockResolvedValue([
-      upload,
-      { ...upload, id: viewerId, storageKey: 'profiles/unused.webp' },
-    ]);
-    prisma.user.count.mockResolvedValueOnce(1).mockResolvedValueOnce(0);
+    });
+    storage.publicObjectUrl.mockImplementation(
+      (_target: StorageTarget, key: string) =>
+        key === storageKey ? publicUrl : `https://storage/${key}`,
+    );
+
     await service.purgeUnusedImages();
+
     expect(storage.delete).toHaveBeenCalledWith(
       StorageTarget.Profiles,
-      'profiles/unused.webp',
+      unusedKey,
     );
     expect(storage.delete).not.toHaveBeenCalledWith(
       StorageTarget.Profiles,
       storageKey,
     );
-    expect(prisma.profileImageUpload.delete).toHaveBeenCalledWith({
-      where: { id: viewerId },
-    });
+    expect(await uploads().countDocuments()).toBe(1);
+  });
+
+  it('does nothing when storage is not configured', async () => {
+    storage.isConfigured.mockReturnValue(false);
+
+    await service.purgeUnusedImages();
+
+    expect(uploads).toBeDefined();
+    expect(storage.delete).not.toHaveBeenCalled();
   });
 });

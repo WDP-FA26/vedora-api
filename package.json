@@ -1,32 +1,26 @@
 {
   "name": "vedora-api",
   "version": "0.1.0",
-  "description": "Vedora backend API built with NestJS, Prisma and PostgreSQL",
+  "description": "Vedora backend API built with NestJS, Prisma and MongoDB",
   "private": true,
   "license": "UNLICENSED",
   "scripts": {
     "build": "nest build",
-    "format": "prettier --write --no-error-on-unmatched-pattern \"src/**/*.ts\" \"prisma/**/*.ts\"",
+    "format": "prettier --write --no-error-on-unmatched-pattern \"src/**/*.ts\"",
     "start": "nest start",
     "start:dev": "nest start --watch",
     "start:debug": "nest start --debug --watch",
     "start:prod": "node dist/main.js",
-    "lint": "eslint \"{src,prisma,test}/**/*.ts\"",
+    "lint": "eslint \"{src,test}/**/*.ts\"",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:cov": "vitest run --coverage",
-    "prisma:generate": "prisma generate",
-    "prisma:migrate:dev": "prisma migrate dev",
-    "prisma:migrate:deploy": "prisma migrate deploy",
-    "prisma:studio": "prisma studio",
-    "prisma:seed": "prisma db seed",
-    "prisma:seed:recipes": "tsx prisma/seed-recipes.ts",
-    "prisma:seed:prod": "node dist/database/seed-cli.js",
-    "postinstall": "prisma generate",
     "test:debug": "vitest --inspect-brk --no-file-parallelism",
     "test:e2e": "vitest run --config ./vitest.config.e2e.mts",
     "test:db": "vitest run --config ./vitest.config.db.mts",
-    "redteam": "node scripts/redteam.mts"
+    "redteam": "node scripts/redteam.mts",
+    "seed": "tsx src/database/seed-cli.ts",
+    "seed:prod": "node dist/database/seed-cli.js"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1146.0",
@@ -35,12 +29,12 @@
     "@nestjs/config": "^4.0.4",
     "@nestjs/core": "^11.2.5",
     "@nestjs/jwt": "11.0.2",
+    "@nestjs/mongoose": "^12.0.0",
     "@nestjs/platform-express": "^11.2.5",
     "@nestjs/schedule": "^12.0.2",
     "@nestjs/swagger": "^11.4.7",
     "@nestjs/throttler": "^6.7.1",
     "@openrouter/ai-sdk-provider": "^3.1.0",
-    "@prisma/client": "6.12.0",
     "@qdrant/js-client-rest": "^1.19.0",
     "ai": "^7.0.118",
     "bcryptjs": "^3.0.3",
@@ -52,9 +46,9 @@
     "ffmpeg-static": "^5.3.0",
     "google-auth-library": "^11.1.0",
     "helmet": "^8.1.0",
-    "joi": "^18.0.1",
+    "mongodb": "7.7.0",
+    "mongoose": "^9.11.4",
     "mupdf": "^1.28.1",
-    "prisma": "6.12.0",
     "redis": "^6.3.0",
     "reflect-metadata": "^0.2.2",
     "resend": "^6.28.1",
@@ -85,10 +79,7 @@
     "vitest-mock-extended": "^5.1.1"
   },
   "engines": {
-    "node": ">=20.11"
-  },
-  "prisma": {
-    "seed": "tsx prisma/seed.ts"
+    "node": ">=24.11"
   },
   "overrides": {
     "multer": "^2.3.0"

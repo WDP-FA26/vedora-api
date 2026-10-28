@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { BillingPlan, PaymentStatus } from '@prisma/client';
+import { BillingPlan, PaymentStatus } from '../mongo/models';
 import { IsEnum } from 'class-validator';
 
 export class CreatePaymentDto {

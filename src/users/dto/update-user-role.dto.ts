@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { UserRole } from '@prisma/client';
+import { UserRole } from '../../mongo/models';
 import { IsEnum } from 'class-validator';
 import { AccountOperationDto } from './account-operation.dto';
 

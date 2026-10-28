@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { ProfileImageKind } from '@prisma/client';
+import { ProfileImageKind } from '../../mongo/models';
 import {
   IsEnum,
   IsIn,

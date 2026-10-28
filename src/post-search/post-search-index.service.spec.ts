@@ -1,27 +1,68 @@
+import type { INestApplication } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { getModelToken } from '@nestjs/mongoose';
+import { Test } from '@nestjs/testing';
+import type { Model } from 'mongoose';
 import { type DeepMockProxy, mockDeep } from 'vitest-mock-extended';
-import { PrismaService } from '../prisma/prisma.service';
+import { createMedia, createPost, createUser } from '../../test/fixtures';
+import {
+  createTestMongoUrl,
+  dropTestDatabase,
+  prepareTestDatabase,
+} from '../../test/mongo-test-db';
+import {
+  MediaAsset,
+  Post,
+  PostStatus,
+  PostType,
+  type User,
+} from '../mongo/models';
+import { MongoModule } from '../mongo/mongo.module';
+import { MongoService } from '../mongo/mongo.service';
 import { QdrantService } from '../qdrant/qdrant.service';
 import { PostEmbeddingsService } from './post-embeddings.service';
 import { chunkText, PostSearchIndexService } from './post-search-index.service';
 
-const POST = {
-  id: 'f1a2d3e4-0000-4000-8000-000000000001',
-  authorId: '0b8f0c1e-3c55-4c1b-9d0e-2f7f3a9f7a10',
-  body: 'Đậu hũ sốt cà',
-  publishedAt: new Date('2026-10-20T00:00:00.000Z'),
-  updatedAt: new Date('2026-10-20T00:00:05.000Z'),
-  media: [] as { transcript: string | null }[],
-};
-
 describe('PostSearchIndexService', () => {
-  let prisma: DeepMockProxy<PrismaService>;
+  let app: INestApplication;
+  let db: MongoService;
+  let posts: Model<Post>;
   let qdrant: DeepMockProxy<QdrantService>;
   let embeddings: DeepMockProxy<PostEmbeddingsService>;
   let service: PostSearchIndexService;
+  let author: User;
+  let post: Post;
 
-  beforeEach(() => {
-    prisma = mockDeep<PrismaService>();
+  const reload = () =>
+    posts
+      .findOne({ _id: post.id })
+      .exec()
+      .then((row) => {
+        if (!row) throw new Error('post missing');
+        return row;
+      });
+  const setPost = (fields: Partial<Post>) =>
+    posts.updateOne({ _id: post.id }, { $set: fields }).exec();
+
+  beforeAll(async () => {
+    const moduleRef = await Test.createTestingModule({
+      imports: [MongoModule.forTest(createTestMongoUrl('searchindex'))],
+    }).compile();
+    app = moduleRef.createNestApplication();
+    await app.init();
+    await prepareTestDatabase(app);
+    db = app.get(MongoService);
+    posts = app.get(getModelToken(Post.name));
+    author = await createUser(db);
+  });
+  beforeEach(async () => {
+    await db.db.collection('posts').deleteMany({});
+    await db.db.collection('media_assets').deleteMany({});
+    post = await createPost(db, {
+      authorId: author.id,
+      body: 'Đậu hũ sốt cà',
+      publishedAt: new Date('2026-10-20T00:00:00.000Z'),
+    });
     qdrant = mockDeep<QdrantService>();
     embeddings = mockDeep<PostEmbeddingsService>();
     Object.defineProperty(embeddings, 'dimensions', { value: 4 });
@@ -32,55 +73,63 @@ describe('PostSearchIndexService', () => {
     qdrant.getCollection.mockResolvedValue({
       config: { params: { vectors: { dense: { size: 4 } } } },
     } as never);
-    prisma.post.updateMany.mockResolvedValue({ count: 0 });
     service = new PostSearchIndexService(
-      prisma,
       qdrant,
       embeddings,
       new ConfigService({ QDRANT_POSTS_COLLECTION: 'test_posts' }),
+      posts,
+      app.get<Model<MediaAsset>>(getModelToken(MediaAsset.name)),
     );
+  });
+  afterAll(async () => {
+    await dropTestDatabase(app);
+    await app.close();
   });
 
   it('indexes published posts that are not indexed yet, keyed by post id', async () => {
-    prisma.post.findMany.mockResolvedValueOnce([POST] as never);
-
     await service.drain();
 
-    expect(prisma.post.findMany).toHaveBeenCalledWith(
-      expect.objectContaining({
-        where: {
-          type: 'POST',
-          status: 'PUBLISHED',
-          searchIndexedAt: null,
-        },
-      }),
-    );
     expect(embeddings.embedPosts).toHaveBeenCalledWith(['Đậu hũ sốt cà']);
     const operation = qdrant.upsert.mock.calls[0][1];
     if (!('points' in operation)) throw new Error('expected points');
     expect(operation.points).toHaveLength(1);
     const [point] = operation.points;
-    expect(point.id).toBe(POST.id);
+    expect(point.id).toBe(post.id);
     expect(point.payload).toEqual({
-      postId: POST.id,
-      authorId: POST.authorId,
+      postId: post.id,
+      authorId: author.id,
       publishedAt: 1_792_454_400,
     });
     expect(point.vector).toMatchObject({
       dense: [0.1, 0.2, 0.3, 0.4],
-      bm25: { text: POST.body },
-      bm25_folded: { text: POST.body },
+      bm25: { text: post.body },
+      bm25_folded: { text: post.body },
     });
-    const update = prisma.post.updateMany.mock.calls[0][0];
-    expect(update?.where).toEqual({ id: POST.id, updatedAt: POST.updatedAt });
-    expect(update?.data.searchIndexedAt).toBeInstanceOf(Date);
-    expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+    expect((await reload()).searchIndexedAt).toBeInstanceOf(Date);
+  });
+
+  it('does not index posts again, nor drafts, nor blogs', async () => {
+    await createPost(db, {
+      authorId: author.id,
+      type: PostType.BLOG,
+      body: 'blog',
+    });
+    await createPost(db, {
+      authorId: author.id,
+      status: PostStatus.PROCESSING,
+      publishedAt: null,
+    });
+    await service.drain();
+    await service.drain();
+
+    expect(embeddings.embedPosts).toHaveBeenCalledTimes(1);
   });
 
   it("embeds what a post's videos say after its body", async () => {
-    prisma.post.findMany.mockResolvedValueOnce([
-      { ...POST, media: [{ transcript: 'Hôm nay mình nấu đậu hũ' }] },
-    ] as never);
+    await createMedia(db, {
+      postId: post.id,
+      transcript: 'Hôm nay mình nấu đậu hũ',
+    });
 
     await service.drain();
 
@@ -90,10 +139,10 @@ describe('PostSearchIndexService', () => {
   });
 
   it('embeds a long post in chunks and keeps their mean as its vector', async () => {
-    const transcript = 'à '.repeat(1000).trim();
-    prisma.post.findMany.mockResolvedValueOnce([
-      { ...POST, media: [{ transcript }] },
-    ] as never);
+    await createMedia(db, {
+      postId: post.id,
+      transcript: 'à '.repeat(1000).trim(),
+    });
     embeddings.embedPosts.mockImplementationOnce((chunks) =>
       Promise.resolve(chunks.map((_, i) => (i === 0 ? [1, 0] : [0, 1]))),
     );
@@ -111,39 +160,53 @@ describe('PostSearchIndexService', () => {
   });
 
   it('marks a post with neither text nor speech indexed without a point', async () => {
-    prisma.post.findMany.mockResolvedValueOnce([
-      { ...POST, body: null },
-    ] as never);
+    await setPost({ body: null });
 
     await service.drain();
 
     expect(embeddings.embedPosts).not.toHaveBeenCalled();
     expect(qdrant.upsert).not.toHaveBeenCalled();
-    const update = prisma.post.updateMany.mock.calls[0][0];
-    expect(update?.where).toEqual({ id: POST.id, updatedAt: POST.updatedAt });
+    expect((await reload()).searchIndexedAt).toBeInstanceOf(Date);
+  });
+
+  it('leaves a post edited while it was indexed for the next run', async () => {
+    embeddings.embedPosts.mockImplementationOnce(async (bodies) => {
+      await setPost({ body: 'Đã sửa' });
+      return bodies.map(() => [0.1, 0.2, 0.3, 0.4]);
+    });
+
+    await service.drain();
+
+    expect((await reload()).searchIndexedAt).toBeNull();
   });
 
   it('leaves posts unindexed when embedding fails, for the next run', async () => {
-    prisma.post.findMany.mockResolvedValueOnce([POST] as never);
     embeddings.embedPosts.mockRejectedValueOnce(new Error('OpenRouter down'));
 
     await expect(service.drain()).rejects.toThrow('OpenRouter down');
     expect(qdrant.upsert).not.toHaveBeenCalled();
-    expect(prisma.post.updateMany).not.toHaveBeenCalled();
+    expect((await reload()).searchIndexedAt).toBeNull();
   });
 
   it('creates a missing collection and marks every post for reindexing', async () => {
+    await service.drain();
+    expect((await reload()).searchIndexedAt).toBeInstanceOf(Date);
     qdrant.collectionExists.mockResolvedValue({ exists: false });
-    prisma.post.findMany.mockResolvedValue([]);
+    const fresh = new PostSearchIndexService(
+      qdrant,
+      embeddings,
+      new ConfigService({ QDRANT_POSTS_COLLECTION: 'test_posts' }),
+      posts,
+      app.get<Model<MediaAsset>>(getModelToken(MediaAsset.name)),
+    );
 
-    await service.drain();
-    await service.drain();
+    await fresh.drain();
+    await fresh.drain();
 
     expect(qdrant.createCollection).toHaveBeenCalledOnce();
-    expect(prisma.post.updateMany).toHaveBeenCalledExactlyOnceWith({
-      where: { searchIndexedAt: { not: null } },
-      data: { searchIndexedAt: null },
-    });
+    // The first drain marked the indexed post for reindexing and embedded it
+    // again; the second found nothing to do.
+    expect(embeddings.embedPosts).toHaveBeenCalledTimes(2);
   });
 
   it('refuses a collection built for another embedding size', async () => {
@@ -157,10 +220,10 @@ describe('PostSearchIndexService', () => {
   it('removes a deleted post without throwing when Qdrant fails', async () => {
     qdrant.delete.mockRejectedValueOnce(new Error('unreachable'));
 
-    await expect(service.remove(POST.id)).resolves.toBeUndefined();
+    await expect(service.remove(post.id)).resolves.toBeUndefined();
     expect(qdrant.delete).toHaveBeenCalledWith('test_posts', {
       wait: true,
-      points: [POST.id],
+      points: [post.id],
     });
   });
 });

@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { AccountStatus } from '@prisma/client';
+import { AccountStatus } from '../../mongo/models';
 import { IsIn } from 'class-validator';
 import { AccountOperationDto } from './account-operation.dto';
 

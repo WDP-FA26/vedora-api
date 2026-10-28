@@ -1,6 +1,13 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { PostStatus } from '@prisma/client';
-import { PrismaService } from '../prisma/prisma.service';
+import { InjectModel } from '@nestjs/mongoose';
+import type { Model } from 'mongoose';
+import {
+  Post,
+  PostBookmark,
+  PostComment,
+  PostLike,
+  PostStatus,
+} from '../mongo/models';
 import { QdrantService } from '../qdrant/qdrant.service';
 import { DENSE_VECTOR, toEpochSeconds } from './post-search-collection';
 import { PostSearchIndexService } from './post-search-index.service';
@@ -33,9 +40,14 @@ export class PostFeedService {
   private readonly logger = new Logger(PostFeedService.name);
 
   constructor(
-    private readonly prisma: PrismaService,
     private readonly qdrant: QdrantService,
     private readonly index: PostSearchIndexService,
+    @InjectModel(Post.name) private readonly posts: Model<Post>,
+    @InjectModel(PostLike.name) private readonly likes: Model<PostLike>,
+    @InjectModel(PostBookmark.name)
+    private readonly bookmarks: Model<PostBookmark>,
+    @InjectModel(PostComment.name)
+    private readonly comments: Model<PostComment>,
   ) {}
 
   /** The first `count` post ids of the viewer's feed as of `asOf`. */
@@ -58,24 +70,37 @@ export class PostFeedService {
    * hides the posts of later pages.
    */
   private async tastePosts(viewerId: string, asOf: Date): Promise<string[]> {
-    const until = { createdAt: { lte: asOf } };
-    const post = { status: PostStatus.PUBLISHED };
-    const where = { userId: viewerId, post, ...until };
-    const recent = {
-      orderBy: { createdAt: 'desc' },
-      take: TASTE_POSTS,
-    } as const;
-    const select = { postId: true, createdAt: true };
+    const until = { createdAt: { $lte: asOf } };
+    // MongoDB has no relation filters: load each interaction's post and keep
+    // the published ones.
     const [likes, bookmarks, comments] = await Promise.all([
-      this.prisma.postLike.findMany({ where, select, ...recent }),
-      this.prisma.postBookmark.findMany({ where, select, ...recent }),
-      this.prisma.postComment.findMany({
-        where: { authorId: viewerId, post, ...until },
-        select,
-        ...recent,
-      }),
+      this.likes
+        .find({ userId: viewerId, ...until })
+        .sort({ createdAt: -1 })
+        .limit(TASTE_POSTS)
+        .exec(),
+      this.bookmarks
+        .find({ userId: viewerId, ...until })
+        .sort({ createdAt: -1 })
+        .limit(TASTE_POSTS)
+        .exec(),
+      this.comments
+        .find({ authorId: viewerId, ...until })
+        .sort({ createdAt: -1 })
+        .limit(TASTE_POSTS)
+        .exec(),
     ]);
-    const ids = [...likes, ...bookmarks, ...comments]
+    const interactions = [...likes, ...bookmarks, ...comments];
+    const published = await this.posts
+      .find({
+        _id: { $in: [...new Set(interactions.map(({ postId }) => postId))] },
+        status: PostStatus.PUBLISHED,
+      })
+      .select('_id')
+      .exec();
+    const live = new Set(published.map(({ id }) => id));
+    const ids = interactions
+      .filter(({ postId }) => live.has(postId))
       .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
       .map(({ postId }) => postId);
     return [...new Set(ids)].slice(0, TASTE_POSTS);
@@ -156,16 +181,16 @@ export class PostFeedService {
     asOf: Date,
     count: number,
   ): Promise<string[]> {
-    const posts = await this.prisma.post.findMany({
-      where: {
+    const posts = await this.posts
+      .find({
         status: PostStatus.PUBLISHED,
-        publishedAt: { lte: asOf },
-        authorId: { not: viewerId },
-      },
-      orderBy: [{ publishedAt: 'desc' }, { id: 'desc' }],
-      take: count,
-      select: { id: true },
-    });
+        publishedAt: { $lte: asOf },
+        authorId: { $ne: viewerId },
+      })
+      .sort({ publishedAt: -1, _id: -1 })
+      .limit(count)
+      .select('_id')
+      .exec();
     return posts.map(({ id }) => id);
   }
 }

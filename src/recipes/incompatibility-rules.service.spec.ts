@@ -1,59 +1,88 @@
 import { BadRequestException, ConflictException } from '@nestjs/common';
-import { type DeepMockProxy, mockDeep } from 'vitest-mock-extended';
-import { PrismaService } from '../prisma/prisma.service';
+import type { INestApplication } from '@nestjs/common';
+import { Test } from '@nestjs/testing';
+import { createIngredient } from '../../test/fixtures';
+import {
+  createTestMongoUrl,
+  dropTestDatabase,
+  prepareTestDatabase,
+} from '../../test/mongo-test-db';
+import { MongoModule } from '../mongo/mongo.module';
+import type { IngredientGroup, IncompatibilityRule } from '../mongo/models';
+import { MongoService } from '../mongo/mongo.service';
 import { IncompatibilityRulesService } from './incompatibility-rules.service';
 
 const tofu = 'a1a2d3e4-0000-4000-8000-000000000001';
 const spinach = 'a1a2d3e4-0000-4000-8000-000000000002';
 const greens = 'b1a2d3e4-0000-4000-8000-000000000001';
-const now = new Date('2026-10-07T08:00:00Z');
-const row = {
-  id: 'c1a2d3e4-0000-4000-8000-000000000001',
-  aIngredientId: tofu,
-  aGroupId: null,
-  bIngredientId: null,
-  bGroupId: greens,
-  reason: 'Oxalat cản hấp thu canxi',
-  source: null,
-  createdAt: now,
-  updatedAt: now,
-  aIngredient: { id: tofu, name: 'Đậu hũ' },
-  aGroup: null,
-  bIngredient: null,
-  bGroup: { id: greens, name: 'Rau giàu oxalat' },
-};
+const REASON = 'Oxalat cản hấp thu canxi';
 
 describe('IncompatibilityRulesService', () => {
-  let prisma: DeepMockProxy<PrismaService>;
+  let app: INestApplication;
+  let mongo: MongoService;
   let service: IncompatibilityRulesService;
 
-  beforeEach(() => {
-    prisma = mockDeep<PrismaService>();
-    service = new IncompatibilityRulesService(prisma);
+  const groups = () =>
+    mongo.connection.model<IngredientGroup>('IngredientGroup');
+  const rules = () =>
+    mongo.connection.model<IncompatibilityRule>('IncompatibilityRule');
+  const members = () => mongo.connection.model('IngredientGroupMember');
+
+  beforeAll(async () => {
+    const moduleRef = await Test.createTestingModule({
+      imports: [MongoModule.forTest(createTestMongoUrl('rules'))],
+      providers: [IncompatibilityRulesService],
+    }).compile();
+    app = moduleRef.createNestApplication();
+    await app.init();
+    await prepareTestDatabase(app);
+    mongo = app.get(MongoService);
+    service = app.get(IncompatibilityRulesService);
+  });
+  beforeEach(async () => {
+    for (const collection of [
+      'ingredients',
+      'ingredient_groups',
+      'ingredient_group_members',
+      'incompatibility_rules',
+    ]) {
+      await mongo.db.collection(collection).deleteMany({});
+    }
+    await createIngredient(mongo, { id: tofu, name: 'Đậu hũ' });
+    await createIngredient(mongo, { id: spinach, name: 'Rau bina' });
+    await groups().create({ _id: greens, name: 'Rau giàu oxalat' });
+  });
+  afterAll(async () => {
+    await dropTestDatabase(app);
+    await app.close();
+  });
+
+  it('rejects a rule that names an id that does not exist', async () => {
+    await expect(
+      service.create({
+        a: { kind: 'INGREDIENT', id: tofu },
+        b: { kind: 'GROUP', id: 'b1a2d3e4-0000-4000-8000-000000000099' },
+        reason: REASON,
+      }),
+    ).rejects.toMatchObject({ response: { code: 'UNKNOWN_REFERENCE' } });
+    expect(await rules().countDocuments()).toBe(0);
   });
 
   it('stores each side as an ingredient or a group', async () => {
-    prisma.incompatibilityRule.findFirst.mockResolvedValue(null);
-    prisma.incompatibilityRule.create.mockResolvedValue(row);
-
     const rule = await service.create({
       a: { kind: 'INGREDIENT', id: tofu },
       b: { kind: 'GROUP', id: greens },
-      reason: row.reason,
+      reason: REASON,
     });
 
-    expect(prisma.incompatibilityRule.create).toHaveBeenCalledWith(
-      expect.objectContaining({
-        data: {
-          aIngredientId: tofu,
-          aGroupId: null,
-          bIngredientId: null,
-          bGroupId: greens,
-          reason: row.reason,
-          source: null,
-        },
-      }),
-    );
+    expect(await rules().findOne({ _id: rule.id }).exec()).toMatchObject({
+      aIngredientId: tofu,
+      aGroupId: null,
+      bIngredientId: null,
+      bGroupId: greens,
+      reason: REASON,
+      source: null,
+    });
     expect(rule.a).toEqual({ kind: 'INGREDIENT', id: tofu, name: 'Đậu hũ' });
     expect(rule.b).toEqual({
       kind: 'GROUP',
@@ -70,10 +99,15 @@ describe('IncompatibilityRulesService', () => {
         reason: 'x',
       }),
     ).rejects.toBeInstanceOf(BadRequestException);
+    expect(await rules().countDocuments()).toBe(0);
   });
 
   it('rejects a pair that already has a rule, in either order', async () => {
-    prisma.incompatibilityRule.findFirst.mockResolvedValue(row);
+    await service.create({
+      a: { kind: 'INGREDIENT', id: tofu },
+      b: { kind: 'GROUP', id: greens },
+      reason: REASON,
+    });
 
     await expect(
       service.create({
@@ -82,32 +116,21 @@ describe('IncompatibilityRulesService', () => {
         reason: 'x',
       }),
     ).rejects.toBeInstanceOf(ConflictException);
-    expect(prisma.incompatibilityRule.findFirst).toHaveBeenCalledWith(
-      expect.objectContaining({
-        where: {
-          OR: [
-            expect.objectContaining({ aGroupId: greens, bIngredientId: tofu }),
-            expect.objectContaining({ aIngredientId: tofu, bGroupId: greens }),
-          ],
-        },
-      }),
-    );
+    expect(await rules().countDocuments()).toBe(1);
   });
 
   it('finds conflicts through group membership and names both sides', async () => {
-    prisma.ingredientGroupMember.findMany.mockResolvedValue([
-      { ingredientId: spinach, groupId: greens },
-    ]);
-    prisma.incompatibilityRule.findMany.mockResolvedValue([row]);
-    prisma.ingredient.findMany.mockResolvedValue([
-      { id: tofu, name: 'Đậu hũ' },
-      { id: spinach, name: 'Rau bina' },
-    ] as never);
+    await members().create({ groupId: greens, ingredientId: spinach });
+    const created = await service.create({
+      a: { kind: 'INGREDIENT', id: tofu },
+      b: { kind: 'GROUP', id: greens },
+      reason: REASON,
+    });
 
     await expect(service.findConflicts([tofu, spinach])).resolves.toEqual([
       {
-        ruleId: row.id,
-        reason: row.reason,
+        ruleId: created.id,
+        reason: REASON,
         source: null,
         a: { id: tofu, name: 'Đậu hũ' },
         b: { id: spinach, name: 'Rau bina' },
@@ -117,6 +140,5 @@ describe('IncompatibilityRulesService', () => {
 
   it('skips the database for fewer than two ingredients', async () => {
     await expect(service.findConflicts([tofu])).resolves.toEqual([]);
-    expect(prisma.incompatibilityRule.findMany).not.toHaveBeenCalled();
   });
 });

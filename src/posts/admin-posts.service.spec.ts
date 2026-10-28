@@ -1,66 +1,37 @@
+import type { INestApplication } from '@nestjs/common';
+import { getModelToken } from '@nestjs/mongoose';
 import { NotFoundException } from '@nestjs/common';
+import { Test } from '@nestjs/testing';
+import type { Model } from 'mongoose';
+import { type DeepMockProxy, mockDeep } from 'vitest-mock-extended';
+import { createMedia, createPost, createUser } from '../../test/fixtures';
+import {
+  createTestMongoUrl,
+  dropTestDatabase,
+  prepareTestDatabase,
+} from '../../test/mongo-test-db';
+import { MediaService } from '../media/media.service';
 import {
   CaptionStatus,
   MediaStatus,
+  type Post,
+  PostComment,
+  PostLike,
   PostStatus,
-  PostType,
-} from '@prisma/client';
-import { type DeepMockProxy, mockDeep } from 'vitest-mock-extended';
-import { pendingMedia } from '../media/media.fixtures';
-import { MediaService } from '../media/media.service';
-import { PrismaService } from '../prisma/prisma.service';
+} from '../mongo/models';
+import { MongoModule } from '../mongo/mongo.module';
+import { MongoService } from '../mongo/mongo.service';
 import { AdminPostsService } from './admin-posts.service';
 
-const postId = 'f1a2d3e4-0000-4000-8000-000000000001';
-const now = new Date('2026-10-07T08:00:00Z');
-const media = {
-  ...pendingMedia,
-  postId,
-  status: MediaStatus.READY,
-  captionStatus: CaptionStatus.READY,
-  captionLanguage: 'vi',
-  captions: [
-    {
-      id: 'c1a2d3e4-0000-4000-8000-000000000001',
-      mediaId: pendingMedia.id,
-      languageCode: 'vi',
-      name: 'Tiếng Việt',
-      isOriginal: true,
-      url: 'https://res.cloudinary.com/demo/raw/upload/vi.vtt',
-      createdAt: now,
-    },
-  ],
-};
-const row = {
-  id: postId,
-  authorId: pendingMedia.ownerId,
-  type: PostType.POST,
-  status: PostStatus.PROCESSING,
-  body: 'Đậu hũ sốt cà',
-  publishedAt: null,
-  createdAt: now,
-  updatedAt: now,
-  author: {
-    id: pendingMedia.ownerId,
-    username: 'vedora.chef',
-    fullName: 'Vedora Chef',
-    avatarUrl: null,
-  },
-  media: [media],
-  viewCount: 7,
-  searchIndexedAt: null,
-  reposts: [],
-  bookmarks: [],
-  _count: { comments: 2, likes: 5, reposts: 1 },
-};
-
 describe('AdminPostsService', () => {
-  let prisma: DeepMockProxy<PrismaService>;
+  let app: INestApplication;
+  let db: MongoService;
   let service: AdminPostsService;
+  let mediaService: DeepMockProxy<MediaService>;
+  let post: Post;
 
-  beforeEach(() => {
-    prisma = mockDeep<PrismaService>();
-    const mediaService = mockDeep<MediaService>();
+  beforeAll(async () => {
+    mediaService = mockDeep<MediaService>();
     mediaService.toResponse.mockImplementation((item) => ({
       id: item.id,
       type: item.type,
@@ -71,7 +42,7 @@ describe('AdminPostsService', () => {
       posterUrl: null,
       durationSec: item.durationSec,
       aspectRatio: item.aspectRatio,
-      captions: (item.captions ?? []).map(
+      captions: item.captions.map(
         ({ languageCode, name, isOriginal, url }) => ({
           languageCode,
           name,
@@ -80,56 +51,93 @@ describe('AdminPostsService', () => {
         }),
       ),
     }));
-    service = new AdminPostsService(prisma, mediaService);
-    prisma.$transaction.mockImplementation((run: unknown) =>
-      Promise.all(run as Promise<unknown>[]),
+    const moduleRef = await Test.createTestingModule({
+      imports: [MongoModule.forTest(createTestMongoUrl('adminposts'))],
+      providers: [
+        AdminPostsService,
+        { provide: MediaService, useValue: mediaService },
+      ],
+    }).compile();
+    app = moduleRef.createNestApplication();
+    await app.init();
+    await prepareTestDatabase(app);
+    db = app.get(MongoService);
+    service = app.get(AdminPostsService);
+
+    const comments = app.get<Model<PostComment>>(
+      getModelToken(PostComment.name),
     );
+    const likes = app.get<Model<PostLike>>(getModelToken(PostLike.name));
+    const author = await createUser(db, { username: 'vedora.chef' });
+    post = await createPost(db, {
+      authorId: author.id,
+      status: PostStatus.PROCESSING,
+      publishedAt: null,
+      body: 'Đậu hũ sốt cà',
+      viewCount: 7,
+    });
+    await createPost(db, { authorId: author.id, status: PostStatus.FAILED });
+    await createMedia(db, {
+      postId: post.id,
+      status: MediaStatus.READY,
+      captionStatus: CaptionStatus.READY,
+      captionLanguage: 'vi',
+      captions: [
+        {
+          languageCode: 'vi',
+          name: 'Tiếng Việt',
+          isOriginal: true,
+          url: 'https://res.cloudinary.com/demo/raw/upload/vi.vtt',
+        },
+      ],
+    });
+    const reader = await createUser(db);
+    await comments.create({
+      postId: post.id,
+      authorId: reader.id,
+      body: 'Ngon',
+    });
+    await likes.create({ postId: post.id, userId: reader.id });
+  });
+  afterAll(async () => {
+    await dropTestDatabase(app);
+    await app.close();
   });
 
   it('lists posts of every status with their caption state', async () => {
-    prisma.post.findMany.mockResolvedValue([row] as never);
-    prisma.post.count.mockResolvedValue(1);
-
     const page = await service.findAll({ page: 1, limit: 20 });
 
-    expect(prisma.post.findMany).toHaveBeenCalledWith(
-      expect.objectContaining({ where: {}, skip: 0, take: 20 }),
-    );
-    expect(page.meta.totalItems).toBe(1);
-    expect(page.items[0]).toMatchObject({
-      id: postId,
+    expect(page.meta.totalItems).toBe(2);
+    expect(page.items.find(({ id }) => id === post.id)).toMatchObject({
       status: PostStatus.PROCESSING,
-      commentCount: 2,
-      likeCount: 5,
+      commentCount: 1,
+      likeCount: 1,
+      viewCount: 7,
       media: [{ captionStatus: CaptionStatus.READY, captionLanguage: 'vi' }],
     });
   });
 
   it('filters by status', async () => {
-    prisma.post.findMany.mockResolvedValue([]);
-    prisma.post.count.mockResolvedValue(0);
-
-    await service.findAll({ page: 1, limit: 20, status: PostStatus.FAILED });
-
-    expect(prisma.post.count).toHaveBeenCalledWith({
-      where: { status: PostStatus.FAILED },
+    const page = await service.findAll({
+      page: 1,
+      limit: 20,
+      status: PostStatus.FAILED,
     });
+    expect(page.meta.totalItems).toBe(1);
+    expect(page.items[0].status).toBe(PostStatus.FAILED);
   });
 
   it("includes each video's caption tracks in a single post", async () => {
-    prisma.post.findUnique.mockResolvedValue(row as never);
+    const found = await service.findOne(post.id);
 
-    const post = await service.findOne(postId);
-
-    expect(post.media[0]).toMatchObject({
+    expect(found.media[0]).toMatchObject({
       captionStatus: CaptionStatus.READY,
       captions: [{ languageCode: 'vi', isOriginal: true }],
     });
   });
 
   it('answers 404 for an unknown post', async () => {
-    prisma.post.findUnique.mockResolvedValue(null);
-    await expect(service.findOne(postId)).rejects.toBeInstanceOf(
+    await expect(service.findOne(crypto.randomUUID())).rejects.toBeInstanceOf(
       NotFoundException,
     );
   });

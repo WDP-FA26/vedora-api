@@ -1,12 +1,19 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
+import { InjectModel } from '@nestjs/mongoose';
+import type { HydratedDocument, Model } from 'mongoose';
 import {
   createPaginatedResponse,
   getPaginationArgs,
   PaginatedResponseDto,
   PaginationQueryDto,
 } from '../common/pagination';
-import { PrismaService } from '../prisma/prisma.service';
+import {
+  Ingredient,
+  IngredientGroup,
+  IngredientGroupMember,
+  IncompatibilityRule,
+} from '../mongo/models';
+import { allExist } from '../mongo/references';
 import {
   type ConflictRule,
   detectConflicts,
@@ -19,20 +26,17 @@ import {
   SaveIncompatibilityRuleDto,
 } from './dto/ingredient.dto';
 import { RecipeConflictDto } from './dto/recipe.dto';
-import { badRequest, conflict, isPrismaError } from './recipe-errors';
+import { badRequest, conflict } from './recipe-errors';
 
-const named = { select: { id: true, name: true } } as const;
+type Named = { id: string; name: string };
 
-const ruleInclude = {
-  aIngredient: named,
-  aGroup: named,
-  bIngredient: named,
-  bGroup: named,
-} satisfies Prisma.IncompatibilityRuleInclude;
-
-type RuleRow = Prisma.IncompatibilityRuleGetPayload<{
-  include: typeof ruleInclude;
-}>;
+/** A rule with the ingredient or group named on each side. */
+type RuleRow = IncompatibilityRule & {
+  aIngredient: Named | null;
+  aGroup: Named | null;
+  bIngredient: Named | null;
+  bGroup: Named | null;
+};
 
 type Side = { ingredientId: string | null; groupId: string | null };
 
@@ -44,35 +48,40 @@ const toSide = ({ kind, id }: RuleSideInputDto): Side =>
 /** "A should not be eaten with B" rules, and the conflicts they cause. */
 @Injectable()
 export class IncompatibilityRulesService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    @InjectModel(IncompatibilityRule.name)
+    private readonly rules: Model<IncompatibilityRule>,
+    @InjectModel(Ingredient.name)
+    private readonly ingredients: Model<Ingredient>,
+    @InjectModel(IngredientGroup.name)
+    private readonly groups: Model<IngredientGroup>,
+    @InjectModel(IngredientGroupMember.name)
+    private readonly members: Model<IngredientGroupMember>,
+  ) {}
 
   async findAll(
     query: PaginationQueryDto,
   ): Promise<PaginatedResponseDto<IncompatibilityRuleDto>> {
-    const [rows, totalItems] = await this.prisma.$transaction([
-      this.prisma.incompatibilityRule.findMany({
-        include: ruleInclude,
-        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
-        ...getPaginationArgs(query),
-      }),
-      this.prisma.incompatibilityRule.count(),
+    const { skip, take } = getPaginationArgs(query);
+    const [rows, totalItems] = await Promise.all([
+      this.rules
+        .find()
+        .sort({ createdAt: -1, _id: -1 })
+        .skip(skip)
+        .limit(take)
+        .exec(),
+      this.rules.countDocuments(),
     ]);
-    return createPaginatedResponse(rows.map(toDto), totalItems, query);
+    const withSides = await this.attachSides(rows);
+    return createPaginatedResponse(withSides.map(toDto), totalItems, query);
   }
 
   async create(
     dto: SaveIncompatibilityRuleDto,
   ): Promise<IncompatibilityRuleDto> {
     const data = await this.toData(dto);
-    try {
-      const row = await this.prisma.incompatibilityRule.create({
-        data,
-        include: ruleInclude,
-      });
-      return toDto(row);
-    } catch (error: unknown) {
-      throw translate(error) ?? error;
-    }
+    const created = await this.rules.create(data);
+    return this.findOne(created.id);
   }
 
   async update(
@@ -80,35 +89,38 @@ export class IncompatibilityRulesService {
     dto: SaveIncompatibilityRuleDto,
   ): Promise<IncompatibilityRuleDto> {
     const data = await this.toData(dto, id);
-    try {
-      const row = await this.prisma.incompatibilityRule.update({
-        where: { id },
-        data,
-        include: ruleInclude,
-      });
-      return toDto(row);
-    } catch (error: unknown) {
-      throw translate(error) ?? error;
-    }
+    const updated = await this.rules
+      .findOneAndUpdate(
+        { _id: id },
+        { $set: data },
+        { returnDocument: 'after' },
+      )
+      .exec();
+    if (!updated) throw new NotFoundException('Rule not found');
+    return this.findOne(id);
   }
 
   async remove(id: string): Promise<void> {
-    try {
-      await this.prisma.incompatibilityRule.delete({ where: { id } });
-    } catch (error: unknown) {
-      throw translate(error) ?? error;
-    }
+    const removed = await this.rules.deleteOne({ _id: id }).exec();
+    if (removed.deletedCount === 0)
+      throw new NotFoundException('Rule not found');
+  }
+
+  private async findOne(id: string): Promise<IncompatibilityRuleDto> {
+    const row = await this.rules.findOne({ _id: id }).exec();
+    if (!row) throw new NotFoundException('Rule not found');
+    const [withSides] = await this.attachSides([row]);
+    return toDto(withSides);
   }
 
   /** The forbidden pairs in one set of ingredients, with their names. */
   async findConflicts(ingredientIds: string[]): Promise<RecipeConflictDto[]> {
     const [conflicts] = await this.findConflictsForEach([ingredientIds]);
     if (conflicts.length === 0) return [];
-    const ingredients = await this.prisma.ingredient.findMany({
-      where: { id: { in: ingredientIds } },
-      select: { id: true, name: true },
-    });
-    const byId = new Map(ingredients.map((item) => [item.id, item]));
+    const ingredients = await this.ingredients
+      .find({ _id: { $in: ingredientIds } })
+      .exec();
+    const byId = new Map(ingredients.map(({ id, name }) => [id, { id, name }]));
     return conflicts.flatMap(({ ingredientAId, ingredientBId, ...rest }) => {
       const a = byId.get(ingredientAId);
       const b = byId.get(ingredientBId);
@@ -119,14 +131,13 @@ export class IncompatibilityRulesService {
   /** Conflicts of several ingredient sets, reading groups and rules once. */
   async findConflictsForEach(
     ingredientSets: string[][],
-    db: Prisma.TransactionClient = this.prisma,
   ): Promise<IngredientConflict[][]> {
     const ingredientIds = [...new Set(ingredientSets.flat())];
     if (ingredientIds.length < 2) return ingredientSets.map(() => []);
 
-    const memberships = await db.ingredientGroupMember.findMany({
-      where: { ingredientId: { in: ingredientIds } },
-    });
+    const memberships = await this.members
+      .find({ ingredientId: { $in: ingredientIds } })
+      .exec();
     const groupsByIngredient = new Map<string, Set<string>>();
     for (const { ingredientId, groupId } of memberships) {
       const groups = groupsByIngredient.get(ingredientId) ?? new Set();
@@ -135,27 +146,46 @@ export class IncompatibilityRulesService {
     }
     const groupIds = [...new Set(memberships.map(({ groupId }) => groupId))];
 
-    const rules: ConflictRule[] = await db.incompatibilityRule.findMany({
-      where: {
-        AND: [
+    const rules = await this.rules
+      .find({
+        $and: [
           {
-            OR: [
-              { aIngredientId: { in: ingredientIds } },
-              { aGroupId: { in: groupIds } },
+            $or: [
+              { aIngredientId: { $in: ingredientIds } },
+              { aGroupId: { $in: groupIds } },
             ],
           },
           {
-            OR: [
-              { bIngredientId: { in: ingredientIds } },
-              { bGroupId: { in: groupIds } },
+            $or: [
+              { bIngredientId: { $in: ingredientIds } },
+              { bGroupId: { $in: groupIds } },
             ],
           },
         ],
-      },
-      orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
-    });
+      })
+      .sort({ createdAt: 1, _id: 1 })
+      .exec();
+    const conflictRules: ConflictRule[] = rules.map(
+      ({
+        id,
+        aIngredientId,
+        aGroupId,
+        bIngredientId,
+        bGroupId,
+        reason,
+        source,
+      }) => ({
+        id,
+        aIngredientId,
+        aGroupId,
+        bIngredientId,
+        bGroupId,
+        reason,
+        source,
+      }),
+    );
     return ingredientSets.map((ids) =>
-      detectConflicts(ids, groupsByIngredient, rules),
+      detectConflicts(ids, groupsByIngredient, conflictRules),
     );
   }
 
@@ -174,13 +204,27 @@ export class IncompatibilityRulesService {
       bIngredientId: second.ingredientId,
       bGroupId: second.groupId,
     });
-    const duplicate = await this.prisma.incompatibilityRule.findFirst({
-      where: {
-        OR: [pair(a, b), pair(b, a)],
-        ...(selfId ? { id: { not: selfId } } : {}),
-      },
-      select: { id: true },
-    });
+    const [ingredients, groups] = await Promise.all([
+      allExist([a.ingredientId, b.ingredientId], (ids) =>
+        this.ingredients.countDocuments({ _id: { $in: ids } }),
+      ),
+      allExist([a.groupId, b.groupId], (ids) =>
+        this.groups.countDocuments({ _id: { $in: ids } }),
+      ),
+    ]);
+    if (!ingredients || !groups) {
+      throw badRequest(
+        'UNKNOWN_REFERENCE',
+        'An id in the request does not exist',
+      );
+    }
+    const matches = (sides: ReturnType<typeof pair>) =>
+      Object.fromEntries(Object.entries(sides));
+    const filter: Record<string, unknown> = {
+      $or: [matches(pair(a, b)), matches(pair(b, a))],
+    };
+    if (selfId) filter._id = { $ne: selfId };
+    const duplicate = await this.rules.findOne(filter).select('_id').exec();
     if (duplicate) {
       throw conflict('RULE_EXISTS', 'A rule for this pair already exists');
     }
@@ -190,27 +234,55 @@ export class IncompatibilityRulesService {
       source: dto.source || null,
     };
   }
-}
 
-function translate(error: unknown): Error | undefined {
-  if (isPrismaError(error, 'P2003')) {
-    return badRequest(
-      'UNKNOWN_REFERENCE',
-      'An id in the request does not exist',
+  /** Resolves each rule's sides to ingredient or group names. */
+  private async attachSides(
+    rows: HydratedDocument<IncompatibilityRule>[],
+  ): Promise<RuleRow[]> {
+    const ingredientIds = [
+      ...new Set(
+        rows.flatMap(({ aIngredientId, bIngredientId }) =>
+          [aIngredientId, bIngredientId].filter(
+            (id): id is string => id !== null,
+          ),
+        ),
+      ),
+    ];
+    const groupIds = [
+      ...new Set(
+        rows.flatMap(({ aGroupId, bGroupId }) =>
+          [aGroupId, bGroupId].filter((id): id is string => id !== null),
+        ),
+      ),
+    ];
+    const [ingredients, groups] = await Promise.all([
+      this.ingredients.find({ _id: { $in: ingredientIds } }).exec(),
+      this.groups.find({ _id: { $in: groupIds } }).exec(),
+    ]);
+    const ingredientById = new Map(
+      ingredients.map(({ id, name }) => [id, { id, name }]),
     );
+    const groupById = new Map(groups.map(({ id, name }) => [id, { id, name }]));
+    const named = (map: Map<string, Named>, id: string | null): Named | null =>
+      id === null ? null : (map.get(id) ?? null);
+    return rows.map((row) => ({
+      ...(row.toObject() as IncompatibilityRule),
+      aIngredient: named(ingredientById, row.aIngredientId),
+      aGroup: named(groupById, row.aGroupId),
+      bIngredient: named(ingredientById, row.bIngredientId),
+      bGroup: named(groupById, row.bGroupId),
+    }));
   }
-  if (isPrismaError(error, 'P2025')) {
-    return new NotFoundException('Rule not found');
-  }
-  return undefined;
 }
 
 function toSideDto(
   ingredient: { id: string; name: string } | null,
   group: { id: string; name: string } | null,
 ): RuleSideDto {
-  if (ingredient) return { kind: 'INGREDIENT', ...ingredient };
-  if (group) return { kind: 'GROUP', ...group };
+  if (ingredient) {
+    return { kind: 'INGREDIENT', id: ingredient.id, name: ingredient.name };
+  }
+  if (group) return { kind: 'GROUP', id: group.id, name: group.name };
   throw new Error('Incompatibility rule with an empty side');
 }
 

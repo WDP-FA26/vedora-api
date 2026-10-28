@@ -13,7 +13,7 @@ import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { compare } from 'bcryptjs';
 import { randomBytes } from 'node:crypto';
-import { AccountStatus, User } from '@prisma/client';
+import { AccountStatus, User } from '../mongo/models';
 import { assertAccountActive } from './account-access';
 import { PublicUser, UsersService } from '../users/users.service';
 import { JwtPayload } from './auth.types';

@@ -1,76 +1,122 @@
-import { Prisma } from '@prisma/client';
+import type { Model } from 'mongoose';
+import { Ingredient, Recipe, RecipeIngredient } from '../mongo/models';
+import { escapeRegExp } from '../users/users.service';
 import type { RecipeCatalogQueryDto } from './dto/recipe-catalog.dto';
+import type { DietaryService } from './dietary.service';
+import type { IncompatibilityRulesService } from './incompatibility-rules.service';
 
-/** Parameterized PostgreSQL predicates: all filters run before paging/counting. */
-export function catalogWhere(
+export interface CatalogPage {
+  ids: string[];
+  total: number;
+}
+
+interface CatalogDeps {
+  recipes: Model<Recipe>;
+  recipeIngredients: Model<RecipeIngredient>;
+  ingredients: Model<Ingredient>;
+  dietary: DietaryService;
+  rules: IncompatibilityRulesService;
+}
+
+/**
+ * The recipes of one catalog page, newest first, and how many match in all.
+ * MongoDB has no relation filters, and total minutes and conflicts inside a
+ * recipe are no filter at all, so this reads the ids, times and ingredients
+ * of every recipe the title/description filter leaves and filters them
+ * here. The catalog is admin-curated and small.
+ */
+export async function catalogPage(
+  { recipes, recipeIngredients, ingredients, dietary, rules }: CatalogDeps,
   query: RecipeCatalogQueryDto,
+  paging: { skip: number; take: number },
   userId?: string,
-): Prisma.Sql {
-  const filters: Prisma.Sql[] = [Prisma.sql`TRUE`];
+): Promise<CatalogPage> {
+  const [rows, links] = await Promise.all([
+    recipes
+      .find()
+      .select('title description prepMinutes cookMinutes')
+      .sort({ updatedAt: -1, _id: -1 })
+      .exec(),
+    recipeIngredients.find().select('recipeId ingredientId').exec(),
+  ]);
+  const ingredientsOf = (recipeId: string) =>
+    links
+      .filter((link) => link.recipeId === recipeId)
+      .map(({ ingredientId }) => ingredientId);
+
+  let matching = rows;
   if (query.q !== undefined) {
-    // strpos treats %, _ and backslashes as text, not LIKE wildcards.
-    filters.push(Prisma.sql`(
-      strpos(lower(r.title), lower(${query.q})) > 0
-      OR strpos(lower(COALESCE(r.description, '')), lower(${query.q})) > 0
-      OR EXISTS (
-        SELECT 1 FROM recipe_ingredients ri
-        JOIN ingredients i ON i.id = ri.ingredient_id
-        WHERE ri.recipe_id = r.id AND (
-          strpos(lower(i.name), lower(${query.q})) > 0
-          OR EXISTS (
-            SELECT 1 FROM unnest(i.aliases) AS alias(name)
-            WHERE strpos(lower(alias.name), lower(${query.q})) > 0
-          )
-        )
-      )
-    )`);
+    const matchingIds = await matchingRecipes(
+      recipes,
+      recipeIngredients,
+      ingredients,
+      query.q,
+    );
+    matching = matching.filter(({ id }) => matchingIds.has(id));
   }
   if (query.maxMinutes !== undefined) {
-    filters.push(Prisma.sql`(
-      (r.prep_minutes IS NOT NULL OR r.cook_minutes IS NOT NULL)
-      AND COALESCE(r.prep_minutes, 0) + COALESCE(r.cook_minutes, 0) <= ${query.maxMinutes}
-    )`);
+    const max = query.maxMinutes;
+    // A recipe with both times unknown never matches.
+    matching = matching.filter(
+      ({ prepMinutes, cookMinutes }) =>
+        (prepMinutes !== null || cookMinutes !== null) &&
+        (prepMinutes ?? 0) + (cookMinutes ?? 0) <= max,
+    );
   }
-  if (query.suitableForMe) {
-    filters.push(Prisma.sql`NOT EXISTS (
-      SELECT 1 FROM recipe_ingredients ri
-      WHERE ri.recipe_id = r.id AND (
-        EXISTS (
-          SELECT 1 FROM user_avoided_ingredients avoided
-          WHERE avoided.user_id = ${userId}::uuid
-            AND avoided.ingredient_id = ri.ingredient_id
-        )
-        OR EXISTS (
-          SELECT 1 FROM ingredient_group_members member
-          JOIN user_avoided_groups avoided ON avoided.group_id = member.group_id
-          WHERE avoided.user_id = ${userId}::uuid
-            AND member.ingredient_id = ri.ingredient_id
-        )
-      )
-    )`);
-    // Each side can name an ingredient or a group. The two ingredients must
-    // differ, including when a group overlaps itself or another group.
-    filters.push(Prisma.sql`NOT EXISTS (
-      SELECT 1 FROM incompatibility_rules rule
-      JOIN recipe_ingredients a ON a.recipe_id = r.id
-      JOIN recipe_ingredients b ON b.recipe_id = r.id
-        AND b.ingredient_id <> a.ingredient_id
-      WHERE (
-        a.ingredient_id = rule.a_ingredient_id
-        OR EXISTS (
-          SELECT 1 FROM ingredient_group_members member
-          WHERE member.ingredient_id = a.ingredient_id
-            AND member.group_id = rule.a_group_id
-        )
-      ) AND (
-        b.ingredient_id = rule.b_ingredient_id
-        OR EXISTS (
-          SELECT 1 FROM ingredient_group_members member
-          WHERE member.ingredient_id = b.ingredient_id
-            AND member.group_id = rule.b_group_id
-        )
-      )
-    )`);
+  if (query.suitableForMe && userId) {
+    const avoided = await dietary.avoidedIngredientIds(userId);
+    matching = matching.filter(({ id }) =>
+      ingredientsOf(id).every((ingredientId) => !avoided.has(ingredientId)),
+    );
+    const conflicts = await rules.findConflictsForEach(
+      matching.map(({ id }) => ingredientsOf(id)),
+    );
+    matching = matching.filter((_, index) => conflicts[index].length === 0);
   }
-  return Prisma.sql`WHERE ${Prisma.join(filters, ' AND ')}`;
+  return {
+    ids: matching
+      .slice(paging.skip, paging.skip + paging.take)
+      .map(({ id }) => id),
+    total: matching.length,
+  };
+}
+
+/** Title, description, or an ingredient whose name or alias contains `text`. */
+async function matchingRecipes(
+  recipes: Model<Recipe>,
+  recipeIngredients: Model<RecipeIngredient>,
+  ingredients: Model<Ingredient>,
+  text: string,
+): Promise<Set<string>> {
+  const pattern = escapeRegExp(text);
+  const [byText, matchingIngredients] = await Promise.all([
+    recipes
+      .find({
+        $or: [
+          { title: { $regex: pattern, $options: 'i' } },
+          { description: { $regex: pattern, $options: 'i' } },
+        ],
+      })
+      .select('_id')
+      .exec(),
+    ingredients
+      .find({
+        $or: [
+          { name: { $regex: pattern, $options: 'i' } },
+          { aliases: { $regex: pattern, $options: 'i' } },
+        ],
+      })
+      .select('_id')
+      .exec(),
+  ]);
+  const byIngredient = await recipeIngredients
+    .find({
+      ingredientId: { $in: matchingIngredients.map(({ id }) => id) },
+    })
+    .select('recipeId')
+    .exec();
+  return new Set([
+    ...byText.map(({ id }) => id),
+    ...byIngredient.map(({ recipeId }) => recipeId),
+  ]);
 }

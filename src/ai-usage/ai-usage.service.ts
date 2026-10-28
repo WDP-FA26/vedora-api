@@ -1,7 +1,9 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { AiFeature, Prisma } from '@prisma/client';
-import { PrismaService } from '../prisma/prisma.service';
+import { InjectModel } from '@nestjs/mongoose';
+import type { Model } from 'mongoose';
+import { isUniqueViolation } from '../mongo/errors';
+import { AiFeature, AiUsage } from '../mongo/models';
 
 const TIME_ZONE = 'Asia/Bangkok';
 const DAY_MS = 86_400_000;
@@ -15,7 +17,7 @@ export interface AiUsageSummary {
 }
 
 /**
- * Daily allowances for paid AI features, counted per user in PostgreSQL so
+ * Daily allowances for paid AI features, counted per user in MongoDB so
  * every API instance sees the same totals. Days follow Asia/Bangkok, like the
  * admin dashboard.
  */
@@ -24,7 +26,7 @@ export class AiUsageService {
   private readonly limits: Record<AiFeature, number>;
 
   constructor(
-    private readonly prisma: PrismaService,
+    @InjectModel(AiUsage.name) private readonly usage: Model<AiUsage>,
     configService: ConfigService,
   ) {
     this.limits = {
@@ -40,23 +42,34 @@ export class AiUsageService {
   }
 
   /**
-   * Counts one use, unless today's allowance is spent. A single statement, so
-   * parallel requests cannot both take the last use.
+   * Counts one use, unless today's allowance is spent. Each step is a single
+   * conditional write, so parallel requests cannot both take the last use.
    */
   async consume(
     userId: string,
     feature: AiFeature,
     now = new Date(),
   ): Promise<boolean> {
-    const rows = await this.prisma.$queryRaw<{ count: number }[]>(Prisma.sql`
-      INSERT INTO ai_usage (user_id, day, feature, count)
-      VALUES (${userId}::uuid, ${bangkokDay(now)}::date, ${feature}::"AiFeature", 1)
-      ON CONFLICT (user_id, day, feature)
-      DO UPDATE SET count = ai_usage.count + 1
-      WHERE ai_usage.count < ${this.limits[feature]}
-      RETURNING count
-    `);
-    return rows.length > 0;
+    const limit = this.limits[feature];
+    const day = new Date(`${bangkokDay(now)}T00:00:00Z`);
+    const take = async (): Promise<boolean> =>
+      (await this.usage
+        .findOneAndUpdate(
+          { userId, day, feature, count: { $lt: limit } },
+          { $inc: { count: 1 } },
+          { returnDocument: 'after' },
+        )
+        .exec()) !== null;
+    if (await take()) return true;
+    if (limit < 1) return false;
+    try {
+      await this.usage.create({ userId, day, feature, count: 1 });
+      return true;
+    } catch (error) {
+      // The row exists: it is full, or a parallel request just created it.
+      if (!isUniqueViolation(error)) throw error;
+      return take();
+    }
   }
 
   /** Gives back a use that produced nothing (refused or failed upstream). */
@@ -65,11 +78,17 @@ export class AiUsageService {
     feature: AiFeature,
     now = new Date(),
   ): Promise<void> {
-    await this.prisma.$executeRaw(Prisma.sql`
-      UPDATE ai_usage SET count = count - 1
-      WHERE user_id = ${userId}::uuid AND day = ${bangkokDay(now)}::date
-        AND feature = ${feature}::"AiFeature" AND count > 0
-    `);
+    await this.usage
+      .updateOne(
+        {
+          userId,
+          day: new Date(`${bangkokDay(now)}T00:00:00Z`),
+          feature,
+          count: { $gt: 0 },
+        },
+        { $inc: { count: -1 } },
+      )
+      .exec();
   }
 
   async summary(
@@ -78,16 +97,10 @@ export class AiUsageService {
     now = new Date(),
   ): Promise<AiUsageSummary> {
     const day = bangkokDay(now);
-    const row = await this.prisma.aiUsage.findUnique({
-      where: {
-        userId_day_feature: {
-          userId,
-          day: new Date(`${day}T00:00:00Z`),
-          feature,
-        },
-      },
-      select: { count: true },
-    });
+    const row = await this.usage
+      .findOne({ userId, day: new Date(`${day}T00:00:00Z`), feature })
+      .select('count')
+      .exec();
     return {
       feature,
       used: row?.count ?? 0,

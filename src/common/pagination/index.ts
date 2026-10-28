@@ -4,3 +4,4 @@ export * from './paginated-response.dto';
 export * from './pagination-limit.dto';
 export * from './pagination-query.dto';
 export * from './pagination';
+export * from './keyset';

@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { Injectable, Logger } from '@nestjs/common';
-import { KnowledgeDocumentFailureReason } from '@prisma/client';
+import { KnowledgeDocumentFailureReason } from '../../mongo/models';
 import { KnowledgeModelsService } from '../retrieval/knowledge-models.service';
 import {
   DocumentExtractionError,

@@ -1,96 +1,72 @@
-import { INestApplication } from '@nestjs/common';
-import { JwtService } from '@nestjs/jwt';
-import { Test } from '@nestjs/testing';
-import { UserRole } from '@prisma/client';
+import { randomUUID } from 'node:crypto';
 import request from 'supertest';
-import type { App } from 'supertest/types';
-import { mockDeep, mockReset } from 'vitest-mock-extended';
-import { AppModule } from '../src/app.module';
-import { configureApp } from '../src/app.setup';
-import { PrismaService } from '../src/prisma/prisma.service';
-
-const USER_ID = '4a1e32e4-e18e-4dd7-8b4a-246ef2113ff2';
-const RECIPE_ID = 'd1a2d3e4-0000-4000-8000-000000000001';
-const ROOT = `/api/v1/recipes/${RECIPE_ID}/favorite`;
+import { createE2eApp, type E2eApp } from './e2e-app';
+import { createRecipe, createUser } from './fixtures';
 
 describe('Recipe favorites (e2e)', () => {
-  const prisma = mockDeep<PrismaService>();
-  let app: INestApplication<App>;
+  let e2e: E2eApp;
   let token: string;
+  let recipeId: string;
+  let root: string;
   beforeAll(async () => {
-    const moduleRef = await Test.createTestingModule({ imports: [AppModule] })
-      .overrideProvider(PrismaService)
-      .useValue(prisma)
-      .compile();
-    app = moduleRef.createNestApplication({ rawBody: true });
-    configureApp(app);
-    await app.init();
-    token = await app
-      .get(JwtService)
-      .signAsync({ sub: USER_ID, username: 'favorites.user' });
-  });
-  beforeEach(() => {
-    mockReset(prisma);
-    prisma.user.findUnique.mockResolvedValue({
-      id: USER_ID,
-      username: 'favorites.user',
-      role: UserRole.USER,
-    } as never);
-    prisma.$transaction.mockImplementation((run: unknown) =>
-      (run as (tx: PrismaService) => Promise<unknown>)(prisma),
+    e2e = await createE2eApp('favorites_e2e');
+    token = await e2e.sign(
+      await createUser(e2e.mongo, { username: 'favorites.user' }),
     );
-    prisma.$queryRaw.mockResolvedValue([{ id: USER_ID }]);
-    prisma.recipeFavorite.findMany.mockResolvedValue([]);
-    prisma.recipeFavorite.count.mockResolvedValue(0);
+    recipeId = (await createRecipe(e2e.mongo)).id;
+    root = `/api/v1/recipes/${recipeId}/favorite`;
   });
   afterAll(async () => {
-    await app.close();
+    await e2e.close();
   });
+  const favorites = () =>
+    e2e.mongo.connection.model('RecipeFavorite').countDocuments();
 
   it.each([
-    ['put', ROOT],
-    ['delete', ROOT],
-    ['get', '/api/v1/recipes/favorites'],
-  ] as const)('requires auth for %s %s', async (method, path) => {
-    await request(app.getHttpServer())[method](path).expect(401);
+    ['put', 'favorite'],
+    ['delete', 'favorite'],
+    ['get', 'favorites'],
+  ] as const)('requires auth for %s %s', async (method, kind) => {
+    const path = kind === 'favorites' ? '/api/v1/recipes/favorites' : root;
+    await request(e2e.app.getHttpServer())[method](path).expect(401);
   });
   it.each(['put', 'delete'] as const)(
     'handles %s without client identity and returns a private state',
     async (method) => {
-      const response = await request(app.getHttpServer())
-        [method](ROOT)
+      const response = await request(e2e.app.getHttpServer())
+        [method](root)
         .set('Authorization', `Bearer ${token}`)
         .expect(200);
       expect(response.body).toEqual({
-        recipeId: RECIPE_ID,
+        recipeId,
         isFavorite: method === 'put',
       });
       expect(response.headers['cache-control']).toBe('private, no-store');
+      expect(await favorites()).toBe(method === 'put' ? 1 : 0);
     },
   );
   it.each(['put', 'delete'] as const)(
     'rejects a client userId on %s',
     async (method) => {
-      await request(app.getHttpServer())
-        [method](ROOT)
+      await request(e2e.app.getHttpServer())
+        [method](root)
         .set('Authorization', `Bearer ${token}`)
-        .send({ userId: USER_ID })
+        .send({ userId: randomUUID() })
         .expect(400);
-      expect(prisma.recipeFavorite.createMany).not.toHaveBeenCalled();
-      expect(prisma.recipeFavorite.deleteMany).not.toHaveBeenCalled();
+      expect(await favorites()).toBe(0);
     },
   );
   it.each(['userId=other', 'page=0', 'limit=51', 'sort=title'])(
     'rejects unsupported favorite query %s',
     async (query) => {
-      await request(app.getHttpServer())
+      await request(e2e.app.getHttpServer())
         .get(`/api/v1/recipes/favorites?${query}`)
         .set('Authorization', `Bearer ${token}`)
         .expect(400);
     },
   );
   it('routes favorites before :id and returns page metadata for an empty private list', async () => {
-    const response = await request(app.getHttpServer())
+    const response = await request(e2e.app.getHttpServer())
       .get('/api/v1/recipes/favorites')
       .set('Authorization', `Bearer ${token}`)
       .expect(200);
@@ -103,11 +79,8 @@ describe('Recipe favorites (e2e)', () => {
   it.each(['put', 'delete'] as const)(
     'returns 404 on %s for a missing recipe',
     async (method) => {
-      prisma.$queryRaw
-        .mockResolvedValueOnce([{ id: USER_ID }])
-        .mockResolvedValueOnce([]);
-      await request(app.getHttpServer())
-        [method](ROOT)
+      await request(e2e.app.getHttpServer())
+        [method](`/api/v1/recipes/${randomUUID()}/favorite`)
         .set('Authorization', `Bearer ${token}`)
         .expect(404);
     },

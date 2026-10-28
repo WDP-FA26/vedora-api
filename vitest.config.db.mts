@@ -1,7 +1,8 @@
 import swc from 'unplugin-swc';
 import { defineConfig } from 'vitest/config';
 
-// Opt-in PostgreSQL tests. Each run migrates and drops its own random schema.
+// Opt-in MongoDB tests against TEST_DATABASE_URL. Each spec creates its own
+// random database, builds the schema indexes, and drops it afterwards.
 export default defineConfig({
   test: {
     include: ['test/**/*.db-spec.ts'],

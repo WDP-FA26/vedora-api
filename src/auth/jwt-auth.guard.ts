@@ -5,8 +5,10 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
+import { InjectModel } from '@nestjs/mongoose';
 import { isUUID } from 'class-validator';
-import { PrismaService } from '../prisma/prisma.service';
+import type { Model } from 'mongoose';
+import { User } from '../mongo/models';
 import { AuthenticatedRequest, JwtPayload } from './auth.types';
 import { assertAccountActive } from './account-access';
 
@@ -14,7 +16,7 @@ import { assertAccountActive } from './account-access';
 export class JwtAuthGuard implements CanActivate {
   constructor(
     private readonly jwtService: JwtService,
-    private readonly prisma: PrismaService,
+    @InjectModel(User.name) private readonly users: Model<User>,
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
@@ -42,10 +44,10 @@ export class JwtAuthGuard implements CanActivate {
 
     // JWT claims can outlive an account or its permissions. Read the current
     // role every time, and never grant access using a role supplied in a JWT.
-    const user = await this.prisma.user.findUnique({
-      where: { id: payload.sub },
-      select: { id: true, username: true, role: true, status: true },
-    });
+    const user = await this.users
+      .findOne({ _id: payload.sub })
+      .select('username role status')
+      .exec();
     if (!user) {
       throw new UnauthorizedException('Account no longer exists');
     }

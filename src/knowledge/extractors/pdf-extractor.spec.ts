@@ -1,4 +1,4 @@
-import { KnowledgeDocumentFailureReason } from '@prisma/client';
+import { KnowledgeDocumentFailureReason } from '../../mongo/models';
 import { type DeepMockProxy, mockDeep } from 'vitest-mock-extended';
 import { KnowledgeModelsService } from '../retrieval/knowledge-models.service';
 import { DocumentExtractionError } from './document-extractor';

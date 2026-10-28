@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { VerificationStatus } from '@prisma/client';
+import { VerificationStatus } from '../../mongo/models';
 import { Transform } from 'class-transformer';
 import {
   ArrayMaxSize,

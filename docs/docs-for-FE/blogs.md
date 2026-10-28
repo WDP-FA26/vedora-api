@@ -141,8 +141,7 @@ post và công thức hiện có. Nhánh Blog tách từ `feat/recipe-catalog`, 
 thay đổi catalog khi merge nếu nhánh đó chưa nằm trên main.
 
 ```bash
-npm run prisma:migrate:deploy
-npm run prisma:generate
+npm run start:dev    # Mongoose tự tạo collection/index khi khởi động
 npm test
 npm run test:e2e
 npm run test:db

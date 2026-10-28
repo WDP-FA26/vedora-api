@@ -1,132 +1,94 @@
-import { INestApplication } from '@nestjs/common';
-import { JwtService } from '@nestjs/jwt';
-import { Test } from '@nestjs/testing';
-import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
-import { Prisma, PostStatus, UserRole } from '@prisma/client';
+import { randomUUID } from 'node:crypto';
+import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import request from 'supertest';
-import type { App } from 'supertest/types';
-import { mockDeep, mockReset } from 'vitest-mock-extended';
-import { AppModule } from '../src/app.module';
-import { configureApp } from '../src/app.setup';
 import type { PaginatedResponseDto } from '../src/common/pagination';
 import type {
   CatalogRecipeDetailDto,
   CatalogRecipeDto,
 } from '../src/recipes/dto/recipe-catalog.dto';
-import { PrismaService } from '../src/prisma/prisma.service';
+import {
+  type Ingredient,
+  type Post,
+  PostStatus,
+  type Recipe,
+  type RecipeIngredient,
+  type User,
+} from '../src/mongo/models';
+import { createE2eApp, type E2eApp } from './e2e-app';
+import {
+  createIngredient,
+  createPost,
+  createRecipe,
+  createUser,
+} from './fixtures';
 
-const USER_ID = '4a1e32e4-e18e-4dd7-8b4a-246ef2113ff2';
-const RECIPE_ID = 'd1a2d3e4-0000-4000-8000-000000000001';
-const INGREDIENT_ID = 'a1a2d3e4-0000-4000-8000-000000000001';
-const POST_ID = 'b1a2d3e4-0000-4000-8000-000000000001';
-const now = new Date('2026-10-12T00:00:00Z');
-const recipe = {
-  id: RECIPE_ID,
-  title: 'Đậu hũ sốt cà',
-  description: 'Món dễ nấu',
-  imageUrl: 'https://example.com/tofu.jpg',
-  servings: 2,
-  prepMinutes: 10,
-  cookMinutes: 5,
-  steps: ['Nấu sốt'],
-  postId: POST_ID,
-  createdById: USER_ID,
-  createdAt: now,
-  updatedAt: now,
-  post: {
-    id: POST_ID,
-    status: PostStatus.PUBLISHED,
-    author: { username: 'vedora.user', fullName: 'Vedora User' },
-  },
-  ingredients: [
-    {
-      recipeId: RECIPE_ID,
-      ingredientId: INGREDIENT_ID,
-      position: 0,
-      quantity: new Prisma.Decimal('200.5'),
-      unit: 'g',
-      note: null,
-      ingredient: { name: 'Đậu hũ' },
-    },
-  ],
-};
-
-describe('Public recipe catalog (e2e)', () => {
-  const prisma = mockDeep<PrismaService>();
-  let app: INestApplication<App>;
+describe('Recipe catalog (e2e)', () => {
+  let e2e: E2eApp;
+  let user: User;
   let token: string;
+  let tofu: Ingredient;
+  let post: Post;
+  let recipe: Recipe;
+  const server = () => e2e.app.getHttpServer();
 
   beforeAll(async () => {
-    const moduleRef = await Test.createTestingModule({ imports: [AppModule] })
-      .overrideProvider(PrismaService)
-      .useValue(prisma)
-      .compile();
-    app = moduleRef.createNestApplication({ rawBody: true });
-    configureApp(app);
-    await app.init();
-    token = await app
-      .get(JwtService)
-      .signAsync({ sub: USER_ID, username: 'vedora.user' });
-  });
-
-  beforeEach(() => {
-    mockReset(prisma);
-    prisma.user.findUnique.mockResolvedValue({
-      status: 'ACTIVE',
-      accountVersion: 0,
-      id: USER_ID,
-      username: 'vedora.user',
-      role: UserRole.USER,
-    } as never);
-    prisma.$transaction.mockImplementation((run: unknown) =>
-      (run as (tx: PrismaService) => Promise<unknown>)(prisma),
+    e2e = await createE2eApp('catalog_e2e');
+    user = await createUser(e2e.mongo, { username: 'vedora.user' });
+    token = await e2e.sign(user);
+    tofu = await createIngredient(e2e.mongo, {
+      name: 'Đậu hũ',
+      aliases: ['đậu phụ'],
+    });
+    post = await createPost(e2e.mongo, { authorId: user.id });
+    recipe = await createRecipe(
+      e2e.mongo,
+      {
+        title: 'Đậu hũ sốt cà',
+        prepMinutes: 10,
+        cookMinutes: 5,
+        steps: ['Nấu sốt'],
+        postId: post.id,
+      },
+      [tofu.id],
     );
-    prisma.$queryRaw.mockImplementation(
-      (sql: unknown) =>
-        Promise.resolve(
-          (sql as Prisma.Sql).text.includes('COUNT(*)')
-            ? [{ total: 1n }]
-            : [{ id: RECIPE_ID }],
-        ) as Prisma.PrismaPromise<unknown>,
-    );
-    prisma.recipe.findMany.mockResolvedValue([recipe]);
-    prisma.recipe.findUnique.mockResolvedValue(recipe);
-    prisma.recipeFavorite.findMany.mockResolvedValue([]);
-    prisma.recipeFavorite.findUnique.mockResolvedValue(null);
+    await e2e.mongo.connection
+      .model<RecipeIngredient>('RecipeIngredient')
+      .updateMany({ recipeId: recipe.id }, { $set: { quantity: 200.5 } });
   });
-
+  afterEach(async () => {
+    await e2e.mongo.connection
+      .model<Post>('Post')
+      .updateOne({ _id: post.id }, { $set: { status: PostStatus.PUBLISHED } });
+  });
   afterAll(async () => {
-    await app.close();
+    await e2e.close();
   });
+
+  const list = (query = '') =>
+    request(server()).get(
+      query ? `/api/v1/recipes?${query}` : '/api/v1/recipes',
+    );
 
   it('lets guests browse with page metadata and a published source', async () => {
-    const response = await request(app.getHttpServer())
-      .get('/api/v1/recipes')
-      .expect(200);
+    const response = await list().expect(200);
     const body = response.body as PaginatedResponseDto<CatalogRecipeDto>;
     expect(body).toMatchObject({
-      items: [{ id: RECIPE_ID, totalMinutes: 15, post: { id: POST_ID } }],
+      items: [{ id: recipe.id, totalMinutes: 15, post: { id: post.id } }],
       meta: { page: 1, limit: 20, totalItems: 1, totalPages: 1 },
     });
     expect(body.items[0].post).not.toHaveProperty('status');
-    expect(prisma.user.findUnique).not.toHaveBeenCalled();
-    expect(prisma.$transaction).toHaveBeenCalledWith(expect.any(Function), {
-      isolationLevel: Prisma.TransactionIsolationLevel.RepeatableRead,
-    });
   });
 
   it('returns full instructions and numeric ingredient quantities', async () => {
-    const response = await request(app.getHttpServer())
-      .get(`/api/v1/recipes/${RECIPE_ID}`)
+    const response = await request(server())
+      .get(`/api/v1/recipes/${recipe.id}`)
       .expect(200);
     const body = response.body as CatalogRecipeDetailDto;
     expect(body).toMatchObject({
-      id: RECIPE_ID,
+      id: recipe.id,
       steps: ['Nấu sốt'],
       totalMinutes: 15,
-      ingredients: [
-        { ingredientId: INGREDIENT_ID, name: 'Đậu hũ', quantity: 200.5 },
-      ],
+      ingredients: [{ ingredientId: tofu.id, name: 'Đậu hũ', quantity: 200.5 }],
     });
     expect(body).not.toHaveProperty('createdById');
   });
@@ -134,62 +96,59 @@ describe('Public recipe catalog (e2e)', () => {
   it.each([PostStatus.PROCESSING, PostStatus.FAILED])(
     'hides the %s source in list and detail',
     async (status) => {
-      const privateRecipe = { ...recipe, post: { ...recipe.post, status } };
-      prisma.recipe.findMany.mockResolvedValue([privateRecipe]);
-      prisma.recipe.findUnique.mockResolvedValue(privateRecipe);
-      const list = await request(app.getHttpServer())
-        .get('/api/v1/recipes')
-        .expect(200);
-      const detail = await request(app.getHttpServer())
-        .get(`/api/v1/recipes/${RECIPE_ID}`)
+      await e2e.mongo.connection
+        .model<Post>('Post')
+        .updateOne({ _id: post.id }, { $set: { status } });
+      const listed = await list().expect(200);
+      const detail = await request(server())
+        .get(`/api/v1/recipes/${recipe.id}`)
         .expect(200);
       expect(
-        (list.body as PaginatedResponseDto<CatalogRecipeDto>).items[0].post,
+        (listed.body as PaginatedResponseDto<CatalogRecipeDto>).items[0].post,
       ).toBeNull();
       expect((detail.body as CatalogRecipeDetailDto).post).toBeNull();
     },
   );
 
   it('requires an account for a personalized filter', async () => {
-    await request(app.getHttpServer())
-      .get('/api/v1/recipes?suitableForMe=true')
-      .expect(401);
-    expect(prisma.$queryRaw).not.toHaveBeenCalled();
+    await list('suitableForMe=true').expect(401);
   });
 
   it('accepts ordinary users and keeps personalized results out of shared caches', async () => {
-    const result = await request(app.getHttpServer())
-      .get('/api/v1/recipes?suitableForMe=true')
+    const result = await list('suitableForMe=true')
       .set('Authorization', `Bearer ${token}`)
       .expect(200);
     expect(result.headers['cache-control']).toBe('private, no-store');
-    const sql = prisma.$queryRaw.mock.calls[0][0] as Prisma.Sql;
-    expect(sql.values).toContain(USER_ID);
     expect(
       (result.body as PaginatedResponseDto<CatalogRecipeDto>).items[0],
     ).not.toHaveProperty('avoidedIngredients');
   });
 
-  it.each(['/recipes', `/recipes/${RECIPE_ID}`])(
+  it.each(['/recipes', '/recipes/anything'])(
     'rejects invalid supplied tokens on %s',
     async (path) => {
-      await request(app.getHttpServer())
+      await request(server())
         .get(`/api/v1${path}`)
         .set('Authorization', 'Bearer invalid')
         .expect(401);
-      expect(prisma.recipe.findUnique).not.toHaveBeenCalled();
     },
   );
 
   it('trims search text and applies query filters before paging', async () => {
-    await request(app.getHttpServer())
+    const found = await request(server())
       .get('/api/v1/recipes')
-      .query({ q: ' ĐẬU PHỤ ', maxMinutes: '20', page: '2', limit: '5' })
+      .query({ q: ' ĐẬU PHỤ ', maxMinutes: '20' })
       .expect(200);
-    const sql = prisma.$queryRaw.mock.calls[0][0] as Prisma.Sql;
-    expect(sql.values).toContain('ĐẬU PHỤ');
-    expect(sql.values).toContain(20);
-    expect(sql.values.slice(-2)).toEqual([5, 5]);
+    expect(
+      (found.body as PaginatedResponseDto<CatalogRecipeDto>).meta.totalItems,
+    ).toBe(1);
+    const tooSlow = await request(server())
+      .get('/api/v1/recipes')
+      .query({ q: ' ĐẬU PHỤ ', maxMinutes: '10' })
+      .expect(200);
+    expect(
+      (tooSlow.body as PaginatedResponseDto<CatalogRecipeDto>).meta.totalItems,
+    ).toBe(0);
   });
 
   it.each([
@@ -211,49 +170,32 @@ describe('Public recipe catalog (e2e)', () => {
     'userId=someone',
     'cursor=anything',
   ])('rejects invalid filters: %s', async (query) => {
-    await request(app.getHttpServer())
-      .get(`/api/v1/recipes?${query}`)
-      .expect(400);
-    expect(prisma.$queryRaw).not.toHaveBeenCalled();
+    await list(query).expect(400);
   });
 
   it('accepts a zero-minute filter and explicit non-personalized browsing', async () => {
-    await request(app.getHttpServer())
-      .get('/api/v1/recipes?maxMinutes=0&suitableForMe=false')
-      .expect(200);
+    await list('maxMinutes=0&suitableForMe=false').expect(200);
   });
 
   it('returns correct totals on an empty out-of-range page', async () => {
-    prisma.$queryRaw.mockImplementation(
-      (sql: unknown) =>
-        Promise.resolve(
-          (sql as Prisma.Sql).text.includes('COUNT(*)') ? [{ total: 3n }] : [],
-        ) as Prisma.PrismaPromise<unknown>,
-    );
-    const response = await request(app.getHttpServer())
-      .get('/api/v1/recipes?page=5&limit=2')
-      .expect(200);
+    await createRecipe(e2e.mongo, { title: 'Second' });
+    await createRecipe(e2e.mongo, { title: 'Third' });
+    const response = await list('page=5&limit=2').expect(200);
     const body = response.body as PaginatedResponseDto<CatalogRecipeDto>;
     expect(body).toMatchObject({
       items: [],
       meta: { totalItems: 3, totalPages: 2, page: 5 },
     });
-    expect(prisma.recipe.findMany).not.toHaveBeenCalled();
   });
 
   it('returns 404 for a missing recipe and 400 for an invalid ID', async () => {
-    prisma.recipe.findUnique.mockResolvedValue(null);
-    await request(app.getHttpServer())
-      .get(`/api/v1/recipes/${RECIPE_ID}`)
-      .expect(404);
-    await request(app.getHttpServer())
-      .get('/api/v1/recipes/not-a-uuid')
-      .expect(400);
+    await request(server()).get(`/api/v1/recipes/${randomUUID()}`).expect(404);
+    await request(server()).get('/api/v1/recipes/not-a-uuid').expect(400);
   });
 
   it('documents the filters and manual preview in Swagger', () => {
     const document = SwaggerModule.createDocument(
-      app,
+      e2e.app,
       new DocumentBuilder().addBearerAuth().build(),
     );
     expect(document.paths['/api/v1/recipes'].get?.parameters).toEqual(

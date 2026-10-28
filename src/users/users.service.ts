@@ -4,13 +4,6 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import {
-  AccountStatus,
-  Prisma,
-  User,
-  UserAccountAction,
-  UserRole,
-} from '@prisma/client';
 import type { AuthenticatedUser } from '../auth/auth.types';
 import { assertAccountActive } from '../auth/account-access';
 import { hashPassword } from '../auth/password';
@@ -19,39 +12,101 @@ import {
   getPaginationArgs,
   PaginatedResponseDto,
 } from '../common/pagination';
-import { PrismaService } from '../prisma/prisma.service';
+import { InjectModel } from '@nestjs/mongoose';
+import type { ClientSession } from 'mongodb';
+import type { Model, QueryFilter } from 'mongoose';
+import { lockDocument } from '../mongo/document-lock';
+import { isUniqueViolation } from '../mongo/errors';
+import {
+  AccountStatus,
+  User,
+  UserAccountAction,
+  UserAccountAudit,
+  UserRole,
+} from '../mongo/models';
+import { MongoService } from '../mongo/mongo.service';
+import { deleteWithReferences } from '../mongo/relations';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { UpdateUserRoleDto } from './dto/update-user-role.dto';
 import { UpdateUserStatusDto } from './dto/update-user-status.dto';
 import { UsersQueryDto } from './dto/users-query.dto';
 
-export const publicUserSelect = {
-  id: true,
-  username: true,
-  fullName: true,
-  email: true,
-  role: true,
-  status: true,
-  accountVersion: true,
-  createdAt: true,
-  updatedAt: true,
-} satisfies Prisma.UserSelect;
+export const publicUserFields = [
+  'id',
+  'username',
+  'fullName',
+  'email',
+  'role',
+  'status',
+  'accountVersion',
+  'createdAt',
+  'updatedAt',
+] as const satisfies readonly (keyof User)[];
 
-export type PublicUser = Prisma.UserGetPayload<{
-  select: typeof publicUserSelect;
-}>;
+export type PublicUser = Pick<User, (typeof publicUserFields)[number]>;
+
+/** The stored fields behind `publicUserFields` (`id` is the `_id` virtual). */
+const projection = publicUserFields.filter((field) => field !== 'id').join(' ');
+
+/** What a new account may set; everything else starts at its default. */
+export type NewUser = Pick<User, 'username' | 'fullName' | 'email'> &
+  Partial<
+    Pick<User, 'passwordHash' | 'googleId' | 'emailVerifiedAt' | 'status'>
+  >;
+
+/** Escapes `text` for use inside a regular expression. */
+export function escapeRegExp(text: string): string {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+export function toPublicUser(user: PublicUser): PublicUser {
+  const {
+    id,
+    username,
+    fullName,
+    email,
+    role,
+    status,
+    accountVersion,
+    createdAt,
+    updatedAt,
+  } = user;
+  return {
+    id,
+    username,
+    fullName,
+    email,
+    role,
+    status,
+    accountVersion,
+    createdAt,
+    updatedAt,
+  };
+}
 
 @Injectable()
 export class UsersService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    @InjectModel(User.name) private readonly users: Model<User>,
+    @InjectModel(UserAccountAudit.name)
+    private readonly audits: Model<UserAccountAudit>,
+    private readonly mongo: MongoService,
+  ) {}
 
-  async create(data: Prisma.UserCreateInput): Promise<PublicUser> {
+  async create(data: NewUser): Promise<PublicUser> {
     try {
-      return await this.prisma.user.create({
-        data,
-        select: publicUserSelect,
+      const user = await this.users.create({
+        role: UserRole.USER,
+        status: AccountStatus.PENDING_EMAIL,
+        accountVersion: 0,
+        isProfessional: false,
+        avoidedIngredientIds: [],
+        avoidedGroupIds: [],
+        likedIngredientIds: [],
+        ...data,
       });
+      return toPublicUser(user);
     } catch (error: unknown) {
       this.rethrowKnownError(error);
     }
@@ -70,33 +125,39 @@ export class UsersService {
   async findAll(
     query: UsersQueryDto,
   ): Promise<PaginatedResponseDto<PublicUser>> {
-    const where: Prisma.UserWhereInput = {
-      ...(query.status ? { status: query.status } : {}),
-      ...(query.q
-        ? {
-            OR: ['username', 'fullName', 'email'].map((field) => ({
-              [field]: {
-                contains: query.q,
-                mode: Prisma.QueryMode.insensitive,
-              },
-            })),
-          }
-        : {}),
-    };
-    // Count and rows use one snapshot so concurrent writes cannot disagree.
-    const [items, totalItems] = await this.prisma.$transaction(
-      [
-        this.prisma.user.findMany({
-          where,
-          select: publicUserSelect,
-          orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
-          ...getPaginationArgs(query),
-        }),
-        this.prisma.user.count({ where }),
-      ],
-      { isolationLevel: Prisma.TransactionIsolationLevel.RepeatableRead },
+    const filters: QueryFilter<User>[] = [];
+    if (query.status) filters.push({ status: query.status });
+    if (query.q) {
+      // Case-insensitive match on any of the identifying fields.
+      const pattern = { $regex: escapeRegExp(query.q), $options: 'i' };
+      filters.push({
+        $or: ['username', 'fullName', 'email'].map((field) => ({
+          [field]: pattern,
+        })),
+      });
+    }
+    const filter: QueryFilter<User> =
+      filters.length === 0
+        ? {}
+        : filters.length === 1
+          ? filters[0]
+          : { $and: filters };
+    const { skip, take } = getPaginationArgs(query);
+    const [items, totalItems] = await Promise.all([
+      this.users
+        .find(filter)
+        .select(projection)
+        .sort({ createdAt: -1, _id: -1 })
+        .skip(skip)
+        .limit(take)
+        .exec(),
+      this.users.countDocuments(filter),
+    ]);
+    return createPaginatedResponse(
+      items.map((user) => toPublicUser(user)),
+      totalItems,
+      query,
     );
-    return createPaginatedResponse(items, totalItems, query);
   }
 
   async findOne(id: string, actor: AuthenticatedUser): Promise<PublicUser> {
@@ -113,16 +174,22 @@ export class UsersService {
   ): Promise<PublicUser> {
     this.assertCanAccess(id, actor);
     try {
-      return await this.prisma.user.update({
-        where: { id },
-        // Explicit fields keep account permissions out of profile updates.
-        data: {
-          username: dto.username,
-          fullName: dto.fullName,
-          email: dto.email,
-        },
-        select: publicUserSelect,
-      });
+      const user = await this.users
+        .findOneAndUpdate(
+          { _id: id },
+          {
+            // Explicit fields keep account permissions out of profile updates.
+            $set: {
+              ...(dto.username !== undefined && { username: dto.username }),
+              ...(dto.fullName !== undefined && { fullName: dto.fullName }),
+              ...(dto.email !== undefined && { email: dto.email }),
+            },
+          },
+          { returnDocument: 'after' },
+        )
+        .exec();
+      if (!user) throw new NotFoundException('User not found');
+      return toPublicUser(user);
     } catch (error: unknown) {
       this.rethrowKnownError(error);
     }
@@ -131,10 +198,10 @@ export class UsersService {
   async remove(id: string, actor: AuthenticatedUser): Promise<void> {
     this.assertCanAccess(id, actor);
     try {
-      await this.withAccountGate(id, actor, false, async (tx, target) => {
-        await this.assertNotLastAdmin(tx, target);
+      await this.withAccountGate(id, actor, false, async (target, session) => {
+        await this.assertNotLastAdmin(target, session);
         await this.writeAudit(
-          tx,
+          session,
           actor.sub,
           target,
           UserAccountAction.DELETE,
@@ -142,7 +209,9 @@ export class UsersService {
           AccountStatus.DELETED,
           target.role,
         );
-        await tx.user.delete({ where: { id } });
+        await deleteWithReferences(this.mongo.db, session, 'users', {
+          _id: id,
+        });
       });
     } catch (error: unknown) {
       this.rethrowKnownError(error);
@@ -150,7 +219,7 @@ export class UsersService {
   }
 
   findByUsername(username: string): Promise<User | null> {
-    return this.prisma.user.findUnique({ where: { username } });
+    return this.users.findOne({ username }).exec();
   }
 
   async updateRole(
@@ -162,27 +231,31 @@ export class UsersService {
       throw new ForbiddenException('Only admins can change user roles');
     }
     try {
-      return await this.withAccountGate(id, actor, true, async (tx, target) => {
-        this.assertVersion(target, dto.expectedVersion);
-        if (target.role === dto.role) return this.selectPublic(target);
-        if (dto.role !== UserRole.ADMIN)
-          await this.assertNotLastAdmin(tx, target);
-        const updated = await tx.user.update({
-          where: { id },
-          data: { role: dto.role, accountVersion: { increment: 1 } },
-          select: publicUserSelect,
-        });
-        await this.writeAudit(
-          tx,
-          actor.sub,
-          target,
-          UserAccountAction.ROLE_CHANGE,
-          dto.reason,
-          target.status,
-          dto.role,
-        );
-        return updated;
-      });
+      return await this.withAccountGate(
+        id,
+        actor,
+        true,
+        async (target, session) => {
+          this.assertVersion(target, dto.expectedVersion);
+          if (target.role === dto.role) return toPublicUser(target);
+          if (dto.role !== UserRole.ADMIN) {
+            await this.assertNotLastAdmin(target, session);
+          }
+          const updated = await this.changeAccount(session, target, {
+            role: dto.role,
+          });
+          await this.writeAudit(
+            session,
+            actor.sub,
+            target,
+            UserAccountAction.ROLE_CHANGE,
+            dto.reason,
+            target.status,
+            dto.role,
+          );
+          return updated;
+        },
+      );
     } catch (error: unknown) {
       this.rethrowKnownError(error);
     }
@@ -195,9 +268,9 @@ export class UsersService {
   ): Promise<PublicUser> {
     if (actor.role !== UserRole.ADMIN)
       throw new ForbiddenException('Only admins can change account status');
-    return this.withAccountGate(id, actor, true, async (tx, target) => {
+    return this.withAccountGate(id, actor, true, async (target, session) => {
       this.assertVersion(target, dto.expectedVersion);
-      if (target.status === dto.status) return this.selectPublic(target);
+      if (target.status === dto.status) return toPublicUser(target);
       if (
         (target.status !== AccountStatus.ACTIVE &&
           target.status !== AccountStatus.SUSPENDED) ||
@@ -210,14 +283,12 @@ export class UsersService {
         });
       }
       if (dto.status === AccountStatus.SUSPENDED)
-        await this.assertNotLastAdmin(tx, target);
-      const updated = await tx.user.update({
-        where: { id },
-        data: { status: dto.status, accountVersion: { increment: 1 } },
-        select: publicUserSelect,
+        await this.assertNotLastAdmin(target, session);
+      const updated = await this.changeAccount(session, target, {
+        status: dto.status,
       });
       await this.writeAudit(
-        tx,
+        session,
         actor.sub,
         target,
         dto.status === AccountStatus.SUSPENDED
@@ -232,11 +303,11 @@ export class UsersService {
   }
 
   findByGoogleId(googleId: string): Promise<User | null> {
-    return this.prisma.user.findUnique({ where: { googleId } });
+    return this.users.findOne({ googleId }).exec();
   }
 
   findByEmail(email: string): Promise<User | null> {
-    return this.prisma.user.findUnique({ where: { email } });
+    return this.users.findOne({ email }).exec();
   }
 
   /**
@@ -246,21 +317,29 @@ export class UsersService {
    */
   async linkGoogleAccount(user: User, googleId: string): Promise<PublicUser> {
     try {
-      return await this.prisma.user.update({
-        where: {
-          id: user.id,
-          status: { in: [AccountStatus.ACTIVE, AccountStatus.PENDING_EMAIL] },
-        },
-        data: user.emailVerifiedAt
-          ? { googleId, status: AccountStatus.ACTIVE }
-          : {
-              googleId,
-              passwordHash: null,
-              emailVerifiedAt: new Date(),
-              status: AccountStatus.ACTIVE,
+      const linked = await this.users
+        .findOneAndUpdate(
+          {
+            _id: user.id,
+            status: {
+              $in: [AccountStatus.ACTIVE, AccountStatus.PENDING_EMAIL],
             },
-        select: publicUserSelect,
-      });
+          },
+          {
+            $set: user.emailVerifiedAt
+              ? { googleId, status: AccountStatus.ACTIVE }
+              : {
+                  googleId,
+                  passwordHash: null,
+                  emailVerifiedAt: new Date(),
+                  status: AccountStatus.ACTIVE,
+                },
+          },
+          { returnDocument: 'after' },
+        )
+        .exec();
+      if (!linked) throw new NotFoundException('User not found');
+      return toPublicUser(linked);
     } catch (error: unknown) {
       this.rethrowKnownError(error);
     }
@@ -275,54 +354,30 @@ export class UsersService {
     { email, username }: { email: string; username: string },
     createdBefore: Date,
   ): Promise<void> {
-    await this.prisma.user.deleteMany({
-      where: {
-        OR: [{ email }, { username }],
+    await this.mongo.withTransaction((session) =>
+      deleteWithReferences(this.mongo.db, session, 'users', {
+        $or: [{ email }, { username }],
         emailVerifiedAt: null,
         googleId: null,
         role: UserRole.USER,
         status: AccountStatus.PENDING_EMAIL,
-        createdAt: { lt: createdBefore },
-      },
-    });
+        createdAt: { $lt: createdBefore },
+      }),
+    );
   }
 
-  findPublicById(id: string): Promise<PublicUser | null> {
-    return this.prisma.user.findUnique({
-      where: { id },
-      select: publicUserSelect,
-    });
+  async findPublicById(id: string): Promise<PublicUser | null> {
+    const user = await this.users
+      .findOne({ _id: id })
+      .select(projection)
+      .exec();
+    return user && toPublicUser(user);
   }
 
   private assertCanAccess(id: string, actor: AuthenticatedUser): void {
     if (actor.role !== UserRole.ADMIN && actor.sub !== id) {
       throw new ForbiddenException('You can only access your own account');
     }
-  }
-
-  private selectPublic(user: User): PublicUser {
-    const {
-      id,
-      username,
-      fullName,
-      email,
-      role,
-      status,
-      accountVersion,
-      createdAt,
-      updatedAt,
-    } = user;
-    return {
-      id,
-      username,
-      fullName,
-      email,
-      role,
-      status,
-      accountVersion,
-      createdAt,
-      updatedAt,
-    };
   }
 
   private assertVersion(target: User, expectedVersion: number): void {
@@ -335,17 +390,18 @@ export class UsersService {
   }
 
   private async assertNotLastAdmin(
-    tx: Prisma.TransactionClient,
     target: User,
+    session: ClientSession,
   ): Promise<void> {
     if (
       target.role !== UserRole.ADMIN ||
       target.status !== AccountStatus.ACTIVE
     )
       return;
-    const activeAdmins = await tx.user.count({
-      where: { role: UserRole.ADMIN, status: AccountStatus.ACTIVE },
-    });
+    const activeAdmins = await this.users.countDocuments(
+      { role: UserRole.ADMIN, status: AccountStatus.ACTIVE },
+      { session },
+    );
     if (activeAdmins <= 1) {
       throw new ConflictException({
         code: 'LAST_ACTIVE_ADMIN',
@@ -354,8 +410,25 @@ export class UsersService {
     }
   }
 
+  /** Sets a role or status and moves the account to its next version. */
+  private async changeAccount(
+    session: ClientSession,
+    target: User,
+    change: Partial<Pick<User, 'role' | 'status'>>,
+  ): Promise<PublicUser> {
+    const updated = await this.users
+      .findOneAndUpdate(
+        { _id: target.id },
+        { $set: change, $inc: { accountVersion: 1 } },
+        { session, returnDocument: 'after' },
+      )
+      .exec();
+    if (!updated) throw new NotFoundException('User not found');
+    return toPublicUser(updated);
+  }
+
   private async writeAudit(
-    tx: Prisma.TransactionClient,
+    session: ClientSession,
     actorId: string,
     target: User,
     action: UserAccountAction,
@@ -363,36 +436,41 @@ export class UsersService {
     status: AccountStatus,
     role: UserRole,
   ): Promise<void> {
-    await tx.userAccountAudit.create({
-      data: {
-        actorId,
-        userId: target.id,
-        action,
-        reason,
-        previousStatus: target.status,
-        status,
-        previousRole: target.role,
-        role,
-        accountVersion: target.accountVersion + 1,
-      },
-    });
+    await this.audits.create(
+      [
+        {
+          actorId,
+          userId: target.id,
+          action,
+          reason,
+          previousStatus: target.status,
+          status,
+          previousRole: target.role,
+          role,
+          accountVersion: target.accountVersion + 1,
+        },
+      ],
+      { session },
+    );
   }
 
   private withAccountGate<T>(
     id: string,
     actor: AuthenticatedUser,
     adminOnly: boolean,
-    operation: (tx: Prisma.TransactionClient, target: User) => Promise<T>,
+    operation: (target: User, session: ClientSession) => Promise<T>,
   ): Promise<T> {
-    return this.prisma.$transaction(async (tx) => {
-      // One transaction-scoped gate serializes all role/status/deletion paths,
-      // including changes to different admins. Per-account locks also order
-      // these changes against refresh-token issuance.
-      await tx.$queryRaw`SELECT 1 AS locked FROM pg_advisory_xact_lock(742019, 1)`;
-      await tx.$queryRaw`SELECT id FROM users WHERE id = ${id}::uuid OR id = ${actor.sub}::uuid ORDER BY id FOR UPDATE`;
-      const currentActor = await tx.user.findUnique({
-        where: { id: actor.sub },
-      });
+    return this.mongo.withTransaction(async (session) => {
+      // One gate serializes all role/status/deletion paths, including
+      // changes to different admins. Per-account locks also order these
+      // changes against refresh-token issuance. Locks are taken in a fixed
+      // order.
+      const database = this.mongo.db;
+      await lockDocument(database, session, 'account-gate');
+      for (const lockId of [...new Set([id, actor.sub])].sort()) {
+        await lockDocument(database, session, 'user', lockId);
+      }
+      const currentActor = await this.findUser(actor.sub, session);
       if (!currentActor)
         throw new ForbiddenException('Account no longer exists');
       assertAccountActive(currentActor.status);
@@ -402,24 +480,31 @@ export class UsersService {
       ) {
         throw new ForbiddenException('Only admins can manage another account');
       }
-      const target = await tx.user.findUnique({ where: { id } });
+      const target = await this.findUser(id, session);
       if (!target || target.status === AccountStatus.DELETED)
         throw new NotFoundException('User not found');
-      return operation(tx, target);
+      return operation(target, session);
     });
   }
 
+  private async findUser(
+    id: string,
+    session: ClientSession,
+  ): Promise<User | null> {
+    return this.users.findOne({ _id: id }).session(session).exec();
+  }
+
   private rethrowKnownError(error: unknown): never {
-    if (error instanceof Prisma.PrismaClientKnownRequestError) {
-      if (error.code === 'P2002') {
-        const fields = Array.isArray(error.meta?.target)
-          ? error.meta.target.join(', ')
-          : 'Username or email';
-        throw new ConflictException(`${fields} already exists`);
-      }
-      if (error.code === 'P2025') {
-        throw new NotFoundException('User not found');
-      }
+    if (isUniqueViolation(error)) {
+      // keyPattern names the fields of the violated unique index.
+      const keyPattern: unknown = error.keyPattern;
+      const fields =
+        keyPattern && typeof keyPattern === 'object'
+          ? Object.keys(keyPattern).join(', ')
+          : '';
+      throw new ConflictException(
+        `${fields || 'Username or email'} already exists`,
+      );
     }
     throw error;
   }

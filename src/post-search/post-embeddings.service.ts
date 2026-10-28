@@ -1,19 +1,48 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { z } from 'zod';
+import { Type } from 'class-transformer';
+import {
+  IsArray,
+  IsInt,
+  IsNumber,
+  IsOptional,
+  IsString,
+  ValidateNested,
+} from 'class-validator';
+import { parsePayload, validatePayload } from '../common/validation';
 
 const OPENROUTER_API = 'https://openrouter.ai/api/v1';
 const BATCH = 64;
 const TIMEOUT_MS = 30_000;
 
-const errorBody = z.object({
-  error: z.object({ message: z.string() }).optional(),
-});
-const embeddingsResponse = z.object({
-  data: z.array(
-    z.object({ index: z.number().optional(), embedding: z.array(z.number()) }),
-  ),
-});
+class EmbeddingDto {
+  @IsOptional()
+  @IsInt()
+  index?: number;
+
+  @IsArray()
+  @IsNumber({}, { each: true })
+  embedding!: number[];
+}
+
+class EmbeddingsResponseDto {
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => EmbeddingDto)
+  data!: EmbeddingDto[];
+}
+
+class ErrorDetailDto {
+  @IsString()
+  message!: string;
+}
+
+class ErrorBodyDto {
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => ErrorDetailDto)
+  error?: ErrorDetailDto;
+}
 
 /** Text embeddings for post search, through OpenRouter's embeddings API. */
 @Injectable()
@@ -76,15 +105,14 @@ export class PostEmbeddingsService {
       }),
       signal,
     });
-    const json = z.json().parse(await response.json());
+    const json: unknown = await response.json();
     if (!response.ok) {
-      const message = errorBody.safeParse(json).data?.error?.message;
+      const message = validatePayload(ErrorBodyDto, json).value?.error?.message;
       throw new Error(
         `OpenRouter /embeddings failed (${response.status}): ${message ?? 'no message'}`,
       );
     }
-    return embeddingsResponse
-      .parse(json)
+    return parsePayload(EmbeddingsResponseDto, json)
       .data.map((item, position) => ({
         ...item,
         index: item.index ?? position,

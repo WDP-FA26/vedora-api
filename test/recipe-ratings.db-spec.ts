@@ -1,21 +1,30 @@
-import { execFileSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import { join } from 'node:path';
 import { INestApplication } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtModule, JwtService } from '@nestjs/jwt';
 import { Test } from '@nestjs/testing';
-import { Prisma, PrismaClient, UserRole } from '@prisma/client';
+import { MongoModule } from '../src/mongo/mongo.module';
+import {
+  type Recipe,
+  type RecipeRating,
+  type User,
+  UserRole,
+} from '../src/mongo/models';
+import { MongoService } from '../src/mongo/mongo.service';
 import request from 'supertest';
 import type { App } from 'supertest/types';
 import { configureApp } from '../src/app.setup';
-import { PrismaService } from '../src/prisma/prisma.service';
 import { RecipeRatingsController } from '../src/recipes/recipe-ratings.controller';
 import { RecipeRatingsService } from '../src/recipes/recipe-ratings.service';
 import type { MyRecipeRatingDto } from '../src/recipes/dto/recipe-rating.dto';
+import { createRecipe, createUser, deleteWithCascade } from './fixtures';
+import {
+  createTestMongoUrl,
+  dropTestDatabase,
+  prepareTestDatabase,
+} from './mongo-test-db';
 
-describe('Recipe ratings with PostgreSQL', () => {
-  const schema = `vedora_ratings_test_${randomUUID().replaceAll('-', '')}`;
+describe('Recipe ratings with MongoDB', () => {
   const recipeId = randomUUID();
   const root = `/api/v1/recipes/${recipeId}`;
   const ids = {
@@ -30,39 +39,18 @@ describe('Recipe ratings with PostgreSQL', () => {
     second: '',
     pending: '',
   };
-  let prisma: PrismaClient;
+  let db: MongoService;
   let app: INestApplication<App>;
 
   beforeAll(async () => {
-    const base = process.env.TEST_DATABASE_URL;
-    if (!base)
-      throw new Error(
-        'Set TEST_DATABASE_URL to a disposable PostgreSQL database',
-      );
-    const url = new URL(base);
-    url.searchParams.set('schema', schema);
-    execFileSync(
-      process.execPath,
-      [
-        join(process.cwd(), 'node_modules/prisma/build/index.js'),
-        'migrate',
-        'deploy',
-      ],
-      {
-        env: { ...process.env, DATABASE_URL: url.toString() },
-        stdio: 'pipe',
-        timeout: 45_000,
-      },
-    );
-    prisma = new PrismaClient({ datasourceUrl: url.toString() });
     const moduleRef = await Test.createTestingModule({
       imports: [
+        MongoModule.forTest(createTestMongoUrl('ratings')),
         JwtModule.register({ secret: 'recipe-ratings-database-test-secret' }),
       ],
       controllers: [RecipeRatingsController],
       providers: [
         RecipeRatingsService,
-        { provide: PrismaService, useValue: prisma },
         {
           provide: ConfigService,
           useValue: new ConfigService({ API_PREFIX: 'api/v1' }),
@@ -71,17 +59,17 @@ describe('Recipe ratings with PostgreSQL', () => {
     }).compile();
     app = moduleRef.createNestApplication({ rawBody: true });
     configureApp(app);
-    await app.listen(0, '127.0.0.1');
+    await app.init();
+    await prepareTestDatabase(app);
+    db = app.get(MongoService);
     for (const name of Object.keys(ids) as (keyof typeof ids)[]) {
-      await prisma.user.create({
-        data: {
-          id: ids[name],
-          username: `ratings.${name}`,
-          fullName: name,
-          email: `${name}@ratings.test`,
-          role: name === 'author' ? UserRole.ADMIN : UserRole.USER,
-          emailVerifiedAt: name === 'pending' ? null : new Date(),
-        },
+      await createUser(db, {
+        id: ids[name],
+        username: `ratings.${name}`,
+        fullName: name,
+        email: `${name}@ratings.test`,
+        role: name === 'author' ? UserRole.ADMIN : UserRole.USER,
+        emailVerifiedAt: name === 'pending' ? null : new Date(),
       });
       tokens[name] = await app
         .get(JwtService)
@@ -90,34 +78,32 @@ describe('Recipe ratings with PostgreSQL', () => {
   });
 
   beforeEach(async () => {
-    await prisma.recipeRating.deleteMany();
-    await prisma.user.updateMany({
-      where: { id: { in: [ids.author, ids.first, ids.second] } },
-      data: { emailVerifiedAt: new Date() },
-    });
-    const data = {
-      title: 'Đậu hũ sốt cà',
-      servings: 2,
-      steps: ['Nấu'],
-      createdById: ids.author,
-    };
-    await prisma.recipe.upsert({
-      where: { id: recipeId },
-      create: { id: recipeId, ...data },
-      update: data,
-    });
-  });
-
-  afterAll(async () => {
-    if (app) await app.close();
-    if (prisma) {
-      await prisma.$executeRaw(
-        Prisma.sql`DROP SCHEMA ${Prisma.raw(`"${schema}"`)} CASCADE`,
+    await db.db.collection('recipe_ratings').deleteMany({});
+    await db.connection
+      .model<User>('User')
+      .updateMany(
+        { _id: { $in: [ids.author, ids.first, ids.second] } },
+        { $set: { emailVerifiedAt: new Date() } },
       );
-      await prisma.$disconnect();
+    if (
+      !(await db.connection.model<Recipe>('Recipe').findOne({ _id: recipeId }))
+    ) {
+      await createRecipe(db, {
+        id: recipeId,
+        title: 'Đậu hũ sốt cà',
+        steps: ['Nấu'],
+        createdById: ids.author,
+      });
     }
   });
 
+  afterAll(async () => {
+    if (app) await dropTestDatabase(app);
+    if (app) await app.close();
+  });
+
+  const ratings = () => db.connection.model<RecipeRating>('RecipeRating');
+  const ratingCount = () => ratings().countDocuments();
   const put = (value: number, token = tokens.first) =>
     request(app.getHttpServer())
       .put(`${root}/rating`)
@@ -149,22 +135,22 @@ describe('Recipe ratings with PostgreSQL', () => {
       averageRating: 5,
       myRating: 5,
     });
-    expect(await prisma.recipeRating.count()).toBe(1);
+    expect(await ratingCount()).toBe(1);
   });
 
   it('computes the mean from multiple members and rounds to one decimal', async () => {
     await put(4).expect(200);
     await put(5, tokens.second).expect(200);
-    const extra = await prisma.user.create({
-      data: {
-        username: 'ratings.third',
-        fullName: 'Third',
-        email: 'third@ratings.test',
-        emailVerifiedAt: new Date(),
-      },
+    const extra = await createUser(db, {
+      username: 'ratings.third',
+      fullName: 'Third',
+      email: 'third@ratings.test',
     });
-    await prisma.recipeRating.create({
-      data: { recipeId, userId: extra.id, value: 5 },
+    await ratings().create({
+      _id: randomUUID(),
+      recipeId,
+      userId: extra.id,
+      value: 5,
     });
     const response = await summary().expect(200);
     expect(response.body).toEqual({
@@ -172,7 +158,7 @@ describe('Recipe ratings with PostgreSQL', () => {
       ratingCount: 3,
       averageRating: 4.7,
     });
-    await prisma.user.delete({ where: { id: extra.id } });
+    await deleteWithCascade(db, 'users', extra.id);
     expect((await summary().expect(200)).body).toEqual({
       recipeId,
       ratingCount: 2,
@@ -211,7 +197,7 @@ describe('Recipe ratings with PostgreSQL', () => {
   it('rejects an author self-rating even with ADMIN role', async () => {
     const response = await put(5, tokens.author).expect(403);
     expect(response.body).toMatchObject({ code: 'SELF_RATING_NOT_ALLOWED' });
-    expect(await prisma.recipeRating.count()).toBe(0);
+    expect(await ratingCount()).toBe(0);
   });
 
   it('deletes only the caller score and allows repeated deletion', async () => {
@@ -240,26 +226,27 @@ describe('Recipe ratings with PostgreSQL', () => {
     await put(5, tokens.pending).expect(403);
     await put(2).expect(200);
     await put(5, tokens.second).expect(200);
-    await prisma.user.update({
-      where: { id: ids.second },
-      data: { emailVerifiedAt: null },
-    });
+    await db.connection
+      .model<User>('User')
+      .updateOne({ _id: ids.second }, { $set: { emailVerifiedAt: null } });
     expect((await summary().expect(200)).body).toEqual({
       recipeId,
       ratingCount: 1,
       averageRating: 2,
     });
     await put(4, tokens.second).expect(403);
-    await prisma.user.update({
-      where: { id: ids.second },
-      data: { emailVerifiedAt: new Date() },
-    });
+    await db.connection
+      .model<User>('User')
+      .updateOne(
+        { _id: ids.second },
+        { $set: { emailVerifiedAt: new Date() } },
+      );
     expect((await summary().expect(200)).body).toEqual({
       recipeId,
       ratingCount: 2,
       averageRating: 3.5,
     });
-    expect(await prisma.recipeRating.count()).toBe(2);
+    expect(await ratingCount()).toBe(2);
   });
 
   it('handles 20 concurrent retries for one member as one rating', async () => {
@@ -267,7 +254,7 @@ describe('Recipe ratings with PostgreSQL', () => {
       Array.from({ length: 20 }, () => put(4)),
     );
     expect(responses.map(({ status }) => status)).toEqual(Array(20).fill(200));
-    expect(await prisma.recipeRating.count()).toBe(1);
+    expect(await ratingCount()).toBe(1);
     expect((await summary().expect(200)).body).toEqual({
       recipeId,
       ratingCount: 1,
@@ -286,7 +273,7 @@ describe('Recipe ratings with PostgreSQL', () => {
         myRating: value,
       });
     }
-    const records = await prisma.recipeRating.findMany();
+    const records = await ratings().find().exec();
     const final = (await summary().expect(200)).body as MyRecipeRatingDto;
     expect(final.ratingCount).toBe(records.length);
     expect(final.averageRating).toBe(records[0]?.value ?? null);
@@ -295,7 +282,7 @@ describe('Recipe ratings with PostgreSQL', () => {
   it('keeps separate records when different members rate concurrently', async () => {
     const responses = await Promise.all([put(2), put(5, tokens.second)]);
     expect(responses.map(({ status }) => status)).toEqual([200, 200]);
-    expect(await prisma.recipeRating.count()).toBe(2);
+    expect(await ratingCount()).toBe(2);
     expect((await summary().expect(200)).body).toEqual({
       recipeId,
       ratingCount: 2,
@@ -303,38 +290,33 @@ describe('Recipe ratings with PostgreSQL', () => {
     });
   });
 
-  it.each([0, 6])('enforces the database CHECK for score %s', async (value) => {
-    await expect(
-      prisma.recipeRating.create({
-        data: { recipeId, userId: ids.first, value },
-      }),
-    ).rejects.toThrow();
-    expect(await prisma.recipeRating.count()).toBe(0);
+  it.each([0, 6])('rejects score %s', async (value) => {
+    await put(value).expect(400);
+    expect(await ratingCount()).toBe(0);
   });
 
-  it('enforces unique member/recipe pairs and missing recipe references in the database', async () => {
+  // MongoDB has no foreign keys: the service checks the recipe itself.
+  it('enforces unique member/recipe pairs in the database', async () => {
     await put(4).expect(200);
     await expect(
-      prisma.recipeRating.create({
-        data: { recipeId, userId: ids.first, value: 5 },
+      ratings().create({
+        _id: randomUUID(),
+        recipeId,
+        userId: ids.first,
+        value: 5,
       }),
-    ).rejects.toMatchObject({ code: 'P2002' });
-    await expect(
-      prisma.recipeRating.create({
-        data: { recipeId: randomUUID(), userId: ids.second, value: 5 },
-      }),
-    ).rejects.toMatchObject({ code: 'P2003' });
-    expect(await prisma.recipeRating.count()).toBe(1);
+    ).rejects.toMatchObject({ code: 11000 });
+    expect(await ratingCount()).toBe(1);
   });
 
   it('does not recreate ratings or summaries after recipe deletion, including a concurrent PUT', async () => {
     await put(4).expect(200);
     const [response] = await Promise.all([
       put(5),
-      prisma.recipe.delete({ where: { id: recipeId } }),
+      deleteWithCascade(db, 'recipes', recipeId),
     ]);
     expect([200, 404, 409]).toContain(response.status);
-    expect(await prisma.recipeRating.count()).toBe(0);
+    expect(await ratingCount()).toBe(0);
     await summary().expect(404);
     await put(3).expect(404);
     await remove().expect(404);

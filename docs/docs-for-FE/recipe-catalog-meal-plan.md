@@ -197,7 +197,7 @@ Test PostgreSQL thực cho tìm kiếm, tổng thời gian, phân trang, xung đ
 các request HTTP lưu thực đơn đồng thời:
 
 ```powershell
-$env:TEST_DATABASE_URL = "postgresql://postgres:password@localhost:5432/vedora_test"
+$env:TEST_DATABASE_URL = "mongodb://vedora:vedora_local_password@localhost:27017/?authSource=admin&directConnection=true"
 npm run test:db
 ```
 

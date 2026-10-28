@@ -1,11 +1,11 @@
 import { Controller, Get } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
-import { PrismaService } from '../prisma/prisma.service';
+import { MongoService } from '../mongo/mongo.service';
 
 @ApiTags('health')
 @Controller('health')
 export class HealthController {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly mongo: MongoService) {}
 
   @Get()
   @ApiOperation({ summary: 'Liveness check' })
@@ -14,9 +14,9 @@ export class HealthController {
   }
 
   @Get('ready')
-  @ApiOperation({ summary: 'Readiness check including PostgreSQL' })
+  @ApiOperation({ summary: 'Readiness check including MongoDB' })
   async ready(): Promise<{ status: string; database: string }> {
-    await this.prisma.$queryRaw`SELECT 1`;
+    await this.mongo.db.admin().command({ ping: 1 });
     return { status: 'ok', database: 'up' };
   }
 }

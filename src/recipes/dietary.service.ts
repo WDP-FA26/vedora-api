@@ -1,92 +1,101 @@
 import { Injectable } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
-import { PrismaService } from '../prisma/prisma.service';
+import { InjectModel } from '@nestjs/mongoose';
+import type { Model } from 'mongoose';
+import {
+  Ingredient,
+  IngredientGroup,
+  IngredientGroupMember,
+  User,
+} from '../mongo/models';
+import { allExist } from '../mongo/references';
 import {
   DietaryOptionsDto,
   DietaryRestrictionsDto,
   SaveDietaryRestrictionsDto,
 } from './dto/dietary.dto';
-import { badRequest, isPrismaError } from './recipe-errors';
-
-const named = { select: { id: true, name: true } } as const;
+import { badRequest } from './recipe-errors';
 
 /** What a user does not eat (ingredients and whole groups) and the ingredients they like. Never shown to others. */
 @Injectable()
 export class DietaryService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    @InjectModel(Ingredient.name)
+    private readonly ingredients: Model<Ingredient>,
+    @InjectModel(IngredientGroup.name)
+    private readonly groups: Model<IngredientGroup>,
+    @InjectModel(IngredientGroupMember.name)
+    private readonly members: Model<IngredientGroupMember>,
+    @InjectModel(User.name) private readonly users: Model<User>,
+  ) {}
 
   /** Every ingredient, and the groups admins marked as food categories. */
   async options(): Promise<DietaryOptionsDto> {
     const [ingredients, groups] = await Promise.all([
-      this.prisma.ingredient.findMany({
-        select: { id: true, name: true, aliases: true },
-        orderBy: { name: 'asc' },
-      }),
-      this.prisma.ingredientGroup.findMany({
-        where: { dietary: true },
-        select: {
-          id: true,
-          name: true,
-          members: {
-            select: { ingredient: { select: { name: true } } },
-            orderBy: { ingredient: { name: 'asc' } },
-          },
-        },
-        orderBy: { name: 'asc' },
-      }),
+      this.ingredients.find().sort({ name: 1 }).exec(),
+      this.groups.find({ dietary: true }).sort({ name: 1 }).exec(),
     ]);
+    const members = await this.members
+      .find({ groupId: { $in: groups.map(({ id }) => id) } })
+      .exec();
+    const nameOf = new Map(ingredients.map(({ id, name }) => [id, name]));
     return {
-      ingredients,
-      groups: groups.map(({ members, ...group }) => ({
-        ...group,
-        ingredients: members.map(({ ingredient }) => ingredient.name),
+      ingredients: ingredients.map(({ id, name, aliases }) => ({
+        id,
+        name,
+        aliases: [...aliases],
+      })),
+      groups: groups.map(({ id, name }) => ({
+        id,
+        name,
+        ingredients: members
+          .filter(({ groupId }) => groupId === id)
+          .map(({ ingredientId }) => nameOf.get(ingredientId) ?? '')
+          .sort(),
       })),
     };
   }
 
   async find(userId: string): Promise<DietaryRestrictionsDto> {
-    const [ingredients, groups, liked] = await Promise.all([
-      this.prisma.userAvoidedIngredient.findMany({
-        where: { userId },
-        select: { ingredient: named },
-        orderBy: { ingredient: { name: 'asc' } },
-      }),
-      this.prisma.userAvoidedGroup.findMany({
-        where: { userId },
-        select: { group: named },
-        orderBy: { group: { name: 'asc' } },
-      }),
-      this.prisma.userLikedIngredient.findMany({
-        where: { userId },
-        select: { ingredient: named },
-        orderBy: { ingredient: { name: 'asc' } },
-      }),
+    const user = await this.preferences(userId);
+    const [ingredients, groups] = await Promise.all([
+      this.ingredients
+        .find({
+          _id: {
+            $in: [...user.avoidedIngredientIds, ...user.likedIngredientIds],
+          },
+        })
+        .select('name')
+        .sort({ name: 1 })
+        .exec(),
+      this.groups
+        .find({ _id: { $in: [...user.avoidedGroupIds] } })
+        .select('name')
+        .sort({ name: 1 })
+        .exec(),
     ]);
+    const liked = new Set(user.likedIngredientIds);
     return {
-      ingredients: ingredients.map(({ ingredient }) => ingredient),
-      groups: groups.map(({ group }) => group),
-      liked: liked.map(({ ingredient }) => ingredient),
+      ingredients: ingredients
+        .filter(({ id }) => !liked.has(id))
+        .map(({ id, name }) => ({ id, name })),
+      groups: groups.map(({ id, name }) => ({ id, name })),
+      liked: ingredients
+        .filter(({ id }) => liked.has(id))
+        .map(({ id, name }) => ({ id, name })),
     };
   }
 
   /** Every ingredient the user avoids, directly or through a group. */
-  async avoidedIngredientIds(
-    userId: string,
-    db: Prisma.TransactionClient = this.prisma,
-  ): Promise<Set<string>> {
-    const [direct, viaGroups] = await Promise.all([
-      db.userAvoidedIngredient.findMany({
-        where: { userId },
-        select: { ingredientId: true },
-      }),
-      db.ingredientGroupMember.findMany({
-        where: { group: { avoidedBy: { some: { userId } } } },
-        select: { ingredientId: true },
-      }),
+  async avoidedIngredientIds(userId: string): Promise<Set<string>> {
+    const user = await this.preferences(userId);
+    const viaGroups = await this.members
+      .find({ groupId: { $in: [...user.avoidedGroupIds] } })
+      .select('ingredientId')
+      .exec();
+    return new Set([
+      ...user.avoidedIngredientIds,
+      ...viaGroups.map(({ ingredientId }) => ingredientId),
     ]);
-    return new Set(
-      [...direct, ...viaGroups].map(({ ingredientId }) => ingredientId),
-    );
   }
 
   async replace(
@@ -100,36 +109,47 @@ export class DietaryService {
         'An ingredient cannot be both liked and avoided',
       );
     }
-    try {
-      await this.prisma.$transaction([
-        this.prisma.userAvoidedIngredient.deleteMany({ where: { userId } }),
-        this.prisma.userAvoidedGroup.deleteMany({ where: { userId } }),
-        this.prisma.userLikedIngredient.deleteMany({ where: { userId } }),
-        this.prisma.userAvoidedIngredient.createMany({
-          data: dto.ingredientIds.map((ingredientId) => ({
-            userId,
-            ingredientId,
-          })),
-        }),
-        this.prisma.userAvoidedGroup.createMany({
-          data: dto.groupIds.map((groupId) => ({ userId, groupId })),
-        }),
-        this.prisma.userLikedIngredient.createMany({
-          data: dto.likedIngredientIds.map((ingredientId) => ({
-            userId,
-            ingredientId,
-          })),
-        }),
-      ]);
-    } catch (error: unknown) {
-      if (isPrismaError(error, 'P2003')) {
-        throw badRequest(
-          'UNKNOWN_REFERENCE',
-          'An ingredient or group in the request does not exist',
-        );
-      }
-      throw error;
+    const [ingredients, groups] = await Promise.all([
+      allExist([...dto.ingredientIds, ...dto.likedIngredientIds], (ids) =>
+        this.ingredients.countDocuments({ _id: { $in: ids } }),
+      ),
+      allExist(dto.groupIds, (ids) =>
+        this.groups.countDocuments({ _id: { $in: ids } }),
+      ),
+    ]);
+    if (!ingredients || !groups) {
+      throw badRequest(
+        'UNKNOWN_REFERENCE',
+        'An ingredient or group in the request does not exist',
+      );
     }
+    await this.users
+      .findOneAndUpdate(
+        { _id: userId },
+        {
+          $set: {
+            avoidedIngredientIds: dto.ingredientIds,
+            avoidedGroupIds: dto.groupIds,
+            likedIngredientIds: dto.likedIngredientIds,
+          },
+        },
+        { returnDocument: 'after' },
+      )
+      .exec();
     return this.find(userId);
+  }
+
+  private async preferences(userId: string) {
+    const user = await this.users
+      .findOne({ _id: userId })
+      .select('avoidedIngredientIds avoidedGroupIds likedIngredientIds')
+      .exec();
+    return (
+      user ?? {
+        avoidedIngredientIds: [],
+        avoidedGroupIds: [],
+        likedIngredientIds: [],
+      }
+    );
   }
 }

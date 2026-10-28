@@ -36,7 +36,11 @@ export class GoogleOAuthService {
     const redirectUri = configService.get<string>('GOOGLE_CALLBACK_URL', '');
     this.client =
       this.clientId && clientSecret && redirectUri
-        ? new OAuth2Client({ clientId: this.clientId, clientSecret, redirectUri })
+        ? new OAuth2Client({
+            clientId: this.clientId,
+            clientSecret,
+            redirectUri,
+          })
         : null;
   }
 

@@ -1,13 +1,27 @@
+import type { INestApplication } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Test } from '@nestjs/testing';
-import { CaptionStatus } from '@prisma/client';
-import { type DeepMockProxy, mockDeep } from 'vitest-mock-extended';
+import { mockDeep, type DeepMockProxy } from 'vitest-mock-extended';
+import { createMedia, createPost, createUser } from '../../test/fixtures';
+import {
+  createTestMongoUrl,
+  dropTestDatabase,
+  prepareTestDatabase,
+} from '../../test/mongo-test-db';
 import { CloudinaryService } from '../cloudinary/cloudinary.service';
-import { PrismaService } from '../prisma/prisma.service';
+import { MongoModule } from '../mongo/mongo.module';
+import { MongoService } from '../mongo/mongo.service';
+import {
+  CaptionStatus,
+  type MediaAsset,
+  MediaStatus,
+  type Post,
+  PostStatus,
+  type Stored,
+} from '../mongo/models';
 import { CaptionService } from './caption.service';
 import * as speechAudio from './captions/speech-audio';
 import { TranscriptionService } from './captions/transcription.service';
-import { mediaId, pendingMedia } from './media.fixtures';
 
 vi.mock('./captions/speech-audio', async (importOriginal) => ({
   ...(await importOriginal<typeof speechAudio>()),
@@ -15,29 +29,44 @@ vi.mock('./captions/speech-audio', async (importOriginal) => ({
 }));
 
 describe('CaptionService', () => {
+  let app: INestApplication;
+  let db: MongoService;
   let service: CaptionService;
-  let prisma: DeepMockProxy<PrismaService>;
   let cloudinary: DeepMockProxy<CloudinaryService>;
   let transcription: DeepMockProxy<TranscriptionService>;
+  let media: MediaAsset;
   const extract = vi.mocked(speechAudio.extractSpeechAudio);
   const cues = [{ start: 5, end: 8, text: 'Xin chào' }];
 
-  beforeEach(async () => {
-    prisma = mockDeep<PrismaService>();
+  const assets = () => db.connection.model<MediaAsset>('MediaAsset');
+  const posts = () => db.connection.model<Post>('Post');
+  const reload = (id: string) => assets().findById(id).exec();
+  const addMedia = (fields: Partial<MediaAsset> = {}) =>
+    createMedia(db, { status: MediaStatus.READY, durationSec: 42, ...fields });
+
+  beforeAll(async () => {
     cloudinary = mockDeep<CloudinaryService>();
     transcription = mockDeep<TranscriptionService>();
     const moduleRef = await Test.createTestingModule({
+      imports: [MongoModule.forTest(createTestMongoUrl('captions'))],
       providers: [
         CaptionService,
-        { provide: PrismaService, useValue: prisma },
         { provide: CloudinaryService, useValue: cloudinary },
         { provide: TranscriptionService, useValue: transcription },
         { provide: ConfigService, useValue: new ConfigService({}) },
       ],
     }).compile();
-    service = moduleRef.get(CaptionService);
+    app = moduleRef.createNestApplication();
+    await app.init();
+    await prepareTestDatabase(app);
+    db = app.get(MongoService);
+    service = app.get(CaptionService);
+  });
+  beforeEach(async () => {
+    await db.db.collection('media_assets').deleteMany({});
+    await db.db.collection('posts').deleteMany({});
+    media = await addMedia();
 
-    prisma.mediaAsset.updateMany.mockResolvedValue({ count: 1 });
     cloudinary.originalUrl.mockReturnValue('https://cdn/original');
     cloudinary.uploadCaption.mockImplementation((_id, language) =>
       Promise.resolve(`https://cdn/${language}.vtt`),
@@ -47,96 +76,173 @@ describe('CaptionService', () => {
       audio: Buffer.from('mp3'),
       speech: [{ start: 5, end: 8 }],
     });
+    transcription.transcribe.mockReset();
     transcription.transcribe.mockResolvedValue({ language: 'vi', cues });
+    transcription.translate.mockReset();
     transcription.translate.mockResolvedValue([{ ...cues[0], text: 'Hello' }]);
+  });
+  afterAll(async () => {
+    await dropTestDatabase(app);
+    await app.close();
   });
 
   it('stores the spoken captions and their English translation', async () => {
-    await service.caption(pendingMedia);
+    await service.caption(media);
 
     expect(extract).toHaveBeenCalledWith('https://cdn/original', 42);
     expect(transcription.translate).toHaveBeenCalledWith(cues, 'vi', 'en');
-    const tracks = prisma.mediaCaption.upsert.mock.calls.map(
-      ([call]) => call.create,
-    );
-    expect(tracks).toEqual([
-      {
-        mediaId,
-        languageCode: 'vi',
-        name: 'Tiếng Việt',
-        isOriginal: true,
-        url: 'https://cdn/vi.vtt',
-      },
-      {
-        mediaId,
-        languageCode: 'en',
-        name: 'English',
-        isOriginal: false,
-        url: 'https://cdn/en.vtt',
-      },
-    ]);
-    const [done] = prisma.mediaAsset.updateMany.mock.calls.at(-1)!;
-    expect(done.data).toEqual({
+    expect(await reload(media.id)).toMatchObject({
       captionStatus: CaptionStatus.READY,
       captionLanguage: 'vi',
       transcript: 'Xin chào',
+      captions: [
+        {
+          languageCode: 'vi',
+          name: 'Tiếng Việt',
+          isOriginal: true,
+          url: 'https://cdn/vi.vtt',
+        },
+        {
+          languageCode: 'en',
+          name: 'English',
+          isOriginal: false,
+          url: 'https://cdn/en.vtt',
+        },
+      ],
     });
   });
 
   it('marks the post for embedding again once its video is captioned', async () => {
-    await service.caption({ ...pendingMedia, postId: 'post-1' });
-
-    expect(prisma.post.updateMany).toHaveBeenCalledWith({
-      where: { id: 'post-1' },
-      data: { searchIndexedAt: null },
+    const author = await createUser(db);
+    const post = await createPost(db, {
+      authorId: author.id,
+      searchIndexedAt: new Date(),
     });
+    media = await addMedia({ postId: post.id });
+
+    await service.caption(media);
+
+    const stored = await posts().findById(post.id).exec();
+    expect(stored?.searchIndexedAt).toBeNull();
   });
 
   it('skips Whisper for a video that is all silence', async () => {
     extract.mockResolvedValue(null);
 
-    await service.caption(pendingMedia);
+    await service.caption(media);
 
     expect(transcription.transcribe).not.toHaveBeenCalled();
-    const [done] = prisma.mediaAsset.updateMany.mock.calls.at(-1)!;
-    expect(done.data).toEqual({ captionStatus: CaptionStatus.NO_SPEECH });
+    expect((await reload(media.id))?.captionStatus).toBe(
+      CaptionStatus.NO_SPEECH,
+    );
+  });
+
+  it('replaces an earlier track of the same language and keeps the others', async () => {
+    const old = { languageCode: 'vi', name: 'x', isOriginal: true, url: 'old' };
+    const other = { ...old, languageCode: 'fr', url: 'fr' };
+    media = await addMedia({ captions: [old, other] });
+
+    await service.caption(media);
+
+    const captions = (await reload(media.id))?.captions ?? [];
+    expect(captions.map(({ languageCode }) => languageCode)).toEqual([
+      'fr',
+      'vi',
+      'en',
+    ]);
+    expect(
+      captions.find(({ languageCode }) => languageCode === 'vi')?.url,
+    ).toBe('https://cdn/vi.vtt');
   });
 
   it('keeps the spoken captions when the translation fails', async () => {
     transcription.translate.mockRejectedValue(new Error('bad JSON'));
 
-    await service.caption(pendingMedia);
+    await service.caption(media);
 
-    expect(prisma.mediaCaption.upsert).toHaveBeenCalledTimes(1);
-    const [done] = prisma.mediaAsset.updateMany.mock.calls.at(-1)!;
-    expect(done.data.captionStatus).toBe(CaptionStatus.READY);
+    const stored = await reload(media.id);
+    expect(stored?.captions).toHaveLength(1);
+    expect(stored?.captionStatus).toBe(CaptionStatus.READY);
   });
 
   it('marks the video FAILED when transcription fails', async () => {
     transcription.transcribe.mockRejectedValue(new Error('503'));
 
-    await service.caption(pendingMedia);
+    await service.caption(media);
 
-    const [done] = prisma.mediaAsset.updateMany.mock.calls.at(-1)!;
-    expect(done.data).toEqual({ captionStatus: CaptionStatus.FAILED });
+    expect((await reload(media.id))?.captionStatus).toBe(CaptionStatus.FAILED);
   });
 
   it('does nothing when another run already claimed the video', async () => {
-    prisma.mediaAsset.updateMany.mockResolvedValue({ count: 0 });
+    await assets().updateOne(
+      { _id: media.id },
+      { $set: { captionStatus: CaptionStatus.TRANSCRIBING } },
+    );
 
-    await service.caption(pendingMedia);
+    await service.caption(media);
 
     expect(extract).not.toHaveBeenCalled();
   });
 
-  describe('backfillTranscripts', () => {
-    const track = { url: 'https://cdn/vi.vtt' };
-    let fetchMock: ReturnType<typeof vi.fn>;
+  it('captions a video once when two runs race for it', async () => {
+    await Promise.all([service.caption(media), service.caption(media)]);
 
-    beforeEach(() => {
-      prisma.mediaAsset.findMany.mockResolvedValue([
-        { id: mediaId, postId: 'post-1', captions: [track] },
-      ] as never);
+    expect(extract).toHaveBeenCalledTimes(1);
+  });
+
+  it('drains only videos of published posts', async () => {
+    const author = await createUser(db);
+    const published = await createPost(db, { authorId: author.id });
+    const hidden = await createPost(db, {
+      authorId: author.id,
+      status: PostStatus.PROCESSING,
+      publishedAt: null,
+    });
+    const visible = await addMedia({ postId: published.id });
+    const other = await addMedia({ postId: hidden.id });
+
+    await service.drain();
+
+    expect((await reload(visible.id))?.captionStatus).toBe(CaptionStatus.READY);
+    expect((await reload(other.id))?.captionStatus).toBe(CaptionStatus.NONE);
+  });
+
+  it('lets captioning that a restart cut off be picked up again', async () => {
+    await db.db
+      .collection<Stored<MediaAsset>>('media_assets')
+      .updateOne(
+        { _id: media.id },
+        { $set: { captionStatus: CaptionStatus.TRANSCRIBING } },
+      );
+    await db.db
+      .collection<Stored<MediaAsset>>('media_assets')
+      .updateOne(
+        { _id: media.id },
+        { $set: { updatedAt: new Date(Date.now() - 31 * 60_000) } },
+      );
+
+    await service.releaseStale();
+
+    expect((await reload(media.id))?.captionStatus).toBe(CaptionStatus.NONE);
+  });
+
+  describe('backfillTranscripts', () => {
+    const track = { url: 'https://cdn/vi.vtt', isOriginal: true };
+    let fetchMock: ReturnType<typeof vi.fn>;
+    let postId: string;
+
+    beforeEach(async () => {
+      const author = await createUser(db);
+      const post = await createPost(db, {
+        authorId: author.id,
+        searchIndexedAt: new Date(),
+      });
+      postId = post.id;
+      media = await addMedia({
+        postId,
+        captionStatus: CaptionStatus.READY,
+        captions: [{ ...track, languageCode: 'vi', name: 'Tiếng Việt' }],
+      });
       fetchMock = vi.fn();
       vi.stubGlobal('fetch', fetchMock);
     });
@@ -151,14 +257,10 @@ describe('CaptionService', () => {
       await service.backfillTranscripts();
 
       expect(fetchMock).toHaveBeenCalledWith(track.url, expect.anything());
-      expect(prisma.mediaAsset.update).toHaveBeenCalledWith({
-        where: { id: mediaId },
-        data: { transcript: 'Xin chào' },
-      });
-      expect(prisma.post.updateMany).toHaveBeenCalledWith({
-        where: { id: 'post-1' },
-        data: { searchIndexedAt: null },
-      });
+      expect((await reload(media.id))?.transcript).toBe('Xin chào');
+      expect(
+        (await posts().findById(postId).exec())?.searchIndexedAt,
+      ).toBeNull();
     });
 
     it('leaves the transcript empty for the next run when the download fails', async () => {
@@ -166,8 +268,10 @@ describe('CaptionService', () => {
 
       await service.backfillTranscripts();
 
-      expect(prisma.mediaAsset.update).not.toHaveBeenCalled();
-      expect(prisma.post.updateMany).not.toHaveBeenCalled();
+      expect((await reload(media.id))?.transcript).toBeNull();
+      expect(
+        (await posts().findById(postId).exec())?.searchIndexedAt,
+      ).toBeInstanceOf(Date);
     });
   });
 });

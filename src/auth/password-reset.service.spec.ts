@@ -1,9 +1,14 @@
-import { createHash } from 'node:crypto';
+import type { INestApplication } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
-import { PasswordResetCode } from '@prisma/client';
-import { type DeepMockProxy, mockDeep } from 'vitest-mock-extended';
+import { createHash } from 'node:crypto';
+import {
+  createTestMongoUrl,
+  dropTestDatabase,
+  prepareTestDatabase,
+} from '../../test/mongo-test-db';
 import { MailService } from '../mail/mail.service';
-import { PrismaService } from '../prisma/prisma.service';
+import { MongoModule } from '../mongo/mongo.module';
+import { MongoService } from '../mongo/mongo.service';
 import { PasswordResetService } from './password-reset.service';
 
 const user = {
@@ -11,185 +16,238 @@ const user = {
   email: 'a@b.vn',
   emailVerifiedAt: new Date('2026-09-01T00:00:00.000Z'),
 };
+const PURPOSE = 'PASSWORD_RESET';
+const hashOf = (code: string) =>
+  createHash('sha256')
+    .update(`password-reset:${user.id}:${code}`)
+    .digest('hex');
+const secondsAgo = (seconds: number) => new Date(Date.now() - seconds * 1000);
 
-async function createService() {
-  const prisma = mockDeep<PrismaService>();
-  const mail = mockDeep<MailService>();
-  const moduleRef = await Test.createTestingModule({
-    providers: [
-      PasswordResetService,
-      { provide: PrismaService, useValue: prisma },
-      { provide: MailService, useValue: mail },
-    ],
-  }).compile();
-  return { service: moduleRef.get(PasswordResetService), prisma, mail };
-}
+type StoredDoc = { _id: string; [key: string]: unknown };
 
-describe('PasswordResetService.send', () => {
-  const now = new Date('2026-10-15T12:00:00.000Z');
-  const secondsAgo = (seconds: number) =>
-    new Date(now.getTime() - seconds * 1000);
-  const pendingCode = (
-    overrides: Partial<PasswordResetCode>,
-  ): PasswordResetCode => ({
-    userId: user.id,
-    codeHash: 'a'.repeat(64),
-    attempts: 0,
-    expiresAt: now,
-    sentAt: secondsAgo(600),
-    firstSentAt: secondsAgo(600),
-    resendCount: 0,
-    ...overrides,
-  });
-
+describe('PasswordResetService', () => {
+  let app: INestApplication;
+  let db: MongoService;
+  const mail = {
+    sendVerificationCode: vi.fn(),
+    sendPasswordResetCode: vi.fn(),
+  };
   let service: PasswordResetService;
-  let prisma: DeepMockProxy<PrismaService>;
-  let mail: DeepMockProxy<MailService>;
 
+  const codes = () => db.db.collection<StoredDoc>('one_time_codes');
+  const guesses = () =>
+    db.db.collection<StoredDoc>('email_verification_guesses');
+  const users = () => db.db.collection<StoredDoc>('users');
+  const pending = () => codes().findOne({ userId: user.id, purpose: PURPOSE });
+  const storedUser = () => users().findOne({ _id: user.id });
+
+  const seedCode = (fields: Record<string, unknown> = {}) =>
+    codes().insertOne({
+      _id: 'code-1',
+      userId: user.id,
+      purpose: PURPOSE,
+      codeHash: 'a'.repeat(64),
+      attempts: 0,
+      expiresAt: new Date(Date.now() + 600_000),
+      sentAt: secondsAgo(600),
+      firstSentAt: secondsAgo(600),
+      resendCount: 0,
+      ...fields,
+    });
+  const seedUser = (fields: Record<string, unknown> = {}) =>
+    users().insertOne({
+      _id: user.id,
+      username: 'vedora.user',
+      fullName: 'Vedora User',
+      email: user.email,
+      role: 'USER',
+      status: 'ACTIVE',
+      accountVersion: 0,
+      isProfessional: false,
+      emailVerifiedAt: user.emailVerifiedAt,
+      avoidedIngredientIds: [],
+      avoidedGroupIds: [],
+      likedIngredientIds: [],
+      ...fields,
+    });
+
+  beforeAll(async () => {
+    const moduleRef = await Test.createTestingModule({
+      imports: [MongoModule.forTest(createTestMongoUrl('pwreset'))],
+      providers: [
+        PasswordResetService,
+        { provide: MailService, useValue: mail },
+      ],
+    }).compile();
+    app = moduleRef.createNestApplication();
+    await app.init();
+    await prepareTestDatabase(app);
+    db = app.get(MongoService);
+    service = app.get(PasswordResetService);
+  });
   beforeEach(async () => {
-    vi.useFakeTimers({ now });
-    ({ service, prisma, mail } = await createService());
+    vi.clearAllMocks();
     mail.sendPasswordResetCode.mockResolvedValue(undefined);
+    await codes().deleteMany({});
+    await guesses().deleteMany({});
+    await users().deleteMany({});
   });
-  afterEach(() => vi.useRealTimers());
-
-  const upserted = () =>
-    prisma.passwordResetCode.upsert.mock.calls[0][0].update;
-
-  it('emails a six-digit code and stores only its hash', async () => {
-    prisma.passwordResetCode.findUnique.mockResolvedValue(null);
-
-    await expect(service.send(user)).resolves.toBe('sent');
-    const [to, code] = mail.sendPasswordResetCode.mock.calls[0];
-    expect(to).toBe(user.email);
-    expect(code).toMatch(/^\d{6}$/);
-    expect(upserted()).toMatchObject({ resendCount: 0, firstSentAt: now });
-    expect(upserted().codeHash).not.toContain(code);
-    expect(mail.sendVerificationCode).not.toHaveBeenCalled();
+  afterAll(async () => {
+    await dropTestDatabase(app);
+    await app.close();
   });
 
-  it('waits 120 seconds between codes', async () => {
-    prisma.passwordResetCode.findUnique.mockResolvedValue(
-      pendingCode({ sentAt: secondsAgo(119) }),
-    );
-
-    await expect(service.send(user)).resolves.toBe('cooldown');
-    expect(mail.sendPasswordResetCode).not.toHaveBeenCalled();
-  });
-
-  it('stops after three resends within the hour', async () => {
-    prisma.passwordResetCode.findUnique.mockResolvedValue(
-      pendingCode({ resendCount: 3 }),
-    );
-
-    await expect(service.send(user)).resolves.toBe('limit');
-    expect(mail.sendPasswordResetCode).not.toHaveBeenCalled();
-  });
-
-  it('restores the previous code when the email fails', async () => {
-    const pending = pendingCode({ resendCount: 1 });
-    prisma.passwordResetCode.findUnique.mockResolvedValue(pending);
-    mail.sendPasswordResetCode.mockRejectedValue(new Error('Resend is down'));
-
-    await expect(service.send(user)).rejects.toThrow('Resend is down');
-    expect(prisma.passwordResetCode.update).toHaveBeenCalledWith({
-      where: { userId: user.id },
-      data: pending,
+  describe('send', () => {
+    it('emails a six-digit code and stores only its hash', async () => {
+      await expect(service.send(user)).resolves.toBe('sent');
+      const [to, code] = mail.sendPasswordResetCode.mock.calls[0] as [
+        string,
+        string,
+      ];
+      expect(to).toBe(user.email);
+      expect(code).toMatch(/^\d{6}$/);
+      const stored = await pending();
+      expect(stored).toMatchObject({ resendCount: 0, codeHash: hashOf(code) });
+      expect(stored?.codeHash).not.toContain(code);
+      expect(mail.sendVerificationCode).not.toHaveBeenCalled();
     });
-  });
-});
 
-describe('PasswordResetService.reset', () => {
-  const hashOf = (code: string) =>
-    createHash('sha256')
-      .update(`password-reset:${user.id}:${code}`)
-      .digest('hex');
+    it('waits 120 seconds between codes', async () => {
+      await seedCode({ sentAt: secondsAgo(119) });
 
-  let service: PasswordResetService;
-  let prisma: DeepMockProxy<PrismaService>;
-
-  beforeEach(async () => {
-    ({ service, prisma } = await createService());
-    prisma.emailVerificationGuesses.updateMany.mockResolvedValue({ count: 1 });
-    prisma.passwordResetCode.updateMany.mockResolvedValue({ count: 1 });
-    prisma.passwordResetCode.findUnique.mockResolvedValue({
-      userId: user.id,
-      codeHash: hashOf('123456'),
-      attempts: 0,
-      expiresAt: new Date(Date.now() + 600_000),
-      sentAt: new Date(),
-      firstSentAt: new Date(),
-      resendCount: 0,
+      await expect(service.send(user)).resolves.toBe('cooldown');
+      expect(mail.sendPasswordResetCode).not.toHaveBeenCalled();
     });
-    prisma.passwordResetCode.deleteMany.mockResolvedValue({ count: 1 });
-    prisma.$transaction.mockImplementation((run: unknown) =>
-      (run as (tx: PrismaService) => Promise<unknown>)(prisma),
-    );
-  });
 
-  it('replaces the password with a matching code and uses the code up', async () => {
-    await expect(service.reset(user, '123456', 'new-hash')).resolves.toBe(
-      'reset',
-    );
-    expect(prisma.passwordResetCode.deleteMany).toHaveBeenCalledWith({
-      where: { userId: user.id, codeHash: hashOf('123456') },
+    it('stops after three resends within the hour', async () => {
+      await seedCode({ resendCount: 3 });
+
+      await expect(service.send(user)).resolves.toBe('limit');
+      expect(mail.sendPasswordResetCode).not.toHaveBeenCalled();
     });
-    expect(prisma.user.update).toHaveBeenCalledWith({
-      where: { id: user.id },
-      data: { passwordHash: 'new-hash', emailVerifiedAt: user.emailVerifiedAt },
+
+    it('restores the previous code when the email fails', async () => {
+      const before = {
+        codeHash: 'b'.repeat(64),
+        sentAt: secondsAgo(600),
+        firstSentAt: secondsAgo(600),
+        resendCount: 1,
+      };
+      await seedCode(before);
+      mail.sendPasswordResetCode.mockRejectedValue(new Error('Resend is down'));
+
+      await expect(service.send(user)).rejects.toThrow('Resend is down');
+      expect(await pending()).toMatchObject(before);
     });
   });
 
-  it('verifies an unverified email on the way', async () => {
-    await service.reset({ ...user, emailVerifiedAt: null }, '123456', 'h');
-
-    const { data } = prisma.user.update.mock.calls[0][0];
-    expect(data.emailVerifiedAt).toBeInstanceOf(Date);
-    expect(prisma.emailVerificationCode.deleteMany).toHaveBeenCalledWith({
-      where: { userId: user.id },
-    });
-  });
-
-  it('rejects a wrong code without changing the password', async () => {
-    await expect(service.reset(user, '654321', 'h')).resolves.toBe('invalid');
-    expect(prisma.user.update).not.toHaveBeenCalled();
-  });
-
-  it('does not accept the matching email verification code', async () => {
-    prisma.passwordResetCode.findUnique.mockResolvedValue({
-      userId: user.id,
-      // How EmailVerificationService hashes the same digits.
-      codeHash: createHash('sha256').update(`${user.id}:123456`).digest('hex'),
-      attempts: 0,
-      expiresAt: new Date(Date.now() + 600_000),
-      sentAt: new Date(),
-      firstSentAt: new Date(),
-      resendCount: 0,
+  describe('reset', () => {
+    beforeEach(async () => {
+      await seedUser();
+      await seedCode({ codeHash: hashOf('123456') });
     });
 
-    await expect(service.reset(user, '123456', 'h')).resolves.toBe('invalid');
-  });
+    it('replaces the password with a matching code and uses the code up', async () => {
+      await expect(service.reset(user, '123456', 'new-hash')).resolves.toBe(
+        'reset',
+      );
+      expect(await storedUser()).toMatchObject({ passwordHash: 'new-hash' });
+      expect(await pending()).toBeNull();
+    });
 
-  it('rejects expired or exhausted codes before comparing', async () => {
-    prisma.passwordResetCode.updateMany.mockResolvedValue({ count: 0 });
+    it('verifies an unverified email on the way', async () => {
+      await expect(
+        service.reset({ ...user, emailVerifiedAt: null }, '123456', 'new-hash'),
+      ).resolves.toBe('reset');
+      const stored = await storedUser();
+      expect(stored?.emailVerifiedAt).toBeInstanceOf(Date);
+      expect(stored).toMatchObject({ status: 'ACTIVE' });
+    });
 
-    await expect(service.reset(user, '123456', 'h')).resolves.toBe('invalid');
-    expect(prisma.passwordResetCode.findUnique).not.toHaveBeenCalled();
-  });
+    it('never reactivates a suspended account', async () => {
+      await users().updateOne(
+        { _id: user.id },
+        { $set: { status: 'SUSPENDED' } },
+      );
 
-  it('lets only one of two parallel resets with the right code win', async () => {
-    prisma.passwordResetCode.deleteMany.mockResolvedValue({ count: 0 });
+      await expect(service.reset(user, '123456', 'new-hash')).resolves.toBe(
+        'reset',
+      );
+      expect(await storedUser()).toMatchObject({ status: 'SUSPENDED' });
+    });
 
-    await expect(service.reset(user, '123456', 'h')).resolves.toBe('invalid');
-    expect(prisma.user.update).not.toHaveBeenCalled();
-  });
+    it('rejects a wrong code without changing the password', async () => {
+      await expect(service.reset(user, '654321', 'h')).resolves.toBe('invalid');
+      expect((await storedUser())?.passwordHash ?? null).toBeNull();
+    });
 
-  it('shares the per-email guess budget with verification codes', async () => {
-    prisma.emailVerificationGuesses.updateMany
-      .mockResolvedValueOnce({ count: 0 })
-      .mockResolvedValueOnce({ count: 0 });
+    it('does not accept the matching email verification code', async () => {
+      await codes().updateOne(
+        { userId: user.id, purpose: PURPOSE },
+        {
+          $set: {
+            codeHash: createHash('sha256')
+              .update(`${user.id}:123456`)
+              .digest('hex'),
+          },
+        },
+      );
 
-    await expect(service.reset(user, '123456', 'h')).resolves.toBe('locked');
-    expect(prisma.passwordResetCode.updateMany).not.toHaveBeenCalled();
+      await expect(service.reset(user, '123456', 'h')).resolves.toBe('invalid');
+    });
+
+    it('rejects expired or exhausted codes before comparing', async () => {
+      await codes().updateOne(
+        { userId: user.id, purpose: PURPOSE },
+        { $set: { expiresAt: secondsAgo(1) } },
+      );
+
+      await expect(service.reset(user, '123456', 'h')).resolves.toBe('invalid');
+      expect(await pending()).toMatchObject({ attempts: 0 });
+    });
+
+    it('lets only one of two parallel resets with the right code win', async () => {
+      const results = await Promise.all([
+        service.reset(user, '123456', 'hash-a'),
+        service.reset(user, '123456', 'hash-b'),
+      ]);
+
+      expect(results.sort()).toEqual(['invalid', 'reset']);
+    });
+
+    it('shares the per-email guess budget with verification codes', async () => {
+      await guesses().insertOne({
+        _id: user.email,
+        guesses: 15,
+        windowStart: new Date(),
+      });
+
+      await expect(service.reset(user, '123456', 'h')).resolves.toBe('locked');
+      expect(await pending()).toMatchObject({ attempts: 0 });
+    });
+
+    it('clears the remaining codes and guesses of the account', async () => {
+      await codes().insertOne({
+        _id: 'code-2',
+        userId: user.id,
+        purpose: 'EMAIL_VERIFICATION',
+        codeHash: 'c'.repeat(64),
+        attempts: 0,
+        expiresAt: new Date(Date.now() + 600_000),
+        sentAt: new Date(),
+        firstSentAt: new Date(),
+        resendCount: 0,
+      });
+      await guesses().insertOne({
+        _id: user.email,
+        guesses: 2,
+        windowStart: new Date(),
+      });
+
+      await service.reset(user, '123456', 'h');
+
+      expect(await codes().countDocuments()).toBe(0);
+      expect(await guesses().countDocuments()).toBe(0);
+    });
   });
 });

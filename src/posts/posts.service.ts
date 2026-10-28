@@ -5,13 +5,32 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { MediaStatus, PostStatus, Prisma } from '@prisma/client';
+import { InjectModel } from '@nestjs/mongoose';
+import type { Model } from 'mongoose';
+import { randomUUID } from 'node:crypto';
 import {
+  afterCursor,
   createCursorPaginatedResponse,
   CursorPaginationQueryDto,
 } from '../common/pagination';
 import { MediaService } from '../media/media.service';
 import { CloudinaryService } from '../cloudinary/cloudinary.service';
+import {
+  MediaStatus,
+  Blog,
+  BlogRecipe,
+  MediaAsset,
+  Post,
+  PostBookmark,
+  PostComment,
+  PostLike,
+  PostRepost,
+  PostStatus,
+  Recipe,
+  User,
+} from '../mongo/models';
+import { MongoService } from '../mongo/mongo.service';
+import { deleteWithReferences } from '../mongo/relations';
 import {
   MAX_FEED_RESULTS,
   PostFeedService,
@@ -21,53 +40,52 @@ import {
   MAX_SEARCH_RESULTS,
   PostSearchService,
 } from '../post-search/post-search.service';
-import { PrismaService } from '../prisma/prisma.service';
-import { blogSummarySelect, toBlogSummary } from './blog-query';
 import { CreatePostDto } from './dto/create-post.dto';
 import { FEED_CURSOR, FeedQueryDto } from './dto/feed-query.dto';
 import { ListPostsQueryDto } from './dto/list-posts-query.dto';
 import { PostPageDto, PostResponseDto } from './dto/post-response.dto';
 import { SearchPostsQueryDto } from './dto/search-posts-query.dto';
-
-export const postInclude = (viewerId?: string) =>
-  ({
-    blog: { select: blogSummarySelect },
-    author: {
-      select: { id: true, username: true, fullName: true, avatarUrl: true },
-    },
-    media: { orderBy: { position: 'asc' }, include: { captions: true } },
-    _count: { select: { comments: true, likes: true, reposts: true } },
-    likes: {
-      where: { userId: viewerId ?? { in: [] } },
-      select: { userId: true },
-      take: 1,
-    },
-    reposts: {
-      where: { userId: viewerId ?? { in: [] } },
-      select: { userId: true },
-      take: 1,
-    },
-    bookmarks: {
-      where: { userId: viewerId ?? { in: [] } },
-      select: { userId: true },
-      take: 1,
-    },
-  }) satisfies Prisma.PostInclude;
-
-type PostWithRelations = Prisma.PostGetPayload<{
-  include: ReturnType<typeof postInclude>;
-}>;
+import { loadPostRelations, type PostRelationModels } from './post-relations';
 
 @Injectable()
 export class PostsService {
   constructor(
-    private readonly prisma: PrismaService,
+    private readonly mongo: MongoService,
     private readonly mediaService: MediaService,
     private readonly cloudinary: CloudinaryService,
     private readonly searchIndex: PostSearchIndexService,
     private readonly postSearch: PostSearchService,
     private readonly postFeed: PostFeedService,
+    @InjectModel(Post.name) private readonly posts: Model<Post>,
+    @InjectModel(MediaAsset.name) private readonly media: Model<MediaAsset>,
+    @InjectModel(PostComment.name)
+    private readonly comments: Model<PostComment>,
+    @InjectModel(PostLike.name) private readonly likes: Model<PostLike>,
+    @InjectModel(PostRepost.name)
+    private readonly reposts: Model<PostRepost>,
+    @InjectModel(PostBookmark.name)
+    private readonly bookmarks: Model<PostBookmark>,
+    @InjectModel(User.name) private readonly users: Model<User>,
+    @InjectModel(Blog.name) private readonly blogs: Model<Blog>,
+    @InjectModel(BlogRecipe.name)
+    private readonly blogRecipes: Model<BlogRecipe>,
+    @InjectModel(Recipe.name) private readonly recipes: Model<Recipe>,
   ) {}
+
+  /** The collections `loadPostRelations` joins against. */
+  private get relationModels(): PostRelationModels {
+    return {
+      users: this.users,
+      media: this.media,
+      comments: this.comments,
+      likes: this.likes,
+      reposts: this.reposts,
+      bookmarks: this.bookmarks,
+      blogs: this.blogs,
+      blogRecipes: this.blogRecipes,
+      recipes: this.recipes,
+    };
+  }
 
   /**
    * Creates the post right away, even while its video is still processing:
@@ -85,19 +103,31 @@ export class PostsService {
       });
     }
 
-    const { id } = await this.prisma.$transaction(async (tx) => {
-      const post = await tx.post.create({
-        data: { authorId, type: dto.type, body },
-      });
-      await this.mediaService.claimForPost(tx, authorId, post.id, mediaIds);
-      return post;
+    const id = randomUUID();
+    await this.mongo.withTransaction(async (session) => {
+      await this.posts.create(
+        [
+          {
+            _id: id,
+            authorId,
+            type: dto.type,
+            status: PostStatus.PROCESSING,
+            body,
+            searchIndexedAt: null,
+            viewCount: 0,
+            publishedAt: null,
+          },
+        ],
+        { session },
+      );
+      await this.mediaService.claimForPost(session, authorId, id, mediaIds);
     });
-    await this.mediaService.settlePosts({ id });
+    await this.mediaService.settlePosts([id]);
     // A text-only post is published by now; one with video is indexed by the
     // catch-up cron once Cloudinary finishes.
     this.searchIndex.schedule();
 
-    return this.toResponse(await this.load(id, authorId));
+    return this.load(id, authorId);
   }
 
   /** Published posts matching `q`, best match first. */
@@ -114,24 +144,22 @@ export class PostsService {
       offset,
       limit,
     );
-    const posts = await this.snapshot(
-      this.prisma.post.findMany({
-        where: { id: { in: ids } },
-        include: postInclude(viewerId),
-      }),
-    );
-    const found = new Map(posts.map((post) => [post.id, post]));
+    const posts = await this.posts.find({ _id: { $in: ids } }).exec();
+    const found = new Set(posts.map(({ id }) => id));
     const missing = ids.filter((id) => !found.has(id));
     if (missing.length > 0) {
       void this.postSearch.prune(missing).catch(() => undefined);
     }
+    const published = new Map(
+      (
+        await this.toResponses(
+          posts.filter(({ status }) => status === PostStatus.PUBLISHED),
+          viewerId,
+        )
+      ).map((post) => [post.id, post]),
+    );
     return {
-      items: ids.flatMap((id) => {
-        const post = found.get(id);
-        return post?.status === PostStatus.PUBLISHED
-          ? [this.toResponse(post)]
-          : [];
-      }),
+      items: ids.flatMap((id) => published.get(id) ?? []),
       nextCursor:
         hasMore && offset + limit < MAX_SEARCH_RESULTS
           ? String(offset + limit)
@@ -150,19 +178,15 @@ export class PostsService {
     // One extra id tells whether another page follows.
     const ids = await this.postFeed.feed(viewerId, asOf, offset + limit + 1);
     const page = ids.slice(offset, offset + limit);
-    const posts = await this.snapshot(
-      this.prisma.post.findMany({
-        where: { id: { in: page }, status: PostStatus.PUBLISHED },
-        include: postInclude(viewerId),
-      }),
+    const posts = await this.posts
+      .find({ status: PostStatus.PUBLISHED, _id: { $in: page } })
+      .exec();
+    const found = new Map(
+      (await this.toResponses(posts, viewerId)).map((post) => [post.id, post]),
     );
-    const found = new Map(posts.map((post) => [post.id, post]));
     const next = offset + limit;
     return {
-      items: page.flatMap((id) => {
-        const post = found.get(id);
-        return post ? [this.toResponse(post)] : [];
-      }),
+      items: page.flatMap((id) => found.get(id) ?? []),
       nextCursor:
         ids.length > next && next < MAX_FEED_RESULTS
           ? `${next}.${asOf.getTime()}`
@@ -174,23 +198,35 @@ export class PostsService {
     query: ListPostsQueryDto,
     viewerId?: string,
   ): Promise<PostPageDto> {
-    const take = query.limit;
-    const posts = await this.snapshot(
-      this.prisma.post.findMany({
-        where: {
-          status: PostStatus.PUBLISHED,
-          ...(query.authorId ? { authorId: query.authorId } : {}),
-          ...(query.type ? { type: query.type } : {}),
-        },
-        orderBy: [{ publishedAt: 'desc' }, { id: 'desc' }],
-        take: take + 1,
-        ...(query.cursor ? { cursor: { id: query.cursor }, skip: 1 } : {}),
-        include: postInclude(viewerId),
-      }),
-    );
-    const page = createCursorPaginatedResponse(posts, take);
+    const filter = {
+      status: PostStatus.PUBLISHED,
+      ...(query.authorId && { authorId: query.authorId }),
+      ...(query.type && { type: query.type }),
+    };
+    if (query.cursor) {
+      const cursor = await this.posts
+        .findOne({
+          ...filter,
+          _id: query.cursor,
+        })
+        .exec();
+      if (!cursor?.publishedAt) return { items: [], nextCursor: null };
+      Object.assign(
+        filter,
+        afterCursor('publishedAt', {
+          value: cursor.publishedAt,
+          id: cursor.id,
+        }),
+      );
+    }
+    const rows = await this.posts
+      .find(filter)
+      .sort({ publishedAt: -1, _id: -1 })
+      .limit(query.limit + 1)
+      .exec();
+    const page = createCursorPaginatedResponse(rows, query.limit);
     return {
-      items: page.items.map((post) => this.toResponse(post)),
+      items: await this.toResponses(page.items, viewerId),
       nextCursor: page.nextCursor,
     };
   }
@@ -200,37 +236,42 @@ export class PostsService {
     userId: string,
     query: CursorPaginationQueryDto,
   ): Promise<PostPageDto> {
-    const rows = await this.snapshot(
-      this.prisma.postBookmark.findMany({
-        where: { userId, post: { status: PostStatus.PUBLISHED } },
-        orderBy: [{ createdAt: 'desc' }, { postId: 'desc' }],
-        take: query.limit + 1,
-        ...(query.cursor
-          ? {
-              cursor: { postId_userId: { postId: query.cursor, userId } },
-              skip: 1,
-            }
-          : {}),
-        select: { post: { include: postInclude(userId) } },
-      }),
-    );
+    const filter: Record<string, unknown> = { userId };
+    if (query.cursor) {
+      // The cursor is the post id; the bookmark gives its place in the order.
+      const cursor = await this.bookmarks
+        .findOne({ userId, postId: query.cursor })
+        .exec();
+      if (!cursor) return { items: [], nextCursor: null };
+      Object.assign(
+        filter,
+        afterCursor('createdAt', { value: cursor.createdAt, id: cursor.id }),
+      );
+    }
+    const rows = await this.bookmarks
+      .find(filter)
+      .sort({ createdAt: -1, _id: -1 })
+      .limit(query.limit + 1)
+      .exec();
+    const posts = await this.posts
+      .find({ _id: { $in: rows.map(({ postId }) => postId) } })
+      .exec();
+    const postById = new Map(posts.map((post) => [post.id, post]));
+    // MongoDB has no relation filters: unpublished posts drop out here.
     const page = createCursorPaginatedResponse(
-      rows.map(({ post }) => post),
+      rows
+        .flatMap(({ postId }) => postById.get(postId) ?? [])
+        .filter(({ status }) => status === PostStatus.PUBLISHED),
       query.limit,
     );
     return {
-      items: page.items.map((post) => this.toResponse(post)),
+      items: await this.toResponses(page.items, userId),
       nextCursor: page.nextCursor,
     };
   }
 
   async findOne(id: string, viewerId?: string): Promise<PostResponseDto> {
-    let post = await this.snapshot(
-      this.prisma.post.findUnique({
-        where: { id },
-        include: postInclude(viewerId),
-      }),
-    );
+    const post = await this.posts.findOne({ _id: id }).exec();
     const isAuthor = viewerId !== undefined && post?.authorId === viewerId;
     if (!post || (post.status !== PostStatus.PUBLISHED && !isAuthor)) {
       throw new NotFoundException('Post not found');
@@ -241,25 +282,27 @@ export class PostsService {
       post.status === PostStatus.PROCESSING &&
       !this.cloudinary.webhooksEnabled
     ) {
-      const pending = post.media.filter(
-        (media) =>
-          media.status === MediaStatus.WAITING_UPLOAD ||
-          media.status === MediaStatus.PROCESSING,
-      );
+      const pending = await this.media
+        .find({
+          postId: id,
+          status: {
+            $in: [MediaStatus.WAITING_UPLOAD, MediaStatus.PROCESSING],
+          },
+        })
+        .exec();
       for (const media of pending) {
         await this.mediaService.refresh(media);
       }
-      await this.mediaService.settlePosts({ id });
-      post = await this.load(id, viewerId);
+      await this.mediaService.settlePosts([id]);
     }
-    return this.toResponse(post);
+    return this.load(id, viewerId);
   }
 
   async remove(id: string, authorId: string): Promise<void> {
-    const post = await this.prisma.post.findUnique({
-      where: { id },
-      select: { authorId: true },
-    });
+    const post = await this.posts
+      .findOne({ _id: id })
+      .select('authorId')
+      .exec();
     if (!post) {
       throw new NotFoundException('Post not found');
     }
@@ -271,10 +314,7 @@ export class PostsService {
 
   /** Deletes anyone's post; the caller has checked the account is an admin. */
   async removeAsAdmin(id: string): Promise<void> {
-    const post = await this.prisma.post.findUnique({
-      where: { id },
-      select: { id: true },
-    });
+    const post = await this.posts.findOne({ _id: id }).select('_id').exec();
     if (!post) {
       throw new NotFoundException('Post not found');
     }
@@ -282,55 +322,60 @@ export class PostsService {
   }
 
   private async destroy(id: string): Promise<void> {
-    const media = await this.prisma.mediaAsset.findMany({
-      where: { postId: id },
-      select: { id: true },
-    });
-    await this.prisma.post.delete({ where: { id } });
+    const media = await this.media.find({ postId: id }).select('_id').exec();
+    await this.mongo.withTransaction((session) =>
+      deleteWithReferences(this.mongo.db, session, 'posts', { _id: id }),
+    );
     await this.searchIndex.remove(id);
-    // The media rows were detached (`onDelete: SetNull`); remove them from
+    // The media rows were detached (onDelete SetNull); remove them from
     // Cloudinary the same way as discarded uploads, retried until confirmed.
     await this.mediaService.discard({
-      id: { in: media.map((item) => item.id) },
+      _id: { $in: media.map((item) => item.id) },
     });
   }
 
-  private load(id: string, viewerId?: string): Promise<PostWithRelations> {
-    return this.snapshot(
-      this.prisma.post.findUniqueOrThrow({
-        where: { id },
-        include: postInclude(viewerId),
-      }),
+  private async load(id: string, viewerId?: string): Promise<PostResponseDto> {
+    const post = await this.posts.findOne({ _id: id }).exec();
+    if (!post) throw new NotFoundException('Post not found');
+    const [response] = await this.toResponses([post], viewerId);
+    return response;
+  }
+
+  /** Post cards for `posts`, in the same order. */
+  async toResponses(
+    posts: readonly Post[],
+    viewerId?: string,
+  ): Promise<PostResponseDto[]> {
+    const relations = await loadPostRelations(
+      this.relationModels,
+      posts,
+      viewerId,
     );
-  }
-
-  private async snapshot<T>(query: Prisma.PrismaPromise<T>): Promise<T> {
-    // Prisma may load relations with several SQL statements. Keep visibility
-    // and the blog summary in one snapshot during concurrent unpublication.
-    const [result] = await this.prisma.$transaction([query], {
-      isolationLevel: Prisma.TransactionIsolationLevel.RepeatableRead,
+    return posts.flatMap((post) => {
+      const related = relations.get(post.id);
+      if (!related) return [];
+      return [
+        {
+          id: post.id,
+          type: post.type,
+          status: post.status,
+          body: post.body,
+          blog: related.blog,
+          publishedAt: post.publishedAt,
+          createdAt: post.createdAt,
+          author: related.author,
+          media: related.media.map((media) =>
+            this.mediaService.toResponse(media),
+          ),
+          commentCount: related.commentCount,
+          likeCount: related.likeCount,
+          isLiked: related.isLiked,
+          repostCount: related.repostCount,
+          isReposted: related.isReposted,
+          isBookmarked: related.isBookmarked,
+          viewCount: post.viewCount,
+        },
+      ];
     });
-    return result;
-  }
-
-  toResponse(post: PostWithRelations): PostResponseDto {
-    return {
-      id: post.id,
-      type: post.type,
-      status: post.status,
-      body: post.body,
-      blog: toBlogSummary(post.blog ?? null),
-      publishedAt: post.publishedAt,
-      createdAt: post.createdAt,
-      author: post.author,
-      media: post.media.map((media) => this.mediaService.toResponse(media)),
-      commentCount: post._count.comments,
-      likeCount: post._count.likes,
-      isLiked: post.likes.length > 0,
-      repostCount: post._count.reposts,
-      isReposted: post.reposts.length > 0,
-      isBookmarked: post.bookmarks.length > 0,
-      viewCount: post.viewCount,
-    };
   }
 }

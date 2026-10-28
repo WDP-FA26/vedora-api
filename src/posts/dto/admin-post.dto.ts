@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { PostStatus, PostType } from '@prisma/client';
+import { PostStatus, PostType } from '../../mongo/models';
 import { IsEnum, IsOptional } from 'class-validator';
 import { PaginationQueryDto } from '../../common/pagination';
 import { AdminMediaDto } from '../../media/dto/media-response.dto';

@@ -1,7 +1,7 @@
 # SePay: gói Pro/Premium và thanh toán QR
 
 Phạm vi triển khai từ `PAYMENT_FLOW_BLUEPRINT.md`: Banking QR + webhook,
-payment intent, idempotency, purchase ledger và membership. Không port domain
+payment intent, idempotency và membership. Không port domain
 marketplace, báo giá, credit hoặc ví nhà bán của dự án nguồn.
 
 ## Quy tắc được duyệt
@@ -73,10 +73,12 @@ toàn bộ mã trong DB. Thiếu/null/trống ghi `PAYMENT_CODE_MISSING`, không
 tìm mã trong `content`/`description`, không cắt mã dài hoặc đoán theo số tiền.
 SePay phải nhận diện được mã ngắn trước khi gửi qua bộ lọc của webhook.
 
-Advisory transaction lock theo provider transaction rồi payer, CAS PENDING,
-unique provider transaction/intent/ledger/active key và CHECK ở DB bảo vệ
-đồng thời. Cùng transaction cập nhật intent, ledger, membership, audit và
-receipt; bất kỳ bước nào lỗi thì rollback tất cả. Callback lỗi DB trả non-2xx
+Transaction lock theo provider transaction rồi payer, CAS PENDING, unique
+provider transaction/active key và validator ở DB bảo vệ đồng thời. Intent đã
+capture chính là bản ghi giao dịch: membership hiện tại là lần capture mới nhất
+của user, từ `capturedAt` đến `capturedAt + durationDays` (không lưu riêng).
+Cùng transaction cập nhật intent và receipt; bất kỳ bước nào lỗi thì rollback
+tất cả. Callback lỗi DB trả non-2xx
 để provider retry. Không gọi external notification trong capture transaction.
 
 `{success:true}` là acknowledgement, **không đồng nghĩa đã capture**. Receipt
@@ -103,7 +105,7 @@ hoặc nhận callback. Khi bật phải đủ bank config + API key >=16 ký t�
 `SEPAY_BANK_GATEWAY` là tên trong payload (ví dụ Vietcombank), không giả định
 hai giá trị là cùng chuỗi. Secret chỉ nằm ở BE, không đưa vào NEXT_PUBLIC.
 
-1. Apply migration `20261023030000_sepay_memberships` qua migrate deploy.
+1. Khởi động API: Mongoose tự tạo collection/index còn thiếu (container production cũng vậy).
 2. Cấu hình tài khoản nhận tiền, bank/gateway, prefix và webhook API key ở BE.
 3. Cấu hình webhook **Vedora** trên SePay: Có tiền vào, đúng tài khoản nhận,
    JSON, API Key, HTTPS URL cuối cùng
@@ -140,7 +142,7 @@ storage theo user + plan và giữ sau lỗi mạng; xóa sau response tạo th�
 
 ## Realtime và khả năng chuyển MongoDB
 
-`PaymentEventsService` dùng Redis Pub/Sub, độc lập Prisma/PostgreSQL. Cùng
+`PaymentEventsService` dùng Redis Pub/Sub, độc lập MongoDB. Cùng
 `PAYMENT_REDIS_URL` và `PAYMENT_EVENTS_CHANNEL` cho các API instance của cùng
 một môi trường. Hai connection Redis mỗi instance được mở khi có stream hoặc
 publish, tự reconnect; không ghi key, không dùng Redis để giữ token/tiền/job.
@@ -173,7 +175,7 @@ Môi trường staging/production dùng channel khác nhau nếu chung Redis: Pu
 không cách ly theo Redis database index.
 
 Khi đổi MongoDB, giữ transport Redis/SSE và hợp đồng invalidation. Riêng
-`PaymentsService` hiện vẫn dùng Prisma PostgreSQL, advisory lock, CAS, Decimal,
+`PaymentsService` dùng MongoDB (transaction + `lockDocument`), CAS và Int64,
 unique/CHECK constraints. Chuyển database cần thay repository/transaction và
 chiến lược chống trùng tương ứng (Mongo transaction cần replica set/sharded
 cluster), cùng mapping ID nếu thay UUID bằng ObjectId; chưa có migration Mongo
@@ -185,13 +187,13 @@ trong thay đổi realtime này.
 npm run build
 npm run lint
 npm test
-$env:TEST_DATABASE_URL = "postgresql://user:password@localhost:5432/vedora_test"
+$env:TEST_DATABASE_URL = "mongodb://vedora:vedora_local_password@localhost:27017/?authSource=admin&directConnection=true"
 npm run test:db -- test/payments.db-spec.ts
 ```
 
 DB suite tạo/drop schema ngẫu nhiên trong DB test: idempotency đồng thời,
 duplicate/reused event, cancel-vs-capture, rollback có chủ đích, ownership,
-snapshots, UTC+7, ledger, thay thế gói và expiry. Không reset DB ứng dụng.
+snapshots, UTC+7, thay thế gói và expiry. Không reset DB ứng dụng.
 Mã ngắn: prefix từ env/QR, ép trùng mã đã hủy, hết lượt retry và dùng lại key,
 hai payer trùng mã đồng thời, không retry unique constraint khác; thiếu mã
 provider vẫn không capture dù nội dung chứa đúng mã. Không gửi tiền thật.

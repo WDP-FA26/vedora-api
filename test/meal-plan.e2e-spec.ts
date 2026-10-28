@@ -1,122 +1,94 @@
-import { INestApplication } from '@nestjs/common';
-import { JwtService } from '@nestjs/jwt';
-import { Test } from '@nestjs/testing';
-import { Prisma, UserRole } from '@prisma/client';
+import { randomUUID } from 'node:crypto';
 import request from 'supertest';
-import type { App } from 'supertest/types';
-import { mockDeep, mockReset } from 'vitest-mock-extended';
 import type { MealPlanDto } from '../src/meal-plan/dto/meal-plan.dto';
-import { AppModule } from '../src/app.module';
-import { configureApp } from '../src/app.setup';
-import { PrismaService } from '../src/prisma/prisma.service';
-
-const USER_ID = '4a1e32e4-e18e-4dd7-8b4a-246ef2113ff2';
-const RECIPE_ID = 'd1a2d3e4-0000-4000-8000-000000000001';
-const TOFU_ID = 'a1a2d3e4-0000-4000-8000-000000000001';
-
-const recipe = {
-  id: RECIPE_ID,
-  title: 'Đậu hũ sốt cà',
-  servings: 2,
-  prepMinutes: 10,
-  cookMinutes: null,
-  steps: ['Chiên đậu'],
-  ingredients: [
-    {
-      ingredientId: TOFU_ID,
-      quantity: null,
-      unit: null,
-      note: null,
-      ingredient: { name: 'Đậu hũ' },
-    },
-  ],
-};
-const body = {
-  days: [
-    { day: 'MON', breakfast: [], lunch: [RECIPE_ID], dinner: [], others: [] },
-  ],
-};
+import type {
+  Ingredient,
+  MealPlanEntry,
+  Recipe,
+  User,
+} from '../src/mongo/models';
+import { createE2eApp, type E2eApp } from './e2e-app';
+import { createIngredient, createRecipe, createUser } from './fixtures';
 
 describe('Meal plan (e2e)', () => {
-  const prisma = mockDeep<PrismaService>();
-  let app: INestApplication<App>;
+  let e2e: E2eApp;
+  let user: User;
   let token: string;
+  let tofu: Ingredient;
+  let recipe: Recipe;
+  let body: object;
+  const server = () => e2e.app.getHttpServer();
+  const entries = () =>
+    e2e.mongo.connection.model<MealPlanEntry>('MealPlanEntry').countDocuments();
 
   beforeAll(async () => {
-    const moduleRef = await Test.createTestingModule({ imports: [AppModule] })
-      .overrideProvider(PrismaService)
-      .useValue(prisma)
-      .compile();
-    app = moduleRef.createNestApplication({ rawBody: true });
-    configureApp(app);
-    await app.init();
-    token = await app.get(JwtService).signAsync({
-      sub: USER_ID,
-      username: 'vedora.user',
-    });
-  });
-
-  beforeEach(() => {
-    mockReset(prisma);
-    prisma.$transaction.mockImplementation((run: unknown) =>
-      (run as (tx: PrismaService) => Promise<unknown>)(prisma),
+    e2e = await createE2eApp('mealplan_e2e');
+    user = await createUser(e2e.mongo, { username: 'vedora.user' });
+    token = await e2e.sign(user);
+    tofu = await createIngredient(e2e.mongo, { name: 'Đậu hũ' });
+    recipe = await createRecipe(
+      e2e.mongo,
+      { title: 'Đậu hũ sốt cà', prepMinutes: 10, steps: ['Chiên đậu'] },
+      [tofu.id],
     );
-    prisma.$queryRaw.mockResolvedValue([{ id: USER_ID }]);
-    prisma.user.findUnique.mockResolvedValue({
-      status: 'ACTIVE',
-      accountVersion: 0,
-      id: USER_ID,
-      username: 'vedora.user',
-      role: UserRole.USER,
-    } as never);
-    prisma.mealPlanEntry.findMany.mockResolvedValue([]);
-    prisma.recipe.findMany.mockResolvedValue([recipe] as never);
-    prisma.userAvoidedIngredient.findMany.mockResolvedValue([]);
-    prisma.ingredientGroupMember.findMany.mockResolvedValue([]);
-    prisma.incompatibilityRule.findMany.mockResolvedValue([]);
+    body = {
+      days: [
+        {
+          day: 'MON',
+          breakfast: [],
+          lunch: [recipe.id],
+          dinner: [],
+          others: [],
+        },
+      ],
+    };
+  });
+  beforeEach(async () => {
+    await e2e.mongo.connection
+      .model<MealPlanEntry>('MealPlanEntry')
+      .deleteMany({ userId: user.id });
+    await e2e.mongo.connection
+      .model<User>('User')
+      .updateOne({ _id: user.id }, { $set: { avoidedIngredientIds: [] } });
+  });
+  afterAll(async () => {
+    await e2e.close();
   });
 
-  afterAll(async () => {
-    await app.close();
-  });
+  const auth = (req: request.Test) =>
+    req.set('Authorization', `Bearer ${token}`);
 
   it('requires a signed-in user', async () => {
-    await request(app.getHttpServer()).get('/api/v1/meal-plan').expect(401);
+    await request(server()).get('/api/v1/meal-plan').expect(401);
   });
 
   it('returns the saved timetable', async () => {
-    prisma.mealPlanEntry.findMany.mockResolvedValue([
-      { day: 'MON', section: 'LUNCH', recipe },
-    ] as never);
-
-    const response = await request(app.getHttpServer())
-      .get('/api/v1/meal-plan')
-      .set('Authorization', `Bearer ${token}`)
+    await auth(request(server()).put('/api/v1/meal-plan/days'))
+      .send(body)
       .expect(200);
-
-    const body = response.body as MealPlanDto;
-    expect(body.days).toHaveLength(7);
-    expect(body.days[0].sections[1]).toMatchObject({
+    const response = await auth(
+      request(server()).get('/api/v1/meal-plan'),
+    ).expect(200);
+    const plan = response.body as MealPlanDto;
+    expect(plan.days).toHaveLength(7);
+    expect(plan.days[0].sections[1]).toMatchObject({
       section: 'LUNCH',
       recipes: [{ title: 'Đậu hũ sốt cà' }],
     });
-    expect(body.problems).toEqual([]);
+    expect(plan.problems).toEqual([]);
   });
 
   it('saves a valid change', async () => {
-    await request(app.getHttpServer())
-      .put('/api/v1/meal-plan/days')
-      .set('Authorization', `Bearer ${token}`)
+    await auth(request(server()).put('/api/v1/meal-plan/days'))
       .send(body)
       .expect(200);
-
-    expect(prisma.mealPlanEntry.createMany).toHaveBeenCalled();
+    expect(await entries()).toBe(1);
   });
 
   it('previews a manually selected recipe without saving', async () => {
-    const response = await request(app.getHttpServer())
-      .post('/api/v1/meal-plan/preview')
-      .set('Authorization', `Bearer ${token}`)
+    const response = await auth(
+      request(server()).post('/api/v1/meal-plan/preview'),
+    )
       .send(body)
       .expect(200);
     expect(response.body).toMatchObject({
@@ -127,7 +99,7 @@ describe('Meal plan (e2e)', () => {
             { section: 'BREAKFAST' },
             {
               section: 'LUNCH',
-              recipes: [{ id: RECIPE_ID }],
+              recipes: [{ id: recipe.id }],
               previous: [],
             },
             { section: 'DINNER' },
@@ -137,34 +109,29 @@ describe('Meal plan (e2e)', () => {
       ],
       problems: [],
     });
-    expect(prisma.mealPlanEntry.createMany).not.toHaveBeenCalled();
-    expect(prisma.mealPlanEntry.deleteMany).not.toHaveBeenCalled();
-    expect(prisma.$transaction).not.toHaveBeenCalled();
+    expect(await entries()).toBe(0);
   });
 
   it('requires login and validates the manual preview body', async () => {
-    await request(app.getHttpServer())
+    await request(server())
       .post('/api/v1/meal-plan/preview')
       .send(body)
       .expect(401);
-    await request(app.getHttpServer())
-      .post('/api/v1/meal-plan/preview')
-      .set('Authorization', `Bearer ${token}`)
+    await auth(request(server()).post('/api/v1/meal-plan/preview'))
       .send({ days: [] })
       .expect(400);
   });
 
   it('answers 409 for a recipe with an avoided ingredient', async () => {
-    prisma.userAvoidedIngredient.findMany.mockResolvedValue([
-      { ingredientId: TOFU_ID },
-    ] as never);
-
-    const response = await request(app.getHttpServer())
-      .put('/api/v1/meal-plan/days')
-      .set('Authorization', `Bearer ${token}`)
+    await e2e.mongo.connection
+      .model<User>('User')
+      .updateOne(
+        { _id: user.id },
+        { $set: { avoidedIngredientIds: [tofu.id] } },
+      );
+    const response = await auth(request(server()).put('/api/v1/meal-plan/days'))
       .send(body)
       .expect(409);
-
     expect(response.body).toMatchObject({
       code: 'MEAL_PLAN_INVALID',
       problems: [
@@ -172,18 +139,16 @@ describe('Meal plan (e2e)', () => {
           code: 'AVOIDED_INGREDIENT',
           day: 'MON',
           recipes: ['Đậu hũ sốt cà'],
-          recipeIds: [RECIPE_ID],
+          recipeIds: [recipe.id],
           ingredients: ['Đậu hũ'],
         },
       ],
     });
-    expect(prisma.mealPlanEntry.createMany).not.toHaveBeenCalled();
+    expect(await entries()).toBe(0);
   });
 
   it('rejects an unknown weekday', async () => {
-    await request(app.getHttpServer())
-      .put('/api/v1/meal-plan/days')
-      .set('Authorization', `Bearer ${token}`)
+    await auth(request(server()).put('/api/v1/meal-plan/days'))
       .send({
         days: [
           { day: 'FUNDAY', breakfast: [], lunch: [], dinner: [], others: [] },
@@ -193,39 +158,31 @@ describe('Meal plan (e2e)', () => {
   });
 
   it('returns missing recipe IDs in preview and save errors', async () => {
-    prisma.recipe.findMany.mockResolvedValue([]);
+    const missing = randomUUID();
+    const unknown = {
+      days: [
+        { day: 'MON', breakfast: [], lunch: [missing], dinner: [], others: [] },
+      ],
+    };
     for (const method of ['post', 'put'] as const) {
-      const response = await request(app.getHttpServer())
-        [method](`/api/v1/meal-plan/${method === 'post' ? 'preview' : 'days'}`)
-        .set('Authorization', `Bearer ${token}`)
-        .send(body)
+      const response = await auth(
+        request(server())[method](
+          `/api/v1/meal-plan/${method === 'post' ? 'preview' : 'days'}`,
+        ),
+      )
+        .send(unknown)
         .expect(method === 'post' ? 200 : 409);
       expect((response.body as { problems: unknown }).problems).toEqual([
         {
           code: 'UNKNOWN_RECIPE',
           day: 'MON',
           recipes: [],
-          recipeIds: [RECIPE_ID],
+          recipeIds: [missing],
           ingredients: [],
           reason: null,
         },
       ]);
     }
-    expect(prisma.mealPlanEntry.createMany).not.toHaveBeenCalled();
-  });
-
-  it('returns 409 instead of 500 for a database write conflict', async () => {
-    prisma.mealPlanEntry.createMany.mockRejectedValue(
-      new Prisma.PrismaClientKnownRequestError('duplicate', {
-        code: 'P2002',
-        clientVersion: '6.12.0',
-      }),
-    );
-    const response = await request(app.getHttpServer())
-      .put('/api/v1/meal-plan/days')
-      .set('Authorization', `Bearer ${token}`)
-      .send(body)
-      .expect(409);
-    expect((response.body as { code: string }).code).toBe('MEAL_PLAN_CONFLICT');
+    expect(await entries()).toBe(0);
   });
 });

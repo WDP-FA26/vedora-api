@@ -18,7 +18,9 @@ export class GoogleExchangeDto {
   @Length(1, 2048)
   code!: string;
 
-  @ApiProperty({ description: 'PKCE verifier from POST /auth/google/authorize' })
+  @ApiProperty({
+    description: 'PKCE verifier from POST /auth/google/authorize',
+  })
   @Matches(/^[A-Za-z0-9._~-]{43,128}$/)
   codeVerifier!: string;
 }

@@ -2,7 +2,7 @@ import { ApiProperty } from '@nestjs/swagger';
 import {
   KnowledgeDocumentFailureReason,
   KnowledgeDocumentStatus,
-} from '@prisma/client';
+} from '../../mongo/models';
 import { PresignedUploadDto } from '../../storage/presigned-upload.dto';
 
 export class KnowledgeDocumentResponseDto {

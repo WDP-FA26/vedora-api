@@ -1,7 +1,6 @@
-import Joi from 'joi';
 import { ConfigService } from '@nestjs/config';
+import { validateEnvironment } from '../config/environment';
 import { SePayProvider } from './sepay.provider';
-import { sepayEnvironmentSchema } from './sepay.config';
 import { parseBankWebhook } from './sepay-payload';
 
 const config = {
@@ -56,16 +55,34 @@ describe('SePay provider boundary', () => {
     expect(() => disabled.verifyWebhook()).toThrow();
   });
   it('validates complete enabled configuration and server plan prices', () => {
-    const schema = Joi.object(sepayEnvironmentSchema);
-    expect(schema.validate(config).error).toBeUndefined();
-    expect(
-      schema.validate({ SEPAY_PAYMENT_ENABLED: true }).error,
-    ).toBeDefined();
-    expect(schema.validate({ BILLING_PRO_PRICE_VND: 0 }).error).toBeDefined();
-    expect(schema.validate({ BILLING_PRO_PRICE_VND: 1.5 }).error).toBeDefined();
-    expect(
-      schema.validate({ SEPAY_PAYMENT_FLOW: 'gateway' }).error,
-    ).toBeDefined();
+    const environment = {
+      DATABASE_URL: 'mongodb://localhost:27017/vedora',
+      JWT_SECRET: 'sepay-test-jwt-secret-of-sufficient-length',
+      FRONTEND_URL: 'https://vedora.test',
+      OPENROUTER_API_KEY: 'sepay-test-openrouter-key',
+      QDRANT_URL: 'https://qdrant.vedora.test',
+      ...config,
+    };
+    expect(() => validateEnvironment(environment)).not.toThrow();
+    expect(() =>
+      validateEnvironment({
+        ...environment,
+        SEPAY_QR_BANK_CODE: '',
+        SEPAY_BANK_GATEWAY: '',
+        SEPAY_QR_ACCOUNT_NUMBER: '',
+        SEPAY_QR_ACCOUNT_HOLDER: '',
+        SEPAY_BANK_WEBHOOK_API_KEY: '',
+      }),
+    ).toThrow();
+    expect(() =>
+      validateEnvironment({ ...environment, BILLING_PRO_PRICE_VND: 0 }),
+    ).toThrow();
+    expect(() =>
+      validateEnvironment({ ...environment, BILLING_PRO_PRICE_VND: 1.5 }),
+    ).toThrow();
+    expect(() =>
+      validateEnvironment({ ...environment, SEPAY_PAYMENT_FLOW: 'gateway' }),
+    ).toThrow();
   });
   it('parses Banking local time as UTC+7 and ignores nonessential provider fields', () => {
     const parsed = parseBankWebhook({

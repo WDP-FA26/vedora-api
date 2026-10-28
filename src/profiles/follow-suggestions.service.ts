@@ -1,7 +1,18 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
-import { FollowSuggestionReason, PostStatus, Prisma } from '@prisma/client';
-import { PrismaService } from '../prisma/prisma.service';
+import { InjectModel } from '@nestjs/mongoose';
+import type { Model } from 'mongoose';
+import { isUniqueViolation } from '../mongo/errors';
+import {
+  Follow,
+  FollowSuggestion,
+  FollowSuggestionReason,
+  Post,
+  PostStatus,
+  SuggestionDismissal,
+  User,
+} from '../mongo/models';
+import { MongoService } from '../mongo/mongo.service';
 import {
   FollowSuggestionDto,
   FollowSuggestionListDto,
@@ -10,7 +21,7 @@ import {
 /** Newest followings of a user, and newest followings of each of those. */
 const FAN_OUT = 200;
 const KEPT_PER_USER = 30;
-/** Rows of `users` rebuilt per SQL statement. */
+/** Users rebuilt per round of queries. */
 const BATCH_SIZE = 200;
 /** A follow-back outranks any realistic mutual count. */
 const FOLLOWS_YOU_SCORE = 1000;
@@ -18,22 +29,11 @@ const ACTIVE_WINDOW_MS = 30 * 24 * 60 * 60 * 1000;
 const ACTIVE_POOL_SIZE = 50;
 const ACTIVE_CACHE_MS = 10 * 60 * 1000;
 
-const candidateSelect = {
-  id: true,
-  username: true,
-  fullName: true,
-  bio: true,
-  avatarUrl: true,
-  coverUrl: true,
-  isProfessional: true,
-} satisfies Prisma.UserSelect;
-type Candidate = Prisma.UserGetPayload<{ select: typeof candidateSelect }>;
-
 interface SuggestionRow {
-  user_id: string;
-  candidate_id: string;
-  mutual_count: number;
-  follows_you: boolean;
+  userId: string;
+  candidateId: string;
+  mutualCount: number;
+  followsYou: boolean;
 }
 
 /**
@@ -45,38 +45,50 @@ export class FollowSuggestionsService {
   private readonly logger = new Logger(FollowSuggestionsService.name);
   private activeAuthors: { ids: string[]; expiresAt: number } | null = null;
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    @InjectModel(User.name) private readonly users: Model<User>,
+    @InjectModel(Follow.name) private readonly follows: Model<Follow>,
+    @InjectModel(Post.name) private readonly posts: Model<Post>,
+    @InjectModel(FollowSuggestion.name)
+    private readonly suggestions: Model<FollowSuggestion>,
+    @InjectModel(SuggestionDismissal.name)
+    private readonly dismissals: Model<SuggestionDismissal>,
+    private readonly mongo: MongoService,
+  ) {}
 
   async list(userId: string, limit: number): Promise<FollowSuggestionListDto> {
     const dismissed = (
-      await this.prisma.suggestionDismissal.findMany({
-        where: { userId },
-        select: { candidateId: true },
-      })
+      await this.dismissals.find({ userId }).select('candidateId').exec()
     ).map((row) => row.candidateId);
 
-    const stored = await this.prisma.followSuggestion.findMany({
-      where: {
-        userId,
-        candidateId: { notIn: dismissed },
-        candidate: {
-          emailVerifiedAt: { not: null },
-          followers: { none: { followerId: userId } },
-        },
-      },
-      orderBy: [{ score: 'desc' }, { candidateId: 'asc' }],
-      take: limit,
-      select: {
-        reason: true,
-        mutualCount: true,
-        candidate: { select: candidateSelect },
-      },
-    });
-    const items: FollowSuggestionDto[] = stored.map((row) => ({
-      ...this.summary(row.candidate),
-      reason: row.reason,
-      mutualCount: row.mutualCount,
-    }));
+    // At most KEPT_PER_USER rows. MongoDB has no relation filters, so the
+    // candidates' state is checked here.
+    const suggestions = await this.suggestions
+      .find({ userId, candidateId: { $nin: dismissed } })
+      .sort({ score: -1, candidateId: 1 })
+      .exec();
+    const candidateIds = suggestions.map(({ candidateId }) => candidateId);
+    const candidates = await this.users
+      .find({ _id: { $in: candidateIds } })
+      .exec();
+    const candidateById = new Map(candidates.map((user) => [user.id, user]));
+    const followed = await this.followedAmong(userId, candidateIds);
+    const items: FollowSuggestionDto[] = [];
+    for (const row of suggestions) {
+      const candidate = candidateById.get(row.candidateId);
+      if (
+        !candidate ||
+        candidate.emailVerifiedAt === null ||
+        followed.has(candidate.id)
+      )
+        continue;
+      items.push({
+        ...this.summary(candidate),
+        reason: row.reason,
+        mutualCount: row.mutualCount,
+      });
+      if (items.length === limit) break;
+    }
 
     if (items.length < limit) {
       const taken = new Set([userId, ...dismissed, ...items.map((i) => i.id)]);
@@ -98,15 +110,13 @@ export class FollowSuggestionsService {
 
   /** Remembers the choice so the person never comes back as a suggestion. */
   async dismiss(userId: string, candidateId: string): Promise<void> {
-    await this.prisma.$transaction([
-      this.prisma.suggestionDismissal.createMany({
-        data: [{ userId, candidateId }],
-        skipDuplicates: true,
-      }),
-      this.prisma.followSuggestion.deleteMany({
-        where: { userId, candidateId },
-      }),
-    ]);
+    try {
+      await this.dismissals.create({ userId, candidateId });
+    } catch (error) {
+      // Dismissed already.
+      if (!isUniqueViolation(error)) throw error;
+    }
+    await this.suggestions.deleteOne({ userId, candidateId });
   }
 
   @Cron(CronExpression.EVERY_HOUR)
@@ -114,13 +124,16 @@ export class FollowSuggestionsService {
     let after: string | undefined;
     let users = 0;
     for (;;) {
-      const batch = await this.prisma.user.findMany({
-        where: { emailVerifiedAt: { not: null } },
-        orderBy: { id: 'asc' },
-        take: BATCH_SIZE,
-        ...(after && { cursor: { id: after }, skip: 1 }),
-        select: { id: true },
-      });
+      const filter: Record<string, unknown> = {
+        emailVerifiedAt: { $ne: null },
+      };
+      if (after) filter._id = { $gt: after };
+      const batch = await this.users
+        .find(filter)
+        .sort({ _id: 1 })
+        .limit(BATCH_SIZE)
+        .select('_id')
+        .exec();
       if (batch.length === 0) break;
       try {
         await this.rebuild(batch.map((user) => user.id));
@@ -141,79 +154,148 @@ export class FollowSuggestionsService {
     // Per user: people followed by the people they follow (capped fan-out),
     // plus their own followers. Excludes themselves, anyone they already
     // follow, dismissed people and unverified accounts.
-    const rows = await this.prisma.$queryRaw<SuggestionRow[]>`
-      WITH mine AS (
-        SELECT user_id, via_id FROM (
-          SELECT follower_id AS user_id, following_id AS via_id,
-                 row_number() OVER (
-                   PARTITION BY follower_id ORDER BY created_at DESC, following_id
-                 ) AS rn
-          FROM follows
-          WHERE follower_id = ANY(${userIds}::uuid[])
-        ) ranked
-        WHERE rn <= ${FAN_OUT}
-      ),
-      signals AS (
-        SELECT m.user_id, fof.following_id AS candidate_id,
-               1 AS mutual_count, false AS follows_you
-        FROM mine m
-        CROSS JOIN LATERAL (
-          SELECT following_id FROM follows
-          WHERE follower_id = m.via_id
-          ORDER BY created_at DESC
-          LIMIT ${FAN_OUT}
-        ) fof
-        UNION ALL
-        SELECT following_id, follower_id, 0, true
-        FROM follows
-        WHERE following_id = ANY(${userIds}::uuid[])
-      ),
-      combined AS (
-        SELECT user_id, candidate_id,
-               sum(mutual_count)::int AS mutual_count,
-               bool_or(follows_you) AS follows_you
-        FROM signals
-        GROUP BY user_id, candidate_id
-      ),
-      ranked AS (
-        SELECT c.*,
-               row_number() OVER (
-                 PARTITION BY c.user_id
-                 ORDER BY c.follows_you DESC, c.mutual_count DESC, c.candidate_id
-               ) AS rn
-        FROM combined c
-        JOIN users u ON u.id = c.candidate_id AND u.email_verified_at IS NOT NULL
-        WHERE c.candidate_id <> c.user_id
-          AND NOT EXISTS (
-            SELECT 1 FROM follows f
-            WHERE f.follower_id = c.user_id AND f.following_id = c.candidate_id
-          )
-          AND NOT EXISTS (
-            SELECT 1 FROM suggestion_dismissals d
-            WHERE d.user_id = c.user_id AND d.candidate_id = c.candidate_id
-          )
-      )
-      SELECT user_id, candidate_id, mutual_count, follows_you
-      FROM ranked
-      WHERE rn <= ${KEPT_PER_USER}
-    `;
+    const rows = await this.suggestionRows(userIds);
 
-    await this.prisma.$transaction([
-      this.prisma.followSuggestion.deleteMany({
-        where: { userId: { in: userIds } },
-      }),
-      this.prisma.followSuggestion.createMany({
-        data: rows.map((row) => ({
-          userId: row.user_id,
-          candidateId: row.candidate_id,
-          mutualCount: row.mutual_count,
-          reason: row.follows_you
+    await this.mongo.withTransaction(async (session) => {
+      await this.suggestions.deleteMany(
+        { userId: { $in: userIds } },
+        { session },
+      );
+      // insertMany rejects an empty list.
+      if (rows.length === 0) return;
+      await this.suggestions.insertMany(
+        rows.map((row) => ({
+          userId: row.userId,
+          candidateId: row.candidateId,
+          mutualCount: row.mutualCount,
+          reason: row.followsYou
             ? FollowSuggestionReason.FOLLOWS_YOU
             : FollowSuggestionReason.MUTUAL,
-          score: row.mutual_count + (row.follows_you ? FOLLOWS_YOU_SCORE : 0),
+          score: row.mutualCount + (row.followsYou ? FOLLOWS_YOU_SCORE : 0),
         })),
-      }),
+        { session },
+      );
+    });
+  }
+
+  /** Ranked candidates for each of `userIds`, best first, `KEPT_PER_USER` each. */
+  private async suggestionRows(userIds: string[]): Promise<SuggestionRow[]> {
+    // The newest FAN_OUT followings of each user, and who follows them back.
+    const [followings, followers] = await Promise.all([
+      this.follows
+        .find({ followerId: { $in: userIds } })
+        .sort({ createdAt: -1, followingId: 1 })
+        .select('followerId followingId')
+        .exec(),
+      this.follows
+        .find({ followingId: { $in: userIds } })
+        .select('followerId followingId')
+        .exec(),
     ]);
+    const via = new Map<string, string[]>();
+    for (const { followerId, followingId } of followings) {
+      const list = via.get(followerId) ?? [];
+      if (list.length < FAN_OUT) list.push(followingId);
+      via.set(followerId, list);
+    }
+
+    // The newest FAN_OUT followings of each person they follow.
+    const viaIds = [...new Set([...via.values()].flat())];
+    const secondDegree = new Map<string, string[]>();
+    for (let start = 0; start < viaIds.length; start += BATCH_SIZE) {
+      const chunk = viaIds.slice(start, start + BATCH_SIZE);
+      const lists = await Promise.all(
+        chunk.map((id) =>
+          this.follows
+            .find({ followerId: id })
+            .sort({ createdAt: -1, followingId: 1 })
+            .limit(FAN_OUT)
+            .select('followingId')
+            .exec(),
+        ),
+      );
+      chunk.forEach((id, index) =>
+        secondDegree.set(
+          id,
+          lists[index].map((row) => row.followingId),
+        ),
+      );
+    }
+
+    type Signal = { mutualCount: number; followsYou: boolean };
+    const signals = new Map<string, Map<string, Signal>>();
+    const signal = (userId: string, candidateId: string): Signal => {
+      const forUser = signals.get(userId) ?? new Map<string, Signal>();
+      signals.set(userId, forUser);
+      const entry = forUser.get(candidateId) ?? {
+        mutualCount: 0,
+        followsYou: false,
+      };
+      forUser.set(candidateId, entry);
+      return entry;
+    };
+    for (const [userId, viaList] of via) {
+      for (const viaId of viaList) {
+        for (const candidateId of secondDegree.get(viaId) ?? []) {
+          signal(userId, candidateId).mutualCount += 1;
+        }
+      }
+    }
+    for (const { followerId, followingId } of followers) {
+      signal(followingId, followerId).followsYou = true;
+    }
+
+    // Drop themselves, unverified accounts, people they already follow and
+    // dismissed people.
+    const candidateIds = [
+      ...new Set([...signals.values()].flatMap((map) => [...map.keys()])),
+    ];
+    if (candidateIds.length === 0) return [];
+    const [verified, followed, dismissed] = await Promise.all([
+      this.users
+        .find({ _id: { $in: candidateIds }, emailVerifiedAt: { $ne: null } })
+        .select('_id')
+        .exec(),
+      this.follows
+        .find({
+          followerId: { $in: userIds },
+          followingId: { $in: candidateIds },
+        })
+        .select('followerId followingId')
+        .exec(),
+      this.dismissals
+        .find({
+          userId: { $in: userIds },
+          candidateId: { $in: candidateIds },
+        })
+        .select('userId candidateId')
+        .exec(),
+    ]);
+    const verifiedIds = new Set(verified.map((user) => user.id));
+    const excluded = new Set([
+      ...followed.map((row) => `${row.followerId}:${row.followingId}`),
+      ...dismissed.map((row) => `${row.userId}:${row.candidateId}`),
+    ]);
+
+    const rows: SuggestionRow[] = [];
+    for (const [userId, forUser] of signals) {
+      const ranked = [...forUser]
+        .filter(
+          ([candidateId]) =>
+            candidateId !== userId &&
+            verifiedIds.has(candidateId) &&
+            !excluded.has(`${userId}:${candidateId}`),
+        )
+        .map(([candidateId, entry]) => ({ userId, candidateId, ...entry }))
+        .sort(
+          (a, b) =>
+            Number(b.followsYou) - Number(a.followsYou) ||
+            b.mutualCount - a.mutualCount ||
+            (a.candidateId < b.candidateId ? -1 : 1),
+        );
+      rows.push(...ranked.slice(0, KEPT_PER_USER));
+    }
+    return rows;
   }
 
   /** Authors with the most recent published posts, shared by every user. */
@@ -221,18 +303,31 @@ export class FollowSuggestionsService {
     if (this.activeAuthors && this.activeAuthors.expiresAt > Date.now()) {
       return this.activeAuthors.ids;
     }
-    const groups = await this.prisma.post.groupBy({
-      by: ['authorId'],
-      where: {
-        status: PostStatus.PUBLISHED,
-        publishedAt: { gte: new Date(Date.now() - ACTIVE_WINDOW_MS) },
-        author: { emailVerifiedAt: { not: null } },
-      },
-      _count: { _all: true },
-      orderBy: [{ _count: { authorId: 'desc' } }, { authorId: 'asc' }],
-      take: ACTIVE_POOL_SIZE,
-    });
-    const ids = groups.map((group) => group.authorId);
+    const groups = await this.posts
+      .aggregate<{ _id: string; posts: number }>([
+        {
+          $match: {
+            status: PostStatus.PUBLISHED,
+            publishedAt: { $gte: new Date(Date.now() - ACTIVE_WINDOW_MS) },
+          },
+        },
+        { $group: { _id: '$authorId', posts: { $sum: 1 } } },
+        { $sort: { posts: -1, _id: 1 } },
+      ])
+      .exec();
+    // MongoDB has no relation filters: unverified authors drop out here.
+    const verified = await this.users
+      .find({
+        _id: { $in: groups.map((group) => group._id) },
+        emailVerifiedAt: { $ne: null },
+      })
+      .select('_id')
+      .exec();
+    const verifiedIds = new Set(verified.map(({ id }) => id));
+    const ids = groups
+      .map((group) => group._id)
+      .filter((id) => verifiedIds.has(id))
+      .slice(0, ACTIVE_POOL_SIZE);
     this.activeAuthors = { ids, expiresAt: Date.now() + ACTIVE_CACHE_MS };
     return ids;
   }
@@ -241,27 +336,29 @@ export class FollowSuggestionsService {
     userId: string,
     taken: Set<string>,
     count: number,
-  ): Promise<Candidate[]> {
+  ): Promise<User[]> {
     const pool = (await this.activePool()).filter((id) => !taken.has(id));
     if (pool.length === 0) return [];
-    const followed = new Set(
-      (
-        await this.prisma.follow.findMany({
-          where: { followerId: userId, followingId: { in: pool } },
-          select: { followingId: true },
-        })
-      ).map((row) => row.followingId),
-    );
+    const followed = await this.followedAmong(userId, pool);
     const ids = pool.filter((id) => !followed.has(id)).slice(0, count);
-    const users = await this.prisma.user.findMany({
-      where: { id: { in: ids } },
-      select: candidateSelect,
-    });
-    // `findMany` ignores the order of `ids`.
+    const users = await this.users.find({ _id: { $in: ids } }).exec();
+    // A filter by ids ignores their order.
     return ids.flatMap((id) => users.find((user) => user.id === id) ?? []);
   }
 
-  private summary(user: Candidate) {
+  /** Which of `ids` the user follows. */
+  private async followedAmong(
+    userId: string,
+    ids: string[],
+  ): Promise<Set<string>> {
+    const follows = await this.follows
+      .find({ followerId: userId, followingId: { $in: ids } })
+      .select('followingId')
+      .exec();
+    return new Set(follows.map(({ followingId }) => followingId));
+  }
+
+  private summary(user: User) {
     return {
       id: user.id,
       username: user.username,

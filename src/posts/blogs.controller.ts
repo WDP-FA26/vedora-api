@@ -23,7 +23,7 @@ import {
   ApiTags,
   OmitType,
 } from '@nestjs/swagger';
-import { PostType } from '@prisma/client';
+import { PostType } from '../mongo/models';
 import type { Response } from 'express';
 import type {
   AuthenticatedRequest,

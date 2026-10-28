@@ -1,53 +1,50 @@
-import { execFileSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import { join } from 'node:path';
-import { PrismaClient } from '@prisma/client';
+import { Test } from '@nestjs/testing';
+import type { INestApplication } from '@nestjs/common';
 import { FollowSuggestionsService } from '../src/profiles/follow-suggestions.service';
-import { PrismaService } from '../src/prisma/prisma.service';
+import { MongoModule } from '../src/mongo/mongo.module';
+import { MongoService } from '../src/mongo/mongo.service';
+import { createUser } from './fixtures';
+import {
+  createTestMongoUrl,
+  dropTestDatabase,
+  prepareTestDatabase,
+} from './mongo-test-db';
 
-describe('Follow suggestions with PostgreSQL', () => {
-  const schema = `vedora_suggest_test_${randomUUID().replaceAll('-', '')}`;
-  let prisma: PrismaClient;
+type StoredDoc = { _id: string; [key: string]: unknown };
+
+describe('Follow suggestions with MongoDB', () => {
+  let app: INestApplication;
+  let db: MongoService;
   let service: FollowSuggestionsService;
   const ids: Record<string, string> = {};
 
+  const follows = () => db.db.collection<StoredDoc>('follows');
   const follow = (from: string, to: string) =>
-    prisma.follow.create({
-      data: { followerId: ids[from], followingId: ids[to] },
+    follows().insertOne({
+      _id: randomUUID(),
+      followerId: ids[from],
+      followingId: ids[to],
+      createdAt: new Date(),
     });
 
   beforeAll(async () => {
-    const base = process.env.TEST_DATABASE_URL;
-    if (!base)
-      throw new Error(
-        'Set TEST_DATABASE_URL to a disposable PostgreSQL database',
-      );
-    const url = new URL(base);
-    url.searchParams.set('schema', schema);
-    execFileSync(
-      process.execPath,
-      [
-        join(process.cwd(), 'node_modules/prisma/build/index.js'),
-        'migrate',
-        'deploy',
-      ],
-      {
-        env: { ...process.env, DATABASE_URL: url.toString() },
-        stdio: 'pipe',
-        timeout: 45_000,
-      },
-    );
-    prisma = new PrismaClient({ datasourceUrl: url.toString() });
-    service = new FollowSuggestionsService(prisma as PrismaService);
+    const moduleRef = await Test.createTestingModule({
+      imports: [MongoModule.forTest(createTestMongoUrl('suggest'))],
+      providers: [FollowSuggestionsService],
+    }).compile();
+    app = moduleRef.createNestApplication();
+    await app.init();
+    await prepareTestDatabase(app);
+    db = app.get(MongoService);
+    service = app.get(FollowSuggestionsService);
 
     for (const name of ['a', 'b', 'c', 'd', 'e', 'f', 'loner', 'unverified']) {
-      const user = await prisma.user.create({
-        data: {
-          username: `suggest.${name}`,
-          fullName: name,
-          email: `suggest.${name}@example.test`,
-          emailVerifiedAt: name === 'unverified' ? null : new Date(),
-        },
+      const user = await createUser(db, {
+        username: `suggest.${name}`,
+        fullName: name,
+        email: `suggest.${name}@example.test`,
+        emailVerifiedAt: name === 'unverified' ? null : new Date(),
       });
       ids[name] = user.id;
     }
@@ -63,9 +60,8 @@ describe('Follow suggestions with PostgreSQL', () => {
   });
 
   afterAll(async () => {
-    if (!prisma) return;
-    await prisma.$executeRawUnsafe(`DROP SCHEMA IF EXISTS "${schema}" CASCADE`);
-    await prisma.$disconnect();
+    await dropTestDatabase(app);
+    await app.close();
   });
 
   it('ranks follow-backs first, then by mutual followings, skipping known and unverified users', async () => {
@@ -90,6 +86,12 @@ describe('Follow suggestions with PostgreSQL', () => {
     expect((await service.list(ids.a, 10)).items.map((i) => i.id)).toEqual([
       ids.e,
     ]);
+    await service.dismiss(ids.a, ids.f);
+    expect(
+      await db.db
+        .collection<StoredDoc>('suggestion_dismissals')
+        .countDocuments(),
+    ).toBe(1);
 
     await service.rebuild([ids.a]);
     expect((await service.list(ids.a, 10)).items.map((i) => i.id)).toEqual([

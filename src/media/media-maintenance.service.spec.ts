@@ -1,52 +1,44 @@
+import type { INestApplication } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Test } from '@nestjs/testing';
+import { createMedia } from '../../test/fixtures';
 import {
-  CaptionStatus,
-  MediaAsset,
-  MediaStatus,
-  MediaType,
-} from '@prisma/client';
-import { type DeepMockProxy, mockDeep } from 'vitest-mock-extended';
+  createTestMongoUrl,
+  dropTestDatabase,
+  prepareTestDatabase,
+} from '../../test/mongo-test-db';
 import { CloudinaryService } from '../cloudinary/cloudinary.service';
-import { PrismaService } from '../prisma/prisma.service';
-import { MediaMaintenanceService } from './media-maintenance.service';
+import { MongoModule } from '../mongo/mongo.module';
+import { MongoService } from '../mongo/mongo.service';
+import { type MediaAsset, MediaStatus } from '../mongo/models';
 import { CaptionService } from './caption.service';
+import { MediaMaintenanceService } from './media-maintenance.service';
 import { MediaService } from './media.service';
 
-const ownerless: MediaAsset = {
-  id: '0b0d9c3e-3f0c-4c5e-9d0a-2b7f1f4d8a11',
-  ownerId: null,
-  type: MediaType.VIDEO,
-  status: MediaStatus.READY,
-  failureReason: null,
-  postId: null,
-  position: 0,
-  publicId: 'vedora/videos/0b0d9c3e-3f0c-4c5e-9d0a-2b7f1f4d8a11',
-  durationSec: 42,
-  aspectRatio: '16:9',
-  captionStatus: CaptionStatus.NONE,
-  captionLanguage: null,
-  transcript: null,
-  discardedAt: new Date('2026-09-25T00:00:00.000Z'),
-  createdAt: new Date('2026-09-24T00:00:00.000Z'),
-  updatedAt: new Date('2026-09-24T00:00:00.000Z'),
-};
-
 describe('MediaMaintenanceService', () => {
+  let app: INestApplication;
+  let db: MongoService;
   let maintenance: MediaMaintenanceService;
-  let prisma: DeepMockProxy<PrismaService>;
-  let mediaService: DeepMockProxy<MediaService>;
-  let captions: DeepMockProxy<CaptionService>;
+  let mediaService: { purge: ReturnType<typeof vi.fn> };
+  let captions: {
+    releaseStale: ReturnType<typeof vi.fn>;
+    schedule: ReturnType<typeof vi.fn>;
+  };
 
-  beforeEach(async () => {
-    prisma = mockDeep<PrismaService>();
-    mediaService = mockDeep<MediaService>();
-    captions = mockDeep<CaptionService>();
+  const assets = () => db.connection.model<MediaAsset>('MediaAsset');
+  const reload = (id: string) => assets().findById(id).exec();
+
+  beforeAll(async () => {
+    mediaService = { purge: vi.fn().mockResolvedValue(true) };
+    captions = {
+      releaseStale: vi.fn().mockResolvedValue(undefined),
+      schedule: vi.fn(),
+    };
     const moduleRef = await Test.createTestingModule({
+      imports: [MongoModule.forTest(createTestMongoUrl('mediamaint'))],
       providers: [
         MediaMaintenanceService,
         CloudinaryService,
-        { provide: PrismaService, useValue: prisma },
         { provide: MediaService, useValue: mediaService },
         { provide: CaptionService, useValue: captions },
         {
@@ -59,18 +51,44 @@ describe('MediaMaintenanceService', () => {
         },
       ],
     }).compile();
-    maintenance = moduleRef.get(MediaMaintenanceService);
+    app = moduleRef.createNestApplication();
+    await app.init();
+    await prepareTestDatabase(app);
+    db = app.get(MongoService);
+    maintenance = app.get(MediaMaintenanceService);
+  });
+  beforeEach(async () => {
+    await db.db.collection('media_assets').deleteMany({});
+    mediaService.purge.mockClear();
+    captions.releaseStale.mockClear();
+    captions.schedule.mockClear();
+  });
+  afterAll(async () => {
+    await dropTestDatabase(app);
+    await app.close();
   });
 
   it('discards media of deleted accounts and purges it from Cloudinary', async () => {
-    prisma.mediaAsset.findMany.mockResolvedValue([ownerless]);
+    const ownerless = await createMedia(db, {
+      ownerId: null,
+      status: MediaStatus.READY,
+    });
 
     await maintenance.purgeDiscarded();
 
-    const [sweep] = prisma.mediaAsset.updateMany.mock.calls[0];
-    expect(sweep.where).toEqual({ ownerId: null, discardedAt: null });
-    expect(sweep.data.discardedAt).toBeInstanceOf(Date);
-    expect(mediaService.purge).toHaveBeenCalledWith(ownerless);
+    const stored = await reload(ownerless.id);
+    expect(stored?.discardedAt).toBeInstanceOf(Date);
+    expect(mediaService.purge).toHaveBeenCalledWith(
+      expect.objectContaining({ id: ownerless.id }),
+    );
+  });
+
+  it('leaves media with an owner alone', async () => {
+    const owned = await createMedia(db, { ownerId: 'someone' });
+    await maintenance.purgeDiscarded();
+    const stored = await reload(owned.id);
+    expect(stored?.discardedAt).toBeNull();
+    expect(mediaService.purge).not.toHaveBeenCalled();
   });
 
   it('releases captioning cut off by a restart and resumes it', async () => {

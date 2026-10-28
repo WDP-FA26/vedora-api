@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { MediaType } from '@prisma/client';
+import { MediaType } from '../../mongo/models';
 import { IsIn } from 'class-validator';
 
 export class CreateUploadDto {

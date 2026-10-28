@@ -1,7 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { createOpenRouter } from '@openrouter/ai-sdk-provider';
-import { AiFeature } from '@prisma/client';
+import { AiFeature } from '../../mongo/models';
 import { generateImage, type ImageModel, type LanguageModel } from 'ai';
 import { randomUUID } from 'node:crypto';
 import { AiUsageService } from '../../ai-usage/ai-usage.service';

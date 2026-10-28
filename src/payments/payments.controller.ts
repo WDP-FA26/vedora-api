@@ -24,11 +24,13 @@ import {
   ApiTags,
   ApiUnauthorizedResponse,
 } from '@nestjs/swagger';
+import { InjectModel } from '@nestjs/mongoose';
+import type { Model } from 'mongoose';
 import type { AuthenticatedRequest } from '../auth/auth.types';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { Roles } from '../auth/roles.decorator';
 import { RolesGuard } from '../auth/roles.guard';
-import { PrismaService } from '../prisma/prisma.service';
+import { PaymentWebhookReceipt, UserRole } from '../mongo/models';
 import {
   BillingCatalogDto,
   BillingOverviewDto,
@@ -185,10 +187,13 @@ export class SePayWebhookController {
 @ApiTags('billing-admin')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard, RolesGuard)
-@Roles('ADMIN')
+@Roles(UserRole.ADMIN)
 @Controller('admin/payments')
 export class PaymentReconciliationController {
-  constructor(private readonly db: PrismaService) {}
+  constructor(
+    @InjectModel(PaymentWebhookReceipt.name)
+    private readonly webhookReceipts: Model<PaymentWebhookReceipt>,
+  ) {}
 
   @Get('webhook-receipts')
   @Header('Cache-Control', 'private, no-store')
@@ -197,10 +202,28 @@ export class PaymentReconciliationController {
     summary:
       'Latest 50 sanitized webhook outcomes for reconciliation (admin only)',
   })
-  receipts() {
-    return this.db.paymentWebhookReceipt.findMany({
-      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
-      take: 50,
-    });
+  async receipts() {
+    const rows = await this.webhookReceipts
+      .find()
+      .sort({ createdAt: -1, _id: -1 })
+      .limit(50)
+      .exec();
+    return rows.map(
+      ({
+        id,
+        providerTransactionId,
+        payloadHash,
+        outcome,
+        intentId,
+        createdAt,
+      }) => ({
+        id,
+        providerTransactionId,
+        payloadHash,
+        outcome,
+        intentId,
+        createdAt,
+      }),
+    );
   }
 }

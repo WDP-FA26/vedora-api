@@ -11,10 +11,8 @@ import {
 import { ApiExcludeController } from '@nestjs/swagger';
 import type { IncomingHttpHeaders } from 'node:http';
 import { CloudinaryService } from '../cloudinary/cloudinary.service';
-import {
-  type CloudinaryNotification,
-  cloudinaryNotification,
-} from './dto/cloudinary-notification';
+import { validatePayload } from '../common/validation';
+import { CloudinaryNotification } from './dto/cloudinary-notification';
 import { MediaService } from './media.service';
 import { RawBody } from './raw-body.decorator';
 
@@ -64,10 +62,10 @@ export class CloudinaryWebhookController {
       this.logger.warn('Rejected Cloudinary notification: bad signature');
       throw new BadRequestException('Invalid webhook signature');
     }
-    const parsed = cloudinaryNotification.safeParse(JSON.parse(body));
-    if (!parsed.success) {
+    const parsed = validatePayload(CloudinaryNotification, JSON.parse(body));
+    if (!parsed.value) {
       throw new BadRequestException('Unexpected notification');
     }
-    return parsed.data;
+    return parsed.value;
   }
 }

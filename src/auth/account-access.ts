@@ -1,5 +1,5 @@
 import { UnauthorizedException } from '@nestjs/common';
-import { AccountStatus } from '@prisma/client';
+import { AccountStatus } from '../mongo/models';
 
 export function assertAccountActive(status: AccountStatus): void {
   if (status !== AccountStatus.ACTIVE) {

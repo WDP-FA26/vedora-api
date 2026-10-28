@@ -3,7 +3,7 @@ import {
   MediaAsset,
   MediaStatus,
   MediaType,
-} from '@prisma/client';
+} from '../mongo/models';
 import type { CloudinaryNotification } from './dto/cloudinary-notification';
 
 // Test fixtures shared by the media specs.
@@ -13,6 +13,7 @@ export const ownerId = '4a1e32e4-e18e-4dd7-8b4a-246ef2113ff2';
 export const publicId = `vedora/videos/${mediaId}`;
 
 export const pendingMedia: MediaAsset = {
+  _id: mediaId,
   id: mediaId,
   ownerId,
   type: MediaType.VIDEO,
@@ -26,6 +27,7 @@ export const pendingMedia: MediaAsset = {
   captionStatus: CaptionStatus.NONE,
   captionLanguage: null,
   transcript: null,
+  captions: [],
   discardedAt: null,
   createdAt: new Date('2026-09-24T00:00:00.000Z'),
   updatedAt: new Date('2026-09-24T00:00:00.000Z'),

@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { PostStatus, PostType } from '@prisma/client';
+import { PostStatus, PostType } from '../../mongo/models';
 import { CursorPaginatedResponseDto } from '../../common/pagination';
 import { MediaResponseDto } from '../../media/dto/media-response.dto';
 import { BlogSummaryDto } from './blog-summary.dto';

@@ -1,9 +1,8 @@
-import { execFileSync } from 'node:child_process';
 import { createHash, randomUUID } from 'node:crypto';
-import { join } from 'node:path';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
-import { AccountStatus, PrismaClient, User, UserRole } from '@prisma/client';
+import { Test } from '@nestjs/testing';
+import type { INestApplication } from '@nestjs/common';
 import { AuthService } from '../src/auth/auth.service';
 import { AuthenticatedUser } from '../src/auth/auth.types';
 import { EmailVerificationService } from '../src/auth/email-verification.service';
@@ -12,13 +11,27 @@ import { RefreshTokensService } from '../src/auth/refresh-tokens.service';
 import { hashPassword } from '../src/auth/password';
 import { hashCode } from '../src/auth/one-time-code';
 import { MailService } from '../src/mail/mail.service';
-import { PrismaService } from '../src/prisma/prisma.service';
+import { MongoModule } from '../src/mongo/mongo.module';
+import { MongoService } from '../src/mongo/mongo.service';
+import { lockDocument } from '../src/mongo/document-lock';
+import { deleteWithReferences } from '../src/mongo/relations';
+import { AccountStatus, User, UserRole } from '../src/mongo/models';
+import { UpdateUserStatusDto } from '../src/users/dto/update-user-status.dto';
 import { UsersService } from '../src/users/users.service';
+import { createUser, deleteWithCascade } from './fixtures';
+import {
+  createTestMongoUrl,
+  dropTestDatabase,
+  prepareTestDatabase,
+} from './mongo-test-db';
 
-describe('Account administration with PostgreSQL', () => {
-  const schema = `vedora_account_test_${randomUUID().replaceAll('-', '')}`;
+type StoredDoc = { _id: string; [key: string]: unknown };
+
+describe('Account administration with MongoDB', () => {
   const password = 'AccountTests123!';
-  let prisma: PrismaClient;
+  let app: INestApplication;
+  let mongo: MongoService;
+  let db: MongoService['db'];
   let users: UsersService;
   let refresh: RefreshTokensService;
   let auth: AuthService;
@@ -26,13 +39,20 @@ describe('Account administration with PostgreSQL', () => {
   let adminB: User;
   let member: User;
   let passwordHash: string;
+  const mail = {
+    sendVerificationCode: vi.fn(),
+    sendPasswordResetCode: vi.fn(),
+  };
   const actor = (user: User): AuthenticatedUser => ({
     sub: user.id,
     username: user.username,
     role: user.role,
   });
-  const operation = (status: 'ACTIVE' | 'SUSPENDED', expectedVersion = 0) => ({
-    status,
+  const operation = (
+    status: 'ACTIVE' | 'SUSPENDED',
+    expectedVersion = 0,
+  ): UpdateUserStatusDto => ({
+    status: status as UpdateUserStatusDto['status'],
     expectedVersion,
     reason: 'Reviewed account',
   });
@@ -41,71 +61,73 @@ describe('Account administration with PostgreSQL', () => {
     expectedVersion: 0,
     reason: 'Role review',
   };
+  const count = (collection: string) =>
+    db.collection(collection).countDocuments();
   const activeAdminCount = () =>
-    prisma.user.count({
-      where: { role: UserRole.ADMIN, status: AccountStatus.ACTIVE },
-    });
+    db
+      .collection<StoredDoc>('users')
+      .countDocuments({ role: UserRole.ADMIN, status: AccountStatus.ACTIVE });
+  const findUser = (id: string) =>
+    db.collection<StoredDoc>('users').findOne({ _id: id });
+  const audits = () =>
+    db
+      .collection<StoredDoc>('user_account_audits')
+      .find()
+      .sort({ accountVersion: 1 })
+      .toArray();
 
   beforeAll(async () => {
-    if (!process.env.TEST_DATABASE_URL)
-      throw new Error(
-        'Set TEST_DATABASE_URL to a disposable PostgreSQL database',
-      );
-    const url = new URL(process.env.TEST_DATABASE_URL);
-    url.searchParams.set('schema', schema);
-    execFileSync(
-      process.execPath,
-      [
-        join(process.cwd(), 'node_modules/prisma/build/index.js'),
-        'migrate',
-        'deploy',
+    const moduleRef = await Test.createTestingModule({
+      imports: [MongoModule.forTest(createTestMongoUrl('account'))],
+      providers: [
+        UsersService,
+        RefreshTokensService,
+        EmailVerificationService,
+        PasswordResetService,
+        AuthService,
+        { provide: MailService, useValue: mail },
+        {
+          provide: ConfigService,
+          useValue: new ConfigService({
+            JWT_ACCESS_TTL: 3600,
+            REFRESH_TOKEN_TTL: 2592000,
+          }),
+        },
+        {
+          provide: JwtService,
+          useValue: new JwtService({
+            secret: 'account-test-secret-longer-than-32-characters',
+            signOptions: { expiresIn: 3600 },
+          }),
+        },
       ],
-      {
-        env: { ...process.env, DATABASE_URL: url.toString() },
-        stdio: 'pipe',
-        timeout: 45_000,
-      },
-    );
-    prisma = new PrismaClient({ datasourceUrl: url.toString() });
-    const db = prisma as PrismaService;
-    users = new UsersService(db);
-    const config = new ConfigService({
-      JWT_ACCESS_TTL: 3600,
-      REFRESH_TOKEN_TTL: 2592000,
-    });
-    refresh = new RefreshTokensService(db, config);
-    const mail = {
-      sendVerificationCode: vi.fn(),
-      sendPasswordResetCode: vi.fn(),
-    } as unknown as MailService;
-    auth = new AuthService(
-      users,
-      new JwtService({
-        secret: 'account-test-secret-longer-than-32-characters',
-        signOptions: { expiresIn: 3600 },
-      }),
-      refresh,
-      new EmailVerificationService(db, mail),
-      new PasswordResetService(db, mail),
-      config,
-    );
+    }).compile();
+    app = moduleRef.createNestApplication();
+    await app.init();
+    await prepareTestDatabase(app);
+    mongo = app.get(MongoService);
+    db = mongo.db;
+    users = app.get(UsersService);
+    refresh = app.get(RefreshTokensService);
+    auth = app.get(AuthService);
     passwordHash = await hashPassword(password);
   });
 
   beforeEach(async () => {
-    await prisma.userAccountAudit.deleteMany();
-    await prisma.user.deleteMany();
+    await db.collection<StoredDoc>('user_account_audits').deleteMany({});
+    await db.collection<StoredDoc>('one_time_codes').deleteMany({});
+    await db.collection<StoredDoc>('refresh_tokens').deleteMany({});
+    await db.collection<StoredDoc>('email_verification_guesses').deleteMany({});
+    await mongo.withTransaction((session) =>
+      deleteWithReferences(db, session, 'users', {}),
+    );
     const make = (username: string, role: UserRole) =>
-      prisma.user.create({
-        data: {
-          username,
-          email: `${username}@example.test`,
-          fullName: username,
-          role,
-          status: AccountStatus.ACTIVE,
-          emailVerifiedAt: new Date(),
-          passwordHash,
-        },
+      createUser(mongo, {
+        username,
+        email: `${username}@example.test`,
+        fullName: username,
+        role,
+        passwordHash,
       });
     adminA = await make('admin.a', UserRole.ADMIN);
     adminB = await make('admin.b', UserRole.ADMIN);
@@ -113,9 +135,8 @@ describe('Account administration with PostgreSQL', () => {
   });
 
   afterAll(async () => {
-    if (!prisma) return;
-    await prisma.$executeRawUnsafe(`DROP SCHEMA IF EXISTS "${schema}" CASCADE`);
-    await prisma.$disconnect();
+    await dropTestDatabase(app);
+    await app.close();
   });
 
   it('suspends/reactivates with a version and durable actor/reason audit', async () => {
@@ -133,10 +154,7 @@ describe('Account administration with PostgreSQL', () => {
         actor(adminB),
       ),
     ).toMatchObject({ status: 'ACTIVE', accountVersion: 2 });
-    const audits = await prisma.userAccountAudit.findMany({
-      orderBy: { accountVersion: 'asc' },
-    });
-    expect(audits).toMatchObject([
+    expect(await audits()).toMatchObject([
       {
         actorId: adminA.id,
         userId: member.id,
@@ -160,7 +178,7 @@ describe('Account administration with PostgreSQL', () => {
     expect(
       await users.updateStatus(member.id, operation('ACTIVE'), actor(adminA)),
     ).toMatchObject({ accountVersion: 0 });
-    expect(await prisma.userAccountAudit.count()).toBe(0);
+    expect(await count('user_account_audits')).toBe(0);
   });
 
   it('rejects a stale version without changing state or audit', async () => {
@@ -168,27 +186,41 @@ describe('Account administration with PostgreSQL', () => {
     await expect(
       users.updateStatus(member.id, operation('ACTIVE'), actor(adminB)),
     ).rejects.toMatchObject({ response: { code: 'ACCOUNT_VERSION_CONFLICT' } });
-    expect(await prisma.userAccountAudit.count()).toBe(1);
+    expect(await count('user_account_audits')).toBe(1);
   });
 
   it('rolls back the status change when the audit cannot be written', async () => {
-    await expect(
-      users.updateStatus(
-        member.id,
-        { ...operation('SUSPENDED'), reason: 'x'.repeat(501) },
-        actor(adminA),
-      ),
-    ).rejects.toThrow();
-    expect(
-      await prisma.user.findUniqueOrThrow({ where: { id: member.id } }),
-    ).toMatchObject({ status: 'ACTIVE', accountVersion: 0 });
-    expect(await prisma.userAccountAudit.count()).toBe(0);
+    // Make the audit insert fail: add a rule to the collection's validator
+    // for the duration of the test.
+    await db.command({
+      collMod: 'user_account_audits',
+      validator: { $expr: { $lte: [{ $strLenCP: '$reason' }, 500] } },
+    });
+    try {
+      await expect(
+        users.updateStatus(
+          member.id,
+          { ...operation('SUSPENDED'), reason: 'x'.repeat(501) },
+          actor(adminA),
+        ),
+      ).rejects.toThrow();
+    } finally {
+      await db.command({
+        collMod: 'user_account_audits',
+        validator: {},
+      });
+    }
+    expect(await findUser(member.id)).toMatchObject({
+      status: 'ACTIVE',
+      accountVersion: 0,
+    });
+    expect(await count('user_account_audits')).toBe(0);
   });
 
   it.each(['suspend', 'demote', 'delete'] as const)(
     'protects the final ACTIVE admin from %s',
     async (action) => {
-      await prisma.user.delete({ where: { id: adminB.id } });
+      await deleteWithCascade(mongo, 'users', adminB.id);
       const attempt =
         action === 'suspend'
           ? users.updateStatus(adminA.id, operation('SUSPENDED'), actor(adminA))
@@ -199,7 +231,7 @@ describe('Account administration with PostgreSQL', () => {
         response: { code: 'LAST_ACTIVE_ADMIN' },
       });
       expect(await activeAdminCount()).toBe(1);
-      expect(await prisma.userAccountAudit.count()).toBe(0);
+      expect(await count('user_account_audits')).toBe(0);
     },
   );
 
@@ -232,7 +264,7 @@ describe('Account administration with PostgreSQL', () => {
       ]);
       expect(results.filter((r) => r.status === 'fulfilled')).toHaveLength(1);
       expect(await activeAdminCount()).toBe(1);
-      expect(await prisma.userAccountAudit.count()).toBe(1);
+      expect(await count('user_account_audits')).toBe(1);
     },
   );
 
@@ -241,9 +273,7 @@ describe('Account administration with PostgreSQL', () => {
     await expect(
       users.updateStatus(member.id, operation('SUSPENDED'), actor(adminB)),
     ).rejects.toMatchObject({ status: 403 });
-    expect(
-      await prisma.user.findUniqueOrThrow({ where: { id: member.id } }),
-    ).toMatchObject({ status: 'ACTIVE' });
+    expect(await findUser(member.id)).toMatchObject({ status: 'ACTIVE' });
   });
 
   it('prevents ordinary accounts from changing status through the service', async () => {
@@ -268,12 +298,12 @@ describe('Account administration with PostgreSQL', () => {
   });
 
   it('does not activate pending email accounts with an admin status command', async () => {
-    const pending = await prisma.user.create({
-      data: {
-        username: 'pending',
-        email: 'pending@example.test',
-        fullName: 'Pending',
-      },
+    const pending = await createUser(mongo, {
+      username: 'pending',
+      email: 'pending@example.test',
+      fullName: 'Pending',
+      status: AccountStatus.PENDING_EMAIL,
+      emailVerifiedAt: null,
     });
     expect(pending.status).toBe('PENDING_EMAIL');
     await expect(
@@ -295,10 +325,9 @@ describe('Account administration with PostgreSQL', () => {
         fullName: member.fullName,
       }),
     ).rejects.toMatchObject({ response: { code: 'ACCOUNT_SUSPENDED' } });
-    await prisma.user.update({
-      where: { id: member.id },
-      data: { googleId: 'google-member' },
-    });
+    await db
+      .collection<StoredDoc>('users')
+      .updateOne({ _id: member.id }, { $set: { googleId: 'google-member' } });
     await expect(
       auth.googleLogin({
         googleId: 'google-member',
@@ -306,7 +335,7 @@ describe('Account administration with PostgreSQL', () => {
         fullName: member.fullName,
       }),
     ).rejects.toMatchObject({ response: { code: 'ACCOUNT_SUSPENDED' } });
-    expect(await prisma.refreshToken.count()).toBe(0);
+    expect(await count('refresh_tokens')).toBe(0);
   });
 
   it('blocks refresh while suspended and allows it again after reactivation without blacklisting', async () => {
@@ -315,7 +344,7 @@ describe('Account administration with PostgreSQL', () => {
     await expect(refresh.rotate(issued.token)).rejects.toMatchObject({
       response: { code: 'ACCOUNT_SUSPENDED' },
     });
-    expect(await prisma.refreshToken.count()).toBe(1);
+    expect(await count('refresh_tokens')).toBe(1);
     await users.updateStatus(member.id, operation('ACTIVE', 1), actor(adminA));
     expect(await refresh.rotate(issued.token)).toMatchObject({
       userId: member.id,
@@ -324,18 +353,21 @@ describe('Account administration with PostgreSQL', () => {
 
   it('orders new refresh-token issuance after a committed suspension', async () => {
     let issuing: Promise<unknown> = Promise.resolve();
-    await prisma.$transaction(async (tx) => {
-      await tx.$queryRaw`SELECT id FROM users WHERE id = ${member.id}::uuid FOR UPDATE`;
+    await mongo.withTransaction(async (session) => {
+      await lockDocument(db, session, 'user', member.id);
       issuing = refresh.issue(member.id).catch((error: unknown) => error);
-      await tx.user.update({
-        where: { id: member.id },
-        data: { status: AccountStatus.SUSPENDED },
-      });
+      await db
+        .collection<User>('users')
+        .updateOne(
+          { _id: member.id },
+          { $set: { status: AccountStatus.SUSPENDED } },
+          { session },
+        );
     });
     expect(await issuing).toMatchObject({
       response: { code: 'ACCOUNT_SUSPENDED' },
     });
-    expect(await prisma.refreshToken.count()).toBe(0);
+    expect(await count('refresh_tokens')).toBe(0);
   });
 
   it('filters member search by status and case-insensitive name/email without private relations', async () => {
@@ -370,10 +402,10 @@ describe('Account administration with PostgreSQL', () => {
 
   it('retains the deletion audit after the account is physically removed', async () => {
     await users.remove(member.id, actor(member));
+    expect(await findUser(member.id)).toBeNull();
     expect(
-      await prisma.user.findUnique({ where: { id: member.id } }),
-    ).toBeNull();
-    expect(await prisma.userAccountAudit.findFirst()).toMatchObject({
+      await db.collection<StoredDoc>('user_account_audits').findOne({}),
+    ).toMatchObject({
       actorId: member.id,
       userId: member.id,
       action: 'DELETE',
@@ -382,19 +414,25 @@ describe('Account administration with PostgreSQL', () => {
   });
 
   it('verifies a pending email into ACTIVE before issuing a token pair', async () => {
-    await prisma.user.update({
-      where: { id: member.id },
-      data: { status: AccountStatus.PENDING_EMAIL, emailVerifiedAt: null },
-    });
+    await db
+      .collection<StoredDoc>('users')
+      .updateOne(
+        { _id: member.id },
+        {
+          $set: { status: AccountStatus.PENDING_EMAIL, emailVerifiedAt: null },
+        },
+      );
     const now = new Date();
-    await prisma.emailVerificationCode.create({
-      data: {
-        userId: member.id,
-        codeHash: hashCode(member.id, '123456'),
-        expiresAt: new Date(now.getTime() + 600_000),
-        sentAt: now,
-        firstSentAt: now,
-      },
+    await db.collection<StoredDoc>('one_time_codes').insertOne({
+      _id: randomUUID(),
+      attempts: 0,
+      resendCount: 0,
+      userId: member.id,
+      purpose: 'EMAIL_VERIFICATION',
+      codeHash: hashCode(member.id, '123456'),
+      expiresAt: new Date(now.getTime() + 600_000),
+      sentAt: now,
+      firstSentAt: now,
     });
     expect(
       await auth.verifyEmail({ email: member.email, code: '123456' }),
@@ -407,22 +445,25 @@ describe('Account administration with PostgreSQL', () => {
     const codeHash = createHash('sha256')
       .update(`password-reset:${member.id}:123456`)
       .digest('hex');
-    await prisma.passwordResetCode.create({
-      data: {
-        userId: member.id,
-        codeHash,
-        expiresAt: new Date(now.getTime() + 600_000),
-        sentAt: now,
-        firstSentAt: now,
-      },
+    await db.collection<StoredDoc>('one_time_codes').insertOne({
+      _id: randomUUID(),
+      attempts: 0,
+      resendCount: 0,
+      userId: member.id,
+      purpose: 'PASSWORD_RESET',
+      codeHash,
+      expiresAt: new Date(now.getTime() + 600_000),
+      sentAt: now,
+      firstSentAt: now,
     });
     await auth.resetPassword({
       email: member.email,
       code: '123456',
       password: 'NewAccountPassword123!',
     });
-    expect(
-      await prisma.user.findUniqueOrThrow({ where: { id: member.id } }),
-    ).toMatchObject({ status: 'SUSPENDED', accountVersion: 1 });
+    expect(await findUser(member.id)).toMatchObject({
+      status: 'SUSPENDED',
+      accountVersion: 1,
+    });
   });
 });

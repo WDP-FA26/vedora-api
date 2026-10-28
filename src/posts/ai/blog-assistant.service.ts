@@ -8,8 +8,18 @@ import {
   ServiceUnavailableException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { InjectModel } from '@nestjs/mongoose';
 import { createOpenRouter } from '@openrouter/ai-sdk-provider';
-import { AiFeature, PostType } from '@prisma/client';
+import type { Model } from 'mongoose';
+import {
+  AiFeature,
+  BlogRecipe,
+  Ingredient,
+  Post,
+  PostType,
+  Recipe,
+  RecipeIngredient,
+} from '../../mongo/models';
 import {
   convertToModelMessages,
   createUIMessageStream,
@@ -27,7 +37,6 @@ import { KnowledgeSearchService } from '../../knowledge/retrieval/knowledge-sear
 import { moderatePlannerMessage } from '../../meal-plan/planner-moderation';
 import { chatErrorCode } from '../../nutrition-chat/nutrition-chat.service';
 import { replyFilter } from '../../nutrition-chat/reply-filter';
-import { PrismaService } from '../../prisma/prisma.service';
 import {
   type BlogAssistantChatDto,
   type BlogAssistantQuotaDto,
@@ -70,10 +79,17 @@ export class BlogAssistantService {
 
   constructor(
     configService: ConfigService,
-    private readonly prisma: PrismaService,
     private readonly knowledge: KnowledgeSearchService,
     private readonly images: BlogImageGeneratorService,
     private readonly usage: AiUsageService,
+    @InjectModel(Post.name) private readonly posts: Model<Post>,
+    @InjectModel(BlogRecipe.name)
+    private readonly blogRecipes: Model<BlogRecipe>,
+    @InjectModel(Recipe.name) private readonly recipes: Model<Recipe>,
+    @InjectModel(RecipeIngredient.name)
+    private readonly recipeIngredients: Model<RecipeIngredient>,
+    @InjectModel(Ingredient.name)
+    private readonly ingredients: Model<Ingredient>,
   ) {
     const openRouter = createOpenRouter({
       apiKey: configService.getOrThrow<string>('OPENROUTER_API_KEY'),
@@ -190,48 +206,62 @@ export class BlogAssistantService {
     userId: string,
     blogId: string,
   ): Promise<LinkedRecipe[]> {
-    const post = await this.prisma.post.findFirst({
-      where: { id: blogId, authorId: userId, type: PostType.BLOG },
-      select: {
-        blog: {
-          select: {
-            recipes: {
-              orderBy: { position: 'asc' },
-              select: {
-                recipe: {
-                  select: {
-                    title: true,
-                    servings: true,
-                    prepMinutes: true,
-                    cookMinutes: true,
-                    ingredients: {
-                      orderBy: { position: 'asc' },
-                      select: {
-                        quantity: true,
-                        unit: true,
-                        ingredient: { select: { name: true } },
-                      },
-                    },
-                  },
-                },
-              },
-            },
-          },
+    const post = await this.posts
+      .findOne({ _id: blogId, authorId: userId, type: PostType.BLOG })
+      .select('_id')
+      .exec();
+    if (!post) throw new NotFoundException('Blog not found');
+    const links = await this.blogRecipes
+      .find({ postId: blogId })
+      .sort({ position: 1 })
+      .exec();
+    const recipeIds = links.map(({ recipeId }) => recipeId);
+    const [recipes, items] = await Promise.all([
+      this.recipes.find({ _id: { $in: recipeIds } }).exec(),
+      recipeIds.length === 0
+        ? []
+        : this.recipeIngredients
+            .find({ recipeId: { $in: recipeIds } })
+            .sort({ position: 1 })
+            .exec(),
+    ]);
+    const ingredients = await this.ingredients
+      .find({
+        _id: {
+          $in: [...new Set(items.map(({ ingredientId }) => ingredientId))],
         },
-      },
+      })
+      .exec();
+    const recipeById = new Map(recipes.map((recipe) => [recipe.id, recipe]));
+    const ingredientById = new Map(
+      ingredients.map((ingredient) => [ingredient.id, ingredient]),
+    );
+    return links.flatMap(({ recipeId }) => {
+      const recipe = recipeById.get(recipeId);
+      if (!recipe) return [];
+      return [
+        {
+          title: recipe.title,
+          servings: recipe.servings,
+          prepMinutes: recipe.prepMinutes,
+          cookMinutes: recipe.cookMinutes,
+          ingredients: items
+            .filter((item) => item.recipeId === recipe.id)
+            .flatMap(({ quantity, unit, ingredientId }) => {
+              const ingredient = ingredientById.get(ingredientId);
+              return ingredient
+                ? [
+                    {
+                      name: ingredient.name,
+                      quantity: quantity?.toString() ?? null,
+                      unit,
+                    },
+                  ]
+                : [];
+            }),
+        },
+      ];
     });
-    if (!post?.blog) throw new NotFoundException('Blog not found');
-    return post.blog.recipes.map(({ recipe }) => ({
-      title: recipe.title,
-      servings: recipe.servings,
-      prepMinutes: recipe.prepMinutes,
-      cookMinutes: recipe.cookMinutes,
-      ingredients: recipe.ingredients.map(({ quantity, unit, ingredient }) => ({
-        name: ingredient.name,
-        quantity: quantity?.toString() ?? null,
-        unit,
-      })),
-    }));
   }
 
   private async refund(userId: string): Promise<void> {

@@ -5,13 +5,21 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { PostReportStatus, PostStatus, Prisma } from '@prisma/client';
+import { InjectModel } from '@nestjs/mongoose';
+import type { Model } from 'mongoose';
 import {
   createPaginatedResponse,
   getPaginationArgs,
   PaginatedResponseDto,
 } from '../common/pagination';
-import { PrismaService } from '../prisma/prisma.service';
+import { isUniqueViolation } from '../mongo/errors';
+import {
+  Post,
+  PostReport,
+  PostReportStatus,
+  PostStatus,
+  User,
+} from '../mongo/models';
 import {
   AdminPostReportDto,
   CreatePostReportDto,
@@ -20,39 +28,42 @@ import {
   ReportDecision,
 } from './dto/post-interaction.dto';
 
-const author = {
-  select: { id: true, username: true, fullName: true, avatarUrl: true },
-} satisfies Prisma.UserDefaultArgs;
+const toAuthor = (user: User) => ({
+  id: user.id,
+  username: user.username,
+  fullName: user.fullName,
+  avatarUrl: user.avatarUrl,
+});
 
-const reportSelect = {
-  id: true,
-  postId: true,
-  reason: true,
-  details: true,
-  status: true,
-  createdAt: true,
-} satisfies Prisma.PostReportSelect;
-
-const adminReportSelect = {
-  ...reportSelect,
-  reviewedAt: true,
-  reporter: author,
-  post: { select: { id: true, body: true, author } },
-} satisfies Prisma.PostReportSelect;
+function toReportDto(report: PostReport): PostReportDto {
+  return {
+    id: report.id,
+    postId: report.postId,
+    reason: report.reason,
+    details: report.details,
+    status: report.status,
+    createdAt: report.createdAt,
+  };
+}
 
 @Injectable()
 export class PostReportsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    @InjectModel(Post.name) private readonly posts: Model<Post>,
+    @InjectModel(PostReport.name)
+    private readonly reports: Model<PostReport>,
+    @InjectModel(User.name) private readonly users: Model<User>,
+  ) {}
 
   async create(
     postId: string,
     reporterId: string,
     dto: CreatePostReportDto,
   ): Promise<PostReportDto> {
-    const post = await this.prisma.post.findFirst({
-      where: { id: postId, status: PostStatus.PUBLISHED },
-      select: { authorId: true },
-    });
+    const post = await this.posts
+      .findOne({ _id: postId, status: PostStatus.PUBLISHED })
+      .select('authorId')
+      .exec();
     if (!post) throw new NotFoundException('Post not found');
     if (post.authorId === reporterId) {
       throw new BadRequestException({
@@ -63,55 +74,44 @@ export class PostReportsService {
       });
     }
     try {
-      return await this.prisma.postReport.create({
-        data: {
-          postId,
-          reporterId,
-          reason: dto.reason,
-          details: dto.details || null,
-        },
-        select: reportSelect,
+      const report = await this.reports.create({
+        postId,
+        reporterId,
+        reason: dto.reason,
+        details: dto.details || null,
+        status: PostReportStatus.PENDING,
       });
+      return toReportDto(report);
     } catch (error: unknown) {
-      if (
-        error instanceof Prisma.PrismaClientKnownRequestError &&
-        error.code === 'P2002'
-      ) {
-        throw new ConflictException({
-          statusCode: HttpStatus.CONFLICT,
-          error: 'Conflict',
-          code: 'ALREADY_REPORTED',
-          message: 'You have already reported this post',
-        });
-      }
-      // The post was deleted between the check and the insert.
-      if (
-        error instanceof Prisma.PrismaClientKnownRequestError &&
-        error.code === 'P2003'
-      ) {
-        throw new NotFoundException('Post not found');
-      }
-      throw error;
+      if (!isUniqueViolation(error)) throw error;
+      throw new ConflictException({
+        statusCode: HttpStatus.CONFLICT,
+        error: 'Conflict',
+        code: 'ALREADY_REPORTED',
+        message: 'You have already reported this post',
+      });
     }
   }
 
   async findAll(
     query: PostReportsQueryDto,
   ): Promise<PaginatedResponseDto<AdminPostReportDto>> {
-    const where = query.status ? { status: query.status } : {};
-    const [rows, totalItems] = await this.prisma.$transaction(
-      [
-        this.prisma.postReport.findMany({
-          where,
-          select: adminReportSelect,
-          orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
-          ...getPaginationArgs(query),
-        }),
-        this.prisma.postReport.count({ where }),
-      ],
-      { isolationLevel: Prisma.TransactionIsolationLevel.RepeatableRead },
+    const { skip, take } = getPaginationArgs(query);
+    const filter = query.status ? { status: query.status } : {};
+    const [rows, totalItems] = await Promise.all([
+      this.reports
+        .find(filter)
+        .sort({ createdAt: -1, _id: -1 })
+        .skip(skip)
+        .limit(take)
+        .exec(),
+      this.reports.countDocuments(filter).exec(),
+    ]);
+    return createPaginatedResponse(
+      await this.toAdminDtos(rows),
+      totalItems,
+      query,
     );
-    return createPaginatedResponse(rows, totalItems, query);
   }
 
   async review(
@@ -120,18 +120,61 @@ export class PostReportsService {
     status: ReportDecision,
   ): Promise<AdminPostReportDto> {
     // Conditional, so two admins can't both decide the same report.
-    const { count } = await this.prisma.postReport.updateMany({
-      where: { id, status: PostReportStatus.PENDING },
-      data: { status, reviewedById: reviewerId, reviewedAt: new Date() },
-    });
-    const report = await this.prisma.postReport.findUnique({
-      where: { id },
-      select: adminReportSelect,
-    });
+    const decided = await this.reports
+      .findOneAndUpdate(
+        { _id: id, status: PostReportStatus.PENDING },
+        { $set: { status, reviewedById: reviewerId, reviewedAt: new Date() } },
+        { returnDocument: 'after' },
+      )
+      .exec();
+    const report = decided ?? (await this.reports.findOne({ _id: id }).exec());
     if (!report) throw new NotFoundException('Report not found');
-    if (count === 0) {
+    if (!decided) {
       throw new ConflictException('The report was already reviewed');
     }
-    return report;
+    const [dto] = await this.toAdminDtos([report]);
+    return dto;
+  }
+
+  /** Adds the reporter and the reported post with its author. */
+  private async toAdminDtos(
+    reports: PostReport[],
+  ): Promise<AdminPostReportDto[]> {
+    const [posts, reporters] = await Promise.all([
+      this.posts
+        .find({
+          _id: { $in: [...new Set(reports.map(({ postId }) => postId))] },
+        })
+        .exec(),
+      this.users
+        .find({
+          _id: {
+            $in: [...new Set(reports.map(({ reporterId }) => reporterId))],
+          },
+        })
+        .exec(),
+    ]);
+    const authors = await this.users
+      .find({
+        _id: { $in: [...new Set(posts.map(({ authorId }) => authorId))] },
+      })
+      .exec();
+    const authorById = new Map(authors.map((user) => [user.id, user]));
+    const postById = new Map(posts.map((post) => [post.id, post]));
+    const reporterById = new Map(reporters.map((user) => [user.id, user]));
+    return reports.flatMap((report) => {
+      const post = postById.get(report.postId);
+      const reporter = reporterById.get(report.reporterId);
+      const author = post && authorById.get(post.authorId);
+      if (!post || !reporter || !author) return [];
+      return [
+        {
+          ...toReportDto(report),
+          reviewedAt: report.reviewedAt,
+          reporter: toAuthor(reporter),
+          post: { id: post.id, body: post.body, author: toAuthor(author) },
+        },
+      ];
+    });
   }
 }

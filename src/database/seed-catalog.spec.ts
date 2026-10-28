@@ -1,13 +1,32 @@
-import { PrismaClient, Recipe } from '@prisma/client';
-import { mockDeep } from 'vitest-mock-extended';
-import { SeedData, seedCatalog } from './seed-catalog';
+import type { INestApplication } from '@nestjs/common';
+import { Test } from '@nestjs/testing';
+import {
+  createTestMongoUrl,
+  dropTestDatabase,
+  prepareTestDatabase,
+} from '../../test/mongo-test-db';
+import { MongoModule } from '../mongo/mongo.module';
+import type { Recipe, RecipeIngredient } from '../mongo/models';
+import { MongoService } from '../mongo/mongo.service';
+import { type SeedData, seedCatalog } from './seed-catalog';
 
-const TOFU_ID = 'a1a2d3e4-0000-4000-8000-000000000001';
 const imageUrl = 'https://upload.wikimedia.org/dish.jpg';
 const data: SeedData = {
-  ingredients: [{ name: 'Đậu hũ', aliases: [] }],
-  groups: [],
-  rules: [],
+  ingredients: [
+    { name: 'Đậu hũ', aliases: [] },
+    { name: 'Mật ong', aliases: [] },
+  ],
+  groups: [
+    { name: 'Đậu', description: '', dietary: true, ingredients: ['Đậu hũ'] },
+  ],
+  rules: [
+    {
+      a: { kind: 'INGREDIENT', name: 'Đậu hũ' },
+      b: { kind: 'INGREDIENT', name: 'Mật ong' },
+      reason: 'Dễ đầy bụng',
+      source: 'test',
+    },
+  ],
   recipes: [
     {
       title: 'Đậu hũ sốt cà',
@@ -16,62 +35,103 @@ const data: SeedData = {
       servings: 2,
       prepMinutes: 10,
       cookMinutes: 15,
-      ingredients: [{ name: 'Đậu hũ', quantity: 200, unit: 'g' }],
+      ingredients: [
+        { name: 'Đậu hũ', quantity: 200, unit: 'g' },
+        { name: 'Mật ong' },
+      ],
       steps: ['Chiên đậu'],
     },
   ],
 };
 
 describe('Catalog seed', () => {
-  const prisma = mockDeep<PrismaClient>();
+  let app: INestApplication;
+  let mongo: MongoService;
 
-  beforeEach(() => {
+  const recipe = () =>
+    mongo.connection
+      .model<Recipe>('Recipe')
+      .findOne({ title: 'Đậu hũ sốt cà' })
+      .exec();
+  const count = (name: string) => mongo.connection.model(name).countDocuments();
+
+  beforeAll(async () => {
+    const moduleRef = await Test.createTestingModule({
+      imports: [MongoModule.forTest(createTestMongoUrl('seedcatalog'))],
+    }).compile();
+    app = moduleRef.createNestApplication();
+    await app.init();
+    await prepareTestDatabase(app);
+    mongo = app.get(MongoService);
+  });
+  beforeEach(async () => {
     vi.spyOn(console, 'log').mockImplementation(() => undefined);
-    prisma.ingredient.upsert.mockResolvedValue({ id: TOFU_ID } as never);
+    for (const collection of [
+      'recipes',
+      'recipe_ingredients',
+      'ingredients',
+      'ingredient_groups',
+      'ingredient_group_members',
+      'incompatibility_rules',
+    ]) {
+      await mongo.db.collection(collection).deleteMany({});
+    }
   });
   afterEach(() => vi.restoreAllMocks());
+  afterAll(async () => {
+    await dropTestDatabase(app);
+    await app.close();
+  });
 
   it('creates a missing recipe with its photo and ingredients', async () => {
-    prisma.recipe.findFirst.mockResolvedValue(null);
+    await seedCatalog(mongo, data);
 
-    await seedCatalog(prisma, data);
+    expect(await recipe()).toMatchObject({ title: 'Đậu hũ sốt cà', imageUrl });
+    const items = await mongo.connection
+      .model<RecipeIngredient>('RecipeIngredient')
+      .find()
+      .sort({ position: 1 })
+      .exec();
+    expect(items).toMatchObject([
+      { position: 0, quantity: 200, unit: 'g' },
+      { position: 1, quantity: null, unit: null },
+    ]);
+    expect(await count('IngredientGroupMember')).toBe(1);
+    expect(await count('IncompatibilityRule')).toBe(1);
+  });
 
-    expect(prisma.recipe.create).toHaveBeenCalledWith({
-      data: expect.objectContaining({
-        title: 'Đậu hũ sốt cà',
-        imageUrl,
-        ingredients: {
-          create: [
-            expect.objectContaining({ ingredientId: TOFU_ID, position: 0 }),
-          ],
-        },
-      }) as unknown,
-    });
+  it('adds nothing the second time', async () => {
+    await seedCatalog(mongo, data);
+    await seedCatalog(mongo, data);
+
+    expect(await count('Recipe')).toBe(1);
+    expect(await count('Ingredient')).toBe(2);
+    expect(await count('RecipeIngredient')).toBe(2);
+    expect(await count('IngredientGroupMember')).toBe(1);
+    expect(await count('IncompatibilityRule')).toBe(1);
   });
 
   it('only fills in the photo of a recipe that already exists', async () => {
-    prisma.recipe.findFirst.mockResolvedValue({
-      id: 'r1',
-      imageUrl: null,
-    } as Recipe);
+    await seedCatalog(mongo, data);
+    await mongo.connection
+      .model<Recipe>('Recipe')
+      .updateOne({ title: 'Đậu hũ sốt cà' }, { $set: { imageUrl: null } });
 
-    await seedCatalog(prisma, data);
+    await seedCatalog(mongo, data);
 
-    expect(prisma.recipe.create).not.toHaveBeenCalled();
-    expect(prisma.recipe.update).toHaveBeenCalledWith({
-      where: { id: 'r1' },
-      data: { imageUrl },
-    });
+    expect((await recipe())?.imageUrl).toBe(imageUrl);
+    expect(await count('Recipe')).toBe(1);
   });
 
   it('keeps a photo an admin already chose', async () => {
-    prisma.recipe.findFirst.mockResolvedValue({
-      id: 'r1',
-      imageUrl: 'https://images.pexels.com/other.jpg',
-    } as Recipe);
+    await seedCatalog(mongo, data);
+    const chosen = 'https://images.pexels.com/other.jpg';
+    await mongo.connection
+      .model<Recipe>('Recipe')
+      .updateOne({ title: 'Đậu hũ sốt cà' }, { $set: { imageUrl: chosen } });
 
-    await seedCatalog(prisma, data);
+    await seedCatalog(mongo, data);
 
-    expect(prisma.recipe.update).not.toHaveBeenCalled();
+    expect((await recipe())?.imageUrl).toBe(chosen);
   });
 });

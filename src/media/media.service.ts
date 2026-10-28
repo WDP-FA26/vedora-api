@@ -8,23 +8,27 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { InjectModel } from '@nestjs/mongoose';
+import type { Model, QueryFilter } from 'mongoose';
+import { randomUUID } from 'node:crypto';
+import type { ClientSession } from 'mongodb';
 import {
+  CaptionStatus,
   MediaAsset,
-  MediaCaption,
   MediaFailureReason,
   MediaStatus,
   MediaType,
+  Post,
   PostStatus,
-  Prisma,
-} from '@prisma/client';
-import { randomUUID } from 'node:crypto';
+  type Stored,
+} from '../mongo/models';
+import { MongoService } from '../mongo/mongo.service';
 import {
   CloudinaryService,
   type CloudinaryVideo,
   STREAM_TRANSFORMATION,
   UPLOAD_SIGNATURE_TTL_SECONDS,
 } from '../cloudinary/cloudinary.service';
-import { PrismaService } from '../prisma/prisma.service';
 import { CaptionService } from './caption.service';
 import {
   CreateUploadResponseDto,
@@ -32,13 +36,13 @@ import {
 } from './dto/media-response.dto';
 import type { CloudinaryNotification } from './dto/cloudinary-notification';
 
-const PENDING: MediaStatus[] = [
+const PENDING: readonly MediaStatus[] = [
   MediaStatus.WAITING_UPLOAD,
   MediaStatus.PROCESSING,
 ];
 
 /** Rows that haven't been discarded; every user-facing query uses it. */
-const LIVE = { discardedAt: null } satisfies Prisma.MediaAssetWhereInput;
+const LIVE: QueryFilter<MediaAsset> = { discardedAt: null };
 
 /** Unattached uploads a user may hold at once, so one account can't flood Cloudinary. */
 const MAX_UNATTACHED_UPLOADS = 5;
@@ -48,8 +52,6 @@ const UPLOAD_GRACE_MS = 10 * 60 * 1000;
 const REFRESH_INTERVAL_MS = 15 * 1000;
 /** A stream that isn't built by now never will be. */
 const ENCODING_TIMEOUT_MS = 60 * 60 * 1000;
-
-type MediaWithCaptions = MediaAsset & { captions?: MediaCaption[] };
 
 /** Whether the HLS eager job has finished, judging by the derived files. */
 function streamBuilt(video: CloudinaryVideo): boolean {
@@ -99,7 +101,10 @@ export class MediaService {
   private readonly lastRefresh = new Map<string, number>();
 
   constructor(
-    private readonly prisma: PrismaService,
+    @InjectModel(MediaAsset.name)
+    private readonly mediaAssets: Model<MediaAsset>,
+    @InjectModel(Post.name) private readonly posts: Model<Post>,
+    private readonly mongo: MongoService,
     private readonly cloudinary: CloudinaryService,
     private readonly captions: CaptionService,
     configService: ConfigService,
@@ -117,13 +122,11 @@ export class MediaService {
   ): Promise<CreateUploadResponseDto> {
     this.cloudinary.require();
 
-    const unattached = await this.prisma.mediaAsset.count({
-      where: {
-        ...LIVE,
-        ownerId,
-        postId: null,
-        status: { not: MediaStatus.FAILED },
-      },
+    const unattached = await this.mediaAssets.countDocuments({
+      discardedAt: null,
+      ownerId,
+      postId: null,
+      status: { $ne: MediaStatus.FAILED },
     });
     if (unattached >= MAX_UNATTACHED_UPLOADS) {
       throw new HttpException(
@@ -140,8 +143,15 @@ export class MediaService {
 
     const id = randomUUID();
     const publicId = this.cloudinary.videoPublicId(id);
-    const media = await this.prisma.mediaAsset.create({
-      data: { id, ownerId, type, publicId },
+    const media = await this.mediaAssets.create({
+      _id: id,
+      ownerId,
+      type,
+      publicId,
+      status: MediaStatus.WAITING_UPLOAD,
+      position: 0,
+      captionStatus: CaptionStatus.NONE,
+      captions: [],
     });
     return {
       media: this.toResponse(media),
@@ -150,48 +160,44 @@ export class MediaService {
   }
 
   async findOwned(id: string, ownerId: string): Promise<MediaResponseDto> {
-    let media = await this.prisma.mediaAsset.findFirst({
-      where: { ...LIVE, id, ownerId },
-    });
+    let media = await this.mediaAssets
+      .findOne({ ...LIVE, _id: id, ownerId })
+      .exec();
     if (!media) {
       throw new NotFoundException('Media not found');
     }
     if (!this.cloudinary.webhooksEnabled && PENDING.includes(media.status)) {
       await this.refresh(media);
-      media = await this.prisma.mediaAsset.findUniqueOrThrow({
-        where: { id },
-      });
+      media = await this.mediaAssets.findOne({ _id: id }).exec();
     }
-    return this.toResponse(media);
+    return this.toResponse(media!);
   }
 
   /** Removes an upload the user dropped from the composer before posting. */
   async removeOwned(id: string, ownerId: string): Promise<void> {
-    const media = await this.prisma.mediaAsset.findFirst({
-      where: { ...LIVE, id, ownerId },
-    });
+    const media = await this.mediaAssets
+      .findOne({ ...LIVE, _id: id, ownerId })
+      .exec();
     if (!media) {
       throw new NotFoundException('Media not found');
     }
     if (media.postId) {
       throw new ConflictException('Media is attached to a post');
     }
-    await this.discard({ id, postId: null });
+    await this.discard({ _id: id, postId: null });
   }
 
   /**
    * Hides the matching media from every query, then deletes it from
    * Cloudinary. Rows that can't be confirmed gone yet are retried by `purge`.
    */
-  async discard(where: Prisma.MediaAssetWhereInput): Promise<void> {
-    const media = await this.prisma.mediaAsset.findMany({
-      where: { ...where, ...LIVE },
-    });
+  async discard(filter: QueryFilter<MediaAsset>): Promise<void> {
+    const media = await this.mediaAssets.find({ ...filter, ...LIVE }).exec();
     if (media.length === 0) return;
-    await this.prisma.mediaAsset.updateMany({
-      where: { id: { in: media.map(({ id }) => id) }, ...LIVE },
-      data: { discardedAt: new Date() },
-    });
+    await this.mediaAssets.updateMany(
+      { _id: { $in: media.map(({ id }) => id) }, ...LIVE },
+      { $set: { discardedAt: new Date() } },
+    );
     for (const item of media) {
       await this.purge(item);
     }
@@ -213,36 +219,39 @@ export class MediaService {
       media.createdAt.getTime() >
         Date.now() - UPLOAD_SIGNATURE_TTL_SECONDS * 1000 - UPLOAD_GRACE_MS;
     if (uploadOpen) return false;
-    await this.prisma.mediaAsset.deleteMany({
-      where: { id: media.id, discardedAt: { not: null } },
-    });
+    await this.mediaAssets
+      .deleteOne({ _id: media.id, discardedAt: { $ne: null } })
+      .exec();
     this.lastRefresh.delete(media.id);
     return true;
   }
 
   /**
    * Attaches the owner's uploads to a new post, in `mediaIds` order. Runs in
-   * the post's transaction; each claim is conditional, so media that belongs
-   * to someone else, is already attached or has failed is rejected.
+   * the post's transaction (`session`); each claim is conditional, so media
+   * that belongs to someone else, is already attached or has failed is
+   * rejected.
    */
   async claimForPost(
-    tx: Prisma.TransactionClient,
+    session: ClientSession,
     ownerId: string,
     postId: string,
     mediaIds: string[],
   ): Promise<void> {
+    const media = this.mongo.db.collection<Stored<MediaAsset>>('media_assets');
     for (const [position, id] of mediaIds.entries()) {
-      const { count } = await tx.mediaAsset.updateMany({
-        where: {
-          ...LIVE,
-          id,
+      const claimed = await media.updateOne(
+        {
+          _id: id,
           ownerId,
           postId: null,
-          status: { not: MediaStatus.FAILED },
+          discardedAt: null,
+          status: { $ne: MediaStatus.FAILED },
         },
-        data: { postId, position },
-      });
-      if (count !== 1) {
+        { $set: { postId, position, updatedAt: new Date() } },
+        { session },
+      );
+      if (claimed.modifiedCount !== 1) {
         throw new BadRequestException({
           statusCode: HttpStatus.BAD_REQUEST,
           error: 'Bad Request',
@@ -254,34 +263,44 @@ export class MediaService {
   }
 
   /**
-   * Moves PROCESSING posts matching `where` to FAILED if any of their media
-   * failed, or to PUBLISHED once all of it is READY. Call it after any change
-   * to media status or attachment has been committed: whichever change lands
-   * last then sees the final state, so concurrent updates can't strand a post.
-   * Videos of posts it publishes are then queued for captions.
+   * Moves the PROCESSING posts among `postIds` to FAILED if any of their
+   * media failed, or to PUBLISHED once all of it is READY (a post without
+   * media publishes at once). Call it after any change to media status or
+   * attachment has been committed: whichever change lands last then sees the
+   * final state, so concurrent updates can't strand a post. Videos of posts
+   * it publishes are then queued for captions.
    */
-  async settlePosts(where: Prisma.PostWhereInput): Promise<void> {
-    await this.prisma.post.updateMany({
-      where: {
-        AND: [
-          where,
-          { status: PostStatus.PROCESSING },
-          { media: { some: { status: MediaStatus.FAILED } } },
-        ],
-      },
-      data: { status: PostStatus.FAILED },
-    });
-    const { count } = await this.prisma.post.updateMany({
-      where: {
-        AND: [
-          where,
-          { status: PostStatus.PROCESSING },
-          { media: { every: { status: MediaStatus.READY } } },
-        ],
-      },
-      data: { status: PostStatus.PUBLISHED, publishedAt: new Date() },
-    });
-    if (count > 0) this.captions.schedule();
+  async settlePosts(postIds: string[]): Promise<void> {
+    const media = await this.mediaAssets
+      .find({ postId: { $in: postIds } })
+      .select('postId status')
+      .exec();
+    const failed = new Set(
+      media
+        .filter(({ status }) => status === MediaStatus.FAILED)
+        .map(({ postId }) => postId),
+    );
+    const waiting = new Set(
+      media
+        .filter(({ status }) => status !== MediaStatus.READY)
+        .map(({ postId }) => postId),
+    );
+    await this.posts
+      .updateMany(
+        { _id: { $in: [...failed] }, status: PostStatus.PROCESSING },
+        { $set: { status: PostStatus.FAILED } },
+      )
+      .exec();
+    const published = await this.posts
+      .updateMany(
+        {
+          _id: { $in: postIds, $nin: [...waiting] },
+          status: PostStatus.PROCESSING,
+        },
+        { $set: { status: PostStatus.PUBLISHED, publishedAt: new Date() } },
+      )
+      .exec();
+    if (published.modifiedCount > 0) this.captions.schedule();
   }
 
   /** Applies a verified Cloudinary notification. */
@@ -338,7 +357,7 @@ export class MediaService {
         media.updatedAt.getTime() < Date.now() - ENCODING_TIMEOUT_MS
       ) {
         await this.markFailed(
-          { id: media.id },
+          { _id: media.id },
           MediaFailureReason.ENCODING_FAILED,
         );
       }
@@ -359,7 +378,8 @@ export class MediaService {
     try {
       await this.cloudinary.deleteMedia(
         media.id,
-        media.captionStatus !== 'NONE' && media.captionStatus !== 'NO_SPEECH',
+        media.captionStatus !== CaptionStatus.NONE &&
+          media.captionStatus !== CaptionStatus.NO_SPEECH,
       );
       return true;
     } catch (error) {
@@ -370,7 +390,7 @@ export class MediaService {
     }
   }
 
-  toResponse(media: MediaWithCaptions): MediaResponseDto {
+  toResponse(media: MediaAsset): MediaResponseDto {
     const ready = media.status === MediaStatus.READY;
     return {
       id: media.id,
@@ -382,7 +402,7 @@ export class MediaService {
       posterUrl: ready ? this.cloudinary.posterUrl(media.publicId) : null,
       durationSec: media.durationSec,
       aspectRatio: media.aspectRatio,
-      captions: (media.captions ?? [])
+      captions: media.captions
         .map(({ languageCode, name, isOriginal, url }) => ({
           languageCode,
           name,
@@ -397,7 +417,7 @@ export class MediaService {
   private async handleMissing(media: MediaAsset): Promise<void> {
     if (media.status === MediaStatus.PROCESSING) {
       await this.markFailed(
-        { id: media.id },
+        { _id: media.id },
         MediaFailureReason.UPLOAD_ERRORED,
       );
       return;
@@ -408,7 +428,7 @@ export class MediaService {
       UPLOAD_GRACE_MS;
     if (Date.now() > expiresAt) {
       await this.markFailed(
-        { id: media.id },
+        { _id: media.id },
         MediaFailureReason.UPLOAD_TIMED_OUT,
       );
     }
@@ -416,9 +436,9 @@ export class MediaService {
 
   /** The file arrived: record its length and shape, enforce the limit. */
   private async applyUploaded(video: CloudinaryVideo): Promise<void> {
-    const media = await this.prisma.mediaAsset.findUnique({
-      where: { publicId: video.public_id },
-    });
+    const media = await this.mediaAssets
+      .findOne({ publicId: video.public_id })
+      .exec();
     if (!media || media.discardedAt) {
       // Discarded, or its row is already gone: nobody will post this file.
       if (media) await this.purge(media);
@@ -428,17 +448,19 @@ export class MediaService {
     if (media.status !== MediaStatus.WAITING_UPLOAD) return;
 
     if ((video.duration ?? 0) > this.maxVideoDurationSec) {
-      await this.markFailed({ id: media.id }, MediaFailureReason.TOO_LONG);
+      await this.markFailed({ _id: media.id }, MediaFailureReason.TOO_LONG);
       return;
     }
-    await this.prisma.mediaAsset.updateMany({
-      where: { id: media.id, status: MediaStatus.WAITING_UPLOAD },
-      data: {
-        status: MediaStatus.PROCESSING,
-        durationSec: video.duration ?? null,
-        aspectRatio: aspectRatio(video),
+    await this.mediaAssets.updateOne(
+      { _id: media.id, status: MediaStatus.WAITING_UPLOAD },
+      {
+        $set: {
+          status: MediaStatus.PROCESSING,
+          durationSec: video.duration ?? null,
+          aspectRatio: aspectRatio(video),
+        },
       },
-    });
+    );
   }
 
   /**
@@ -450,46 +472,44 @@ export class MediaService {
     publicId: string,
     video?: CloudinaryVideo,
   ): Promise<void> {
-    let media = await this.prisma.mediaAsset.findFirst({
-      where: { ...LIVE, publicId },
-    });
+    let media = await this.mediaAssets.findOne({ ...LIVE, publicId }).exec();
     if (!media || !PENDING.includes(media.status)) return;
     if (media.status === MediaStatus.WAITING_UPLOAD) {
       const details = video ?? (await this.cloudinary.findVideo(publicId));
       if (!details) return;
       await this.applyUploaded(details);
-      media = await this.prisma.mediaAsset.findUniqueOrThrow({
-        where: { id: media.id },
-      });
-      if (media.status !== MediaStatus.PROCESSING) return;
+      media = await this.mediaAssets.findOne({ _id: media.id }).exec();
+      if (!media || media.status !== MediaStatus.PROCESSING) return;
     }
 
-    const { count } = await this.prisma.mediaAsset.updateMany({
-      where: { id: media.id, status: MediaStatus.PROCESSING, ...LIVE },
-      data: { status: MediaStatus.READY },
-    });
-    if (count > 0) {
-      this.lastRefresh.delete(media.id);
-      await this.settlePosts({ media: { some: { id: media.id } } });
+    const ready = await this.mediaAssets
+      .findOneAndUpdate(
+        { ...LIVE, _id: media.id, status: MediaStatus.PROCESSING },
+        { $set: { status: MediaStatus.READY } },
+        { returnDocument: 'after' },
+      )
+      .exec();
+    if (ready) {
+      this.lastRefresh.delete(ready.id);
+      if (ready.postId) await this.settlePosts([ready.postId]);
     }
   }
 
   private async markFailed(
-    where: Prisma.MediaAssetWhereInput,
+    match: QueryFilter<MediaAsset>,
     reason: MediaFailureReason,
   ): Promise<void> {
-    const media = await this.prisma.mediaAsset.findFirst({
-      where: { ...where, ...LIVE },
-    });
-    if (!media) return;
-    const { count } = await this.prisma.mediaAsset.updateMany({
-      where: { id: media.id, status: { in: PENDING } },
-      data: { status: MediaStatus.FAILED, failureReason: reason },
-    });
-    if (count > 0) {
+    const media = await this.mediaAssets
+      .findOneAndUpdate(
+        { ...LIVE, ...match, status: { $in: [...PENDING] } },
+        { $set: { status: MediaStatus.FAILED, failureReason: reason } },
+        { returnDocument: 'after' },
+      )
+      .exec();
+    if (media) {
       this.logger.log(`Media ${media.id} failed: ${reason}`);
       this.lastRefresh.delete(media.id);
-      await this.settlePosts({ media: { some: { id: media.id } } });
+      if (media.postId) await this.settlePosts([media.postId]);
       // A failed video can never play; free the storage now. The row stays
       // so the author sees why, and discarding it later retries this.
       await this.deleteFromCloudinary(media);
@@ -501,6 +521,9 @@ export class MediaService {
     const mediaId = this.cloudinary.mediaIdOf(publicId);
     if (!mediaId) return;
     this.logger.log(`Deleting unclaimed Cloudinary video ${publicId}`);
-    await this.deleteFromCloudinary({ id: mediaId, captionStatus: 'NONE' });
+    await this.deleteFromCloudinary({
+      id: mediaId,
+      captionStatus: CaptionStatus.NONE,
+    });
   }
 }

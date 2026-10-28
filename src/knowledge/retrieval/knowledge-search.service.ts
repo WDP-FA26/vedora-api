@@ -1,12 +1,12 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { parsePayload } from '../../common/validation';
 import { QdrantService } from '../../qdrant/qdrant.service';
 import {
   BM25_FOLDED_VECTOR,
   BM25_VECTOR,
   bm25,
   DENSE_VECTOR,
-  knowledgePointPayload,
-  type KnowledgePointPayload,
+  KnowledgePointPayload,
 } from './knowledge-collection';
 import { KnowledgeIndexService } from './knowledge-index.service';
 import {
@@ -61,7 +61,7 @@ export class KnowledgeSearchService {
     const candidates = [
       ...new Map(
         points.map(({ payload }) => {
-          const point = knowledgePointPayload.parse(payload);
+          const point = parsePayload(KnowledgePointPayload, payload);
           return [point.text, point];
         }),
       ).values(),

@@ -20,7 +20,7 @@ e2e trên máy FE bị timeout ở `beforeAll`, chưa xác định nguyên nhân
   `deleteMany` + `createMany` trong một batch `$transaction` (mức mặc định
   READ COMMITTED).
 - `meal_plan_entries` có khóa chính `(user_id, day, section, recipe_id)`.
-- Không có exception filter nào bắt lỗi Prisma `P2002` trên route này.
+- Không có exception filter nào bắt lỗi unique index của MongoDB trên route này.
 
 **Tình huống lỗi:**
 

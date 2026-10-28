@@ -3,8 +3,13 @@ import { ConfigService } from '@nestjs/config';
 import { createOpenRouter } from '@openrouter/ai-sdk-provider';
 import { generateText, type LanguageModel, Output } from 'ai';
 import { z } from 'zod';
+import { parsePayload, validatePayload } from '../../common/validation';
 import type { ReasoningEffort } from '../../nutrition-chat/nutrition-chat.agent';
 import { type SpeechAudio, toOriginalTime } from './speech-audio';
+import {
+  OpenRouterErrorBody,
+  TranscriptionResponse,
+} from './transcription.dto';
 import type { Cue } from './vtt';
 
 const OPENROUTER_API = 'https://openrouter.ai/api/v1';
@@ -40,24 +45,8 @@ const LANGUAGE_CODES: Record<string, string> = {
   english: 'en',
 };
 
-const errorBody = z.object({
-  error: z.object({ message: z.string() }).optional(),
-});
-const transcriptionResponse = z.object({
-  text: z.string(),
-  language: z.string().optional(),
-  segments: z
-    .array(
-      z.object({
-        start: z.number(),
-        end: z.number(),
-        text: z.string(),
-        avg_logprob: z.number().optional(),
-        no_speech_prob: z.number().optional(),
-      }),
-    )
-    .optional(),
-});
+// zod stays for the AI SDK's structured output; the HTTP bodies above are
+// class-validator DTOs.
 const translationOutput = z.object({ lines: z.array(z.string()) });
 
 export interface Transcript {
@@ -115,12 +104,13 @@ export class TranscriptionService {
     });
     const body: unknown = await response.json().catch(() => null);
     if (!response.ok) {
-      const message = errorBody.safeParse(body).data?.error?.message;
+      const message = validatePayload(OpenRouterErrorBody, body).value?.error
+        ?.message;
       throw new Error(
         `Transcription answered ${response.status}${message ? `: ${message}` : ''}`,
       );
     }
-    const result = transcriptionResponse.parse(body);
+    const result = parsePayload(TranscriptionResponse, body);
     const audioEnd = speech.reduce(
       (sum, { start, end }) => sum + end - start,
       0,

@@ -1,5 +1,5 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { AccountStatus } from '@prisma/client';
+import { AccountStatus } from '../../mongo/models';
 import { Transform } from 'class-transformer';
 import { IsEnum, IsOptional, IsString, MaxLength } from 'class-validator';
 import { PaginationQueryDto } from '../../common/pagination';

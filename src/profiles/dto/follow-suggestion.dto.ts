@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { FollowSuggestionReason } from '@prisma/client';
+import { FollowSuggestionReason } from '../../mongo/models';
 import { Type } from 'class-transformer';
 import { IsInt, IsOptional, Max, Min } from 'class-validator';
 import { ProfileSummaryDto } from './profile.dto';

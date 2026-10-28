@@ -1,8 +1,12 @@
 import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { InjectModel } from '@nestjs/mongoose';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
-import { PrismaService } from '../prisma/prisma.service';
-import { Prisma } from '@prisma/client';
+import type { ClientSession } from 'mongodb';
+import type { Model } from 'mongoose';
+import { lockDocument } from '../mongo/document-lock';
+import { RefreshToken, User } from '../mongo/models';
+import { MongoService } from '../mongo/mongo.service';
 import { assertAccountActive } from './account-access';
 
 export interface IssuedRefreshToken {
@@ -19,7 +23,10 @@ export class RefreshTokensService {
   private readonly refreshTokenTtl: number;
 
   constructor(
-    private readonly prisma: PrismaService,
+    @InjectModel(RefreshToken.name)
+    private readonly tokens: Model<RefreshToken>,
+    @InjectModel(User.name) private readonly users: Model<User>,
+    private readonly mongo: MongoService,
     configService: ConfigService,
   ) {
     this.refreshTokenTtl = configService.get<number>(
@@ -30,16 +37,9 @@ export class RefreshTokensService {
 
   async issue(userId: string): Promise<IssuedRefreshToken> {
     const token = this.generateToken();
-    await this.prisma.$transaction(async (tx) => {
-      await this.lockActiveAccount(tx, userId);
-      await tx.refreshToken.create({
-        data: {
-          familyId: randomUUID(),
-          tokenHash: this.hashToken(token),
-          userId,
-          expiresAt: this.expiresAt(),
-        },
-      });
+    await this.mongo.withTransaction(async (session) => {
+      await this.lockActiveAccount(session, userId);
+      await this.insertToken(session, randomUUID(), token, userId);
     });
 
     return { token, expiresIn: this.refreshTokenTtl };
@@ -47,9 +47,7 @@ export class RefreshTokensService {
 
   async rotate(token: string): Promise<RotatedRefreshToken> {
     const tokenHash = this.hashToken(token);
-    const storedToken = await this.prisma.refreshToken.findUnique({
-      where: { tokenHash },
-    });
+    const storedToken = await this.tokens.findOne({ tokenHash }).exec();
 
     if (!storedToken) {
       throw new UnauthorizedException('Invalid refresh token');
@@ -62,41 +60,34 @@ export class RefreshTokensService {
     }
 
     if (storedToken.expiresAt <= now) {
-      await this.prisma.refreshToken.updateMany({
-        where: { id: storedToken.id, revokedAt: null },
-        data: { revokedAt: now },
-      });
+      await this.tokens.updateOne(
+        { _id: storedToken.id, revokedAt: null },
+        { $set: { revokedAt: now } },
+      );
       throw new UnauthorizedException('Refresh token expired');
     }
 
     const replacementToken = this.generateToken();
-    const replacementId = randomUUID();
-    const rotated = await this.prisma.$transaction(async (transaction) => {
-      await this.lockActiveAccount(transaction, storedToken.userId);
-      const revoked = await transaction.refreshToken.updateMany({
-        where: {
-          id: storedToken.id,
+    const rotated = await this.mongo.withTransaction(async (session) => {
+      await this.lockActiveAccount(session, storedToken.userId);
+      const revoked = await this.tokens.updateOne(
+        {
+          _id: storedToken.id,
           tokenHash,
           revokedAt: null,
-          expiresAt: { gt: now },
+          expiresAt: { $gt: now },
         },
-        data: {
-          revokedAt: now,
-          replacedByTokenId: replacementId,
-        },
-      });
+        { $set: { revokedAt: now } },
+        { session },
+      );
+      if (revoked.modifiedCount !== 1) return false;
 
-      if (revoked.count !== 1) return false;
-
-      await transaction.refreshToken.create({
-        data: {
-          id: replacementId,
-          familyId: storedToken.familyId,
-          tokenHash: this.hashToken(replacementToken),
-          userId: storedToken.userId,
-          expiresAt: this.expiresAt(),
-        },
-      });
+      await this.insertToken(
+        session,
+        storedToken.familyId,
+        replacementToken,
+        storedToken.userId,
+      );
       return true;
     });
 
@@ -113,41 +104,63 @@ export class RefreshTokensService {
   }
 
   async revoke(token: string): Promise<void> {
-    const storedToken = await this.prisma.refreshToken.findUnique({
-      where: { tokenHash: this.hashToken(token) },
-    });
+    const storedToken = await this.tokens
+      .findOne({ tokenHash: this.hashToken(token) })
+      .exec();
     if (!storedToken) return;
     await this.revokeFamily(storedToken.familyId, new Date());
   }
 
   /** Signs the user out everywhere. */
   async revokeAllForUser(userId: string): Promise<void> {
-    await this.prisma.refreshToken.updateMany({
-      where: { userId, revokedAt: null },
-      data: { revokedAt: new Date() },
-    });
+    await this.tokens.updateMany(
+      { userId, revokedAt: null },
+      { $set: { revokedAt: new Date() } },
+    );
   }
 
-  private revokeFamily(familyId: string, revokedAt: Date): Promise<unknown> {
-    return this.prisma.refreshToken.updateMany({
-      where: { familyId, revokedAt: null },
-      data: { revokedAt },
-    });
+  private async revokeFamily(familyId: string, revokedAt: Date): Promise<void> {
+    await this.tokens.updateMany(
+      { familyId, revokedAt: null },
+      { $set: { revokedAt } },
+    );
   }
 
   private generateToken(): string {
     return randomBytes(48).toString('base64url');
   }
 
-  private async lockActiveAccount(
-    tx: Prisma.TransactionClient,
+  private async insertToken(
+    session: ClientSession,
+    familyId: string,
+    token: string,
     userId: string,
   ): Promise<void> {
-    await tx.$queryRaw`SELECT id FROM users WHERE id = ${userId}::uuid FOR UPDATE`;
-    const user = await tx.user.findUnique({
-      where: { id: userId },
-      select: { status: true },
-    });
+    await this.tokens.create(
+      [
+        {
+          _id: randomUUID(),
+          familyId,
+          tokenHash: this.hashToken(token),
+          userId,
+          expiresAt: this.expiresAt(),
+          revokedAt: null,
+        },
+      ],
+      { session },
+    );
+  }
+
+  private async lockActiveAccount(
+    session: ClientSession,
+    userId: string,
+  ): Promise<void> {
+    await lockDocument(this.mongo.db, session, 'user', userId);
+    const user = await this.users
+      .findOne({ _id: userId })
+      .select('status')
+      .session(session)
+      .exec();
     if (!user) throw new UnauthorizedException('Account no longer exists');
     assertAccountActive(user.status);
   }

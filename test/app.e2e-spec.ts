@@ -1,18 +1,12 @@
 import { createHash } from 'node:crypto';
-import { INestApplication } from '@nestjs/common';
-import { JwtService } from '@nestjs/jwt';
-import { UserRole } from '@prisma/client';
-import { Test } from '@nestjs/testing';
+import { MediaStatus, type MediaAsset } from '../src/mongo/models';
 import request from 'supertest';
-import type { App } from 'supertest/types';
 import type { MockInstance } from 'vitest';
-import { type DeepMockProxy, mockDeep } from 'vitest-mock-extended';
-import { AppModule } from '../src/app.module';
-import { configureApp } from '../src/app.setup';
 import { GuestSessionService } from '../src/nutrition-chat/guest/guest-session.service';
 import { KnowledgeService } from '../src/knowledge/knowledge.service';
-import { uploaded } from '../src/media/media.fixtures';
-import { PrismaService } from '../src/prisma/prisma.service';
+import { mediaId, publicId, uploaded } from '../src/media/media.fixtures';
+import { createE2eApp, type E2eApp } from './e2e-app';
+import { createMedia, createUser } from './fixtures';
 
 const CLOUDINARY_SECRET = 'e2e-api-secret';
 
@@ -25,47 +19,22 @@ function signWebhook(payload: string, key = CLOUDINARY_SECRET) {
 }
 
 describe('Vedora API (e2e)', () => {
-  let app: INestApplication<App>;
-  let prisma: DeepMockProxy<PrismaService>;
+  let e2e: E2eApp;
   let token: string;
+  const app = {
+    getHttpServer: () => e2e.app.getHttpServer(),
+    get: <T>(type: new (...args: never[]) => T): T => e2e.app.get(type),
+  };
 
   beforeAll(async () => {
-    prisma = mockDeep<PrismaService>();
-    prisma.user.findUnique.mockResolvedValue({
-      status: 'ACTIVE',
-      accountVersion: 0,
-      id: '4a1e32e4-e18e-4dd7-8b4a-246ef2113ff2',
-      username: 'vedora.user',
-      role: UserRole.USER,
-      fullName: 'Vedora User',
-      email: 'hello@vedora.vn',
-      bio: null,
-      avatarUrl: null,
-      coverUrl: null,
-      isProfessional: false,
-      passwordHash: null,
-      googleId: null,
-      emailVerifiedAt: new Date(),
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    });
-    const moduleRef = await Test.createTestingModule({ imports: [AppModule] })
-      .overrideProvider(PrismaService)
-      .useValue(prisma)
-      .compile();
-
-    app = moduleRef.createNestApplication({ rawBody: true });
-    configureApp(app);
-    await app.init();
-
-    token = await app.get(JwtService).signAsync({
-      sub: '4a1e32e4-e18e-4dd7-8b4a-246ef2113ff2',
-      username: 'vedora.user',
-    });
+    e2e = await createE2eApp('app_e2e');
+    token = await e2e.sign(
+      await createUser(e2e.mongo, { username: 'vedora.user' }),
+    );
   });
 
   afterAll(async () => {
-    await app.close();
+    await e2e.close();
   });
 
   describe('POST /api/v1/posts', () => {
@@ -197,13 +166,20 @@ describe('Vedora API (e2e)', () => {
   describe('POST /api/v1/webhooks/cloudinary', () => {
     const payload = JSON.stringify(uploaded(42));
 
-    it('accepts notifications signed over the raw body', async () => {
-      prisma.mediaAsset.findUnique.mockResolvedValue({
-        id: '0b0d9c3e-3f0c-4c5e-9d0a-2b7f1f4d8a11',
-        status: 'READY',
-        discardedAt: null,
-      } as never);
+    const media = () => e2e.mongo.connection.model<MediaAsset>('MediaAsset');
 
+    beforeEach(async () => {
+      await media().deleteMany({ _id: mediaId }).exec();
+      await createMedia(e2e.mongo, {
+        id: mediaId,
+        publicId,
+        status: MediaStatus.WAITING_UPLOAD,
+      });
+    });
+    const statusOfMedia = async () =>
+      (await media().findById(mediaId).exec())?.status;
+
+    it('accepts notifications signed over the raw body', async () => {
       await request(app.getHttpServer())
         .post('/api/v1/webhooks/cloudinary')
         .set('content-type', 'application/json')
@@ -211,12 +187,10 @@ describe('Vedora API (e2e)', () => {
         .send(payload)
         .expect(204);
 
-      expect(prisma.mediaAsset.findUnique).toHaveBeenCalled();
+      expect(await statusOfMedia()).toBe(MediaStatus.PROCESSING);
     });
 
     it('rejects notifications with a bad signature', async () => {
-      prisma.mediaAsset.findUnique.mockClear();
-
       await request(app.getHttpServer())
         .post('/api/v1/webhooks/cloudinary')
         .set('content-type', 'application/json')
@@ -224,7 +198,7 @@ describe('Vedora API (e2e)', () => {
         .send(payload)
         .expect(400);
 
-      expect(prisma.mediaAsset.findUnique).not.toHaveBeenCalled();
+      expect(await statusOfMedia()).toBe(MediaStatus.WAITING_UPLOAD);
     });
   });
 

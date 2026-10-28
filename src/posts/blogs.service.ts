@@ -3,12 +3,28 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { PostStatus, PostType, Prisma } from '@prisma/client';
+import { InjectModel } from '@nestjs/mongoose';
+import { randomUUID } from 'node:crypto';
 import { isURL } from 'class-validator';
-import { createCursorPaginatedResponse } from '../common/pagination';
-import { PrismaService } from '../prisma/prisma.service';
+import type { ClientSession } from 'mongodb';
+import type { Model } from 'mongoose';
+import {
+  afterCursor,
+  createCursorPaginatedResponse,
+} from '../common/pagination';
+import { lockDocument } from '../mongo/document-lock';
+import {
+  Blog,
+  BlogRecipe,
+  Post,
+  PostStatus,
+  PostType,
+  Recipe,
+  type Stored,
+} from '../mongo/models';
+import { MongoService } from '../mongo/mongo.service';
+import { deleteWithReferences } from '../mongo/relations';
 import { StorageService, StorageTarget } from '../storage/storage.service';
-import { blogSummarySelect } from './blog-query';
 import {
   BlogDetailDto,
   CreateBlogDto,
@@ -16,100 +32,103 @@ import {
   UpdateBlogDto,
 } from './dto/blog.dto';
 import { PostPageDto } from './dto/post-response.dto';
-import { postInclude, PostsService } from './posts.service';
-
-const detailInclude = (viewerId?: string) => ({
-  ...postInclude(viewerId),
-  blog: {
-    select: { ...blogSummarySelect, content: true, updatedAt: true },
-  },
-});
+import { PostsService } from './posts.service';
 
 @Injectable()
 export class BlogsService {
   constructor(
-    private readonly prisma: PrismaService,
+    private readonly mongo: MongoService,
     private readonly posts: PostsService,
     private readonly storage: StorageService,
+    @InjectModel(Post.name) private readonly postsModel: Model<Post>,
+    @InjectModel(Blog.name) private readonly blogsModel: Model<Blog>,
+    @InjectModel(BlogRecipe.name)
+    private readonly blogRecipes: Model<BlogRecipe>,
+    @InjectModel(Recipe.name) private readonly recipesModel: Model<Recipe>,
   ) {}
 
   async create(authorId: string, dto: CreateBlogDto): Promise<BlogDetailDto> {
     this.validateCover(dto.coverImageUrl);
-    return this.write(async (tx) => {
-      const status = dto.status ?? PostStatus.DRAFT;
-      const content = dto.content ?? '';
-      this.validatePublication(status, content);
-      await this.validateRecipes(tx, dto.recipeIds);
-      const row = await tx.post.create({
-        data: {
+    const status: PostStatus =
+      (dto.status as PostStatus | undefined) ?? PostStatus.DRAFT;
+    const content = dto.content ?? '';
+    this.validatePublication(status, content);
+    await this.validateRecipes(dto.recipeIds);
+    const id = randomUUID();
+    // The post, its blog and its recipe links are written together.
+    await this.mongo.withTransaction(async (session) => {
+      const now = new Date();
+      await this.collections.posts.insertOne(
+        {
+          _id: id,
           authorId,
           type: PostType.BLOG,
           status,
-          publishedAt: status === PostStatus.PUBLISHED ? new Date() : null,
-          blog: {
-            create: {
-              title: dto.title,
-              content,
-              excerpt: this.excerpt(content),
-              coverImageUrl: dto.coverImageUrl ?? null,
-              recipes: { create: this.recipeLinks(dto.recipeIds ?? []) },
-            },
-          },
+          body: null,
+          searchIndexedAt: null,
+          viewCount: 0,
+          publishedAt: status === PostStatus.PUBLISHED ? now : null,
+          createdAt: now,
+          updatedAt: now,
         },
-        include: detailInclude(authorId),
-      });
-      return this.toDetail(row);
+        { session },
+      );
+      await this.collections.blogs.insertOne(
+        {
+          _id: id,
+          title: dto.title,
+          content,
+          excerpt: this.excerpt(content),
+          coverImageUrl: dto.coverImageUrl ?? null,
+          updatedAt: now,
+        },
+        { session },
+      );
+      await this.linkRecipes(session, id, dto.recipeIds ?? []);
     });
+    return this.loadDetail(id, authorId);
   }
 
   async findOne(id: string, viewerId?: string): Promise<BlogDetailDto> {
-    // Related rows may take multiple SQL statements; visibility and content
-    // must use the same snapshot during concurrent draft edits.
-    const [row] = await this.prisma.$transaction(
-      [
-        this.prisma.post.findUnique({
-          where: { id },
-          include: detailInclude(viewerId),
-        }),
-      ],
-      { isolationLevel: Prisma.TransactionIsolationLevel.RepeatableRead },
-    );
+    const post = await this.postsModel
+      .findOne({ _id: id, type: PostType.BLOG })
+      .exec();
     if (
-      !row?.blog ||
-      row.type !== PostType.BLOG ||
-      (row.status !== PostStatus.PUBLISHED && row.authorId !== viewerId)
+      !post ||
+      (post.status !== PostStatus.PUBLISHED && post.authorId !== viewerId)
     ) {
       throw new NotFoundException('Blog not found');
     }
-    return this.toDetail(row);
+    return this.toDetail(post, viewerId);
   }
 
   async listMine(
     authorId: string,
     query: MyBlogsQueryDto,
   ): Promise<PostPageDto> {
-    const where: Prisma.PostWhereInput = {
+    const filter: Record<string, unknown> = {
       authorId,
       type: PostType.BLOG,
-      ...(query.status ? { status: query.status } : {}),
+      ...(query.status && { status: query.status }),
     };
     if (query.cursor) {
-      const cursor = await this.prisma.post.findFirst({
-        where: { ...where, id: query.cursor },
-        select: { id: true },
-      });
+      const cursor = await this.postsModel
+        .findOne({ ...filter, _id: query.cursor })
+        .exec();
       if (!cursor) throw new BadRequestException('Invalid blog cursor');
+      Object.assign(
+        filter,
+        afterCursor('createdAt', { value: cursor.createdAt, id: cursor.id }),
+      );
     }
-    const rows = await this.prisma.post.findMany({
-      where,
-      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
-      take: query.limit + 1,
-      ...(query.cursor ? { cursor: { id: query.cursor }, skip: 1 } : {}),
-      include: postInclude(authorId),
-    });
+    const rows = await this.postsModel
+      .find(filter)
+      .sort({ createdAt: -1, _id: -1 })
+      .limit(query.limit + 1)
+      .exec();
     const page = createCursorPaginatedResponse(rows, query.limit);
     return {
-      items: page.items.map((row) => this.posts.toResponse(row)),
+      items: await this.posts.toResponses(page.items, authorId),
       nextCursor: page.nextCursor,
     };
   }
@@ -122,72 +141,113 @@ export class BlogsService {
     if (Object.values(dto).every((value) => value === undefined))
       throw new BadRequestException('Provide at least one blog field');
     this.validateCover(dto.coverImageUrl);
-    return this.write(async (tx) => {
-      await this.lockOwned(tx, id, authorId);
-      const current = await tx.post.findUniqueOrThrow({
-        where: { id },
-        include: { blog: true },
-      });
-      if (!current.blog) throw new NotFoundException('Blog not found');
-      const status = dto.status ?? current.status;
-      const content = dto.content ?? current.blog.content;
+    await this.validateRecipes(dto.recipeIds);
+    await this.mongo.withTransaction(async (session) => {
+      const current = await this.lockOwned(session, id, authorId);
+      const blog = await this.collections.blogs.findOne(
+        { _id: id },
+        { session },
+      );
+      if (!blog) throw new NotFoundException('Blog not found');
+      const status: PostStatus =
+        (dto.status as PostStatus | undefined) ?? current.status;
+      const content = dto.content ?? blog.content;
       this.validatePublication(status, content);
-      await this.validateRecipes(tx, dto.recipeIds);
-      const row = await tx.post.update({
-        where: { id, authorId, type: PostType.BLOG },
-        data: {
-          status,
-          // Edits and re-publication keep the original feed position.
-          publishedAt:
-            status === PostStatus.PUBLISHED
-              ? (current.publishedAt ?? new Date())
-              : current.publishedAt,
-          blog: {
-            update: {
-              title: dto.title,
-              content: dto.content,
-              ...(dto.content !== undefined
-                ? { excerpt: this.excerpt(dto.content) }
-                : {}),
-              coverImageUrl: dto.coverImageUrl,
-              ...(dto.recipeIds !== undefined
-                ? {
-                    recipes: {
-                      deleteMany: {},
-                      create: this.recipeLinks(dto.recipeIds),
-                    },
-                  }
-                : {}),
-            },
+      const now = new Date();
+      await this.collections.posts.updateOne(
+        { _id: id },
+        {
+          $set: {
+            status,
+            // Edits and re-publication keep the original feed position.
+            publishedAt:
+              status === PostStatus.PUBLISHED
+                ? (current.publishedAt ?? now)
+                : current.publishedAt,
+            updatedAt: now,
           },
         },
-        include: detailInclude(authorId),
-      });
-      return this.toDetail(row);
+        { session },
+      );
+      await this.collections.blogs.updateOne(
+        { _id: id },
+        {
+          $set: {
+            ...(dto.title !== undefined && { title: dto.title }),
+            ...(dto.content !== undefined && {
+              content: dto.content,
+              excerpt: this.excerpt(dto.content),
+            }),
+            ...(dto.coverImageUrl !== undefined && {
+              coverImageUrl: dto.coverImageUrl,
+            }),
+            updatedAt: now,
+          },
+        },
+        { session },
+      );
+      if (dto.recipeIds !== undefined) {
+        await this.collections.blogRecipes.deleteMany(
+          { postId: id },
+          { session },
+        );
+        await this.linkRecipes(session, id, dto.recipeIds);
+      }
     });
+    return this.loadDetail(id, authorId);
   }
 
   async remove(id: string, authorId: string): Promise<void> {
-    await this.write(async (tx) => {
-      await this.lockOwned(tx, id, authorId);
-      // The post owns its blog, recipe links and interactions; all cascade.
-      await tx.post.delete({ where: { id, authorId, type: PostType.BLOG } });
+    await this.mongo.withTransaction(async (session) => {
+      await this.lockOwned(session, id, authorId);
+      // The post owns its blog, recipe links and interactions.
+      await deleteWithReferences(this.mongo.db, session, 'posts', {
+        _id: id,
+      });
     });
   }
 
+  private get collections() {
+    const database = this.mongo.db;
+    return {
+      posts: database.collection<Stored<Post>>('posts'),
+      blogs: database.collection<Stored<Blog>>('blogs'),
+      blogRecipes: database.collection<Stored<BlogRecipe>>('blog_recipes'),
+    };
+  }
+
+  /** Locks and returns the author's blog post. */
   private async lockOwned(
-    tx: Prisma.TransactionClient,
+    session: ClientSession,
     id: string,
     authorId: string,
   ) {
     // Serialize edit/publish/delete so publication cannot validate an old
     // content value while another edit replaces it with an empty draft.
-    const rows = await tx.$queryRaw<{ id: string }[]>(Prisma.sql`
-      SELECT id FROM posts
-      WHERE id = ${id}::uuid AND author_id = ${authorId}::uuid AND type = 'BLOG'
-      FOR UPDATE
-    `);
-    if (rows.length === 0) throw new NotFoundException('Blog not found');
+    await lockDocument(this.mongo.db, session, 'post', id);
+    const owned = await this.collections.posts.findOne(
+      { _id: id, authorId, type: PostType.BLOG },
+      { session },
+    );
+    if (!owned) throw new NotFoundException('Blog not found');
+    return owned;
+  }
+
+  private async linkRecipes(
+    session: ClientSession,
+    postId: string,
+    recipeIds: string[],
+  ): Promise<void> {
+    if (recipeIds.length === 0) return;
+    await this.collections.blogRecipes.insertMany(
+      recipeIds.map((recipeId, position) => ({
+        _id: randomUUID(),
+        postId,
+        recipeId,
+        position,
+      })),
+      { session },
+    );
   }
 
   private validatePublication(status: PostStatus, content: string) {
@@ -218,12 +278,12 @@ export class BlogsService {
     });
   }
 
-  private async validateRecipes(tx: Prisma.TransactionClient, ids?: string[]) {
+  private async validateRecipes(ids?: string[]) {
     if (!ids?.length) return;
-    const recipes = await tx.recipe.findMany({
-      where: { id: { in: ids } },
-      select: { id: true },
-    });
+    const recipes = await this.recipesModel
+      .find({ _id: { $in: ids } })
+      .select('_id')
+      .exec();
     const found = new Set(recipes.map(({ id }) => id));
     const missing = ids.filter((id) => !found.has(id));
     if (missing.length) {
@@ -237,40 +297,31 @@ export class BlogsService {
     }
   }
 
-  private recipeLinks(ids: string[]) {
-    return ids.map((recipeId, position) => ({ recipeId, position }));
-  }
-
   private excerpt(content: string) {
     return Array.from(content.replace(/\s+/g, ' ').trim())
       .slice(0, 280)
       .join('');
   }
 
-  private toDetail(
-    row: Prisma.PostGetPayload<{ include: ReturnType<typeof detailInclude> }>,
-  ): BlogDetailDto {
-    if (!row.blog) throw new NotFoundException('Blog not found');
-    return {
-      ...this.posts.toResponse(row),
-      content: row.blog.content,
-      updatedAt: row.blog.updatedAt,
-    };
+  private async loadDetail(
+    id: string,
+    viewerId: string,
+  ): Promise<BlogDetailDto> {
+    const post = await this.postsModel.findOne({ _id: id }).exec();
+    if (!post) throw new NotFoundException('Blog not found');
+    return this.toDetail(post, viewerId);
   }
 
-  private async write<T>(run: (tx: Prisma.TransactionClient) => Promise<T>) {
-    try {
-      return await this.prisma.$transaction(run);
-    } catch (error) {
-      if (error instanceof Prisma.PrismaClientKnownRequestError) {
-        if (error.code === 'P2025')
-          throw new NotFoundException('Blog not found');
-        if (error.code === 'P2003')
-          throw new BadRequestException(
-            'A linked recipe or account no longer exists',
-          );
-      }
-      throw error;
-    }
+  private async toDetail(
+    post: Post,
+    viewerId?: string,
+  ): Promise<BlogDetailDto> {
+    const [response] = await this.posts.toResponses([post], viewerId);
+    const blog = await this.blogsModel
+      .findOne({ _id: post.id })
+      .select('content updatedAt')
+      .exec();
+    if (!response || !blog) throw new NotFoundException('Blog not found');
+    return { ...response, content: blog.content, updatedAt: blog.updatedAt };
   }
 }

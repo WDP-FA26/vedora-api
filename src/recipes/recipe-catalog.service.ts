@@ -3,32 +3,46 @@ import {
   NotFoundException,
   UnauthorizedException,
 } from '@nestjs/common';
-import { PostStatus, Prisma } from '@prisma/client';
+import { InjectModel } from '@nestjs/mongoose';
+import type { Model } from 'mongoose';
 import {
   createPaginatedResponse,
   getPaginationArgs,
   PaginatedResponseDto,
 } from '../common/pagination';
-import { PrismaService } from '../prisma/prisma.service';
+import {
+  Ingredient,
+  Post,
+  PostStatus,
+  Recipe,
+  RecipeFavorite,
+  RecipeIngredient,
+  User,
+} from '../mongo/models';
 import {
   CatalogRecipeDetailDto,
   CatalogRecipeDto,
   RecipeCatalogQueryDto,
 } from './dto/recipe-catalog.dto';
 import { IncompatibilityRulesService } from './incompatibility-rules.service';
-import { catalogWhere } from './recipe-catalog.query';
-import {
-  recipeDetailInclude,
-  recipeInclude,
-  toRecipeDetailDto,
-  toRecipeDto,
-} from './recipes.service';
+import { DietaryService } from './dietary.service';
+import { catalogPage } from './recipe-catalog.query';
+import { loadRecipes, toRecipeDto } from './recipes.service';
 
 @Injectable()
 export class RecipeCatalogService {
   constructor(
-    private readonly prisma: PrismaService,
+    @InjectModel(Recipe.name) private readonly recipes: Model<Recipe>,
+    @InjectModel(RecipeIngredient.name)
+    private readonly recipeIngredients: Model<RecipeIngredient>,
+    @InjectModel(Ingredient.name)
+    private readonly ingredients: Model<Ingredient>,
+    @InjectModel(Post.name) private readonly posts: Model<Post>,
+    @InjectModel(User.name) private readonly users: Model<User>,
+    @InjectModel(RecipeFavorite.name)
+    private readonly favorites: Model<RecipeFavorite>,
     private readonly rules: IncompatibilityRulesService,
+    private readonly dietary: DietaryService,
   ) {}
 
   async list(
@@ -40,90 +54,99 @@ export class RecipeCatalogService {
         'Sign in to filter by your dietary profile',
       );
     }
-    const where = catalogWhere(query, userId);
-    const { skip, take } = getPaginationArgs(query);
-    return this.prisma.$transaction(
-      async (tx) => {
-        const [ids, [count]] = await Promise.all([
-          tx.$queryRaw<{ id: string }[]>(Prisma.sql`
-          SELECT r.id FROM recipes r ${where}
-          ORDER BY r.updated_at DESC, r.id DESC LIMIT ${take} OFFSET ${skip}
-        `),
-          tx.$queryRaw<{ total: bigint }[]>(Prisma.sql`
-          SELECT COUNT(*) AS total FROM recipes r ${where}
-        `),
-        ]);
-        const rows =
-          ids.length > 0
-            ? await tx.recipe.findMany({
-                where: { id: { in: ids.map(({ id }) => id) } },
-                include: recipeInclude,
-              })
-            : [];
-        const byId = new Map(rows.map((row) => [row.id, row]));
-        const favorites =
-          userId && ids.length
-            ? await tx.recipeFavorite.findMany({
-                where: { userId, recipeId: { in: ids.map(({ id }) => id) } },
-                select: { recipeId: true },
-              })
-            : [];
-        const favoriteIds = new Set(favorites.map(({ recipeId }) => recipeId));
-        const ordered = ids.map(({ id }) => byId.get(id)!);
-        const conflicts = await this.rules.findConflictsForEach(
-          ordered.map((row) =>
-            row.ingredients.map(({ ingredientId }) => ingredientId),
-          ),
-          tx,
-        );
-        return createPaginatedResponse(
-          ordered.map((row, index) => {
-            const recipe = toRecipeDto(row, conflicts[index]);
-            return {
-              ...recipe,
-              isFavorite: favoriteIds.has(row.id),
-              // Admin-authored recipes are public, but their source post may not be.
-              post:
-                row.post?.status === PostStatus.PUBLISHED ? recipe.post : null,
-              totalMinutes: totalMinutes(row),
-            };
-          }),
-          Number(count.total),
-          query,
-        );
+    const { ids, total } = await catalogPage(
+      {
+        recipes: this.recipes,
+        recipeIngredients: this.recipeIngredients,
+        ingredients: this.ingredients,
+        dietary: this.dietary,
+        rules: this.rules,
       },
-      { isolationLevel: Prisma.TransactionIsolationLevel.RepeatableRead },
+      query,
+      getPaginationArgs(query),
+      userId,
+    );
+    const rows = await this.recipes.find({ _id: { $in: ids } }).exec();
+    const byId = new Map(rows.map((row) => [row.id, row]));
+    const ordered = ids.flatMap((id) => byId.get(id) ?? []);
+    const [recipes, favoriteIds, publishedPosts] = await Promise.all([
+      loadRecipes(
+        {
+          recipeIngredients: this.recipeIngredients,
+          ingredients: this.ingredients,
+          posts: this.posts,
+          users: this.users,
+        },
+        this.rules,
+        ordered,
+      ),
+      this.favoriteIds(ids, userId),
+      this.publishedPosts(ordered.map(({ postId }) => postId)),
+    ]);
+    return createPaginatedResponse(
+      ordered.map((row, index) => ({
+        ...toRecipeDto(recipes[index]),
+        isFavorite: favoriteIds.has(row.id),
+        // Admin-authored recipes are public, but their source post may not be.
+        post:
+          row.postId && publishedPosts.has(row.postId)
+            ? recipes[index].post
+            : null,
+        totalMinutes: totalMinutes(row),
+      })),
+      total,
+      query,
     );
   }
 
   async findOne(id: string, userId?: string): Promise<CatalogRecipeDetailDto> {
-    return this.prisma.$transaction(
-      async (tx) => {
-        const row = await tx.recipe.findUnique({
-          where: { id },
-          include: recipeDetailInclude,
-        });
-        if (!row) throw new NotFoundException('Recipe not found');
-        const [conflicts] = await this.rules.findConflictsForEach(
-          [row.ingredients.map(({ ingredientId }) => ingredientId)],
-          tx,
-        );
-        const favorite = userId
-          ? await tx.recipeFavorite.findUnique({
-              where: { recipeId_userId: { recipeId: id, userId } },
-              select: { recipeId: true },
-            })
-          : null;
-        const detail = toRecipeDetailDto(row, conflicts);
-        return {
-          ...detail,
-          isFavorite: favorite !== null,
-          post: row.post?.status === PostStatus.PUBLISHED ? detail.post : null,
-          totalMinutes: totalMinutes(row),
-        };
-      },
-      { isolationLevel: Prisma.TransactionIsolationLevel.RepeatableRead },
-    );
+    const row = await this.recipes.findOne({ _id: id }).exec();
+    if (!row) throw new NotFoundException('Recipe not found');
+    const [[detail], favoriteIds, publishedPosts] = await Promise.all([
+      loadRecipes(
+        {
+          recipeIngredients: this.recipeIngredients,
+          ingredients: this.ingredients,
+          posts: this.posts,
+          users: this.users,
+        },
+        this.rules,
+        [row],
+      ),
+      this.favoriteIds([id], userId),
+      this.publishedPosts([row.postId]),
+    ]);
+    return {
+      ...detail,
+      isFavorite: favoriteIds.has(id),
+      post: row.postId && publishedPosts.has(row.postId) ? detail.post : null,
+      totalMinutes: totalMinutes(row),
+    };
+  }
+
+  private async favoriteIds(
+    recipeIds: string[],
+    userId?: string,
+  ): Promise<Set<string>> {
+    if (!userId) return new Set();
+    const favorites = await this.favorites
+      .find({ userId, recipeId: { $in: recipeIds } })
+      .select('recipeId')
+      .exec();
+    return new Set(favorites.map(({ recipeId }) => recipeId));
+  }
+
+  private async publishedPosts(
+    postIds: (string | null)[],
+  ): Promise<Set<string>> {
+    const posts = await this.posts
+      .find({
+        status: PostStatus.PUBLISHED,
+        _id: { $in: postIds.filter((id) => id !== null) },
+      })
+      .select('_id')
+      .exec();
+    return new Set(posts.map(({ id }) => id));
   }
 }
 

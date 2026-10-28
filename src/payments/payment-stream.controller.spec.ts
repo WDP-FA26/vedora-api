@@ -1,8 +1,9 @@
 import { MessageEvent } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { Subject } from 'rxjs';
+import type { Model } from 'mongoose';
 import type { AuthenticatedRequest } from '../auth/auth.types';
-import { PrismaService } from '../prisma/prisma.service';
+import type { User } from '../mongo/models';
 import { PaymentEventsService, PaymentSignal } from './payment-events.service';
 import { PaymentsService } from './payments.service';
 import { PaymentStreamController } from './payment-stream.controller';
@@ -33,7 +34,9 @@ describe('Payment stream lifecycle', () => {
         isConnected: () => true,
         closed$: closed.asObservable(),
       } as unknown as PaymentEventsService,
-      { user: { findUnique: findUser } } as unknown as PrismaService,
+      {
+        findById: () => ({ select: () => ({ exec: findUser }) }),
+      } as unknown as Model<User>,
       { verifyAsync: verify } as unknown as JwtService,
     );
   });

@@ -1,15 +1,23 @@
-import { execFileSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import { join } from 'node:path';
 import { INestApplication } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtModule, JwtService } from '@nestjs/jwt';
 import { Test } from '@nestjs/testing';
-import { PrismaClient } from '@prisma/client';
 import request from 'supertest';
 import type { App } from 'supertest/types';
 import { configureApp } from '../src/app.setup';
-import { PrismaService } from '../src/prisma/prisma.service';
+import { MongoModule } from '../src/mongo/mongo.module';
+import { MongoService } from '../src/mongo/mongo.service';
+import {
+  BillingPlan,
+  PaymentStatus,
+  type PaymentIntent,
+  type PaymentRequest,
+  type PaymentWebhookReceipt,
+  type Stored,
+  type User,
+  UserRole,
+} from '../src/mongo/models';
 import {
   PaymentsController,
   PaymentReconciliationController,
@@ -22,9 +30,14 @@ import type { PaymentDto } from '../src/payments/payment.dto';
 import { PaymentEventsService } from '../src/payments/payment-events.service';
 import { PaymentStreamController } from '../src/payments/payment-stream.controller';
 import * as paymentCodes from '../src/payments/payment-code';
+import { createUser, deleteWithCascade } from './fixtures';
+import {
+  createTestMongoUrl,
+  dropTestDatabase,
+  prepareTestDatabase,
+} from './mongo-test-db';
 
-describe('SePay payments with PostgreSQL and HTTP', () => {
-  const schema = `vedora_payment_test_${randomUUID().replaceAll('-', '')}`;
+describe('SePay payments with MongoDB and HTTP', () => {
   const secret = 'sepay-integration-webhook-secret';
   const settings = {
     PAYMENT_REDIS_URL: '',
@@ -40,27 +53,32 @@ describe('SePay payments with PostgreSQL and HTTP', () => {
     BILLING_PREMIUM_PRICE_VND: 99000,
     BILLING_DURATION_DAYS: 30,
   };
-  let db: PrismaClient;
+  let db: MongoService;
   let app: INestApplication<App>;
   let service: PaymentsService;
   let jwt: JwtService;
   let counter = 1000;
+  const intents = () =>
+    db.db.collection<Stored<PaymentIntent>>('payment_intents');
+  const requests = () =>
+    db.db.collection<Stored<PaymentRequest>>('payment_requests');
+  const receipts = () =>
+    db.db.collection<Stored<PaymentWebhookReceipt>>('payment_webhook_receipts');
+  const users = () => db.db.collection<Stored<User>>('users');
   const path = '/api/v1';
   const webhookPath = `${path}/payments/sepay/bank-transfer-webhook`;
   const makeUser = async (role: 'USER' | 'ADMIN' = 'USER') => {
     const suffix = randomUUID().replaceAll('-', '').slice(0, 15);
-    const user = await db.user.create({
-      data: {
-        username: `pay${suffix}`,
-        email: `${suffix}@payments.test`,
-        fullName: 'Payment Test',
-        role,
-        status: 'ACTIVE',
-        emailVerifiedAt: new Date(),
-      },
+    const user = await createUser(db, {
+      username: `pay${suffix}`,
+      email: `${suffix}@payments.test`,
+      fullName: 'Payment Test',
+      role: role as UserRole,
     });
     return {
-      ...user,
+      id: user.id,
+      username: user.username,
+      email: user.email,
       token: await jwt.signAsync({ sub: user.id, username: user.username }),
     };
   };
@@ -68,7 +86,7 @@ describe('SePay payments with PostgreSQL and HTTP', () => {
     user: { id: string },
     planCode: 'PRO' | 'PREMIUM' = 'PRO',
     key = randomUUID(),
-  ) => service.create(user.id, planCode, key);
+  ) => service.create(user.id, planCode as BillingPlan, key);
   const event = (
     intent: PaymentDto,
     overrides: Record<string, unknown> = {},
@@ -90,30 +108,25 @@ describe('SePay payments with PostgreSQL and HTTP', () => {
       .post(webhookPath)
       .set('Authorization', credential)
       .send(body);
+  /** Captured purchases; each one used to write a ledger row. */
+  const captures = (where: Partial<Stored<PaymentIntent>>) =>
+    intents().countDocuments({ ...where, status: PaymentStatus.SUCCEEDED });
+  /** Membership as the overview reports it, with dates. */
+  const membershipOf = async (userId: string) => {
+    const { membership } = await service.overview(userId);
+    return {
+      planCode: membership.planCode,
+      startsAt: new Date(membership.startsAt!),
+      expiresAt: new Date(membership.expiresAt!),
+    };
+  };
 
   beforeAll(async () => {
-    if (!process.env.TEST_DATABASE_URL)
-      throw new Error(
-        'Set TEST_DATABASE_URL to a disposable PostgreSQL database',
-      );
-    const url = new URL(process.env.TEST_DATABASE_URL);
-    url.searchParams.set('schema', schema);
-    execFileSync(
-      process.execPath,
-      [
-        join(process.cwd(), 'node_modules/prisma/build/index.js'),
-        'migrate',
-        'deploy',
-      ],
-      {
-        env: { ...process.env, DATABASE_URL: url.toString() },
-        stdio: 'pipe',
-        timeout: 45_000,
-      },
-    );
-    db = new PrismaClient({ datasourceUrl: url.toString() });
     const moduleRef = await Test.createTestingModule({
-      imports: [JwtModule.register({ secret: 'sepay-db-test-jwt-secret' })],
+      imports: [
+        MongoModule.forTest(createTestMongoUrl('payment')),
+        JwtModule.register({ secret: 'sepay-db-test-jwt-secret' }),
+      ],
       controllers: [
         PaymentStreamController,
         PaymentsController,
@@ -125,22 +138,22 @@ describe('SePay payments with PostgreSQL and HTTP', () => {
         SePayProvider,
         SePayWebhookGuard,
         PaymentEventsService,
-        { provide: PrismaService, useValue: db },
         { provide: ConfigService, useValue: new ConfigService(settings) },
       ],
     }).compile();
     app = moduleRef.createNestApplication({ rawBody: true });
     configureApp(app);
     await app.init();
+    db = app.get(MongoService);
+    await prepareTestDatabase(app);
     await app.listen(0, '127.0.0.1');
     service = app.get(PaymentsService);
     jwt = app.get(JwtService);
   });
   afterAll(async () => {
-    await app?.close();
-    if (db) {
-      await db.$executeRawUnsafe(`DROP SCHEMA IF EXISTS "${schema}" CASCADE`);
-      await db.$disconnect();
+    if (app) {
+      await dropTestDatabase(app);
+      await app.close();
     }
   });
   afterEach(() => {
@@ -158,13 +171,9 @@ describe('SePay payments with PostgreSQL and HTTP', () => {
         payment.paymentCode,
       );
       await callback(event(payment)).expect(200);
-      expect(
-        (
-          await db.paymentIntent.findUniqueOrThrow({
-            where: { id: payment.id },
-          })
-        ).status,
-      ).toBe('SUCCEEDED');
+      expect((await intents().findOne({ _id: payment.id }))!.status).toBe(
+        'SUCCEEDED',
+      );
     } finally {
       config.set('SEPAY_PAYMENT_CODE_PREFIX', 'VED');
     }
@@ -183,17 +192,8 @@ describe('SePay payments with PostgreSQL and HTTP', () => {
     expect(payment.paymentCode).toMatch(/^VED[A-Z0-9]{6}$/);
     expect(payment.paymentCode).not.toBe(stored.paymentCode);
     expect((await create(user, 'PRO', key)).id).toBe(payment.id);
-    expect(await db.paymentIntent.count({ where: { userId: user.id } })).toBe(
-      1,
-    );
-    expect(await db.paymentRequest.count({ where: { actorId: user.id } })).toBe(
-      1,
-    );
-    expect(
-      await db.paymentAudit.count({
-        where: { intentId: payment.id, action: 'CREATED' },
-      }),
-    ).toBe(1);
+    expect(await intents().countDocuments({ userId: user.id })).toBe(1);
+    expect(await requests().countDocuments({ actorId: user.id })).toBe(1);
   });
 
   it('bounds collision retries and lets the same key succeed after exhaustion', async () => {
@@ -208,12 +208,8 @@ describe('SePay payments with PostgreSQL and HTTP', () => {
       response: { code: 'PAYMENT_CODE_UNAVAILABLE' },
     });
     expect(generate).toHaveBeenCalledTimes(5);
-    expect(await db.paymentIntent.count({ where: { userId: user.id } })).toBe(
-      0,
-    );
-    expect(await db.paymentRequest.count({ where: { actorId: user.id } })).toBe(
-      0,
-    );
+    expect(await intents().countDocuments({ userId: user.id })).toBe(0);
+    expect(await requests().countDocuments({ actorId: user.id })).toBe(0);
     generate.mockRestore();
     expect((await create(user, 'PRO', key)).status).toBe('PENDING');
   });
@@ -222,9 +218,11 @@ describe('SePay payments with PostgreSQL and HTTP', () => {
     const one = await makeUser(),
       two = await makeUser();
     const stored = new Set(
-      (await db.paymentIntent.findMany({ select: { paymentCode: true } })).map(
-        (row) => row.paymentCode,
-      ),
+      (
+        await intents()
+          .find({}, { projection: { paymentCode: 1 } })
+          .toArray()
+      ).map((row) => row.paymentCode),
     );
     const unused: string[] = [];
     for (let value = 0; unused.length < 2; value++) {
@@ -242,22 +240,10 @@ describe('SePay payments with PostgreSQL and HTTP', () => {
       new Set(unused),
     );
     expect(
-      await db.paymentIntent.count({
-        where: { userId: { in: [one.id, two.id] } },
-      }),
+      await intents().countDocuments({ userId: { $in: [one.id, two.id] } }),
     ).toBe(2);
     expect(
-      await db.paymentRequest.count({
-        where: { actorId: { in: [one.id, two.id] } },
-      }),
-    ).toBe(2);
-    expect(
-      await db.paymentAudit.count({
-        where: {
-          intentId: { in: payments.map((payment) => payment.id) },
-          action: 'CREATED',
-        },
-      }),
+      await requests().countDocuments({ actorId: { $in: [one.id, two.id] } }),
     ).toBe(2);
   });
 
@@ -265,18 +251,25 @@ describe('SePay payments with PostgreSQL and HTTP', () => {
     const owner = await makeUser(),
       user = await makeUser();
     await create(owner);
-    await db.$executeRawUnsafe(
-      `CREATE UNIQUE INDEX reject_test_same_price ON payment_intents (amount) WHERE user_id IN ('${owner.id}'::uuid, '${user.id}'::uuid)`,
+    await db.db.collection('payment_intents').createIndex(
+      { amount: 1 },
+      {
+        name: 'reject_test_same_price',
+        unique: true,
+        partialFilterExpression: { userId: { $in: [owner.id, user.id] } },
+      },
     );
     const generate = vi.spyOn(paymentCodes, 'generatePaymentCode');
     try {
       await expect(create(user)).rejects.toMatchObject({
-        code: 'P2002',
-        meta: { target: ['amount'] },
+        code: 11000,
+        keyPattern: { amount: 1 },
       });
       expect(generate).toHaveBeenCalledOnce();
     } finally {
-      await db.$executeRawUnsafe('DROP INDEX reject_test_same_price');
+      await db.db
+        .collection('payment_intents')
+        .dropIndex('reject_test_same_price');
     }
   });
 
@@ -287,23 +280,19 @@ describe('SePay payments with PostgreSQL and HTTP', () => {
       const body = event(payment, { code, content: payment.paymentCode });
       await callback(body).expect(200);
       expect(
-        (
-          await db.paymentWebhookReceipt.findFirstOrThrow({
-            where: { providerTransactionId: `BANK-${body.id}` },
-          })
-        ).outcome,
+        (await receipts().findOne({
+          providerTransactionId: `BANK-${body.id}`,
+        }))!.outcome,
       ).toBe(
         code?.trim() ? 'PAYMENT_INTENT_NOT_FOUND' : 'PAYMENT_CODE_MISSING',
       );
     }
     expect((await service.get(payment.id, user.id)).status).toBe('PENDING');
     expect((await service.overview(user.id)).membership.planCode).toBe('FREE');
-    expect(
-      await db.paymentLedger.count({ where: { intentId: payment.id } }),
-    ).toBe(0);
+    expect(await captures({ _id: payment.id })).toBe(0);
   });
 
-  it('publishes capture only after committed payment, ledger and membership are visible', async () => {
+  it('publishes capture only after the committed payment and membership are visible', async () => {
     const user = await makeUser(),
       payment = await create(user);
     let visible: unknown;
@@ -312,27 +301,20 @@ describe('SePay payments with PostgreSQL and HTTP', () => {
       .mockImplementation(async (change) => {
         visible = {
           change,
-          status: (
-            await db.paymentIntent.findUniqueOrThrow({
-              where: { id: payment.id },
-            })
-          ).status,
-          ledgerCount: await db.paymentLedger.count({
-            where: { intentId: payment.id },
-          }),
-          paymentId: (
-            await db.membership.findUniqueOrThrow({
-              where: { userId: user.id },
-            })
-          ).paymentId,
+          status: (await intents().findOne({ _id: payment.id }))!.status,
+          captureCount: await captures({ _id: payment.id }),
+          paymentId: (await intents().findOne({
+            userId: user.id,
+            status: PaymentStatus.SUCCEEDED,
+          }))!._id,
         };
       });
     await callback(event(payment)).expect(200);
     expect(publish).toHaveBeenCalledOnce();
     expect(visible).toEqual({
       change: { userId: user.id, intentId: payment.id },
-      status: 'SUCCEEDED',
-      ledgerCount: 1,
+      status: PaymentStatus.SUCCEEDED,
+      captureCount: 1,
       paymentId: payment.id,
     });
   });
@@ -358,11 +340,7 @@ describe('SePay payments with PostgreSQL and HTTP', () => {
     const publish = vi
       .spyOn(app.get(PaymentEventsService), 'publish')
       .mockImplementation(async () => {
-        visible = (
-          await db.paymentIntent.findUniqueOrThrow({
-            where: { id: payment.id },
-          })
-        ).status;
+        visible = (await intents().findOne({ _id: payment.id }))!.status;
       });
     await service.cancel(payment.id, user.id);
     await service.cancel(payment.id, user.id);
@@ -378,9 +356,7 @@ describe('SePay payments with PostgreSQL and HTTP', () => {
     );
     await callback(event(payment)).expect(200, { success: true });
     expect((await service.get(payment.id, user.id)).status).toBe('SUCCEEDED');
-    expect(
-      await db.paymentLedger.count({ where: { intentId: payment.id } }),
-    ).toBe(1);
+    expect(await captures({ _id: payment.id })).toBe(1);
   });
 
   it('rejects anonymous and non-owner streams before sending SSE headers', async () => {
@@ -484,9 +460,7 @@ describe('SePay payments with PostgreSQL and HTTP', () => {
     await expect(create(user, 'PREMIUM', key)).rejects.toMatchObject({
       status: 409,
     });
-    expect(await db.paymentIntent.count({ where: { userId: user.id } })).toBe(
-      1,
-    );
+    expect(await intents().countDocuments({ userId: user.id })).toBe(1);
   });
   it('concurrent same/different keys produce one pending intent', async () => {
     const user = await makeUser(),
@@ -498,9 +472,7 @@ describe('SePay payments with PostgreSQL and HTTP', () => {
       Array.from({ length: 4 }, () => create(user)),
     );
     expect(new Set([...same, ...other].map((item) => item.id)).size).toBe(1);
-    expect(await db.paymentRequest.count({ where: { actorId: user.id } })).toBe(
-      5,
-    );
+    expect(await requests().countDocuments({ actorId: user.id })).toBe(5);
   });
   it('rejects another plan while a payment is pending', async () => {
     const user = await makeUser();
@@ -523,9 +495,7 @@ describe('SePay payments with PostgreSQL and HTTP', () => {
       expect(stored.qr?.accountNumber).toBe('0012345678');
       await expect(create(user)).rejects.toMatchObject({ status: 409 });
       await callback(event(payment)).expect(200);
-      const membership = await db.membership.findUniqueOrThrow({
-        where: { userId: user.id },
-      });
+      const membership = await membershipOf(user.id);
       expect(
         membership.expiresAt.getTime() - membership.startsAt.getTime(),
       ).toBe(30 * 86_400_000);
@@ -561,8 +531,8 @@ describe('SePay payments with PostgreSQL and HTTP', () => {
     await callback(body, 'Bearer fake').expect(401);
     await callback(body, 'Apikey wrong-secret-of-valid-length').expect(401);
     expect(
-      await db.paymentWebhookReceipt.count({
-        where: { providerTransactionId: `BANK-${body.id}` },
+      await receipts().countDocuments({
+        providerTransactionId: `BANK-${body.id}`,
       }),
     ).toBe(0);
     expect((await service.get(payment.id, user.id)).status).toBe('PENDING');
@@ -577,9 +547,7 @@ describe('SePay payments with PostgreSQL and HTTP', () => {
       { id: Number.MAX_SAFE_INTEGER + 1 },
     ])
       await callback(event(payment, change)).expect(400);
-    expect(await db.paymentLedger.count({ where: { userId: user.id } })).toBe(
-      0,
-    );
+    expect(await captures({ userId: user.id })).toBe(0);
   });
   it.each([
     [{ transferType: 'out' }, 'NOT_INCOMING'],
@@ -597,16 +565,12 @@ describe('SePay payments with PostgreSQL and HTTP', () => {
         body = event(payment, change);
       await callback(body).expect(200, { success: true });
       expect(
-        (
-          await db.paymentWebhookReceipt.findFirstOrThrow({
-            where: { providerTransactionId: `BANK-${body.id}` },
-          })
-        ).outcome,
+        (await receipts().findOne({
+          providerTransactionId: `BANK-${body.id}`,
+        }))!.outcome,
       ).toBe(reason);
       expect((await service.get(payment.id, user.id)).status).toBe('PENDING');
-      expect(await db.paymentLedger.count({ where: { userId: user.id } })).toBe(
-        0,
-      );
+      expect(await captures({ userId: user.id })).toBe(0);
     },
   );
   it('captures exact payment and activates membership atomically from capture time', async () => {
@@ -614,12 +578,8 @@ describe('SePay payments with PostgreSQL and HTTP', () => {
       payment = await create(user),
       before = Date.now();
     await callback(event(payment, { gateway: 'vietcombank' })).expect(200);
-    const stored = await db.paymentIntent.findUniqueOrThrow({
-      where: { id: payment.id },
-    });
-    const membership = await db.membership.findUniqueOrThrow({
-      where: { userId: user.id },
-    });
+    const stored = (await intents().findOne({ _id: payment.id }))!;
+    const membership = await membershipOf(user.id);
     expect(stored.status).toBe('SUCCEEDED');
     expect(stored.activeIntentKey).toBeNull();
     expect(membership.planCode).toBe('PRO');
@@ -629,14 +589,7 @@ describe('SePay payments with PostgreSQL and HTTP', () => {
     );
     expect(stored.paidAt!.toISOString()).toBe('2026-10-23T03:20:30.000Z');
     expect((await service.get(payment.id, user.id)).qr).toBeNull();
-    expect(
-      await db.paymentLedger.count({ where: { intentId: payment.id } }),
-    ).toBe(1);
-    expect(
-      await db.paymentAudit.count({
-        where: { intentId: payment.id, action: 'CAPTURED' },
-      }),
-    ).toBe(1);
+    expect(await captures({ _id: payment.id })).toBe(1);
   });
   it('matches the configured VA exactly via subAccount', async () => {
     const user = await makeUser(),
@@ -654,21 +607,10 @@ describe('SePay payments with PostgreSQL and HTTP', () => {
       Array.from({ length: 6 }, () => callback(body)),
     );
     expect(responses.map((item) => item.status)).toEqual(Array(6).fill(200));
-    expect(await db.paymentLedger.count({ where: { userId: user.id } })).toBe(
-      1,
-    );
-    expect(
-      await db.paymentAudit.count({
-        where: { intentId: payment.id, action: 'CAPTURED' },
-      }),
-    ).toBe(1);
-    const original = await db.membership.findUniqueOrThrow({
-      where: { userId: user.id },
-    });
+    expect(await captures({ userId: user.id })).toBe(1);
+    const original = await membershipOf(user.id);
     await callback(body).expect(200);
-    expect(
-      await db.membership.findUnique({ where: { userId: user.id } }),
-    ).toEqual(original);
+    expect(await membershipOf(user.id)).toEqual(original);
   });
   it('does not use one provider event to pay for two users', async () => {
     const one = await makeUser(),
@@ -680,22 +622,17 @@ describe('SePay payments with PostgreSQL and HTTP', () => {
       callback(event(p1, { id })),
       callback(event(p2, { id })),
     ]);
+    expect(await captures({ providerTransactionId: `BANK-${id}` })).toBe(1);
     expect(
-      await db.paymentLedger.count({
-        where: { providerTransactionId: `BANK-${id}` },
+      await intents().countDocuments({
+        _id: { $in: [p1.id, p2.id] },
+        status: PaymentStatus.SUCCEEDED,
       }),
     ).toBe(1);
     expect(
-      await db.paymentIntent.count({
-        where: { id: { in: [p1.id, p2.id] }, status: 'SUCCEEDED' },
-      }),
-    ).toBe(1);
-    expect(
-      await db.paymentWebhookReceipt.count({
-        where: {
-          providerTransactionId: `BANK-${id}`,
-          outcome: 'TRANSACTION_ALREADY_USED',
-        },
+      await receipts().countDocuments({
+        providerTransactionId: `BANK-${id}`,
+        outcome: 'TRANSACTION_ALREADY_USED',
       }),
     ).toBe(1);
   });
@@ -705,15 +642,10 @@ describe('SePay payments with PostgreSQL and HTTP', () => {
     await callback(event(payment)).expect(200);
     const body = event(payment);
     await callback(body).expect(200);
+    expect(await captures({ _id: payment.id })).toBe(1);
     expect(
-      await db.paymentLedger.count({ where: { intentId: payment.id } }),
-    ).toBe(1);
-    expect(
-      (
-        await db.paymentWebhookReceipt.findFirstOrThrow({
-          where: { providerTransactionId: `BANK-${body.id}` },
-        })
-      ).outcome,
+      (await receipts().findOne({ providerTransactionId: `BANK-${body.id}` }))!
+        .outcome,
     ).toBe('PAYMENT_INTENT_ALREADY_SUCCEEDED');
   });
   it('cancels idempotently, preserves old keys, and refuses late payment resurrection', async () => {
@@ -726,9 +658,7 @@ describe('SePay payments with PostgreSQL and HTTP', () => {
     expect((await service.get(payment.id, user.id)).status).toBe('CANCELLED');
     expect((await create(user, 'PRO', key)).id).toBe(payment.id);
     expect((await create(user)).id).not.toBe(payment.id);
-    expect(
-      await db.paymentLedger.count({ where: { intentId: payment.id } }),
-    ).toBe(0);
+    expect(await captures({ _id: payment.id })).toBe(0);
   });
   it('serializes cancellation against capture without an inconsistent state', async () => {
     const user = await makeUser(),
@@ -737,12 +667,10 @@ describe('SePay payments with PostgreSQL and HTTP', () => {
       service.cancel(payment.id, user.id),
       service.bankWebhook(event(payment)),
     ]);
-    const stored = await db.paymentIntent.findUniqueOrThrow({
-      where: { id: payment.id },
-    });
-    expect(
-      await db.paymentLedger.count({ where: { intentId: payment.id } }),
-    ).toBe(stored.status === 'SUCCEEDED' ? 1 : 0);
+    const stored = (await intents().findOne({ _id: payment.id }))!;
+    expect(await captures({ _id: payment.id })).toBe(
+      stored.status === PaymentStatus.SUCCEEDED ? 1 : 0,
+    );
     expect(['SUCCEEDED', 'CANCELLED']).toContain(stored.status);
     expect(stored.activeIntentKey).toBeNull();
   });
@@ -750,89 +678,79 @@ describe('SePay payments with PostgreSQL and HTTP', () => {
     const user = await makeUser(),
       first = await create(user);
     await callback(event(first)).expect(200);
-    await db.membership.update({
-      where: { userId: user.id },
-      data: { expiresAt: new Date(Date.now() + 90 * 86_400_000) },
-    });
     const second = await create(user, 'PREMIUM');
     await callback(event(second)).expect(200);
-    const membership = await db.membership.findUniqueOrThrow({
-      where: { userId: user.id },
-    });
+    const membership = await membershipOf(user.id);
+    const { capturedAt } = (await intents().findOne({ _id: second.id }))!;
     expect(membership.planCode).toBe('PREMIUM');
-    expect(membership.paymentId).toBe(second.id);
+    expect(membership.startsAt).toEqual(capturedAt);
     expect(membership.expiresAt.getTime() - membership.startsAt.getTime()).toBe(
       30 * 86_400_000,
     );
-    expect(
-      (await db.user.findUniqueOrThrow({ where: { id: user.id } })).role,
-    ).toBe('USER');
-    expect(await db.paymentLedger.count({ where: { userId: user.id } })).toBe(
-      2,
-    );
+    expect((await users().findOne({ _id: user.id }))!.role).toBe('USER');
+    expect(await captures({ userId: user.id })).toBe(2);
   });
   it('expired membership reads as FREE without jobs', async () => {
     const user = await makeUser(),
       payment = await create(user);
     await callback(event(payment)).expect(200);
-    await db.membership.update({
-      where: { userId: user.id },
-      data: { expiresAt: new Date(Date.now() - 1000) },
-    });
+    await intents().updateOne(
+      { _id: payment.id },
+      { $set: { capturedAt: new Date(Date.now() - 31 * 86_400_000) } },
+    );
     expect((await service.overview(user.id)).membership.planCode).toBe('FREE');
   });
   it('retains financial history after user deletion and ignores unavailable recipients', async () => {
     const user = await makeUser(),
       payment = await create(user);
-    await db.user.delete({ where: { id: user.id } });
+    await deleteWithCascade(db, 'users', user.id);
     const body = event(payment);
     await callback(body).expect(200);
     expect(
-      (
-        await db.paymentWebhookReceipt.findFirstOrThrow({
-          where: { providerTransactionId: `BANK-${body.id}` },
-        })
-      ).outcome,
+      (await receipts().findOne({ providerTransactionId: `BANK-${body.id}` }))!
+        .outcome,
     ).toBe('ACCOUNT_UNAVAILABLE');
-    expect(await db.paymentIntent.count({ where: { id: payment.id } })).toBe(1);
+    expect(await intents().countDocuments({ _id: payment.id })).toBe(1);
   });
-  it('rolls back payment, ledger, audit and receipt if membership write fails', async () => {
+  it('rolls back the capture if its receipt write fails', async () => {
     const publish = vi
       .spyOn(app.get(PaymentEventsService), 'publish')
       .mockResolvedValue();
     const user = await makeUser(),
       payment = await create(user, 'PREMIUM'),
       body = event(payment);
-    await db.$executeRawUnsafe(
-      `ALTER TABLE memberships ADD CONSTRAINT reject_test_premium CHECK (plan_code <> 'PREMIUM') NOT VALID`,
-    );
+    // Make the receipt insert fail: add a rule to the collection's validator
+    // for the duration of the test.
+    const [info] = await db.db
+      .listCollections({ name: 'payment_webhook_receipts' })
+      .toArray();
+    const validator: unknown =
+      'options' in info ? info.options?.validator : undefined;
+    await db.db.command({
+      collMod: 'payment_webhook_receipts',
+      validator: validator
+        ? { $and: [validator, { outcome: { $ne: 'CAPTURED' } }] }
+        : { outcome: { $ne: 'CAPTURED' } },
+    });
     try {
       await callback(body).expect(500);
       expect(publish).not.toHaveBeenCalled();
       expect((await service.get(payment.id, user.id)).status).toBe('PENDING');
+      expect(await captures({ _id: payment.id })).toBe(0);
       expect(
-        await db.paymentLedger.count({ where: { intentId: payment.id } }),
-      ).toBe(0);
-      expect(
-        await db.paymentAudit.count({
-          where: { intentId: payment.id, action: 'CAPTURED' },
-        }),
-      ).toBe(0);
-      expect(
-        await db.paymentWebhookReceipt.count({
-          where: { providerTransactionId: `BANK-${body.id}` },
+        await receipts().countDocuments({
+          providerTransactionId: `BANK-${body.id}`,
         }),
       ).toBe(0);
     } finally {
-      await db.$executeRawUnsafe(
-        'ALTER TABLE memberships DROP CONSTRAINT reject_test_premium',
-      );
+      await db.db.command({
+        collMod: 'payment_webhook_receipts',
+        validator: validator ?? {},
+      });
     }
     await callback(body).expect(200);
     expect(publish).toHaveBeenCalledOnce();
-    expect(
-      await db.paymentLedger.count({ where: { intentId: payment.id } }),
-    ).toBe(1);
+    expect(await captures({ _id: payment.id })).toBe(1);
   });
   it('restricts sanitized receipt reconciliation to admins', async () => {
     const user = await makeUser(),

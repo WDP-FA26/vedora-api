@@ -171,8 +171,7 @@ là chuỗi hoặc mảng thông báo validation. Không có mã lỗi nghiệp 
 Migration mới: `20261002000000_post_comments_and_likes`. Áp dụng trước khi chạy bản API mới:
 
 ```bash
-npm run prisma:migrate:deploy
-npm run prisma:generate
+npm run start:dev    # Mongoose tự tạo collection/index khi khởi động
 npm run build
 ```
 

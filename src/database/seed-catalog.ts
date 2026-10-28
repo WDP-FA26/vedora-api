@@ -1,9 +1,18 @@
+import { randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { PrismaClient } from '@prisma/client';
+import type {
+  Ingredient,
+  IngredientGroup,
+  IngredientGroupMember,
+  IncompatibilityRule,
+  Recipe,
+  RecipeIngredient,
+} from '../mongo/models';
+import type { MongoService } from '../mongo/mongo.service';
 
 // The starter catalog: plant-based Vietnamese ingredients, groups,
-// incompatibility rules and recipes from `prisma/seed-data/recipes.json`.
+// incompatibility rules and recipes from `seed-data/recipes.json`.
 // It runs on every production start, so it only adds what is missing: rows
 // are matched by name or title, and nothing an admin edited is overwritten
 // or deleted. An existing recipe only gains a photo when it has none.
@@ -36,27 +45,35 @@ export interface SeedData {
   }[];
 }
 
-/** Read from the working directory: the production image ships `prisma/` beside `dist/`. */
+/** Read from the working directory: the production image ships `seed-data/` beside `dist/`. */
 export function loadCatalog(): SeedData {
   return JSON.parse(
-    readFileSync(
-      join(process.cwd(), 'prisma', 'seed-data', 'recipes.json'),
-      'utf8',
-    ),
+    readFileSync(join(process.cwd(), 'seed-data', 'recipes.json'), 'utf8'),
   ) as SeedData;
 }
 
 export async function seedCatalog(
-  prisma: PrismaClient,
+  mongo: MongoService,
   data: SeedData = loadCatalog(),
 ): Promise<void> {
+  const ingredientsModel = mongo.connection.model<Ingredient>('Ingredient');
+  const groupsModel =
+    mongo.connection.model<IngredientGroup>('IngredientGroup');
+  const membersModel = mongo.connection.model<IngredientGroupMember>(
+    'IngredientGroupMember',
+  );
+  const rulesModel = mongo.connection.model<IncompatibilityRule>(
+    'IncompatibilityRule',
+  );
+  const recipesModel = mongo.connection.model<Recipe>('Recipe');
+  const recipeIngredientsModel =
+    mongo.connection.model<RecipeIngredient>('RecipeIngredient');
+
   const ingredientIds = new Map<string, string>();
   for (const { name, aliases } of data.ingredients) {
-    const row = await prisma.ingredient.upsert({
-      where: { name },
-      create: { name, aliases },
-      update: {},
-    });
+    const row =
+      (await ingredientsModel.findOne({ name })) ??
+      (await ingredientsModel.create({ _id: randomUUID(), name, aliases }));
     ingredientIds.set(name, row.id);
   }
   const ingredientId = (name: string): string => {
@@ -67,19 +84,22 @@ export async function seedCatalog(
 
   const groupIds = new Map<string, string>();
   for (const { name, description, dietary, ingredients } of data.groups) {
-    const row = await prisma.ingredientGroup.upsert({
-      where: { name },
-      create: { name, description, dietary },
-      update: {},
-    });
+    const row =
+      (await groupsModel.findOne({ name })) ??
+      (await groupsModel.create({
+        _id: randomUUID(),
+        name,
+        description,
+        dietary,
+      }));
     groupIds.set(name, row.id);
-    await prisma.ingredientGroupMember.createMany({
-      data: ingredients.map((member) => ({
-        groupId: row.id,
-        ingredientId: ingredientId(member),
-      })),
-      skipDuplicates: true,
-    });
+    for (const member of ingredients) {
+      const key = { groupId: row.id, ingredientId: ingredientId(member) };
+      const exists = await membersModel.findOne(key);
+      if (!exists) {
+        await membersModel.create({ _id: randomUUID(), ...key });
+      }
+    }
   }
 
   const side = ({ kind, name }: Side) => {
@@ -100,12 +120,15 @@ export async function seedCatalog(
       bIngredientId: second.ingredientId,
       bGroupId: second.groupId,
     });
-    const existing = await prisma.incompatibilityRule.findFirst({
-      where: { OR: [pair(a, b), pair(b, a)] },
+    const existing = await rulesModel.findOne({
+      $or: [pair(a, b), pair(b, a)],
     });
     if (existing) continue;
-    await prisma.incompatibilityRule.create({
-      data: { ...pair(a, b), reason: rule.reason, source: rule.source },
+    await rulesModel.create({
+      _id: randomUUID(),
+      ...pair(a, b),
+      reason: rule.reason,
+      source: rule.source,
     });
     rules++;
   }
@@ -113,33 +136,35 @@ export async function seedCatalog(
   let recipes = 0;
   let photos = 0;
   for (const { ingredients, ...recipe } of data.recipes) {
-    const existing = await prisma.recipe.findFirst({
-      where: { title: recipe.title },
-    });
+    const existing = await recipesModel.findOne({ title: recipe.title });
     if (existing) {
       if (recipe.imageUrl && !existing.imageUrl) {
-        await prisma.recipe.update({
-          where: { id: existing.id },
-          data: { imageUrl: recipe.imageUrl },
-        });
+        await recipesModel.updateOne(
+          { _id: existing.id },
+          { $set: { imageUrl: recipe.imageUrl } },
+        );
         photos++;
       }
       continue;
     }
-    await prisma.recipe.create({
-      data: {
-        ...recipe,
-        ingredients: {
-          create: ingredients.map((item, position) => ({
-            ingredientId: ingredientId(item.name),
-            position,
-            quantity: item.quantity ?? null,
-            unit: item.unit ?? null,
-            note: item.note ?? null,
-          })),
-        },
-      },
+    // MongoDB has no nested writes: create the recipe, then its ingredients.
+    const created = await recipesModel.create({
+      _id: randomUUID(),
+      ...recipe,
     });
+    if (ingredients.length > 0) {
+      await recipeIngredientsModel.insertMany(
+        ingredients.map((item, position) => ({
+          _id: randomUUID(),
+          recipeId: created.id,
+          ingredientId: ingredientId(item.name),
+          position,
+          quantity: item.quantity ?? null,
+          unit: item.unit ?? null,
+          note: item.note ?? null,
+        })),
+      );
+    }
     recipes++;
   }
 

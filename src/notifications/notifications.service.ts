@@ -1,33 +1,20 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { NotificationType, Prisma } from '@prisma/client';
+import { InjectModel } from '@nestjs/mongoose';
+import type { Model, QueryFilter } from 'mongoose';
 import { filter, Observable, Subject } from 'rxjs';
 import {
+  afterCursor,
   createCursorPaginatedResponse,
   CursorPaginationQueryDto,
 } from '../common/pagination';
-import { PrismaService } from '../prisma/prisma.service';
+import { Notification, NotificationType, User } from '../mongo/models';
 import {
   NotificationDto,
   NotificationPageDto,
   UnreadCountDto,
 } from './dto/notification.dto';
 
-const notificationSelect = {
-  id: true,
-  recipientId: true,
-  type: true,
-  postId: true,
-  commentId: true,
-  readAt: true,
-  createdAt: true,
-  actor: {
-    select: { id: true, username: true, fullName: true, avatarUrl: true },
-  },
-} satisfies Prisma.NotificationSelect;
-
-type NotificationRow = Prisma.NotificationGetPayload<{
-  select: typeof notificationSelect;
-}>;
+type NotificationRow = { notification: Notification; actor: User };
 
 export interface NotifyInput {
   recipientId: string;
@@ -37,15 +24,20 @@ export interface NotifyInput {
   commentId?: string;
 }
 
-function toDto(row: NotificationRow): NotificationDto {
+function toDto({ notification, actor }: NotificationRow): NotificationDto {
   return {
-    id: row.id,
-    type: row.type,
-    actor: row.actor,
-    postId: row.postId,
-    commentId: row.commentId,
-    readAt: row.readAt,
-    createdAt: row.createdAt,
+    id: notification.id,
+    type: notification.type,
+    actor: {
+      id: actor.id,
+      username: actor.username,
+      fullName: actor.fullName,
+      avatarUrl: actor.avatarUrl,
+    },
+    postId: notification.postId,
+    commentId: notification.commentId,
+    readAt: notification.readAt,
+    createdAt: notification.createdAt,
   };
 }
 
@@ -56,13 +48,17 @@ export class NotificationsService {
   // shared bus (e.g. Postgres LISTEN/NOTIFY or Redis) in place of this Subject.
   private readonly events = new Subject<NotificationRow>();
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    @InjectModel(Notification.name)
+    private readonly notifications: Model<Notification>,
+    @InjectModel(User.name) private readonly users: Model<User>,
+  ) {}
 
   /** Live notifications for one user; one subscription per open connection. */
   stream(userId: string): Observable<NotificationDto> {
     return new Observable<NotificationDto>((subscriber) => {
       const subscription = this.events
-        .pipe(filter((row) => row.recipientId === userId))
+        .pipe(filter((row) => row.notification.recipientId === userId))
         .subscribe((row) => subscriber.next(toDto(row)));
       return () => subscription.unsubscribe();
     });
@@ -77,22 +73,20 @@ export class NotificationsService {
     try {
       if (input.type !== NotificationType.COMMENT) {
         // Toggling a like or follow on and off must not spam the recipient.
-        const existing = await this.prisma.notification.findFirst({
-          where: {
+        const existing = await this.notifications
+          .findOne({
             recipientId: input.recipientId,
             actorId: input.actorId,
             type: input.type,
             postId: input.postId ?? null,
-          },
-          select: { id: true },
-        });
+          })
+          .select('_id')
+          .exec();
         if (existing) return;
       }
-      const row = await this.prisma.notification.create({
-        data: input,
-        select: notificationSelect,
-      });
-      this.events.next(row);
+      const created = await this.notifications.create(input);
+      const actor = await this.users.findById(input.actorId).exec();
+      if (actor) this.events.next({ notification: created, actor });
     } catch (error: unknown) {
       this.logger.warn(
         `Could not create ${input.type} notification: ${String(error)}`,
@@ -104,35 +98,62 @@ export class NotificationsService {
     userId: string,
     query: CursorPaginationQueryDto,
   ): Promise<NotificationPageDto> {
-    const rows = await this.prisma.notification.findMany({
-      where: { recipientId: userId },
-      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
-      take: query.limit + 1,
-      ...(query.cursor ? { cursor: { id: query.cursor }, skip: 1 } : {}),
-      select: notificationSelect,
-    });
+    const filter: QueryFilter<Notification> = { recipientId: userId };
+    if (query.cursor) {
+      const cursor = await this.notifications
+        .findById(query.cursor)
+        .select('createdAt')
+        .exec();
+      if (!cursor) return { items: [], nextCursor: null };
+      Object.assign(
+        filter,
+        afterCursor<Notification>('createdAt', {
+          value: cursor.createdAt,
+          id: cursor.id,
+        }),
+      );
+    }
+    const rows = await this.notifications
+      .find(filter)
+      .sort({ createdAt: -1, _id: -1 })
+      .limit(query.limit + 1)
+      .exec();
     const page = createCursorPaginatedResponse(rows, query.limit);
-    return { ...page, items: page.items.map(toDto) };
+    const actors = await this.users
+      .find({ _id: { $in: rows.map((row) => row.actorId) } })
+      .exec();
+    const byId = new Map(actors.map((actor) => [actor.id, actor]));
+    return {
+      ...page,
+      items: page.items.flatMap((notification) => {
+        const actor = byId.get(notification.actorId);
+        return actor ? [toDto({ notification, actor })] : [];
+      }),
+    };
   }
 
   async unreadCount(userId: string): Promise<UnreadCountDto> {
-    const unreadCount = await this.prisma.notification.count({
-      where: { recipientId: userId, readAt: null },
-    });
+    const unreadCount = await this.notifications
+      .countDocuments({ recipientId: userId, readAt: null })
+      .exec();
     return { unreadCount };
   }
 
   async markRead(userId: string, id: string): Promise<void> {
-    await this.prisma.notification.updateMany({
-      where: { id, recipientId: userId, readAt: null },
-      data: { readAt: new Date() },
-    });
+    await this.notifications
+      .updateOne(
+        { _id: id, recipientId: userId, readAt: null },
+        { $set: { readAt: new Date() } },
+      )
+      .exec();
   }
 
   async markAllRead(userId: string): Promise<void> {
-    await this.prisma.notification.updateMany({
-      where: { recipientId: userId, readAt: null },
-      data: { readAt: new Date() },
-    });
+    await this.notifications
+      .updateMany(
+        { recipientId: userId, readAt: null },
+        { $set: { readAt: new Date() } },
+      )
+      .exec();
   }
 }

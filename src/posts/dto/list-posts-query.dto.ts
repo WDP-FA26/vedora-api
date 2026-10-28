@@ -1,6 +1,6 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { IsEnum, IsOptional, IsUUID } from 'class-validator';
-import { PostType } from '@prisma/client';
+import { PostType } from '../../mongo/models';
 import { CursorPaginationQueryDto } from '../../common/pagination';
 
 export class ListPostsQueryDto extends CursorPaginationQueryDto {

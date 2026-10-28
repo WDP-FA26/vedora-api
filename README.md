@@ -1,15 +1,15 @@
 # Vedora API
 
-Backend starter cho Vedora, sử dụng NestJS, Prisma ORM, PostgreSQL và Docker. Repository có sẵn cấu hình để chạy local hoặc triển khai bằng Docker Compose trên Dokploy.
+Backend starter cho Vedora, sử dụng NestJS, Mongoose (MongoDB, tự host bằng Docker Compose) và Docker. Repository có sẵn cấu hình để chạy local hoặc triển khai bằng Docker Compose trên Dokploy.
 
 ## Thành phần
 
 - NestJS 11 + TypeScript
-- Prisma ORM + PostgreSQL 17
+- `@nestjs/mongoose` + Mongoose 9 trên MongoDB 8 (replica set một node, bật xác thực bằng keyfile)
 - Swagger/OpenAPI tại `/docs`
 - Validation request, CORS và security headers
 - Health check tách liveness/readiness
-- Migration tự chạy trước khi container API khởi động
+- Schema Mongoose khai báo collection và index; API tạo chúng khi khởi động (MongoDB không có migration)
 - Docker image multi-stage, chạy bằng non-root user
 - Docker Compose cho local và Dokploy
 
@@ -17,17 +17,15 @@ Backend starter cho Vedora, sử dụng NestJS, Prisma ORM, PostgreSQL và Docke
 
 ```text
 .
-├── prisma/
-│   ├── migrations/            # Lịch sử migration cần commit
-│   ├── schema.prisma
-│   └── seed.ts
+├── seed-data/
+│   └── recipes.json           # Danh mục khởi đầu (nguyên liệu, nhóm, quy tắc, công thức)
 ├── src/
 │   ├── common/pagination/     # DTO, helper và Swagger cho phân trang dùng chung
 │   ├── health/                # Liveness/readiness
 │   ├── cloudinary/            # Cloudinary client dùng chung (ký upload, URL, xoá)
 │   ├── media/                 # Upload video, webhook, phụ đề Whisper, dọn dẹp định kỳ
 │   ├── posts/                 # Bài ngắn, blog, comment, like và bookmark
-│   ├── prisma/                # PrismaService dùng chung
+│   ├── mongo/                 # MongoModule, MongoService, schema và type dùng chung
 │   ├── users/                 # CRUD mẫu
 │   ├── app.module.ts
 │   └── main.ts
@@ -38,13 +36,12 @@ Backend starter cho Vedora, sử dụng NestJS, Prisma ORM, PostgreSQL và Docke
 
 ## Chạy local không dùng Docker cho API
 
-Yêu cầu Node.js `>=20.11`, npm và PostgreSQL.
+Yêu cầu Node.js `>=20.11`, npm và MongoDB chạy dưới dạng replica set (transaction của MongoDB cần replica set). Cách nhanh nhất: `docker compose up -d mongo`.
 
 ```bash
 cp .env.example .env
 npm install
-npm run prisma:migrate:dev
-npm run prisma:seed
+npm run seed
 npm run start:dev
 ```
 
@@ -75,7 +72,7 @@ Dừng container:
 docker compose down
 ```
 
-Không thêm `-v` nếu muốn giữ dữ liệu PostgreSQL. `docker compose down -v` sẽ xóa volume database.
+Không thêm `-v` nếu muốn giữ dữ liệu MongoDB. `docker compose down -v` sẽ xóa volume database.
 
 ## API mẫu
 
@@ -83,7 +80,7 @@ Không thêm `-v` nếu muốn giữ dữ liệu PostgreSQL. `docker compose dow
 | --- | --- | --- |
 | `GET` | `/api/v1` | Thông tin API |
 | `GET` | `/api/v1/health` | Liveness |
-| `GET` | `/api/v1/health/ready` | Readiness + PostgreSQL |
+| `GET` | `/api/v1/health/ready` | Readiness + MongoDB |
 | `POST` | `/api/v1/auth/register` | Đăng ký và gửi mã xác minh email; chưa trả token |
 | `POST` | `/api/v1/auth/login` | Đăng nhập bằng username/password và nhận cặp AT/RT |
 | `POST` | `/api/v1/auth/password/forgot` | Gửi mã đặt lại mật khẩu tới email (luôn trả `204`) |
@@ -209,7 +206,7 @@ trong API:
 4. `OPENROUTER_MODEL` dịch từng dòng: tiếng Việt sang tiếng Anh, ngôn ngữ khác sang tiếng
    Việt. Dịch lỗi thì vẫn giữ phụ đề gốc.
 5. Mỗi ngôn ngữ là một file WebVTT trên Cloudinary (`<folder>/captions/<mediaId>/<lang>.vtt`),
-   liệt kê trong bảng `media_captions` và trả về ở `media.captions` (ngôn ngữ nói trước).
+   lưu trong mảng nhúng `media_assets.captions` và trả về ở `media.captions` (ngôn ngữ nói trước).
 
 Trạng thái nằm ở `MediaAsset.captionStatus` (`NONE`, `TRANSCRIBING`, `READY`,
 `NO_SPEECH`, `FAILED`); cron 10 phút một lần chạy lại video bị gián đoạn do restart.
@@ -227,8 +224,8 @@ Các API tương tác áp dụng cho bài `PUBLISHED`:
 API ghi yêu cầu Bearer token. Response bài đăng bổ sung `commentCount`, `likeCount`,
 `isLiked`; feed vẫn đọc công khai, gửi token để nhận trạng thái like của người xem.
 
-Migration `20261002000000_post_comments_and_likes` tạo hai bảng, unique key chống like
-trùng và khóa ngoại cascade. Chạy `npm run prisma:migrate:deploy` trước khi dùng bản mới.
+Mỗi cặp bài/người dùng chỉ có một like và một bookmark (unique index), và xoá bài sẽ
+xoá kèm comment/like/bookmark qua `deleteWithReferences`.
 Tài liệu FE: [docs/docs-for-FE/post-comments-likes.md](docs/docs-for-FE/post-comments-likes.md).
 
 ## Kho công thức và chọn món vào thực đơn
@@ -292,7 +289,7 @@ Thành phần tại `src/common/pagination` hỗ trợ hai kiểu phân trang ch
 
 - `PaginationQueryDto`: `page` mặc định 1, tối đa 1000000; `limit` mặc định 20, tối đa 50.
 - `CursorPaginationQueryDto`: `cursor` tùy chọn (UUID v4), cùng quy tắc `limit`.
-- `getPaginationArgs(query)`: chuyển page/limit đã validate thành `{ skip, take }` cho Prisma.
+- `getPaginationArgs(query)`: chuyển page/limit đã validate thành `{ skip, take }` cho Mongoose.
 - `createPaginatedResponse(items, totalItems, query)`: trả `{ items, meta }`.
 - `createCursorPaginatedResponse(rows, limit)`: nhận tối đa `limit + 1` bản ghi,
   bỏ bản ghi dư và trả `{ items, nextCursor }`.
@@ -315,31 +312,30 @@ findAll(@Query() query: PaginationQueryDto) {
 Phần truy vấn trong `UsersService.findAll`:
 
 ```ts
-import { Prisma } from '@prisma/client';
 import { createPaginatedResponse, getPaginationArgs } from '../common/pagination';
 
-const [items, totalItems] = await this.prisma.$transaction(
-  [
-    this.prisma.user.findMany({
-      select: publicUserSelect,
-      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
-      ...getPaginationArgs(query),
-    }),
-    this.prisma.user.count(),
-  ],
-  { isolationLevel: Prisma.TransactionIsolationLevel.RepeatableRead },
-);
-return createPaginatedResponse(items, totalItems, query);
+const { skip, take } = getPaginationArgs(query);
+const [items, totalItems] = await Promise.all([
+  this.users
+    .find(filter)
+    .select(publicUserFields.join(' '))
+    .sort({ createdAt: -1, _id: -1 })
+    .skip(skip)
+    .limit(take)
+    .exec(),
+  this.users.countDocuments(filter),
+]);
+return createPaginatedResponse(items.map(toPublicUser), totalItems, query);
 ```
 
 Để thêm bộ lọc, tạo DTO kế thừa `PaginationQueryDto` hoặc `CursorPaginationQueryDto`
-và khai báo validator/Swagger cho từng trường. Với phân trang page, `findMany` và
-`count` phải dùng cùng điều kiện `where`; sắp xếp luôn có khóa duy nhất để phân định
-khi trùng giá trị (ví dụ `id`). Transaction `RepeatableRead` giúp số lượng và danh sách
-nhất quán trong một response.
+và khai báo validator/Swagger cho từng trường. Với phân trang page, `find` và
+`countDocuments` phải dùng cùng filter; sắp xếp luôn có `_id` làm khóa phân định
+khi trùng giá trị. Chạy hai truy vấn song song như ví dụ trên.
 
-Với cursor, xem `PostsService.list`: lấy `limit + 1` item, sắp xếp ổn định,
-truyền `cursor: { id }` cùng `skip: 1` khi có cursor. Dùng
+Với cursor, xem `afterCursor` trong `src/common/pagination/keyset.ts`: filter
+`field < value OR (field = value AND _id < cursor id)`, sắp xếp ổn định theo
+`{ [field]: -1, _id: -1 }`, lấy `limit + 1` để biết còn trang sau. Dùng
 `CursorPaginatedResponseDto<ItemDto>` và khai báo lại schema `items` trong DTO response
 cụ thể như `PostPageDto`.
 
@@ -357,41 +353,48 @@ npm run build
 npm run lint
 npm test            # unit (Vitest)
 npm run test:e2e    # HTTP e2e (Vitest + supertest)
-npm run prisma:generate
-npm run prisma:migrate:dev -- --name ten_migration
-npm run prisma:migrate:deploy
-npm run prisma:studio
-npm run prisma:seed
-npm run prisma:seed:prod
+npm run test:db     # test cần MongoDB thật (TEST_DATABASE_URL)
+npm run seed        # seed tài khoản admin + danh mục khởi đầu
+npm run seed:prod   # chạy seed từ dist (container)
 ```
 
-Test dùng Vitest + `@nestjs/testing` theo [hướng dẫn của NestJS](https://docs.nestjs.com/fundamentals/testing): unit test (`src/**/*.spec.ts`) dựng service bằng `Test.createTestingModule` với mock `vitest-mock-extended`; e2e (`test/**/*.e2e-spec.ts`) chạy cả `AppModule` qua HTTP với `configureApp` giống production, chỉ Prisma bị mock.
+Test dùng Vitest + `@nestjs/testing` theo [hướng dẫn của NestJS](https://docs.nestjs.com/fundamentals/testing). Unit test (`src/**/*.spec.ts`) và DB test (`test/**/*.db-spec.ts`) dựng module với `MongoModule.forTest(...)`, trỏ vào một database tạm riêng cho từng file (`test/mongo-test-db.ts`), rồi xoá database đó sau khi chạy. E2E (`test/**/*.e2e-spec.ts`) chạy cả `AppModule` qua HTTP với `configureApp` giống production trên database tạm.
 
-Khi sửa `prisma/schema.prisma`, tạo migration bằng `prisma:migrate:dev`, kiểm tra SQL trong `prisma/migrations`, rồi commit cả schema và migration. Container production chạy `prisma migrate deploy` tự động trước khi start NestJS. Migration cần giữ advisory lock theo phiên, nên nếu `DATABASE_URL` trỏ tới pooler ở chế độ transaction (PgBouncer, host `-pooler` của Neon) thì lệnh này lỗi `P1002`; khi đó khai báo thêm `DIRECT_URL` là kết nối trực tiếp.
+Khi sửa schema, sửa class trong `src/mongo/schemas/`: Mongoose tạo collection và index còn thiếu khi API khởi động (`autoIndex`) và trong test qua `prepareTestDatabase`. MongoDB không có migration, nên không có lịch sử thay đổi để review: kiểm tra kỹ thay đổi schema (đặc biệt index unique và partial filter) trước khi merge.
+
+Một số quy tắc của MongoDB mà code phải tuân theo (chi tiết trong `src/mongo/`):
+
+- Khoá chính là `String` UUID trong `_id`; document trả về có thêm virtual `id` cùng giá trị. Model nối dùng id riêng cộng unique index.
+- Không có khoá ngoại: `onDelete` do `deleteWithReferences` áp dụng (`cascade`, `setNull`, `restrict`). Ghi id tham chiếu dạng scalar thì service phải kiểm tra tồn tại trước (`allExist`).
+- Field optional mặc định `null`, mảng mặc định `[]`, để document luôn có đủ field mà code đọc.
+- Danh sách con nhỏ thuộc hẳn một document (phụ đề) được nhúng vào document cha thay vì tách collection.
+- Index unique trên field optional (`googleId`, `activeIntentKey`, `providerTransactionId`) là partial index (`$type: "string"`).
+- Transaction mở bằng `MongoService.withTransaction`; mọi truy vấn bên trong phải nhận `.session(session)`. MongoDB không có `SELECT … FOR UPDATE`: transaction cần khoá dùng `lockDocument`, khi xung đột ghi driver tự thử lại callback.
+- Không `.lean()` trong service: giữ document để dùng virtual `id`; không spread document, dùng field cụ thể hoặc `.toObject()`.
 
 ### Seed production
 
-Container production tự chạy seed mỗi lần khởi động, ngay sau `prisma migrate deploy` (xem `CMD` trong `Dockerfile`); nếu seed lỗi, API vẫn khởi động. Seed gồm hai phần:
+Container production tự chạy seed mỗi lần khởi động (xem `CMD` trong `Dockerfile`); nếu seed lỗi, API vẫn khởi động. Seed gồm hai phần:
 
 - Tài khoản `vedora.admin` (`src/database/seed.ts`).
-- Danh mục khởi đầu từ `prisma/seed-data/recipes.json` (`src/database/seed-catalog.ts`): nguyên liệu, nhóm, quy tắc kỵ nhau và công thức kèm đường dẫn ảnh món. Phần này chỉ thêm những gì còn thiếu, so theo tên hoặc tiêu đề: không sửa hay xoá dữ liệu admin đã chỉnh, và chỉ gán ảnh cho công thức chưa có ảnh.
+- Danh mục khởi đầu từ `seed-data/recipes.json` (`src/database/seed-catalog.ts`): nguyên liệu, nhóm, quy tắc kỵ nhau và công thức kèm đường dẫn ảnh món. Phần này chỉ thêm những gì còn thiếu, so theo tên hoặc tiêu đề: không sửa hay xoá dữ liệu admin đã chỉnh, và chỉ gán ảnh cho công thức chưa có ảnh.
 
 Để chạy lại bằng tay, mở **Terminal** của service `api` trên Dokploy rồi chạy:
 
 ```bash
-npm run prisma:seed:prod
+npm run seed:prod
 ```
 
 Nếu chạy production Compose từ máy chủ bằng CLI:
 
 ```bash
-docker compose -f docker-compose.dokploy.yml exec api npm run prisma:seed:prod
+docker compose -f docker-compose.dokploy.yml exec api npm run seed:prod
 ```
 
 Với Compose local, dùng:
 
 ```bash
-docker compose exec api npm run prisma:seed:prod
+docker compose exec api npm run seed:prod
 ```
 
 Seed có tính idempotent, vì vậy có thể chạy lại mà không tạo trùng user `vedora.admin`. Khai báo `SEED_USER_PASSWORD` trước khi seed; nếu không có biến này thì seed user sẽ được bỏ qua. Seed không đặt lại mật khẩu của user đã tồn tại, ngoại trừ user cũ được chuyển đổi từ schema trước auth và chưa có mật khẩu. Sau khi sửa nội dung seed, commit và deploy lại image; seed mới sẽ chạy khi container khởi động.
@@ -450,13 +453,13 @@ REFRESH_TOKEN_TTL=2592000
 GOOGLE_CLIENT_ID=GOOGLE_OAUTH_CLIENT_ID
 GOOGLE_CLIENT_SECRET=GOOGLE_OAUTH_CLIENT_SECRET
 GOOGLE_CALLBACK_URL=https://ten-mien-frontend.example.com/auth/google
-POSTGRES_DB=vedora
-POSTGRES_USER=vedora
-POSTGRES_PASSWORD=THAY_BANG_MAT_KHAU_NGAU_NHIEN
-DATABASE_URL=postgresql://vedora:THAY_BANG_MAT_KHAU_NGAU_NHIEN@postgres:5432/vedora?schema=public
+MONGO_DB=vedora
+MONGO_USER=vedora
+MONGO_PASSWORD=THAY_BANG_MAT_KHAU_NGAU_NHIEN
+DATABASE_URL=mongodb://vedora:THAY_BANG_MAT_KHAU_NGAU_NHIEN@mongo:27017/vedora?authSource=admin&replicaSet=rs0
 ```
 
-`postgres` trong `DATABASE_URL` là tên service nội bộ Docker, không đổi thành `localhost`. Nếu mật khẩu có ký tự đặc biệt trong URL (`@`, `:`, `/`, `#`, `%`...), phải URL-encode mật khẩu hoặc dùng chuỗi chỉ gồm chữ và số đủ dài.
+`mongo` trong `DATABASE_URL` là tên service nội bộ Docker (cũng là tên host mà replica set `rs0` quảng bá), không đổi thành `localhost`. Nếu mật khẩu có ký tự đặc biệt trong URL (`@`, `:`, `/`, `#`, `%`...), phải URL-encode mật khẩu hoặc dùng chuỗi chỉ gồm chữ và số đủ dài.
 
 File Compose tham chiếu rõ từng biến bằng `${VARIABLE}`; Dokploy sẽ tạo `.env` để Compose nội suy chúng. Không đưa secrets trực tiếp vào Git.
 
@@ -464,9 +467,9 @@ File Compose tham chiếu rõ từng biến bằng `${VARIABLE}`; Dokploy sẽ t
 
 1. Nhấn **Deploy**.
 2. Theo dõi tab **Deployments** cho đến khi build xong.
-3. Mở **Logs**, chọn service `api`; cần thấy NestJS start thành công và không còn lỗi migration.
-4. Trong **Monitoring/General**, cả `postgres` và `api` phải ở trạng thái healthy.
-5. Nếu lỗi kết nối DB, kiểm tra `DATABASE_URL`, đặc biệt hostname phải là `postgres` và password phải khớp `POSTGRES_PASSWORD`.
+3. Mở **Logs**, chọn service `api`; cần thấy NestJS start thành công (log tạo index của Mongoose chạy ngay sau khi kết nối).
+4. Trong **Monitoring/General**, cả `mongo` và `api` phải ở trạng thái healthy (`mongo` tự khởi tạo replica set ở lần chạy đầu).
+5. Nếu lỗi kết nối DB, kiểm tra `DATABASE_URL`, đặc biệt hostname phải là `mongo`, password phải khớp `MONGO_PASSWORD`, và URL phải có `authSource=admin&replicaSet=rs0`.
 
 ### 6. Gắn domain và HTTPS
 
@@ -476,7 +479,7 @@ File Compose tham chiếu rõ từng biến bằng `${VARIABLE}`; Dokploy sẽ t
 4. Bật HTTPS/Let's Encrypt và lưu.
 5. Kiểm tra `https://api.example.com/api/v1/health` và `https://api.example.com/docs`.
 
-Không cần tự thêm Traefik labels; Dokploy Domains sẽ sinh routing cho service. PostgreSQL không có `ports` trong file Dokploy nên không bị public ra Internet.
+Không cần tự thêm Traefik labels; Dokploy Domains sẽ sinh routing cho service. MongoDB không có `ports` trong file Dokploy nên không bị public ra Internet.
 
 ### 7. Auto deploy
 
@@ -484,11 +487,11 @@ Với GitHub provider, bật **Auto Deploy** và bảo đảm branch trong Dokpl
 
 ### 8. Backup và vận hành
 
-- Volume PostgreSQL là named volume `postgres_data`, dữ liệu vẫn còn khi redeploy.
+- Dữ liệu MongoDB nằm trong named volume `mongo_data`; keyfile của replica set nằm trong `mongo_config` (đừng xoá, mất keyfile thì không vào lại được dữ liệu). Dữ liệu vẫn còn khi redeploy.
 - Cấu hình S3-compatible destination trong Dokploy trước, sau đó tạo lịch backup ở tab **Backups/Volume Backups** của Compose.
 - Chạy một lần **Test backup** và thử quy trình restore trước khi coi backup là hoàn tất.
 - Theo dõi Logs/Monitoring và đặt giới hạn CPU/RAM trong Advanced khi biết tải thực tế.
-- Khi đổi cấu trúc database, chỉ dùng migration đã commit; không chạy `prisma migrate dev` trên production.
+- Khi đổi cấu trúc database, Mongoose tạo index còn thiếu lúc khởi động nhưng không sửa document cũ; thay đổi phá vỡ dữ liệu phải xử lý thủ công trước khi deploy.
 
 Tài liệu Dokploy tham khảo:
 
@@ -502,8 +505,7 @@ Tài liệu Dokploy tham khảo:
 
 | Biến | Bắt buộc | Mặc định | Ý nghĩa |
 | --- | --- | --- | --- |
-| `DATABASE_URL` | Có | — | PostgreSQL connection string |
-| `DIRECT_URL` | Khi `DATABASE_URL` đi qua pooler | — | Kết nối trực tiếp tới PostgreSQL, chỉ dùng cho `prisma migrate deploy` lúc container khởi động. Với Neon: cùng chuỗi kết nối nhưng host không có `-pooler` |
+| `DATABASE_URL` | Có | — | MongoDB connection string của replica set. Chạy API trên host thì thêm `directConnection=true` |
 | `NODE_ENV` | Không | `development` | Môi trường chạy |
 | `PORT` | Không | `3000` | Port của NestJS |
 | `API_PREFIX` | Không | `api/v1` | Global API prefix |
@@ -525,9 +527,9 @@ Tài liệu Dokploy tham khảo:
 | `FRONTEND_URL` | Không | `http://localhost:3000` | Origin của frontend |
 | `MAX_VIDEO_DURATION_SEC` | Không | `180` | Video dài hơn bị đánh dấu `FAILED` và xoá khỏi Cloudinary |
 | `SEED_USER_PASSWORD` | Khi muốn seed user | — | Mật khẩu ban đầu cho `vedora.admin` |
-| `POSTGRES_DB` | Khi dùng Compose | — | Database được container PostgreSQL tạo |
-| `POSTGRES_USER` | Khi dùng Compose | — | Database user |
-| `POSTGRES_PASSWORD` | Khi dùng Compose | — | Database password |
+| `MONGO_DB` | Khi dùng Compose | — | Database được container MongoDB tạo |
+| `MONGO_USER` | Khi dùng Compose | — | Tài khoản root MongoDB |
+| `MONGO_PASSWORD` | Khi dùng Compose | — | Mật khẩu root MongoDB |
 
 ## Checklist trước production
 

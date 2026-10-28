@@ -1,22 +1,32 @@
-import { execFileSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import { join } from 'node:path';
 import { INestApplication } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtModule, JwtService } from '@nestjs/jwt';
 import { Test } from '@nestjs/testing';
-import { PrismaClient } from '@prisma/client';
+import type { Document } from 'mongodb';
 import request from 'supertest';
 import type { App } from 'supertest/types';
 import { AdminDashboardController } from '../src/admin-dashboard/admin-dashboard.controller';
 import { AdminDashboardService } from '../src/admin-dashboard/admin-dashboard.service';
 import { configureApp } from '../src/app.setup';
-import { PrismaService } from '../src/prisma/prisma.service';
 import type { DashboardDto } from '../src/admin-dashboard/dto/dashboard.dto';
+import { MongoModule } from '../src/mongo/mongo.module';
+import { MongoService } from '../src/mongo/mongo.service';
+import {
+  AccountStatus,
+  PostStatus,
+  PostType,
+  UserRole,
+} from '../src/mongo/models';
+import { createPost, createRecipe, createUser } from './fixtures';
+import {
+  createTestMongoUrl,
+  dropTestDatabase,
+  prepareTestDatabase,
+} from './mongo-test-db';
 
-describe('Admin dashboard with PostgreSQL', () => {
-  const schema = `vedora_dashboard_test_${randomUUID().replaceAll('-', '')}`;
-  let db: PrismaClient;
+describe('Admin dashboard with MongoDB', () => {
+  let db: MongoService;
   let app: INestApplication<App>;
   let dashboard: AdminDashboardService;
   let token: string;
@@ -31,36 +41,16 @@ describe('Admin dashboard with PostgreSQL', () => {
   const path = '/api/v1/admin/dashboard';
 
   beforeAll(async () => {
-    if (!process.env.TEST_DATABASE_URL)
-      throw new Error(
-        'Set TEST_DATABASE_URL to a disposable PostgreSQL database',
-      );
-    const url = new URL(process.env.TEST_DATABASE_URL);
-    url.searchParams.set('schema', schema);
-    execFileSync(
-      process.execPath,
-      [
-        join(process.cwd(), 'node_modules/prisma/build/index.js'),
-        'migrate',
-        'deploy',
-      ],
-      {
-        env: { ...process.env, DATABASE_URL: url.toString() },
-        stdio: 'pipe',
-        timeout: 45_000,
-      },
-    );
-    db = new PrismaClient({ datasourceUrl: url.toString() });
     const moduleRef = await Test.createTestingModule({
       imports: [
+        MongoModule.forTest(createTestMongoUrl('dashboard')),
         JwtModule.register({
-          secret: 'dashboard-postgresql-integration-secret',
+          secret: 'dashboard-mongodb-integration-secret',
         }),
       ],
       controllers: [AdminDashboardController],
       providers: [
         AdminDashboardService,
-        { provide: PrismaService, useValue: db },
         {
           provide: ConfigService,
           useValue: new ConfigService({ API_PREFIX: 'api/v1' }),
@@ -70,6 +60,8 @@ describe('Admin dashboard with PostgreSQL', () => {
     app = moduleRef.createNestApplication({ rawBody: true });
     configureApp(app);
     await app.init();
+    db = app.get(MongoService);
+    await prepareTestDatabase(app);
     dashboard = app.get(AdminDashboardService);
     const makeUser = (
       name: string,
@@ -77,16 +69,14 @@ describe('Admin dashboard with PostgreSQL', () => {
       createdAt: Date,
       role: 'USER' | 'ADMIN' = 'USER',
     ) =>
-      db.user.create({
-        data: {
-          username: name,
-          email: `${name}@dashboard.test`,
-          fullName: name,
-          role,
-          status,
-          createdAt,
-          emailVerifiedAt: status === 'PENDING_EMAIL' ? null : before,
-        },
+      createUser(db, {
+        username: name,
+        email: `${name}@dashboard.test`,
+        fullName: name,
+        role: role as UserRole,
+        status: status as AccountStatus,
+        createdAt,
+        emailVerifiedAt: status === 'PENDING_EMAIL' ? null : before,
       });
     const admin = await makeUser('dashboard.admin', 'ACTIVE', start, 'ADMIN');
     adminId = admin.id;
@@ -117,36 +107,26 @@ describe('Admin dashboard with PostgreSQL', () => {
       ['BLOG', null, 'DRAFT'],
       ['POST', start, 'FAILED'],
     ] as const) {
-      await db.post.create({
-        data: {
-          authorId: memberId,
-          type,
-          status,
-          publishedAt,
-          body: 'dashboard body',
-          ...(type === 'BLOG'
-            ? {
-                blog: {
-                  create: {
-                    title: 'Dashboard blog',
-                    content: 'Content',
-                    excerpt: 'Content',
-                  },
-                },
-              }
-            : {}),
-        },
+      const post = await createPost(db, {
+        authorId: memberId,
+        type: type as PostType,
+        status: status as PostStatus,
+        publishedAt,
+        body: 'dashboard body',
       });
+      if (type === 'BLOG') {
+        await db.db.collection<Document & { _id: string }>('blogs').insertOne({
+          _id: post.id,
+          title: 'Dashboard blog',
+          coverImageUrl: null,
+          content: 'Content',
+          excerpt: 'Content',
+          updatedAt: new Date(),
+        });
+      }
     }
     for (const createdAt of [before, start, new Date(end.getTime() - 1), end]) {
-      await db.recipe.create({
-        data: {
-          title: 'Dashboard recipe',
-          servings: 2,
-          steps: ['Cook'],
-          createdAt,
-        },
-      });
+      await createRecipe(db, { title: 'Dashboard recipe', createdAt });
     }
     for (const [status, createdAt, reviewedAt] of [
       ['PENDING', before, null],
@@ -156,16 +136,15 @@ describe('Admin dashboard with PostgreSQL', () => {
       ['RESOLVED', secondDay, end],
       ['PENDING', end, null],
     ] as const) {
-      const post = await db.post.create({
-        data: {
-          authorId: memberId,
-          status: 'PUBLISHED',
-          publishedAt: before,
-          body: 'Report source',
-        },
+      const post = await createPost(db, {
+        authorId: memberId,
+        publishedAt: before,
+        body: 'Report source',
       });
-      await db.postReport.create({
-        data: {
+      await db.db
+        .collection<Document & { _id: string }>('post_reports')
+        .insertOne({
+          _id: randomUUID(),
           postId: post.id,
           reporterId: memberId,
           reason: 'OTHER',
@@ -173,16 +152,14 @@ describe('Admin dashboard with PostgreSQL', () => {
           createdAt,
           reviewedAt,
           reviewedById: reviewedAt ? adminId : null,
-        },
-      });
+        });
     }
   });
 
   afterAll(async () => {
-    await app?.close();
-    if (db) {
-      await db.$executeRawUnsafe(`DROP SCHEMA IF EXISTS "${schema}" CASCADE`);
-      await db.$disconnect();
+    if (app) {
+      await dropTestDatabase(app);
+      await app.close();
     }
   });
 
@@ -275,29 +252,49 @@ describe('Admin dashboard with PostgreSQL', () => {
   });
 
   it('blocks a suspended administrator with the same unexpired JWT', async () => {
-    await db.user.update({
-      where: { id: adminId },
-      data: { status: 'SUSPENDED' },
-    });
+    await db.db
+      .collection<Document & { _id: string }>('users')
+      .updateOne(
+        { _id: adminId },
+        { $set: { status: AccountStatus.SUSPENDED } },
+      );
     try {
       await request(app.getHttpServer())
         .get(path)
         .auth(token, { type: 'bearer' })
         .expect(401);
     } finally {
-      await db.user.update({
-        where: { id: adminId },
-        data: { status: 'ACTIVE' },
-      });
+      await db.db
+        .collection<Document & { _id: string }>('users')
+        .updateOne(
+          { _id: adminId },
+          { $set: { status: AccountStatus.ACTIVE } },
+        );
     }
   });
 
   it('does not mutate any underlying domain records', async () => {
     const snapshot = async () => ({
-      users: await db.user.findMany({ orderBy: { id: 'asc' } }),
-      posts: await db.post.findMany({ orderBy: { id: 'asc' } }),
-      reports: await db.postReport.findMany({ orderBy: { id: 'asc' } }),
-      recipes: await db.recipe.findMany({ orderBy: { id: 'asc' } }),
+      users: await db.db
+        .collection('users')
+        .find({})
+        .sort({ _id: 1 })
+        .toArray(),
+      posts: await db.db
+        .collection('posts')
+        .find({})
+        .sort({ _id: 1 })
+        .toArray(),
+      reports: await db.db
+        .collection('post_reports')
+        .find({})
+        .sort({ _id: 1 })
+        .toArray(),
+      recipes: await db.db
+        .collection('recipes')
+        .find({})
+        .sort({ _id: 1 })
+        .toArray(),
     });
     const beforeQuery = await snapshot();
     await dashboard.get(query);

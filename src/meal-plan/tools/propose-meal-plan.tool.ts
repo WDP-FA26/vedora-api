@@ -1,4 +1,4 @@
-import { Weekday } from '@prisma/client';
+import { Weekday } from '../../mongo/models';
 import { tool } from 'ai';
 import { z } from 'zod';
 import {

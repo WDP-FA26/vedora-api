@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { AccountStatus, UserRole } from '@prisma/client';
+import { AccountStatus, UserRole } from '../../mongo/models';
 
 export class UserResponseDto {
   @ApiProperty({ format: 'uuid' })

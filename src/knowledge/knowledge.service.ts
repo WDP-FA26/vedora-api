@@ -7,14 +7,15 @@ import {
   UnsupportedMediaTypeException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { InjectModel } from '@nestjs/mongoose';
+import type { Model } from 'mongoose';
 import {
   KnowledgeDocument,
   KnowledgeDocumentFailureReason,
   KnowledgeDocumentStatus,
-} from '@prisma/client';
+} from '../mongo/models';
 import { NoSuchKey } from '@aws-sdk/client-s3';
 import { StorageService, StorageTarget } from '../storage/storage.service';
-import { PrismaService } from '../prisma/prisma.service';
 import {
   CreateKnowledgeUploadResponseDto,
   KnowledgeDocumentResponseDto,
@@ -32,7 +33,8 @@ export class KnowledgeService {
   private readonly maxBytes: number;
 
   constructor(
-    private readonly prisma: PrismaService,
+    @InjectModel(KnowledgeDocument.name)
+    private readonly documents: Model<KnowledgeDocument>,
     private readonly storage: StorageService,
     private readonly pdf: PdfExtractor,
     private readonly index: KnowledgeIndexService,
@@ -63,27 +65,31 @@ export class KnowledgeService {
       PDF_CONTENT_TYPE,
       sizeBytes,
     );
-    const document = await this.prisma.knowledgeDocument.create({
-      data: {
-        id,
-        uploadedById: userId,
-        title: filename,
-        contentType: PDF_CONTENT_TYPE,
-        storageKey: key,
-      },
+    const document = await this.documents.create({
+      _id: id,
+      uploadedById: userId,
+      title: filename,
+      contentType: PDF_CONTENT_TYPE,
+      storageKey: key,
+      status: KnowledgeDocumentStatus.WAITING_UPLOAD,
     });
 
     return { document: toResponse(document), upload };
   }
 
   async markUploaded(key: string): Promise<void> {
-    const [document] = await this.prisma.knowledgeDocument.updateManyAndReturn({
-      where: {
-        storageKey: key,
-        status: KnowledgeDocumentStatus.WAITING_UPLOAD,
-      },
-      data: { status: KnowledgeDocumentStatus.PROCESSING },
-    });
+    // The conditional update claims the document, so a repeated event for the
+    // same upload cannot start a second ingestion.
+    const document = await this.documents
+      .findOneAndUpdate(
+        {
+          storageKey: key,
+          status: KnowledgeDocumentStatus.WAITING_UPLOAD,
+        },
+        { $set: { status: KnowledgeDocumentStatus.PROCESSING } },
+        { returnDocument: 'after' },
+      )
+      .exec();
     // don't hold the event open during extraction; failures land on the row
     if (document) void this.ingest(document);
     else this.logger.warn(`No waiting document for ${key}`);
@@ -115,16 +121,18 @@ export class KnowledgeService {
       return;
     }
 
-    await this.prisma.knowledgeDocument.update({
-      where: { id: document.id },
-      data: {
-        status: KnowledgeDocumentStatus.READY,
-        failureReason: null,
-        sectionCount: sections.length,
-        imageCount,
-        sizeBytes: file.byteLength,
+    await this.documents.updateOne(
+      { _id: document.id },
+      {
+        $set: {
+          status: KnowledgeDocumentStatus.READY,
+          failureReason: null,
+          sectionCount: sections.length,
+          imageCount,
+          sizeBytes: file.byteLength,
+        },
       },
-    });
+    );
     this.logger.log(
       `Ingested ${document.id} (${sections.length} sections, ${imageCount} images)`,
     );
@@ -146,16 +154,22 @@ export class KnowledgeService {
     id: string,
     reason: KnowledgeDocumentFailureReason,
   ): Promise<void> {
-    await this.prisma.knowledgeDocument.update({
-      where: { id },
-      data: { status: KnowledgeDocumentStatus.FAILED, failureReason: reason },
-    });
+    await this.documents.updateOne(
+      { _id: id },
+      {
+        $set: {
+          status: KnowledgeDocumentStatus.FAILED,
+          failureReason: reason,
+        },
+      },
+    );
   }
 
   async findAll(): Promise<KnowledgeDocumentResponseDto[]> {
-    const documents = await this.prisma.knowledgeDocument.findMany({
-      orderBy: { createdAt: 'desc' },
-    });
+    const documents = await this.documents
+      .find()
+      .sort({ createdAt: -1, _id: -1 })
+      .exec();
     return documents.map(toResponse);
   }
 
@@ -168,13 +182,11 @@ export class KnowledgeService {
     const document = await this.findDocument(id);
     await this.storage.delete(StorageTarget.Knowledge, document.storageKey);
     await this.index.remove(id);
-    await this.prisma.knowledgeDocument.delete({ where: { id } });
+    await this.documents.deleteOne({ _id: id }).exec();
   }
 
   private async findDocument(id: string): Promise<KnowledgeDocument> {
-    const document = await this.prisma.knowledgeDocument.findUnique({
-      where: { id },
-    });
+    const document = await this.documents.findOne({ _id: id }).exec();
     if (!document) throw new NotFoundException('Document not found');
     return document;
   }

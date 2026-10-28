@@ -1,117 +1,92 @@
-import { INestApplication } from '@nestjs/common';
-import { JwtService } from '@nestjs/jwt';
-import { Test } from '@nestjs/testing';
-import { UserRole } from '@prisma/client';
 import request from 'supertest';
-import type { App } from 'supertest/types';
-import { mockDeep, mockReset } from 'vitest-mock-extended';
-import { AppModule } from '../src/app.module';
-import { configureApp } from '../src/app.setup';
-import { PrismaService } from '../src/prisma/prisma.service';
+import type { User } from '../src/mongo/models';
+import { createE2eApp, type E2eApp } from './e2e-app';
+import { createPost, createUser } from './fixtures';
 
-const USER_ID = '4a1e32e4-e18e-4dd7-8b4a-246ef2113ff2';
-const OTHER_ID = 'a6ff1292-ed03-4c34-a9cf-b4c7a27cbd82';
+type StoredDoc = { _id: string; [key: string]: unknown };
 
 describe('Profiles and follows (e2e)', () => {
-  const prisma = mockDeep<PrismaService>();
-  let app: INestApplication<App>;
+  let e2e: E2eApp;
+  let user: User;
+  let other: User;
   let token: string;
 
   beforeAll(async () => {
-    const moduleRef = await Test.createTestingModule({ imports: [AppModule] })
-      .overrideProvider(PrismaService)
-      .useValue(prisma)
-      .compile();
-    app = moduleRef.createNestApplication({ rawBody: true });
-    configureApp(app);
-    await app.init();
-    token = await app.get(JwtService).signAsync({
-      sub: USER_ID,
-      username: 'vedora.user',
+    e2e = await createE2eApp('profiles_e2e');
+    user = await createUser(e2e.mongo, { username: 'vedora.user' });
+    other = await createUser(e2e.mongo, {
+      username: 'vedora.other',
+      email: 'private@vedora.vn',
     });
-  });
-
-  beforeEach(() => {
-    mockReset(prisma);
-    prisma.$transaction.mockImplementation(((run: unknown) =>
-      typeof run === 'function'
-        ? (run as (tx: PrismaService) => Promise<unknown>)(prisma)
-        : Promise.all(run as Promise<unknown>[])));
-    prisma.user.findUnique.mockImplementation(
-      ({ where }) =>
-        Promise.resolve({
-          id: where.id ?? OTHER_ID,
-          username: 'vedora.user',
-          fullName: 'Vedora User',
-          role: UserRole.USER,
-          status: 'ACTIVE',
-          accountVersion: 0,
-          emailVerifiedAt: new Date(),
-          bio: null,
-          avatarUrl: null,
-          coverUrl: null,
-          createdAt: new Date('2026-09-29T00:00:00Z'),
-          email: 'private@vedora.vn',
-        }) as never,
-    );
-    prisma.post.count.mockResolvedValue(2);
-    prisma.follow.count.mockResolvedValue(1);
-    prisma.follow.findMany.mockResolvedValue([]);
+    token = await e2e.sign(user);
+    await createPost(e2e.mongo, { authorId: other.id });
+    await createPost(e2e.mongo, { authorId: other.id });
   });
 
   afterAll(async () => {
-    await app.close();
+    await e2e.close();
   });
 
   it('serves public profiles without private account data', async () => {
-    const response = await request(app.getHttpServer())
-      .get(`/api/v1/profiles/${OTHER_ID}`)
+    const response = await request(e2e.app.getHttpServer())
+      .get(`/api/v1/profiles/${other.id}`)
       .expect(200);
     expect(response.body).toMatchObject({
-      id: OTHER_ID,
+      id: other.id,
       postCount: 2,
-      followerCount: 1,
-      followingCount: 1,
+      followerCount: 0,
+      followingCount: 0,
     });
     expect(response.body).not.toHaveProperty('email');
     expect(response.body).not.toHaveProperty('role');
   });
 
-  it('keeps follow mutations private and rejects self-follow', async () => {
-    await request(app.getHttpServer())
-      .put(`/api/v1/profiles/${OTHER_ID}/follow`)
+  it('keeps follow mutations private, rejects self-follow and repeats idempotently', async () => {
+    await request(e2e.app.getHttpServer())
+      .put(`/api/v1/profiles/${other.id}/follow`)
       .expect(401);
-    await request(app.getHttpServer())
-      .put(`/api/v1/profiles/${USER_ID}/follow`)
+    await request(e2e.app.getHttpServer())
+      .put(`/api/v1/profiles/${user.id}/follow`)
       .auth(token, { type: 'bearer' })
       .expect(400);
-    prisma.follow.createMany.mockResolvedValue({ count: 0 });
-    await request(app.getHttpServer())
-      .put(`/api/v1/profiles/${OTHER_ID}/follow`)
-      .auth(token, { type: 'bearer' })
-      .expect(204);
-    expect(prisma.follow.createMany).toHaveBeenCalledWith({
-      data: [{ followerId: USER_ID, followingId: OTHER_ID }],
-      skipDuplicates: true,
-    });
+    for (let attempt = 0; attempt < 2; attempt++) {
+      await request(e2e.app.getHttpServer())
+        .put(`/api/v1/profiles/${other.id}/follow`)
+        .auth(token, { type: 'bearer' })
+        .expect(204);
+    }
+    expect(
+      await e2e.mongo.db.collection<StoredDoc>('follows').countDocuments({
+        followerId: user.id,
+        followingId: other.id,
+      }),
+    ).toBe(1);
   });
 
   it('exposes follower lists and published posts to guests', async () => {
-    await request(app.getHttpServer())
-      .get(`/api/v1/profiles/${OTHER_ID}/followers`)
-      .expect(200, { items: [], nextCursor: null });
-    prisma.post.findMany.mockResolvedValue([]);
-    await request(app.getHttpServer())
-      .get(`/api/v1/posts?authorId=${OTHER_ID}`)
-      .expect(200, { items: [], nextCursor: null });
+    const followers = await request(e2e.app.getHttpServer())
+      .get(`/api/v1/profiles/${other.id}/followers`)
+      .expect(200);
+    expect(followers.body).toMatchObject({
+      items: [{ id: user.id }],
+      nextCursor: null,
+    });
+    const posts = await request(e2e.app.getHttpServer())
+      .get(`/api/v1/posts?authorId=${other.id}`)
+      .expect(200);
+    expect(posts.body).toMatchObject({ nextCursor: null });
+    expect((posts.body as { items: unknown[] }).items).toHaveLength(2);
   });
 
   it('validates profile edits and never accepts a client-supplied image URL', async () => {
-    await request(app.getHttpServer())
+    await request(e2e.app.getHttpServer())
       .patch('/api/v1/profiles/me')
       .auth(token, { type: 'bearer' })
       .send({ avatarUrl: 'https://example.com/forged.png' })
       .expect(400);
-    expect(prisma.user.update).not.toHaveBeenCalled();
+    const stored = await e2e.mongo.db
+      .collection<StoredDoc>('users')
+      .findOne({ _id: user.id });
+    expect(stored?.avatarUrl).toBeNull();
   });
 });

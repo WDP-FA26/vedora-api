@@ -1,92 +1,123 @@
+import type { INestApplication } from '@nestjs/common';
 import {
   BadRequestException,
   ConflictException,
   NotFoundException,
 } from '@nestjs/common';
-import { PostReportReason, PostReportStatus, Prisma } from '@prisma/client';
-import { type DeepMockProxy, mockDeep } from 'vitest-mock-extended';
-import { PrismaService } from '../prisma/prisma.service';
+import { Test } from '@nestjs/testing';
+import { createPost, createUser } from '../../test/fixtures';
+import {
+  createTestMongoUrl,
+  dropTestDatabase,
+  prepareTestDatabase,
+} from '../../test/mongo-test-db';
+import {
+  type Post,
+  PostReportReason,
+  PostReportStatus,
+  PostStatus,
+  type Stored,
+  type User,
+} from '../mongo/models';
+import { MongoModule } from '../mongo/mongo.module';
+import { MongoService } from '../mongo/mongo.service';
 import { PostReportsService } from './post-reports.service';
 
-const postId = 'f1a2d3e4-0000-4000-8000-000000000001';
-const reportId = 'f1a2d3e4-0000-4000-8000-000000000009';
-const authorId = '0b8f0c1e-3c55-4c1b-9d0e-2f7f3a9f7a10';
-const reporterId = '4a1e32e4-e18e-4dd7-8b4a-246ef2113ff2';
-const report = {
-  id: reportId,
-  postId,
-  reason: PostReportReason.SPAM,
-  details: null,
-  status: PostReportStatus.PENDING,
-  createdAt: new Date('2026-10-07T08:00:00Z'),
-};
-
 describe('PostReportsService', () => {
-  let prisma: DeepMockProxy<PrismaService>;
+  let app: INestApplication;
+  let db: MongoService;
   let service: PostReportsService;
+  let author: User;
+  let reporter: User;
+  let post: Post;
 
-  beforeEach(() => {
-    prisma = mockDeep<PrismaService>();
-    service = new PostReportsService(prisma);
-    prisma.post.findFirst.mockResolvedValue({ authorId } as never);
-    prisma.postReport.create.mockResolvedValue(report as never);
+  beforeAll(async () => {
+    const moduleRef = await Test.createTestingModule({
+      imports: [MongoModule.forTest(createTestMongoUrl('reports'))],
+      providers: [PostReportsService],
+    }).compile();
+    app = moduleRef.createNestApplication();
+    await app.init();
+    await prepareTestDatabase(app);
+    db = app.get(MongoService);
+    service = app.get(PostReportsService);
+    author = await createUser(db, { username: 'author' });
+    reporter = await createUser(db, { username: 'reporter' });
+  });
+  beforeEach(async () => {
+    await db.db.collection('post_reports').deleteMany({});
+    await db.db.collection<Stored<Post>>('posts').deleteMany({});
+    post = await createPost(db, { authorId: author.id });
+  });
+  afterAll(async () => {
+    await dropTestDatabase(app);
+    await app.close();
   });
 
+  const file = (reporterId = reporter.id, details?: string) =>
+    service.create(post.id, reporterId, {
+      reason: PostReportReason.SPAM,
+      details,
+    });
+  const count = (collection: string) =>
+    db.db.collection(collection).countDocuments();
+
   it('files a report against a published post', async () => {
-    await expect(
-      service.create(postId, reporterId, {
-        reason: PostReportReason.SPAM,
-        details: '',
-      }),
-    ).resolves.toEqual(report);
-    expect(prisma.postReport.create).toHaveBeenCalledWith(
-      expect.objectContaining({
-        data: { postId, reporterId, reason: 'SPAM', details: null },
-      }),
-    );
+    await expect(file(reporter.id, '')).resolves.toMatchObject({
+      postId: post.id,
+      reason: 'SPAM',
+      details: null,
+      status: PostReportStatus.PENDING,
+    });
+    expect(await count('post_reports')).toBe(1);
   });
 
   it('refuses reports on missing posts and on your own post', async () => {
-    await expect(
-      service.create(postId, authorId, { reason: PostReportReason.SPAM }),
-    ).rejects.toBeInstanceOf(BadRequestException);
-
-    prisma.post.findFirst.mockResolvedValue(null);
-    await expect(
-      service.create(postId, reporterId, { reason: PostReportReason.SPAM }),
-    ).rejects.toBeInstanceOf(NotFoundException);
-    expect(prisma.postReport.create).not.toHaveBeenCalled();
+    await expect(file(author.id)).rejects.toBeInstanceOf(BadRequestException);
+    await db.db
+      .collection<Stored<Post>>('posts')
+      .updateOne({ _id: post.id }, { $set: { status: PostStatus.PROCESSING } });
+    await expect(file()).rejects.toBeInstanceOf(NotFoundException);
+    expect(await count('post_reports')).toBe(0);
   });
 
   it('answers 409 ALREADY_REPORTED for a second report', async () => {
-    prisma.postReport.create.mockRejectedValue(
-      new Prisma.PrismaClientKnownRequestError('duplicate', {
-        code: 'P2002',
-        clientVersion: 'test',
-      }),
-    );
-    await expect(
-      service.create(postId, reporterId, { reason: PostReportReason.SPAM }),
-    ).rejects.toMatchObject({
+    await file();
+    await expect(file()).rejects.toMatchObject({
       response: { code: 'ALREADY_REPORTED' },
     });
+    expect(await count('post_reports')).toBe(1);
+  });
+
+  it('lists reports with the reporter and the reported post, newest first', async () => {
+    await file();
+    const page = await service.findAll({ page: 1, limit: 20 });
+    expect(page.meta.totalItems).toBe(1);
+    expect(page.items[0]).toMatchObject({
+      reporter: { username: 'reporter' },
+      post: { id: post.id, author: { username: 'author' } },
+    });
+    const pending = await service.findAll({
+      page: 1,
+      limit: 20,
+      status: PostReportStatus.RESOLVED,
+    });
+    expect(pending.items).toEqual([]);
   });
 
   it('closes a pending report once', async () => {
-    prisma.postReport.findUnique.mockResolvedValue(report as never);
-    prisma.postReport.updateMany.mockResolvedValue({ count: 1 });
-    await service.review(reportId, authorId, PostReportStatus.DISMISSED);
-    expect(prisma.postReport.updateMany).toHaveBeenCalledWith({
-      where: { id: reportId, status: PostReportStatus.PENDING },
-      data: expect.objectContaining({
-        status: PostReportStatus.DISMISSED,
-        reviewedById: authorId,
-      }) as unknown,
-    });
-
-    prisma.postReport.updateMany.mockResolvedValue({ count: 0 });
+    const { id } = await file();
     await expect(
-      service.review(reportId, authorId, PostReportStatus.RESOLVED),
+      service.review(id, author.id, PostReportStatus.DISMISSED),
+    ).resolves.toMatchObject({
+      status: PostReportStatus.DISMISSED,
+      reviewedAt: expect.any(Date) as Date,
+    });
+    await expect(
+      service.review(id, author.id, PostReportStatus.RESOLVED),
     ).rejects.toBeInstanceOf(ConflictException);
+    await expect(
+      service.review(crypto.randomUUID(), author.id, PostReportStatus.RESOLVED),
+    ).rejects.toBeInstanceOf(NotFoundException);
   });
 });
