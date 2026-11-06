@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Optional } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { InjectModel } from '@nestjs/mongoose';
 import type { Model, QueryFilter } from 'mongoose';
@@ -8,9 +8,13 @@ import {
   CursorPaginationQueryDto,
 } from '../common/pagination/index.js';
 import { NotificationsService } from '../notifications/notifications.service.js';
-import { isUniqueViolation } from '../mongo/errors.js';
+import { assertAccountActive } from '../auth/account-access.js';
+import { MongoService } from '../mongo/mongo.service.js';
+import { withUserLocks } from '../mongo/with-user-locks.js';
+import { MessagingEventsService } from '../messaging/messaging-events.service.js';
 import {
   Follow,
+  MessagingEventType,
   NotificationType,
   Post,
   PostStatus,
@@ -58,6 +62,8 @@ export class ProfilesService {
     private readonly uploads: Model<ProfileImageUpload>,
     private readonly storage: StorageService,
     private readonly notifications: NotificationsService,
+    private readonly mongo: MongoService,
+    @Optional() private readonly messagingEvents?: MessagingEventsService,
   ) {}
 
   async findOne(id: string): Promise<ProfileDto> {
@@ -115,14 +121,38 @@ export class ProfilesService {
         'You cannot follow yourself',
       );
     await this.requirePublicUser(id);
-    let created = true;
-    try {
-      await this.follows.create({ followerId, followingId: id });
-    } catch (error) {
-      // Already following: a repeat request is not an error.
-      if (!isUniqueViolation(error)) throw error;
-      created = false;
-    }
+    const created = await withUserLocks(
+      this.mongo,
+      [id, followerId],
+      async (session) => {
+        const actor = await this.users
+          .findById(followerId)
+          .session(session)
+          .exec();
+        if (
+          !actor ||
+          !(await this.users
+            .exists({ _id: id, emailVerifiedAt: { $ne: null } })
+            .session(session))
+        ) {
+          throw new ResourceNotFoundException('NOT_FOUND', 'Profile not found');
+        }
+        assertAccountActive(actor.status);
+        const result = await this.follows.updateOne(
+          { followerId, followingId: id },
+          { $setOnInsert: { followerId, followingId: id } },
+          { upsert: true, session },
+        );
+        if (result.upsertedCount > 0) {
+          await this.messagingEvents?.record(
+            [id, followerId],
+            { type: MessagingEventType.RELATIONSHIP_CHANGED },
+            session,
+          );
+        }
+        return result.upsertedCount > 0;
+      },
+    );
     if (created) {
       await this.notifications.notify({
         recipientId: id,
@@ -134,7 +164,19 @@ export class ProfilesService {
 
   async unfollow(id: string, followerId: string): Promise<void> {
     await this.requirePublicUser(id);
-    await this.follows.deleteOne({ followerId, followingId: id });
+    await withUserLocks(this.mongo, [id, followerId], async (session) => {
+      const result = await this.follows.deleteOne(
+        { followerId, followingId: id },
+        { session },
+      );
+      if (result.deletedCount > 0) {
+        await this.messagingEvents?.record(
+          [id, followerId],
+          { type: MessagingEventType.RELATIONSHIP_CHANGED },
+          session,
+        );
+      }
+    });
   }
 
   async followers(

@@ -14,6 +14,7 @@ import { HealthModule } from './health/health.module.js';
 import { KnowledgeModule } from './knowledge/knowledge.module.js';
 import { CloudinaryModule } from './cloudinary/cloudinary.module.js';
 import { MailModule } from './mail/mail.module.js';
+import { MessagingModule } from './messaging/messaging.module.js';
 import { MealPlanModule } from './meal-plan/meal-plan.module.js';
 import { MediaModule } from './media/media.module.js';
 import { NutritionChatModule } from './nutrition-chat/nutrition-chat.module.js';
@@ -49,6 +50,7 @@ import { VerificationModule } from './verification/verification.module.js';
     MediaModule,
     PostsModule,
     NotificationsModule,
+    MessagingModule,
     NutritionChatModule,
     KnowledgeModule,
     ProfilesModule,
