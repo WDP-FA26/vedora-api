@@ -67,8 +67,10 @@ services:
       MONGO_INITDB_ROOT_USERNAME: ${MONGO_USER}
       MONGO_INITDB_ROOT_PASSWORD: ${MONGO_PASSWORD}
       MONGO_INITDB_DATABASE: ${MONGO_DB}
-    expose:
-      - "27017"
+    # Loopback only: reached from a laptop through an SSH tunnel, never from the
+    # internet directly. The API still connects over the internal network.
+    ports:
+      - "127.0.0.1:27017:27017"
     volumes:
       - mongo_data:/data/db
       - mongo_config:/data/configdb
