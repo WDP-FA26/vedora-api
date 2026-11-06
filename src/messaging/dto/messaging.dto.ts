@@ -85,6 +85,16 @@ export class ConversationPreviewDto {
   @ApiProperty() createdAt!: Date;
 }
 
+export class MessagingContactDto {
+  @ApiProperty({ type: MessagingPeerDto }) peer!: MessagingPeerDto;
+  @ApiProperty({ type: String, nullable: true, format: 'uuid' })
+  conversationId!: string | null;
+  @ApiProperty({ enum: MessagingInbox }) box!: MessagingInbox;
+  @ApiProperty() followsPeer!: boolean;
+  @ApiProperty() peerFollowsYou!: boolean;
+  @ApiProperty() canSend!: boolean;
+}
+
 export class ConversationDto {
   @ApiProperty({ format: 'uuid' }) id!: string;
   @ApiProperty({ type: MessagingPeerDto }) peer!: MessagingPeerDto;

@@ -45,6 +45,7 @@ import {
   ConversationReadDto,
   ConversationsQueryDto,
   MessagePageDto,
+  MessagingContactDto,
   ReadConversationDto,
   SendMessageDto,
   SendMessageResponseDto,
@@ -184,6 +185,20 @@ export class MessagingController {
     @Query() query: CursorPaginationQueryDto,
   ): Promise<MessagePageDto> {
     return this.messaging.listMessages(request.user.sub, id, query);
+  }
+
+  @Get('users/:userId')
+  @Header('Cache-Control', 'private, no-store')
+  @ApiOperation({
+    summary:
+      'Resolve an existing conversation and follow permissions without creating one',
+  })
+  @ApiOkResponse({ type: MessagingContactDto })
+  contact(
+    @Req() request: AuthenticatedRequest,
+    @Param('userId', ParseUUIDPipe) id: string,
+  ): Promise<MessagingContactDto> {
+    return this.messaging.contact(request.user.sub, id);
   }
 
   @Post('users/:userId/messages')

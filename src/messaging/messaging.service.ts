@@ -29,6 +29,7 @@ import {
   MessageDto,
   MessagePageDto,
   MessagingInbox,
+  MessagingContactDto,
   SendMessageDto,
   SendMessageResponseDto,
 } from './dto/messaging.dto.js';
@@ -70,6 +71,48 @@ export class MessagingService {
     private readonly messages: Model<DirectMessage>,
     private readonly events: MessagingEventsService,
   ) {}
+
+  async contact(userId: string, peerId: string): Promise<MessagingContactDto> {
+    if (userId === peerId)
+      throw new InvalidInputException(
+        'SELF_MESSAGE_NOT_ALLOWED',
+        'You cannot message yourself',
+      );
+    return this.mongo.withTransaction(async (session) => {
+      const peer = await this.users
+        .findById(peerId)
+        .select('username fullName avatarUrl isProfessional status')
+        .session(session)
+        .exec();
+      if (!peer || peer.status !== AccountStatus.ACTIVE)
+        throw new ResourceNotFoundException(
+          'NOT_FOUND',
+          'Recipient is unavailable',
+        );
+      const relationships = await this.relationships(userId, session);
+      const [lowId, highId] = [userId, peerId].sort();
+      const conversation = await this.conversations
+        .findOne({ lowId, highId })
+        .select('_id')
+        .session(session)
+        .exec();
+      const followsPeer = relationships.following.has(peerId);
+      return {
+        peer: {
+          id: peer.id,
+          username: peer.username,
+          fullName: peer.fullName,
+          avatarUrl: peer.avatarUrl,
+          isProfessional: peer.isProfessional,
+        },
+        conversationId: conversation?.id ?? null,
+        box: this.box(peerId, relationships),
+        followsPeer,
+        peerFollowsYou: relationships.followers.has(peerId),
+        canSend: followsPeer,
+      };
+    });
+  }
 
   async sendToUser(
     senderId: string,

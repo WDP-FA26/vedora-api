@@ -237,6 +237,32 @@ describe('Direct messaging (HTTP + MongoDB + realtime)', () => {
     expect(await events().countDocuments()).toBe(0);
   });
 
+  it('resolves contact permissions without creating an empty conversation', async () => {
+    const get = () =>
+      request(app.getHttpServer())
+        .get(`${root}/users/${bob.id}`)
+        .auth(token(alice), { type: 'bearer' });
+    expect((await get().expect(200)).body).toMatchObject({
+      conversationId: null,
+      followsPeer: false,
+      peerFollowsYou: false,
+      canSend: false,
+      box: 'requests',
+    });
+    await follow(alice, bob);
+    const sent = (await send(alice, bob).expect(201))
+      .body as SendMessageResponseDto;
+    expect((await get().expect(200)).body).toMatchObject({
+      conversationId: sent.conversationId,
+      followsPeer: true,
+      canSend: true,
+    });
+    expect(await conversations().countDocuments()).toBe(1);
+    await request(app.getHttpServer())
+      .get(`${root}/users/${bob.id}`)
+      .expect(401);
+  });
+
   it('puts a one-way message in requests and allows its recipient to read but not reply', async () => {
     await follow(alice, bob);
     const sent = (await send(alice, bob, '  Hello Bob  ').expect(201))
