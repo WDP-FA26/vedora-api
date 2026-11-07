@@ -106,6 +106,8 @@ onDelete(UserSchema, async (db, ids, session) => {
     .deleteMany({ userId: inIds }, { session })
     .exec();
   const cascadeModels: Array<[string, Record<string, unknown>]> = [
+    ['Conversation', { $or: [{ lowId: inIds }, { highId: inIds }] }],
+    ['MessagingEvent', { userIds: inIds }],
     ['Follow', { $or: [{ followerId: inIds }, { followingId: inIds }] }],
     ['Notification', { $or: [{ recipientId: inIds }, { actorId: inIds }] }],
     ['FollowSuggestion', { $or: [{ userId: inIds }, { candidateId: inIds }] }],

@@ -12,6 +12,7 @@ Backend starter cho Vedora, sử dụng NestJS, Mongoose (MongoDB, tự host b�
 - Schema Mongoose khai báo collection và index; API tạo chúng khi khởi động (MongoDB không có migration)
 - Docker image multi-stage, chạy bằng non-root user
 - Docker Compose cho local và Dokploy
+- Nhắn tin riêng realtime theo quan hệ theo dõi: [contract và hướng dẫn frontend](docs/docs-for-FE/realtime-messaging.md)
 
 ## Cấu trúc chính
 

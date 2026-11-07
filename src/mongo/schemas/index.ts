@@ -40,6 +40,11 @@ import {
   VerificationRequestSchema,
 } from './verification.schema.js';
 import { DocumentLockSchema } from '../document-lock.js';
+import {
+  ConversationSchema,
+  DirectMessageSchema,
+  MessagingEventSchema,
+} from './messaging.schema.js';
 
 export * from './user.schema.js';
 export * from './post.schema.js';
@@ -47,10 +52,14 @@ export * from './media.schema.js';
 export * from './verification.schema.js';
 export * from './recipe.schema.js';
 export * from './payment.schema.js';
+export * from './messaging.schema.js';
 
 /** Every collection the API reads or writes, keyed by its model name. */
 export const MODEL_DEFINITIONS: { name: string; schema: Schema }[] = [
   { name: 'DocumentLock', schema: DocumentLockSchema },
+  { name: 'Conversation', schema: ConversationSchema },
+  { name: 'DirectMessage', schema: DirectMessageSchema },
+  { name: 'MessagingEvent', schema: MessagingEventSchema },
   { name: 'User', schema: UserSchema },
   { name: 'UserAccountAudit', schema: UserAccountAuditSchema },
   { name: 'Follow', schema: FollowSchema },

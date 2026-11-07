@@ -15,6 +15,8 @@ export const INVALID_INPUT_CODES = [
   'UNKNOWN_REFERENCE',
   'CONFLICTING_PREFERENCE',
   'SAME_INGREDIENT',
+  'SELF_MESSAGE_NOT_ALLOWED',
+  'MESSAGE_CURSOR_INVALID',
 ] as const;
 
 export type InvalidInputCode = (typeof INVALID_INPUT_CODES)[number];

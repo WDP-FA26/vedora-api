@@ -26,6 +26,8 @@ Thay đổi so với body mặc định của NestJS trước đây: không còn
 | --- | --- | --- |
 | `VALIDATION_FAILED` | Body/query không hợp lệ | `messages: string[]` — từng lỗi validation, lỗi lồng nhau có đường dẫn (ví dụ `messages.0.role ...`) |
 | `BAD_REQUEST` | Yêu cầu sai, không có mã riêng | — |
+| `SELF_MESSAGE_NOT_ALLOWED` | Không thể nhắn tin cho chính mình | — |
+| `MESSAGE_CURSOR_INVALID` | Cursor tin nhắn sai hoặc cuộc trò chuyện đã đổi hộp thư; tải lại trang đầu | — |
 | `EMPTY_POST` | Bài viết không có chữ và không có video | — |
 | `OWN_POST` | Báo cáo bài của chính mình | — |
 | `MEDIA_UNAVAILABLE` | Media chưa sẵn sàng hoặc đã dùng ở bài khác | — |
@@ -51,6 +53,7 @@ Thay đổi so với body mặc định của NestJS trước đây: không còn
 | `code` | Ý nghĩa | `details` |
 | --- | --- | --- |
 | `FORBIDDEN` | Không có quyền | — |
+| `MESSAGE_FOLLOW_REQUIRED` | Cần theo dõi người nhận trước khi gửi tin nhắn | — |
 | `EMAIL_NOT_VERIFIED` | Email chưa xác minh (đăng nhập đúng mật khẩu hoặc đánh giá công thức) | `email: string` |
 | `CAPTCHA_FAILED` | Xác minh Turnstile thất bại | — |
 | `SELF_RATING_NOT_ALLOWED` | Tự đánh giá công thức của mình | — |
@@ -62,6 +65,8 @@ Thay đổi so với body mặc định của NestJS trước đây: không còn
 | `NOT_FOUND` | Tài nguyên không tồn tại hoặc không xem được | — |
 
 ### 409
+
+Nhắn tin có thêm `MESSAGE_ID_CONFLICT`: `clientMessageId` đã được dùng cho nội dung khác. Retry cùng tin phải giữ nguyên UUID và nội dung; xem [nhắn tin realtime](realtime-messaging.md).
 
 | `code` | Ý nghĩa | `details` |
 | --- | --- | --- |

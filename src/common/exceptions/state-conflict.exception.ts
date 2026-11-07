@@ -22,6 +22,7 @@ export const STATE_CONFLICT_CODES = [
   'FAVORITE_CONFLICT',
   'RATING_CONFLICT',
   'MEAL_PLAN_CONFLICT',
+  'MESSAGE_ID_CONFLICT',
 ] as const;
 
 export type StateConflictCode = (typeof STATE_CONFLICT_CODES)[number];
