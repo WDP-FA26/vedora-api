@@ -1,5 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
+import { AiService, InjectModel as InjectAiModel } from '@nestjs/ai';
 import { InjectModel } from '@nestjs/mongoose';
 import type { Model } from 'mongoose';
 import {
@@ -16,12 +16,7 @@ import {
 import { cannedReply } from '../../../ai/chat/canned-reply.js';
 import { chatErrorCode } from '../../../ai/chat/errors.js';
 import { replyFilter } from '../../../ai/chat/reply-filter.js';
-import { moderateWithRetry } from '../../../ai/moderation/moderation.js';
-import {
-  chatModel,
-  DEFAULT_CHAT_MODEL,
-  DEFAULT_MODERATION_MODEL,
-} from '../../../ai/openrouter.js';
+import { moderate } from '../../../ai/moderation/moderation.js';
 import { AiUsageService } from '../../../ai/usage/ai-usage.service.js';
 import { KnowledgeSearchService } from '../../../knowledge/retrieval/knowledge-search.service.js';
 import {
@@ -72,11 +67,10 @@ const SEARCH_TIMEOUT_MS = 5000;
 @Injectable()
 export class BlogAssistantService {
   private readonly logger = new Logger(BlogAssistantService.name);
-  private readonly model: LanguageModel;
-  private readonly moderationModel: LanguageModel;
 
   constructor(
-    configService: ConfigService,
+    private readonly ai: AiService,
+    @InjectAiModel('blog') private readonly model: LanguageModel,
     private readonly knowledge: KnowledgeSearchService,
     private readonly images: BlogImageGeneratorService,
     private readonly usage: AiUsageService,
@@ -84,26 +78,7 @@ export class BlogAssistantService {
     @InjectModel(Recipe.name) private readonly recipes: Model<Recipe>,
     @InjectModel(Ingredient.name)
     private readonly ingredients: Model<Ingredient>,
-  ) {
-    const apiKey = configService.getOrThrow<string>('OPENROUTER_API_KEY');
-    this.moderationModel = chatModel({
-      apiKey,
-      modelId: configService.get<string>(
-        'OPENROUTER_MODERATION_MODEL',
-        DEFAULT_MODERATION_MODEL,
-      ),
-      reasoningEffort: 'low',
-    });
-    // `openrouter/auto` may route to a model that calls tools poorly; pin one
-    // for this agent with BLOG_AI_MODEL
-    this.model = chatModel({
-      apiKey,
-      modelId:
-        configService.get<string>('BLOG_AI_MODEL') ||
-        configService.get<string>('OPENROUTER_MODEL', DEFAULT_CHAT_MODEL),
-      reasoningEffort: configService.get('OPENROUTER_REASONING_EFFORT', 'low'),
-    });
-  }
+  ) {}
 
   async quota(userId: string): Promise<BlogAssistantQuotaDto> {
     const [messages, images] = await Promise.all([
@@ -134,8 +109,8 @@ export class BlogAssistantService {
 
     // a resumed turn only carries editor tool outputs, checked by schema
     if (last.role === 'user') {
-      const verdict = await moderateWithRetry(
-        this.moderationModel,
+      const verdict = await moderate(
+        this.ai,
         textOf(last),
         abortSignal,
         BLOG_ASSISTANT_POLICY,

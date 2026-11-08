@@ -7,6 +7,7 @@ import { validateEnvironment } from './config/environment.js';
 import { PaymentsModule } from './payments/payments.module.js';
 import { AppController } from './app.controller.js';
 import { AdminDashboardModule } from './admin-dashboard/admin-dashboard.module.js';
+import { AiModule } from './ai/ai.module.js';
 import { AuthModule } from './auth/auth.module.js';
 import { StorageModule } from './storage/storage.module.js';
 import { StorageWebhookModule } from './storage/storage-webhook.module.js';
@@ -36,6 +37,7 @@ import { VerificationModule } from './verification/verification.module.js';
     }),
     ScheduleModule.forRoot(),
     MongoModule.forRoot(),
+    AiModule,
     MailModule,
     CloudinaryModule,
     StorageModule,

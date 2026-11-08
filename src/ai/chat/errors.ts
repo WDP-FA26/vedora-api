@@ -1,9 +1,13 @@
+import { AiModelError } from '@nestjs/ai';
 import { APICallError, RetryError } from 'ai';
 
 export type ChatErrorCode = 'RATE_LIMITED' | 'MODEL_ERROR';
 
 function failedCall(error: unknown): APICallError | null {
-  const cause = RetryError.isInstance(error) ? error.lastError : error;
+  const unwrapped = error instanceof AiModelError ? error.cause : error;
+  const cause = RetryError.isInstance(unwrapped)
+    ? unwrapped.lastError
+    : unwrapped;
   return APICallError.isInstance(cause) ? cause : null;
 }
 
