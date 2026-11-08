@@ -1,15 +1,11 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { AiService } from '@nestjs/ai';
 import { AiFeature } from '../../../mongo/models.js';
-import { generateImage, type ImageModel, type LanguageModel } from 'ai';
+import { generateImage, type ImageModel } from 'ai';
 import { randomUUID } from 'node:crypto';
-import { moderateWithRetry } from '../../../ai/moderation/moderation.js';
-import {
-  chatModel,
-  DEFAULT_IMAGE_MODEL,
-  DEFAULT_MODERATION_MODEL,
-  imageModel,
-} from '../../../ai/openrouter.js';
+import { moderate } from '../../../ai/moderation/moderation.js';
+import { DEFAULT_IMAGE_MODEL, imageModel } from '../../../ai/openrouter.js';
 import { AiUsageService } from '../../../ai/usage/ai-usage.service.js';
 import {
   StorageService,
@@ -49,10 +45,10 @@ const EXTENSIONS: Record<string, string> = {
 export class BlogImageGeneratorService {
   private readonly logger = new Logger(BlogImageGeneratorService.name);
   private readonly imageModel: ImageModel;
-  private readonly moderationModel: LanguageModel;
 
   constructor(
     configService: ConfigService,
+    private readonly ai: AiService,
     private readonly storage: StorageService,
     private readonly usage: AiUsageService,
   ) {
@@ -63,14 +59,6 @@ export class BlogImageGeneratorService {
         'OPENROUTER_IMAGE_MODEL',
         DEFAULT_IMAGE_MODEL,
       ),
-    });
-    this.moderationModel = chatModel({
-      apiKey,
-      modelId: configService.get<string>(
-        'OPENROUTER_MODERATION_MODEL',
-        DEFAULT_MODERATION_MODEL,
-      ),
-      reasoningEffort: 'low',
     });
   }
 
@@ -123,8 +111,8 @@ export class BlogImageGeneratorService {
     if (!(await this.usage.consume(userId, AiFeature.BLOG_IMAGE)))
       return { error: 'IMAGE_QUOTA_EXCEEDED' };
     try {
-      const verdict = await moderateWithRetry(
-        this.moderationModel,
+      const verdict = await moderate(
+        this.ai,
         prompt,
         abortSignal ?? new AbortController().signal,
         BLOG_ASSISTANT_POLICY,

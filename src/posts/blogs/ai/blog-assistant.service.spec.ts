@@ -2,7 +2,7 @@ import type { INestApplication } from '@nestjs/common';
 import { QuotaReachedException } from '../../../common/exceptions/quota-reached.exception.js';
 import { InvalidInputException } from '../../../common/exceptions/invalid-input.exception.js';
 import { ResourceNotFoundException } from '../../../common/exceptions/resource-not-found.exception.js';
-import { ConfigService } from '@nestjs/config';
+import { AiModule, AiService } from '@nestjs/ai';
 import { getModelToken } from '@nestjs/mongoose';
 import { Test } from '@nestjs/testing';
 import { AiFeature } from '../../../mongo/models.js';
@@ -100,11 +100,6 @@ const moderator = new MockLanguageModelV4({
     }),
 });
 
-vi.mock('@openrouter/ai-sdk-provider', () => ({
-  createOpenRouter: () => (modelId: string) =>
-    modelId === 'openai/gpt-oss-safeguard-20b' ? moderator : model,
-}));
-
 const userMessage = (text: string) => ({
   id: 'm1',
   role: 'user',
@@ -125,6 +120,7 @@ const replyText = (chunks: UIMessageChunk[]) =>
 describe('BlogAssistantService', () => {
   let app: INestApplication;
   let db: MongoService;
+  let ai: AiService;
   let models: {
     posts: Model<Post>;
     recipes: Model<Recipe>;
@@ -144,12 +140,18 @@ describe('BlogAssistantService', () => {
 
   beforeAll(async () => {
     const moduleRef = await Test.createTestingModule({
-      imports: [MongoModule.forTest(createTestMongoUrl('blogassistant'))],
+      imports: [
+        MongoModule.forTest(createTestMongoUrl('blogassistant')),
+        AiModule.forRoot({
+          models: { blog: model, moderation: moderator },
+        }),
+      ],
     }).compile();
     app = moduleRef.createNestApplication();
     await app.init();
     await prepareTestDatabase(app);
     db = app.get(MongoService);
+    ai = app.get(AiService);
     const modelOf = <T>(name: string) => app.get<Model<T>>(getModelToken(name));
     models = {
       posts: modelOf(Post.name),
@@ -171,7 +173,8 @@ describe('BlogAssistantService', () => {
     aiUsage.consume.mockResolvedValue(true);
     aiUsage.refund.mockResolvedValue();
     service = new BlogAssistantService(
-      new ConfigService({ OPENROUTER_API_KEY: 'key' }),
+      ai,
+      model,
       mockDeep<KnowledgeSearchService>(),
       mockDeep<BlogImageGeneratorService>(),
       aiUsage,

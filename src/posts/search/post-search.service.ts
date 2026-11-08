@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { AiService } from '@nestjs/ai';
 import { QdrantService } from '../../qdrant/qdrant.service.js';
-import { PostEmbeddingsService } from './post-embeddings.service.js';
 import {
   BM25_FOLDED_VECTOR,
   BM25_VECTOR,
@@ -26,7 +26,7 @@ export class PostSearchService {
 
   constructor(
     private readonly qdrant: QdrantService,
-    private readonly embeddings: PostEmbeddingsService,
+    private readonly ai: AiService,
     private readonly index: PostSearchIndexService,
     configService: ConfigService,
   ) {
@@ -42,7 +42,11 @@ export class PostSearchService {
     limit: number,
   ): Promise<PostSearchPage> {
     await this.index.ensureCollection();
-    const dense = await this.embeddings.embedQuery(query);
+    const { embedding: dense } = await this.ai.embed({
+      model: 'posts',
+      label: 'search-posts',
+      value: `task: search result | query: ${query}`,
+    });
     const { points } = await this.qdrant.query(this.index.collection, {
       prefetch: [
         {

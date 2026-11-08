@@ -1,11 +1,15 @@
 import { ConfigService } from '@nestjs/config';
+import { AiService } from '@nestjs/ai';
+import { mockDeep } from 'vitest-mock-extended';
 import { KnowledgeModelsService } from './knowledge-models.service.js';
 
 const fetchMock = vi.fn<typeof fetch>();
+let ai = mockDeep<AiService>();
 
 function createService(config: Record<string, unknown> = {}) {
   return new KnowledgeModelsService(
     new ConfigService({ OPENROUTER_API_KEY: 'key', ...config }),
+    ai,
   );
 }
 
@@ -19,11 +23,36 @@ function requestBody(call = 0) {
 describe('KnowledgeModelsService', () => {
   beforeEach(() => {
     fetchMock.mockReset();
+    ai = mockDeep<AiService>();
     vi.stubGlobal('fetch', fetchMock);
   });
   afterEach(() => vi.unstubAllGlobals());
 
-  it('embeds text and images at the configured size, in input order', async () => {
+  it('embeds text chunks and queries through AiService', async () => {
+    ai.embedMany.mockResolvedValue({ embeddings: [[1], [2]] } as never);
+    ai.embed.mockResolvedValue({ embedding: [3] } as never);
+    const signal = new AbortController().signal;
+    const service = createService();
+
+    await expect(service.embed(['đậu phụ', 'canxi'])).resolves.toEqual([
+      [1],
+      [2],
+    ]);
+    await expect(service.embedQuery('đậu phụ', signal)).resolves.toEqual([3]);
+
+    expect(ai.embedMany).toHaveBeenCalledWith({
+      label: 'index-knowledge',
+      values: ['đậu phụ', 'canxi'],
+    });
+    expect(ai.embed).toHaveBeenCalledWith({
+      label: 'search-knowledge',
+      value: 'task: question answering | query: đậu phụ',
+      abortSignal: signal,
+    });
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('embeds multimodal inputs at the configured size, in input order', async () => {
     fetchMock.mockResolvedValue(
       Response.json({
         data: [
@@ -67,7 +96,9 @@ describe('KnowledgeModelsService', () => {
       ),
     );
 
-    await expect(createService().embedQuery('q')).rejects.toMatchObject({
+    await expect(
+      createService().embed([{ image: new Uint8Array([0xff, 0xd8]) }]),
+    ).rejects.toMatchObject({
       message: 'openrouter request failed',
       reason: 'OpenRouter /embeddings failed (402): Insufficient credits',
     });

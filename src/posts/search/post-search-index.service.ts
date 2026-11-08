@@ -1,11 +1,11 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { AiService } from '@nestjs/ai';
 import { InjectModel } from '@nestjs/mongoose';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import type { Model } from 'mongoose';
 import { MediaAsset, Post, PostStatus, PostType } from '../../mongo/models.js';
 import { QdrantService } from '../../qdrant/qdrant.service.js';
-import { PostEmbeddingsService } from './post-embeddings.service.js';
 import {
   BM25_FOLDED_VECTOR,
   BM25_VECTOR,
@@ -40,13 +40,14 @@ export const SEARCHABLE_POST = {
 export class PostSearchIndexService {
   private readonly logger = new Logger(PostSearchIndexService.name);
   readonly collection: string;
+  readonly dimensions: number;
   private collectionReady: Promise<void> | null = null;
   private draining: Promise<void> | null = null;
   private drainAgain = false;
 
   constructor(
     private readonly qdrant: QdrantService,
-    private readonly embeddings: PostEmbeddingsService,
+    private readonly ai: AiService,
     configService: ConfigService,
     @InjectModel(Post.name) private readonly posts: Model<Post>,
     @InjectModel(MediaAsset.name) private readonly media: Model<MediaAsset>,
@@ -55,6 +56,10 @@ export class PostSearchIndexService {
       'QDRANT_POSTS_COLLECTION',
       // v2 adds `publishedAt` to the payload for the feed.
       'vedora_posts_v2',
+    );
+    this.dimensions = configService.get<number>(
+      'POST_SEARCH_EMBEDDING_DIMENSIONS',
+      768,
     );
   }
 
@@ -147,9 +152,13 @@ export class PostSearchIndexService {
       .filter(({ chunks }) => chunks.length > 0);
     if (texts.length > 0) {
       // One request for every chunk of the batch, then one vector per post.
-      const chunkVectors = await this.embeddings.embedPosts(
-        texts.flatMap(({ chunks }) => chunks),
-      );
+      const { embeddings: chunkVectors } = await this.ai.embedMany({
+        model: 'posts',
+        label: 'index-posts',
+        values: texts.flatMap(({ chunks }) =>
+          chunks.map((chunk) => `title: none | text: ${chunk}`),
+        ),
+      });
       let next = 0;
       const vectors = texts.map(({ chunks }) =>
         meanVector(chunkVectors.slice(next, (next += chunks.length))),
@@ -190,7 +199,7 @@ export class PostSearchIndexService {
   }
 
   private async createCollection(): Promise<void> {
-    const size = this.embeddings.dimensions;
+    const size = this.dimensions;
     if ((await this.qdrant.collectionExists(this.collection)).exists) {
       const { config } = await this.qdrant.getCollection(this.collection);
       const vectors = config.params.vectors;

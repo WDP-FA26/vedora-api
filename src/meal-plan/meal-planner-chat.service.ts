@@ -1,5 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
+import { AiService, InjectModel } from '@nestjs/ai';
 import {
   isStepCount,
   type LanguageModel,
@@ -9,14 +9,8 @@ import {
 import { cannedReply } from '../ai/chat/canned-reply.js';
 import { chatErrorCode } from '../ai/chat/errors.js';
 import { replyFilter } from '../ai/chat/reply-filter.js';
-import { moderateWithRetry } from '../ai/moderation/moderation.js';
+import { moderate } from '../ai/moderation/moderation.js';
 import { NUTRITION_POLICY } from '../ai/moderation/policies/nutrition.js';
-import {
-  chatModel,
-  DEFAULT_CHAT_MODEL,
-  DEFAULT_MODERATION_MODEL,
-} from '../ai/openrouter.js';
-import type { ReasoningEffort } from '../ai/reasoning.js';
 import { searchKnowledgeTool } from '../ai/tools/search-knowledge.tool.js';
 import { KnowledgeSearchService } from '../knowledge/retrieval/knowledge-search.service.js';
 import { DietaryService } from '../recipes/dietary.service.js';
@@ -41,44 +35,22 @@ const SEARCH_TIMEOUT_MS = 5000;
 @Injectable()
 export class MealPlannerChatService {
   private readonly logger = new Logger(MealPlannerChatService.name);
-  private readonly model: LanguageModel;
-  private readonly moderationModel: LanguageModel;
 
   constructor(
-    configService: ConfigService,
+    private readonly ai: AiService,
+    @InjectModel() private readonly model: LanguageModel,
     private readonly mealPlan: MealPlanService,
     private readonly dietary: DietaryService,
     private readonly knowledge: KnowledgeSearchService,
-  ) {
-    const apiKey = configService.getOrThrow<string>('OPENROUTER_API_KEY');
-    this.moderationModel = chatModel({
-      apiKey,
-      modelId: configService.get<string>(
-        'OPENROUTER_MODERATION_MODEL',
-        DEFAULT_MODERATION_MODEL,
-      ),
-      reasoningEffort: 'low',
-    });
-    this.model = chatModel({
-      apiKey,
-      modelId: configService.get<string>(
-        'OPENROUTER_MODEL',
-        DEFAULT_CHAT_MODEL,
-      ),
-      reasoningEffort: configService.get<ReasoningEffort>(
-        'OPENROUTER_REASONING_EFFORT',
-        'low',
-      ),
-    });
-  }
+  ) {}
 
   async stream(
     userId: string,
     messages: PlannerMessageDto[],
     abortSignal: AbortSignal,
   ) {
-    const verdict = await moderateWithRetry(
-      this.moderationModel,
+    const verdict = await moderate(
+      this.ai,
       messages.at(-1)?.text ?? '',
       abortSignal,
       NUTRITION_POLICY,

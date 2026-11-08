@@ -1,4 +1,6 @@
 import { ConfigService } from '@nestjs/config';
+import { AiModule, AiService } from '@nestjs/ai';
+import { Test } from '@nestjs/testing';
 import { AiFeature } from '../../../mongo/models.js';
 import { MockImageModelV4, MockLanguageModelV4 } from 'ai/test';
 import { type DeepMockProxy, mockDeep } from 'vitest-mock-extended';
@@ -60,9 +62,17 @@ vi.mock('@openrouter/ai-sdk-provider', () => ({
 }));
 
 describe('BlogImageGeneratorService', () => {
+  let ai: AiService;
   let storage: DeepMockProxy<StorageService>;
   let aiUsage: DeepMockProxy<AiUsageService>;
   let service: BlogImageGeneratorService;
+
+  beforeAll(async () => {
+    const moduleRef = await Test.createTestingModule({
+      imports: [AiModule.forRoot({ models: { moderation: moderator } })],
+    }).compile();
+    ai = moduleRef.get(AiService);
+  });
 
   beforeEach(() => {
     verdict = 'allow';
@@ -80,6 +90,7 @@ describe('BlogImageGeneratorService', () => {
     aiUsage.refund.mockResolvedValue();
     service = new BlogImageGeneratorService(
       new ConfigService({ OPENROUTER_API_KEY: 'key' }),
+      ai,
       storage,
       aiUsage,
     );

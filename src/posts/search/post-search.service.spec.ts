@@ -1,25 +1,25 @@
 import { ConfigService } from '@nestjs/config';
+import { AiService } from '@nestjs/ai';
 import { type DeepMockProxy, mockDeep } from 'vitest-mock-extended';
 import { QdrantService } from '../../qdrant/qdrant.service.js';
-import { PostEmbeddingsService } from './post-embeddings.service.js';
 import { PostSearchIndexService } from './post-search-index.service.js';
 import { PostSearchService } from './post-search.service.js';
 
 describe('PostSearchService', () => {
   let qdrant: DeepMockProxy<QdrantService>;
-  let embeddings: DeepMockProxy<PostEmbeddingsService>;
+  let ai: DeepMockProxy<AiService>;
   let index: DeepMockProxy<PostSearchIndexService>;
   let service: PostSearchService;
 
   beforeEach(() => {
     qdrant = mockDeep<QdrantService>();
-    embeddings = mockDeep<PostEmbeddingsService>();
+    ai = mockDeep<AiService>();
     index = mockDeep<PostSearchIndexService>();
     Object.defineProperty(index, 'collection', { value: 'test_posts' });
-    embeddings.embedQuery.mockResolvedValue([0.1, 0.2]);
+    ai.embed.mockResolvedValue({ embedding: [0.1, 0.2] } as never);
     service = new PostSearchService(
       qdrant,
-      embeddings,
+      ai,
       index,
       new ConfigService({ POST_SEARCH_MIN_SCORE: 0.7 }),
     );
@@ -33,6 +33,11 @@ describe('PostSearchService', () => {
     const page = await service.search('dau hu', 20, 2);
 
     expect(page).toEqual({ ids: ['a', 'b'], hasMore: true });
+    expect(ai.embed).toHaveBeenCalledWith({
+      model: 'posts',
+      label: 'search-posts',
+      value: 'task: search result | query: dau hu',
+    });
     expect(qdrant.query).toHaveBeenCalledWith('test_posts', {
       prefetch: [
         {

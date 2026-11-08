@@ -1,8 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { chatModel, DEFAULT_CHAT_MODEL } from '../../ai/openrouter.js';
-import type { ReasoningEffort } from '../../ai/reasoning.js';
-import { generateText, type LanguageModel, Output } from 'ai';
+import { AiService } from '@nestjs/ai';
 import { z } from 'zod';
 import { parsePayload, validatePayload } from '../../common/validation.js';
 import { ExternalServiceException } from '../../common/exceptions/external-service.exception.js';
@@ -15,7 +13,6 @@ import type { Cue } from './vtt.js';
 
 const OPENROUTER_API = 'https://openrouter.ai/api/v1';
 const TRANSCRIBE_TIMEOUT_MS = 3 * 60_000;
-const TRANSLATE_TIMEOUT_MS = 2 * 60_000;
 
 /** Biases transcription toward these spellings. */
 const CAPTION_PROMPT =
@@ -65,25 +62,16 @@ export interface Transcript {
 export class TranscriptionService {
   private readonly apiKey: string;
   private readonly transcriptionModel: string;
-  private readonly translationModel: LanguageModel;
 
-  constructor(configService: ConfigService) {
+  constructor(
+    configService: ConfigService,
+    private readonly ai: AiService,
+  ) {
     this.apiKey = configService.getOrThrow<string>('OPENROUTER_API_KEY');
     this.transcriptionModel = configService.get<string>(
       'TRANSCRIPTION_MODEL',
       'openai/whisper-large-v3',
     );
-    this.translationModel = chatModel({
-      apiKey: this.apiKey,
-      modelId: configService.get<string>(
-        'OPENROUTER_MODEL',
-        DEFAULT_CHAT_MODEL,
-      ),
-      reasoningEffort: configService.get<ReasoningEffort>(
-        'OPENROUTER_REASONING_EFFORT',
-        'low',
-      ),
-    });
   }
 
   async transcribe({ audio, speech }: SpeechAudio): Promise<Transcript> {
@@ -140,22 +128,22 @@ export class TranscriptionService {
 
   /** The same cues in `to`, one line per cue; throws if lines go missing. */
   async translate(cues: Cue[], from: string, to: string): Promise<Cue[]> {
-    const { output } = await generateText({
-      model: this.translationModel,
+    const { object } = await this.ai.generateObject({
+      label: 'translate-captions',
       instructions: `You translate video captions about plant-based cooking from ${languageName(from, 'en')} to ${languageName(to, 'en')}. Return exactly one translated line per input line, in the same order, as {"lines": [...]}. Keep these words unchanged: ${NEVER_TRANSLATE.join(', ')}. Never merge, split or skip lines.`,
       prompt: JSON.stringify(cues.map((cue) => cue.text)),
-      output: Output.object({ schema: translationOutput }),
-      abortSignal: AbortSignal.timeout(TRANSLATE_TIMEOUT_MS),
+      schema: translationOutput,
+      timeout: '2m',
     });
-    if (output.lines.length !== cues.length) {
+    if (object.lines.length !== cues.length) {
       throw new ExternalServiceException(
         'openrouter',
-        `Translation returned ${output.lines.length} lines for ${cues.length} cues`,
+        `Translation returned ${object.lines.length} lines for ${cues.length} cues`,
       );
     }
     return cues.map((cue, index) => ({
       ...cue,
-      text: output.lines[index].trim(),
+      text: object.lines[index].trim(),
     }));
   }
 }
