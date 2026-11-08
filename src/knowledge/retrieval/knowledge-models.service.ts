@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { AiService } from '@nestjs/ai';
 import type { ClassConstructor } from 'class-transformer';
 import { parsePayload, validatePayload } from '../../common/validation.js';
 import { ExternalServiceException } from '../../common/exceptions/external-service.exception.js';
@@ -18,7 +19,6 @@ export interface RerankResult {
 }
 
 const OPENROUTER_API = 'https://openrouter.ai/api/v1';
-const TEXT_BATCH = 64;
 const IMAGE_BATCH = 8;
 const EMBED_TIMEOUT_MS = 60_000;
 const OCR_TIMEOUT_MS = 5 * 60_000;
@@ -26,8 +26,9 @@ const OCR_TIMEOUT_MS = 5 * 60_000;
 // the parsed text and its reply is discarded
 const OCR_CARRIER_MODEL = 'google/gemini-3.1-flash-lite';
 
-// plain fetch: the AI SDK embeds text only, and @openrouter/sdk neither
-// honours abort signals nor returns OCR annotations
+// Text embeddings go through `AiService`; image embeddings, reranking and PDF
+// OCR use fetch since the AI SDK embeds text only and does not expose OCR
+// annotations.
 @Injectable()
 export class KnowledgeModelsService {
   private readonly apiKey: string;
@@ -35,7 +36,10 @@ export class KnowledgeModelsService {
   private readonly rerankModel: string;
   readonly dimensions: number;
 
-  constructor(configService: ConfigService) {
+  constructor(
+    configService: ConfigService,
+    private readonly ai: AiService,
+  ) {
     this.apiKey = configService.getOrThrow<string>('OPENROUTER_API_KEY');
     this.embeddingModel = configService.get<string>(
       'OPENROUTER_EMBEDDING_MODEL',
@@ -49,14 +53,19 @@ export class KnowledgeModelsService {
   }
 
   async embed(inputs: EmbeddingInput[]): Promise<number[][]> {
-    const size = inputs.some((input) => typeof input !== 'string')
-      ? IMAGE_BATCH
-      : TEXT_BATCH;
+    if (inputs.length === 0) return [];
+    if (inputs.every((input): input is string => typeof input === 'string')) {
+      const { embeddings } = await this.ai.embedMany({
+        label: 'index-knowledge',
+        values: inputs,
+      });
+      return embeddings;
+    }
     const vectors: number[][] = [];
-    for (let start = 0; start < inputs.length; start += size) {
+    for (let start = 0; start < inputs.length; start += IMAGE_BATCH) {
       vectors.push(
         ...(await this.embedBatch(
-          inputs.slice(start, start + size),
+          inputs.slice(start, start + IMAGE_BATCH),
           AbortSignal.timeout(EMBED_TIMEOUT_MS),
         )),
       );
@@ -65,11 +74,12 @@ export class KnowledgeModelsService {
   }
 
   async embedQuery(query: string, signal?: AbortSignal): Promise<number[]> {
-    const [vector] = await this.embedBatch(
-      [`task: question answering | query: ${query}`],
-      signal ?? AbortSignal.timeout(EMBED_TIMEOUT_MS),
-    );
-    return vector;
+    const { embedding } = await this.ai.embed({
+      label: 'search-knowledge',
+      value: `task: question answering | query: ${query}`,
+      abortSignal: signal,
+    });
+    return embedding;
   }
 
   async rerank(

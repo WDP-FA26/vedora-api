@@ -1,9 +1,11 @@
 import { FeatureUnavailableException } from '../common/exceptions/feature-unavailable.exception.js';
-import { ConfigService } from '@nestjs/config';
+import { ConfigModule } from '@nestjs/config';
+import { FakeEmbeddingModel, providerError } from '@nestjs/ai/testing';
 import { Test } from '@nestjs/testing';
 import { simulateReadableStream, type UIMessageChunk } from 'ai';
 import { convertReadableStreamToArray, MockLanguageModelV4 } from 'ai/test';
 import { type DeepMockProxy, mockDeep } from 'vitest-mock-extended';
+import { AiModule } from '../ai/ai.module.js';
 import { KnowledgeSearchService } from '../knowledge/retrieval/knowledge-search.service.js';
 import { INSTRUCTIONS } from './nutrition-chat.prompt.js';
 import { NutritionChatService } from './nutrition-chat.service.js';
@@ -48,6 +50,7 @@ const searchChunks: StreamPart[] = [
 
 let steps: StreamPart[][] = [];
 let verdict = 'allow';
+let rateLimitModeration = false;
 
 const model = new MockLanguageModelV4({
   doStream: () =>
@@ -62,18 +65,23 @@ const model = new MockLanguageModelV4({
 
 const moderator = new MockLanguageModelV4({
   doGenerate: () =>
-    Promise.resolve({
-      content: [{ type: 'text', text: JSON.stringify({ verdict }) }],
-      finishReason: { unified: 'stop', raw: undefined },
-      usage,
-      warnings: [],
-    }),
+    rateLimitModeration
+      ? Promise.reject(providerError(429, { retryAfter: 0 }))
+      : Promise.resolve({
+          content: [{ type: 'text', text: JSON.stringify({ verdict }) }],
+          finishReason: { unified: 'stop', raw: undefined },
+          usage,
+          warnings: [],
+        }),
 });
 
 const MODERATION_MODEL = 'openai/gpt-oss-safeguard-20b';
-const languageModel = vi.fn<
-  (modelId: string, settings: { reasoning: object }) => MockLanguageModelV4
->((modelId) => (modelId === MODERATION_MODEL ? moderator : model));
+const languageModel = Object.assign(
+  vi.fn<
+    (modelId: string, settings: { reasoning: object }) => MockLanguageModelV4
+  >((modelId) => (modelId === MODERATION_MODEL ? moderator : model)),
+  { textEmbeddingModel: () => new FakeEmbeddingModel() },
+);
 const createOpenRouter = vi.fn<
   (settings: { apiKey: string }) => typeof languageModel
 >(() => languageModel);
@@ -91,16 +99,22 @@ const replyText = (chunks: UIMessageChunk[]) =>
 
 async function createService() {
   const moduleRef = await Test.createTestingModule({
+    imports: [
+      ConfigModule.forRoot({
+        isGlobal: true,
+        ignoreEnvFile: true,
+        load: [
+          () => ({
+            OPENROUTER_API_KEY: 'key',
+            OPENROUTER_MODEL: 'test/model',
+          }),
+        ],
+      }),
+      AiModule,
+    ],
     providers: [
       NutritionChatService,
       { provide: KnowledgeSearchService, useValue: knowledge },
-      {
-        provide: ConfigService,
-        useValue: new ConfigService({
-          OPENROUTER_API_KEY: 'key',
-          OPENROUTER_MODEL: 'test/model',
-        }),
-      },
     ],
   }).compile();
   return moduleRef.get(NutritionChatService);
@@ -128,6 +142,7 @@ describe('NutritionChatService', () => {
     moderator.doGenerateCalls.length = 0;
     steps = [];
     verdict = 'allow';
+    rateLimitModeration = false;
   });
 
   it('streams the reply to the conversation', async () => {
@@ -192,7 +207,7 @@ describe('NutritionChatService', () => {
   });
 
   it('retries moderation with backoff before giving up', async () => {
-    verdict = 'not-a-verdict';
+    rateLimitModeration = true;
     const chunks = ask('Đậu phụ có bao nhiêu canxi?');
     await expect(chunks).rejects.toThrow(FeatureUnavailableException);
     expect(moderator.doGenerateCalls).toHaveLength(3);

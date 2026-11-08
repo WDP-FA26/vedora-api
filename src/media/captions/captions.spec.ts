@@ -1,4 +1,8 @@
-import { parseSilences, speechIntervals, toOriginalTime } from './speech-audio.js';
+import {
+  parseSilences,
+  speechIntervals,
+  toOriginalTime,
+} from './speech-audio.js';
 import {
   languageCode,
   languageName,
