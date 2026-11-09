@@ -75,10 +75,10 @@ describe('SePay provider boundary', () => {
       }),
     ).toThrow();
     expect(() =>
-      validateEnvironment({ ...environment, BILLING_PRO_PRICE_VND: 0 }),
+      validateEnvironment({ ...environment, SUBSCRIPTION_PRO_PRICE_VND: 0 }),
     ).toThrow();
     expect(() =>
-      validateEnvironment({ ...environment, BILLING_PRO_PRICE_VND: 1.5 }),
+      validateEnvironment({ ...environment, SUBSCRIPTION_PRO_PRICE_VND: 1.5 }),
     ).toThrow();
     expect(() =>
       validateEnvironment({ ...environment, SEPAY_PAYMENT_FLOW: 'gateway' }),
