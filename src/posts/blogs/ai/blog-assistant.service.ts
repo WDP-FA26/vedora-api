@@ -19,7 +19,11 @@ import { chatErrorCode } from '../../../ai/chat/errors.js';
 import { replyFilter } from '../../../ai/chat/reply-filter.js';
 import { MODERATION_MODEL } from '../../../ai/guardrails/guardrail.js';
 import { decide } from '../../../common/decision/decision.js';
-import { AiUsageService } from '../../../ai/usage/ai-usage.service.js';
+import {
+  AiUsageService,
+  type UsageTicket,
+} from '../../../subscriptions/ai-usage.service.js';
+import { quotaStream } from '../../../subscriptions/quota-stream.js';
 import { KnowledgeSearchService } from '../../../knowledge/retrieval/knowledge-search.service.js';
 import {
   AiFeature,
@@ -86,6 +90,10 @@ export class BlogAssistantService {
     dto: BlogAssistantChatDto,
     abortSignal: AbortSignal,
   ) {
+    abortSignal = AbortSignal.any([
+      abortSignal,
+      AbortSignal.timeout(5 * 60_000),
+    ]);
     const tools = blogAssistantTools(userId, this.knowledge, this.images);
     const messages = await parseMessages(dto.messages, tools);
     const last = messages[messages.length - 1];
@@ -93,67 +101,84 @@ export class BlogAssistantService {
       ? await this.linkedRecipes(userId, dto.blogId)
       : [];
 
-    if (!(await this.usage.consume(userId, AiFeature.BLOG_CHAT))) {
+    const userTurn = messages.findLast((message) => message.role === 'user');
+    const ticket = await this.usage.consume(userId, AiFeature.BLOG_CHAT, {
+      requestId: userTurn?.id,
+      // The draft may be saved for the first time between editor tool calls.
+      // Bind to the chat session, not a blogId that can appear mid-turn.
+      prompt: { parts: userTurn?.parts, sessionId: dto.id },
+      input: { messages, editor: dto.editor, blogId: dto.blogId },
+      continuation: last.role !== 'user',
+    });
+    if (!ticket) {
       throw new QuotaReachedException(
         'AI_QUOTA_EXCEEDED',
-        'You have used all assistant requests for today',
+        'Your shared AI text allowance is exhausted',
       );
     }
 
-    if (last.role === 'user') {
-      const { choice: verdict } = await decide(
-        this.moderator,
-        textOf(last),
-        abortSignal,
-        BLOG_ASSISTANT_POLICY,
-      ).catch(async (error: unknown) => {
-        await this.refund(userId);
-        if (abortSignal.aborted) throw error;
-        this.logger.error(`Moderation failed: ${String(error)}`);
-        throw new FeatureUnavailableException(
-          'SERVICE_UNAVAILABLE',
-          'Moderation is unavailable',
-        );
-      });
-      const refusal = blogRefusal(verdict);
-      if (refusal) {
-        this.logger.warn(`Moderation answered ${verdict}`);
-        await this.refund(userId);
-        return cannedReply(BLOG_ASSISTANT_REFUSALS[refusal]);
+    try {
+      if (last.role === 'user') {
+        const { choice: verdict } = await decide(
+          this.moderator,
+          textOf(last),
+          abortSignal,
+          BLOG_ASSISTANT_POLICY,
+        ).catch((error: unknown) => {
+          if (abortSignal.aborted) throw error;
+          this.logger.error(`Moderation failed: ${String(error)}`);
+          throw new FeatureUnavailableException(
+            'SERVICE_UNAVAILABLE',
+            'Moderation is unavailable',
+          );
+        });
+        const refusal = blogRefusal(verdict);
+        if (refusal) {
+          this.logger.warn(`Moderation answered ${verdict}`);
+          await this.refund(ticket);
+          return cannedReply(BLOG_ASSISTANT_REFUSALS[refusal]);
+        }
       }
-    }
 
-    const agent = new ToolLoopAgent({
-      model: this.model,
-      instructions: blogAssistantInstructions(dto.editor, recipes),
-      maxOutputTokens: MAX_OUTPUT_TOKENS,
-      tools,
-      stopWhen: isStepCount(MAX_STEPS),
-      prepareStep: ({ stepNumber }) =>
-        stepNumber === MAX_STEPS - 1 ? { toolChoice: 'none' } : {},
-    });
-    const result = await agent.stream({
-      messages: await convertToModelMessages(messages, {
+      const agent = new ToolLoopAgent({
+        model: this.model,
+        instructions: blogAssistantInstructions(dto.editor, recipes),
+        maxOutputTokens: MAX_OUTPUT_TOKENS,
         tools,
-        ignoreIncompleteToolCalls: true,
-      }),
-      abortSignal,
-      timeout: { tools: { searchKnowledgeMs: SEARCH_TIMEOUT_MS } },
-      experimental_transform: replyFilter(),
-    });
-    return toUIMessageStream({
-      stream: result.stream,
-      tools: agent.tools,
-      originalMessages: messages,
-      onError: (error) => {
-        this.logger.error(
-          `Blog assistant stream failed: ${
-            error instanceof Error ? error.message : String(error)
-          }`,
-        );
-        return chatErrorCode(error);
-      },
-    });
+        stopWhen: isStepCount(MAX_STEPS),
+        prepareStep: ({ stepNumber }) =>
+          stepNumber === MAX_STEPS - 1 ? { toolChoice: 'none' } : {},
+      });
+      const result = await agent.stream({
+        messages: await convertToModelMessages(messages, {
+          tools,
+          ignoreIncompleteToolCalls: true,
+        }),
+        abortSignal,
+        timeout: { tools: { searchKnowledgeMs: SEARCH_TIMEOUT_MS } },
+        experimental_transform: replyFilter(),
+      });
+      return quotaStream(
+        toUIMessageStream({
+          stream: result.stream,
+          tools: agent.tools,
+          originalMessages: messages,
+          onError: (error) => {
+            this.logger.error(
+              `Blog assistant stream failed: ${
+                error instanceof Error ? error.message : String(error)
+              }`,
+            );
+            return chatErrorCode(error);
+          },
+        }),
+        this.usage,
+        ticket,
+      );
+    } catch (error) {
+      await this.refund(ticket);
+      throw error;
+    }
   }
 
   private async linkedRecipes(
@@ -214,9 +239,9 @@ export class BlogAssistantService {
     });
   }
 
-  private async refund(userId: string): Promise<void> {
+  private async refund(ticket: UsageTicket): Promise<void> {
     await this.usage
-      .refund(userId, AiFeature.BLOG_CHAT)
+      .refund(ticket)
       .catch((error: unknown) =>
         this.logger.warn(`Quota refund failed: ${String(error)}`),
       );

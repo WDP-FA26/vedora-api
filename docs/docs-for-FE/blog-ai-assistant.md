@@ -64,7 +64,7 @@ Ngày tính theo giờ Bangkok (reset lúc 00:00 GMT+7). **Mỗi request** tới
 Accept/Reject một editor tool. Một câu hỏi có hai thay đổi được duyệt sẽ tốn
 khoảng 3 lượt. Mỗi ảnh tạo hoặc sửa trừ 1 lượt `images`. Lượt bị moderation
 chặn hoặc tạo ảnh lỗi được hoàn lại. Gọi lại quota sau mỗi lượt chat để cập nhật
-"Còn X lượt hôm nay".
+"Còn X lượt", kèm thời điểm đặt lại theo `resetsAt` và liên kết tới Gói của bạn.
 
 ## Tools
 
@@ -198,7 +198,7 @@ Lưu ý:
 | 400 | Body sai, hoặc `BLOG_AI_INVALID_MESSAGES` (tool part sai schema, tin nhắn cuối rỗng hay quá 4.000 ký tự, tool chưa có output) | Báo lỗi, kiểm tra lại cách build message |
 | 401 | Token thiếu, sai hoặc hết hạn | Refresh token rồi gửi lại |
 | 404 | `blogId` không phải blog của user | Bỏ `blogId` |
-| 429 | `code: "AI_QUOTA_EXCEEDED"`: hết lượt trong ngày (xem `resetsAt` từ `/quota`), hoặc quá 30 request/phút (không có `code`) | Hiện "Hết lượt hôm nay" hoặc "Thử lại sau ít phút" |
+| 429 | `code: "AI_QUOTA_EXCEEDED"`: hết lượt dùng chung theo gói (xem `resetsAt` từ `/quota`), hoặc quá 30 request/phút | Hiện "Hết lượt AI" và liên kết Gói của bạn, hoặc "Thử lại sau ít phút" |
 | 503 | Model kiểm duyệt lỗi hoặc timeout | Cho phép thử lại |
 
 Lỗi giữa chừng stream đến dưới dạng chunk `error` với `errorText` là
@@ -220,5 +220,7 @@ npm test -- src/posts/ai src/ai-usage
 ```
 
 Env backend: `BLOG_AI_MODEL` (nên ghim model gọi tool ổn định),
-`OPENROUTER_IMAGE_MODEL=qwen/qwen-image-2.1-turbo`, `BLOG_AI_DAILY_MESSAGES=100`,
-`BLOG_AI_DAILY_IMAGES=10`.
+`OPENROUTER_IMAGE_MODEL=qwen/qwen-image-2.1-turbo`. Hạn mức trợ lý/ảnh hiện theo
+gói và dùng chung lượt văn bản với planner, xem [subscriptions.md](subscriptions.md).
+Các biến BLOG_AI_DAILY_* cũ không còn điều khiển quota. `resetsAt` là cuối chu
+kỳ của Plus/Pro hoặc 00:00 Asia/Bangkok của Free, không luôn là nửa đêm.

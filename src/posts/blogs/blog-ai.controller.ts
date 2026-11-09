@@ -43,7 +43,9 @@ export class BlogAiController {
   constructor(private readonly assistant: BlogAssistantService) {}
 
   @Get('quota')
-  @ApiOperation({ summary: "Today's assistant and image allowance" })
+  @ApiOperation({
+    summary: 'Shared subscription text allowance and image allowance',
+  })
   @ApiOkResponse({ type: BlogAssistantQuotaDto })
   quota(@Req() request: AuthenticatedRequest): Promise<BlogAssistantQuotaDto> {
     return this.assistant.quota(request.user.sub);
@@ -84,7 +86,7 @@ export class BlogAiController {
   @ApiTooManyRequestsResponse({
     type: ErrorBodyDto,
     description:
-      '`AI_QUOTA_EXCEEDED` when the daily allowance is spent, or more than 30 requests a minute',
+      '`AI_QUOTA_EXCEEDED` when the shared daily/cycle allowance is spent, or more than 30 requests a minute',
   })
   @ApiServiceUnavailableResponse({
     type: ErrorBodyDto,

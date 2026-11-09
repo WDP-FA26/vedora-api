@@ -1,4 +1,5 @@
 export enum BillingPlan {
+  PLUS = 'PLUS',
   PRO = 'PRO',
   PREMIUM = 'PREMIUM',
 }
@@ -154,6 +155,7 @@ export enum MealSection {
 }
 
 export enum AiFeature {
+  MEAL_PLAN_CHAT = 'MEAL_PLAN_CHAT',
   BLOG_CHAT = 'BLOG_CHAT',
   BLOG_IMAGE = 'BLOG_IMAGE',
 }

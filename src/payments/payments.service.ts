@@ -7,6 +7,7 @@ import { lockDocument } from '../mongo/document-lock.js';
 import { isUniqueViolation } from '../mongo/errors.js';
 import {
   AccountStatus,
+  AiFeature,
   BillingPlan,
   PaymentIntent,
   PaymentRequest,
@@ -24,6 +25,15 @@ import { SePayProvider } from './sepay.provider.js';
 import { parseBankWebhook } from './sepay-payload.js';
 import { generatePaymentCode } from './payment-code.js';
 import {
+  effectivePlan,
+  PAID_PLANS,
+  PLAN_VERSION,
+  purchasedPlanName,
+  SUBSCRIPTION_LIMITS,
+} from '../subscriptions/subscription-policy.js';
+import { SubscriptionsService } from '../subscriptions/subscriptions.service.js';
+import { AiUsageService } from '../subscriptions/ai-usage.service.js';
+import {
   PaymentChanged,
   PaymentEventsService,
 } from './payment-events.service.js';
@@ -34,8 +44,6 @@ import { FeatureUnavailableException } from '../common/exceptions/feature-unavai
 
 const hash = (value: unknown) =>
   createHash('sha256').update(JSON.stringify(value)).digest('hex');
-const membershipExpiry = (startsAt: Date, durationDays: number) =>
-  new Date(startsAt.getTime() + durationDays * 86_400_000);
 type Intent = Omit<PaymentIntent, '_id'>;
 
 @Injectable()
@@ -54,21 +62,30 @@ export class PaymentsService {
     private readonly config: ConfigService,
     private readonly provider: SePayProvider,
     private readonly events: PaymentEventsService,
+    private readonly subscriptions: SubscriptionsService,
+    private readonly usage: AiUsageService,
   ) {}
 
   catalog(): BillingCatalogDto {
     return {
+      planVersion: PLAN_VERSION,
+      freeLimits: {
+        textLimit: SUBSCRIPTION_LIMITS.FREE.text,
+        imageLimit: SUBSCRIPTION_LIMITS.FREE.images,
+      },
       paymentsEnabled: this.config.get<boolean>('SEPAY_PAYMENT_ENABLED', false),
-      plans: [BillingPlan.PRO, BillingPlan.PREMIUM].map((code) => ({
+      plans: PAID_PLANS.map((code) => ({
         code,
-        name: code === BillingPlan.PRO ? 'Pro' : 'Premium',
+        name: code === BillingPlan.PLUS ? 'Plus' : 'Pro',
         priceVnd: String(
           this.config.get<number>(
-            `BILLING_${code}_PRICE_VND`,
-            code === BillingPlan.PRO ? 49000 : 99000,
+            `SUBSCRIPTION_${code}_PRICE_VND`,
+            code === BillingPlan.PLUS ? 49000 : 99000,
           ),
         ),
         durationDays: this.config.get<number>('BILLING_DURATION_DAYS', 30),
+        textLimit: SUBSCRIPTION_LIMITS[code].text,
+        imageLimit: SUBSCRIPTION_LIMITS[code].images,
       })),
     };
   }
@@ -94,7 +111,13 @@ export class PaymentsService {
   serialize(intent: Intent): PaymentDto {
     return {
       id: intent.id,
-      planCode: intent.planCode,
+      planCode: effectivePlan(intent),
+      planVersion: intent.planVersion ?? 1,
+      purchasedPlanName: purchasedPlanName(intent),
+      textLimit:
+        intent.textLimit ?? SUBSCRIPTION_LIMITS[effectivePlan(intent)].text,
+      imageLimit:
+        intent.imageLimit ?? SUBSCRIPTION_LIMITS[effectivePlan(intent)].images,
       durationDays: intent.durationDays,
       amount: intent.amount.toString(),
       currency: intent.currency,
@@ -115,11 +138,8 @@ export class PaymentsService {
 
   async overview(userId: string): Promise<BillingOverviewDto> {
     const now = new Date();
-    const [latest, pending, recent] = await Promise.all([
-      this.intents
-        .findOne({ userId, status: PaymentStatus.SUCCEEDED })
-        .sort({ capturedAt: -1, _id: -1 })
-        .exec(),
+    const [period, pending, recent] = await Promise.all([
+      this.subscriptions.period(userId, now),
       this.intents.findOne({ activeIntentKey: userId }).exec(),
       this.intents
         .find({ userId })
@@ -127,20 +147,23 @@ export class PaymentsService {
         .limit(20)
         .exec(),
     ]);
-    const membership = latest?.capturedAt
-      ? {
-          planCode: latest.planCode,
-          startsAt: latest.capturedAt,
-          expiresAt: membershipExpiry(latest.capturedAt, latest.durationDays),
-        }
-      : null;
+    const [text, images] = await Promise.all([
+      this.usage.summaryForPeriod(
+        userId,
+        AiFeature.MEAL_PLAN_CHAT,
+        period,
+        now,
+      ),
+      this.usage.summaryForPeriod(userId, AiFeature.BLOG_IMAGE, period, now),
+    ]);
     return {
+      usage: { text, images },
       membership:
-        membership && membership.expiresAt > now
+        period.planCode !== 'FREE'
           ? {
-              planCode: membership.planCode,
-              startsAt: membership.startsAt.toISOString(),
-              expiresAt: membership.expiresAt.toISOString(),
+              planCode: period.planCode,
+              startsAt: period.startsAt.toISOString(),
+              expiresAt: period.expiresAt.toISOString(),
             }
           : { planCode: 'FREE', startsAt: null, expiresAt: null },
       pendingPayment: pending ? this.serialize(pending) : null,
@@ -166,7 +189,7 @@ export class PaymentsService {
         'BAD_REQUEST',
         'A valid Idempotency-Key is required',
       );
-    const payloadHash = hash({ planCode });
+    const payloadHash = hash({ planCode, planVersion: PLAN_VERSION });
     const attemptCreate = () =>
       this.mongo.withTransaction(async (session) => {
         await this.lock(session, 'payer', userId);
@@ -218,9 +241,15 @@ export class PaymentsService {
           .exec();
         if (
           intent &&
-          (intent.planCode !== planCode ||
+          (effectivePlan(intent) !== planCode ||
             intent.amount.toString() !== plan.priceVnd ||
-            intent.durationDays !== plan.durationDays)
+            intent.durationDays !== plan.durationDays ||
+            (intent.textLimit ??
+              SUBSCRIPTION_LIMITS[effectivePlan(intent)].text) !==
+              plan.textLimit ||
+            (intent.imageLimit ??
+              SUBSCRIPTION_LIMITS[effectivePlan(intent)].images) !==
+              plan.imageLimit)
         )
           throw new StateConflictException(
             'PENDING_PAYMENT_CONFLICT',
@@ -236,6 +265,9 @@ export class PaymentsService {
                 _id: randomUUID(),
                 userId,
                 planCode,
+                planVersion: PLAN_VERSION,
+                textLimit: plan.textLimit,
+                imageLimit: plan.imageLimit,
                 amount: BigInt(plan.priceVnd),
                 durationDays: plan.durationDays,
                 currency: 'VND',

@@ -248,16 +248,6 @@ export class EnvironmentVariables {
   @IsString()
   OPENROUTER_IMAGE_MODEL = 'qwen/qwen-image-2.1-turbo';
 
-  @Type(() => Number)
-  @IsInt()
-  @Min(1)
-  BLOG_AI_DAILY_MESSAGES = 100;
-
-  @Type(() => Number)
-  @IsInt()
-  @Min(1)
-  BLOG_AI_DAILY_IMAGES = 10;
-
   @ValidateIf((env: EnvironmentVariables) => env.PAYMENT_REDIS_URL !== '')
   @IsUrl({
     protocols: ['redis', 'rediss'],
@@ -269,17 +259,18 @@ export class EnvironmentVariables {
   @Matches(/^[A-Za-z0-9:_-]{1,100}$/)
   PAYMENT_EVENTS_CHANNEL = 'vedora:payments:v1';
 
+  // New catalogue uses distinct env names so an old PRO=49000 cannot price v2 Pro.
   @Type(() => Number)
   @IsInt()
   @Min(1)
   @Max(1_000_000_000)
-  BILLING_PRO_PRICE_VND = 49000;
+  SUBSCRIPTION_PLUS_PRICE_VND = 49000;
 
   @Type(() => Number)
   @IsInt()
   @Min(1)
   @Max(1_000_000_000)
-  BILLING_PREMIUM_PRICE_VND = 99000;
+  SUBSCRIPTION_PRO_PRICE_VND = 99000;
 
   @Type(() => Number)
   @IsInt()

@@ -1,8 +1,7 @@
 import { ConfigService } from '@nestjs/config';
-import { AiFeature } from '../../../../../src/mongo/models.js';
 import { Experimental_EvaluationMockModelV4, MockImageModelV4 } from 'ai/test';
 import { type DeepMockProxy, mockDeep } from 'vitest-mock-extended';
-import { AiUsageService } from '../../../../../src/ai/usage/ai-usage.service.js';
+import { AiUsageService } from '../../../../../src/subscriptions/ai-usage.service.js';
 import {
   StorageService,
   StorageTarget,
@@ -67,8 +66,13 @@ describe('BlogImageGeneratorService', () => {
       url.startsWith(`${PUBLIC}/`) ? url.slice(PUBLIC.length + 1) : null,
     );
     aiUsage = mockDeep<AiUsageService>();
-    aiUsage.consume.mockResolvedValue(true);
+    aiUsage.consume.mockResolvedValue({
+      id: 'ticket',
+      token: 'lease',
+      hash: 'hash',
+    });
     aiUsage.refund.mockResolvedValue();
+    aiUsage.complete.mockResolvedValue();
     service = new BlogImageGeneratorService(
       new ConfigService({ OPENROUTER_API_KEY: 'key' }),
       moderator,
@@ -100,7 +104,7 @@ describe('BlogImageGeneratorService', () => {
   });
 
   it('answers with a code once the daily images are spent', async () => {
-    aiUsage.consume.mockResolvedValue(false);
+    aiUsage.consume.mockResolvedValue(null);
 
     await expect(service.generate(USER_ID, 'pho', '1:1')).resolves.toEqual({
       error: 'IMAGE_QUOTA_EXCEEDED',
@@ -115,7 +119,11 @@ describe('BlogImageGeneratorService', () => {
       service.generate(USER_ID, 'a famous singer eating pho', '1:1'),
     ).resolves.toEqual({ error: 'IMAGE_PROMPT_REFUSED' });
     expect(imageModel.doGenerate).not.toHaveBeenCalled();
-    expect(aiUsage.refund).toHaveBeenCalledWith(USER_ID, AiFeature.BLOG_IMAGE);
+    expect(aiUsage.refund).toHaveBeenCalledWith({
+      id: 'ticket',
+      token: 'lease',
+      hash: 'hash',
+    });
   });
 
   it('gives the image back when the provider fails', async () => {
@@ -124,7 +132,11 @@ describe('BlogImageGeneratorService', () => {
     await expect(service.generate(USER_ID, 'pho', '1:1')).resolves.toEqual({
       error: 'IMAGE_FAILED',
     });
-    expect(aiUsage.refund).toHaveBeenCalledWith(USER_ID, AiFeature.BLOG_IMAGE);
+    expect(aiUsage.refund).toHaveBeenCalledWith({
+      id: 'ticket',
+      token: 'lease',
+      hash: 'hash',
+    });
   });
 
   it("edits one of the user's own images", async () => {

@@ -21,7 +21,8 @@ Backend starter cho Vedora, sử dụng NestJS, Mongoose (MongoDB, tự host b�
 ├── seed-data/
 │   └── recipes.json           # Danh mục khởi đầu (nguyên liệu, nhóm, quy tắc, công thức)
 ├── src/
-│   ├── ai/                    # Hạ tầng AI dùng chung: model OpenRouter, moderation, quota, tool tra cứu
+│   ├── ai/                    # Hạ tầng AI dùng chung: model OpenRouter, guardrail
+│   ├── subscriptions/         # Plus/Pro, chu kỳ quyền lợi và hạn mức AI dùng chung
 │   ├── common/pagination/     # DTO, helper và Swagger cho phân trang dùng chung
 │   ├── config/                # Validate biến môi trường
 │   ├── mongo/                 # MongoModule, MongoService, schema và type dùng chung

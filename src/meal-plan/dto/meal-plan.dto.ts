@@ -1,5 +1,5 @@
 import { applyDecorators } from '@nestjs/common';
-import { ApiProperty } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { MealSection, Weekday } from '../../mongo/models.js';
 import { Type } from 'class-transformer';
 import {
@@ -9,6 +9,7 @@ import {
   IsArray,
   IsEnum,
   IsIn,
+  IsOptional,
   IsString,
   IsUUID,
   MaxLength,
@@ -190,6 +191,15 @@ export class PlannerMessageDto {
 }
 
 export class MealPlannerChatDto {
+  @ApiPropertyOptional({
+    maxLength: 100,
+    description: 'Stable logical user-turn ID for quota/idempotency',
+  })
+  @IsOptional()
+  @IsString()
+  @MinLength(1)
+  @MaxLength(100)
+  requestId?: string;
   @ApiProperty({
     type: [PlannerMessageDto],
     maxItems: MAX_PLANNER_MESSAGES,

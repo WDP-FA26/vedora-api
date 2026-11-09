@@ -9,8 +9,10 @@ import { SePayProvider } from './sepay.provider.js';
 import { SePayWebhookGuard } from './sepay-webhook.guard.js';
 import { PaymentEventsService } from './payment-events.service.js';
 import { PaymentStreamController } from './payment-stream.controller.js';
+import { SubscriptionsModule } from '../subscriptions/subscriptions.module.js';
 
 @Module({
+  imports: [SubscriptionsModule],
   controllers: [
     PaymentStreamController,
     PaymentsController,

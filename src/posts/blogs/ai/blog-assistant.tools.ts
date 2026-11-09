@@ -96,7 +96,7 @@ export function blogAssistantTools(
     searchKnowledge: searchKnowledgeTool(knowledge),
     generateImage: tool({
       description:
-        "Generate a new illustration for the blog and store it. Costs one of the user's daily images: only call it when the user asks for an image. Write the prompt in English, describing a plant-based dish or scene (subject, angle, lighting, style); no text in the image, no real people. Returns a URL to pass to insertImage, or an error code to explain to the user.",
+        "Generate a new illustration for the blog and store it. Costs one image from the user's current subscription allowance: only call it when the user asks for an image. Write the prompt in English, describing a plant-based dish or scene (subject, angle, lighting, style); no text in the image, no real people. Returns a URL to pass to insertImage, or an error code to explain to the user.",
       inputSchema: z.object({
         prompt: z.string().min(1).max(1000),
         aspectRatio: z.enum(IMAGE_ASPECT_RATIOS).default('4:3'),
@@ -107,7 +107,7 @@ export function blogAssistantTools(
     }),
     editImage: tool({
       description:
-        "Edit an image already in the draft (one of the user's blog images) following an instruction, e.g. brighter, remove the spoon, change the background. Costs one daily image. Returns the edited image's URL; the original is kept, so call insertImage with `replaces` set to the original URL to swap them.",
+        "Edit an image already in the draft (one of the user's blog images) following an instruction, e.g. brighter, remove the spoon, change the background. Costs one image from the current subscription allowance. Returns the edited image's URL; the original is kept, so call insertImage with `replaces` set to the original URL to swap them.",
       inputSchema: z.object({
         imageUrl: z.url(),
         instruction: z.string().min(1).max(1000).describe('In English'),
