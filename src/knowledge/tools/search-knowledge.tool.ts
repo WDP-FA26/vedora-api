@@ -4,7 +4,7 @@ import { z } from 'zod';
 import type {
   KnowledgeHit,
   KnowledgeSearchService,
-} from '../../knowledge/retrieval/knowledge-search.service.js';
+} from '../retrieval/knowledge-search.service.js';
 
 const logger = new Logger('SearchKnowledgeTool');
 

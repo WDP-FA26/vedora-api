@@ -3,7 +3,7 @@ import { PostStatus, PostType } from '../../mongo/models.js';
 import { IsIn, IsEnum, IsOptional, IsString, MaxLength } from 'class-validator';
 import { PaginationQueryDto } from '../../common/pagination/index.js';
 import { AdminMediaDto } from '../../media/dto/media-response.dto.js';
-import { PostAuthorDto } from './post-response.dto.js';
+import { PostAuthorDto } from '../../common/dto/post-author.dto.js';
 import { BlogSummaryDto } from './blog-summary.dto.js';
 
 export class AdminPostsQueryDto extends PaginationQueryDto {

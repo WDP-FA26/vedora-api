@@ -24,7 +24,7 @@ import { pipeUIMessageStreamToResponse } from 'ai';
 import type { Response } from 'express';
 import type { AuthenticatedRequest } from '../auth/auth.types.js';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard.js';
-import { UserThrottlerGuard } from '../nutrition-chat/user-throttler.guard.js';
+import { UserThrottlerGuard } from '../auth/user-throttler.guard.js';
 import {
   MealPlanDto,
   MealPlanPreviewDto,

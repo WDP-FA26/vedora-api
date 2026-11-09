@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { ThrottlerGuard } from '@nestjs/throttler';
-import type { AuthenticatedRequest } from '../auth/auth.types.js';
+import type { AuthenticatedRequest } from './auth.types.js';
 
 @Injectable()
 export class UserThrottlerGuard extends ThrottlerGuard {

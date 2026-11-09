@@ -103,6 +103,7 @@ export default tseslint.config(
                 '**/verification/**',
                 '**/admin-dashboard/**',
                 '**/storage/**',
+                '**/knowledge/**',
                 '**/cloudinary/**',
                 '**/mail/**',
                 '**/qdrant/**',

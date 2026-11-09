@@ -11,12 +11,13 @@ import { GoogleOAuthService } from './google-oauth.service.js';
 import { EmailVerificationService } from './email-verification.service.js';
 import { PasswordResetService } from './password-reset.service.js';
 import { RolesGuard } from './roles.guard.js';
-import { TurnstileService } from '../nutrition-chat/guest/turnstile.service.js';
+import { CaptchaModule } from '../captcha/captcha.module.js';
 
 @Global()
 @Module({
   imports: [
     UsersModule,
+    CaptchaModule,
     JwtModule.registerAsync({
       inject: [ConfigService],
       useFactory: (configService: ConfigService) => ({
@@ -29,7 +30,6 @@ import { TurnstileService } from '../nutrition-chat/guest/turnstile.service.js';
   ],
   controllers: [AuthController],
   providers: [
-    TurnstileService,
     AuthService,
     JwtAuthGuard,
     OptionalJwtAuthGuard,

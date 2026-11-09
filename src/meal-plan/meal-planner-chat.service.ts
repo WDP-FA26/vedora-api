@@ -13,7 +13,7 @@ import { replyFilter } from '../ai/chat/reply-filter.js';
 import { MODERATION_MODEL } from '../ai/guardrails/guardrail.js';
 import { decide } from '../common/decision/decision.js';
 import { NUTRITION_POLICY } from '../ai/guardrails/policies/nutrition.js';
-import { searchKnowledgeTool } from '../ai/tools/search-knowledge.tool.js';
+import { searchKnowledgeTool } from '../knowledge/tools/search-knowledge.tool.js';
 import { KnowledgeSearchService } from '../knowledge/retrieval/knowledge-search.service.js';
 import { DietaryService } from '../recipes/dietary.service.js';
 import type { PlannerMessageDto } from './dto/meal-plan.dto.js';

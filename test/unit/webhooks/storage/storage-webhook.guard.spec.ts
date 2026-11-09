@@ -1,9 +1,9 @@
 import { ExecutionContext } from '@nestjs/common';
-import { UnauthenticatedException } from '../../../src/common/exceptions/unauthenticated.exception.js';
+import { UnauthenticatedException } from '../../../../src/common/exceptions/unauthenticated.exception.js';
 import { ExecutionContextHost } from '@nestjs/core/helpers/execution-context-host';
 import { mockDeep } from 'vitest-mock-extended';
-import { StorageWebhookGuard } from '../../../src/storage/storage-webhook.guard.js';
-import { StorageService } from '../../../src/storage/storage.service.js';
+import { StorageWebhookGuard } from '../../../../src/webhooks/storage/storage-webhook.guard.js';
+import { StorageService } from '../../../../src/storage/storage.service.js';
 
 function contextWith(authorization?: string): ExecutionContext {
   return new ExecutionContextHost([

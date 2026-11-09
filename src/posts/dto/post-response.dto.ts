@@ -2,21 +2,8 @@ import { ApiProperty } from '@nestjs/swagger';
 import { PostStatus, PostType } from '../../mongo/models.js';
 import { CursorPaginatedResponseDto } from '../../common/pagination/index.js';
 import { MediaResponseDto } from '../../media/dto/media-response.dto.js';
+import { PostAuthorDto } from '../../common/dto/post-author.dto.js';
 import { BlogSummaryDto } from './blog-summary.dto.js';
-
-export class PostAuthorDto {
-  @ApiProperty({ format: 'uuid' })
-  id!: string;
-
-  @ApiProperty({ example: 'vedora.user' })
-  username!: string;
-
-  @ApiProperty({ example: 'Vedora User' })
-  fullName!: string;
-
-  @ApiProperty({ nullable: true, type: String })
-  avatarUrl!: string | null;
-}
 
 export class PostResponseDto {
   @ApiProperty({ format: 'uuid' })

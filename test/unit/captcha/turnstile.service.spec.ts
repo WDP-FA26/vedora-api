@@ -1,5 +1,5 @@
 import { ConfigService } from '@nestjs/config';
-import { TurnstileService } from '../../../../src/nutrition-chat/guest/turnstile.service.js';
+import { TurnstileService } from '../../../src/captcha/turnstile.service.js';
 
 describe('Turnstile server verification', () => {
   const fetchMock = vi.fn<typeof fetch>();

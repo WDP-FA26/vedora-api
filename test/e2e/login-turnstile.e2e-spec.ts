@@ -5,7 +5,7 @@ import request from 'supertest';
 import type { App } from 'supertest/types.js';
 import { mockDeep, mockReset } from 'vitest-mock-extended';
 import { AuthService } from '../../src/auth/auth.service.js';
-import { TurnstileService } from '../../src/nutrition-chat/guest/turnstile.service.js';
+import { TurnstileService } from '../../src/captcha/turnstile.service.js';
 import { AccountStatus, UserRole } from '../../src/mongo/models.js';
 import { createE2eApp, type E2eApp } from '../support/e2e-app.js';
 

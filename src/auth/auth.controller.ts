@@ -22,7 +22,7 @@ import {
   ApiTooManyRequestsResponse,
   ApiUnauthorizedResponse,
 } from '@nestjs/swagger';
-import { TurnstileService } from '../nutrition-chat/guest/turnstile.service.js';
+import { TurnstileService } from '../captcha/turnstile.service.js';
 import { type PublicUser } from '../users/public-user.js';
 import { AuthService } from './auth.service.js';
 import { AuthenticatedRequest } from './auth.types.js';

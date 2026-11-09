@@ -1,5 +1,5 @@
 import { isStepCount, type LanguageModel, ToolLoopAgent } from 'ai';
-import { searchKnowledgeTool } from '../ai/tools/search-knowledge.tool.js';
+import { searchKnowledgeTool } from '../knowledge/tools/search-knowledge.tool.js';
 import type { KnowledgeSearchService } from '../knowledge/retrieval/knowledge-search.service.js';
 import { INSTRUCTIONS } from './nutrition-chat.prompt.js';
 

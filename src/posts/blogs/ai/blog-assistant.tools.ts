@@ -1,7 +1,7 @@
 import { tool } from 'ai';
 import { z } from 'zod';
 import type { KnowledgeSearchService } from '../../../knowledge/retrieval/knowledge-search.service.js';
-import { searchKnowledgeTool } from '../../../ai/tools/search-knowledge.tool.js';
+import { searchKnowledgeTool } from '../../../knowledge/tools/search-knowledge.tool.js';
 import {
   type BlogImageGeneratorService,
   IMAGE_ASPECT_RATIOS,

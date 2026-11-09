@@ -6,8 +6,8 @@ import {
   Logger,
 } from '@nestjs/common';
 import type { Request } from 'express';
-import { UnauthenticatedException } from '../common/exceptions/unauthenticated.exception.js';
-import { StorageService } from './storage.service.js';
+import { UnauthenticatedException } from '../../common/exceptions/unauthenticated.exception.js';
+import { StorageService } from '../../storage/storage.service.js';
 
 @Injectable()
 export class StorageWebhookGuard implements CanActivate {

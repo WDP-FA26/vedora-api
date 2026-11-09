@@ -1,7 +1,7 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { NotificationType, PostType } from '../../mongo/models.js';
 import { CursorPaginatedResponseDto } from '../../common/pagination/index.js';
-import { PostAuthorDto } from '../../posts/dto/post-response.dto.js';
+import { PostAuthorDto } from '../../common/dto/post-author.dto.js';
 
 export class NotificationDto {
   @ApiProperty({ format: 'uuid' })
