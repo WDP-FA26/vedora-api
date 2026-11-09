@@ -21,7 +21,7 @@ import {
   UpdateBlogDto,
 } from '../dto/blog.dto.js';
 import { PostPageDto } from '../dto/post-response.dto.js';
-import { PostsService } from '../posts.service.js';
+import { PostsQueryService } from '../posts-query.service.js';
 import { PostModerationService } from '../../media/post-moderation.service.js';
 import { InvalidInputException } from '../../common/exceptions/invalid-input.exception.js';
 import { ResourceNotFoundException } from '../../common/exceptions/resource-not-found.exception.js';
@@ -30,7 +30,7 @@ import { ResourceNotFoundException } from '../../common/exceptions/resource-not-
 export class BlogsService {
   constructor(
     private readonly mongo: MongoService,
-    private readonly posts: PostsService,
+    private readonly postsQuery: PostsQueryService,
     private readonly storage: StorageService,
     private readonly postModeration: PostModerationService,
     @InjectModel(Post.name) private readonly postsModel: Model<Post>,
@@ -113,7 +113,7 @@ export class BlogsService {
       .exec();
     const page = createCursorPaginatedResponse(rows, query.limit);
     return {
-      items: await this.posts.toResponses(page.items, authorId),
+      items: await this.postsQuery.toResponses(page.items, authorId),
       nextCursor: page.nextCursor,
     };
   }
@@ -271,7 +271,7 @@ export class BlogsService {
     post: Post,
     viewerId?: string,
   ): Promise<BlogDetailDto> {
-    const [response] = await this.posts.toResponses([post], viewerId);
+    const [response] = await this.postsQuery.toResponses([post], viewerId);
     if (!response || !post.blog)
       throw new ResourceNotFoundException('NOT_FOUND', 'Blog not found');
     return {

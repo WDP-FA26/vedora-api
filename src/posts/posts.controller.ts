@@ -34,6 +34,7 @@ import { ListPostsQueryDto } from './dto/list-posts-query.dto.js';
 import { PostPageDto, PostResponseDto } from './dto/post-response.dto.js';
 import { SearchPostsQueryDto } from './dto/search-posts-query.dto.js';
 import { PostViewsService } from './post-views.service.js';
+import { PostsQueryService } from './posts-query.service.js';
 import { PostsService } from './posts.service.js';
 
 @ApiTags('posts')
@@ -41,6 +42,7 @@ import { PostsService } from './posts.service.js';
 export class PostsController {
   constructor(
     private readonly postsService: PostsService,
+    private readonly postsQuery: PostsQueryService,
     private readonly views: PostViewsService,
   ) {}
 
@@ -91,7 +93,7 @@ export class PostsController {
     @Query() query: ListPostsQueryDto,
     @Req() request: OptionalAuthenticatedRequest,
   ): Promise<PostPageDto> {
-    return this.postsService.list(query, request.user?.sub);
+    return this.postsQuery.list(query, request.user?.sub);
   }
 
   @Get('search')
@@ -107,7 +109,7 @@ export class PostsController {
     @Query() query: SearchPostsQueryDto,
     @Req() request: OptionalAuthenticatedRequest,
   ): Promise<PostPageDto> {
-    return this.postsService.search(query, request.user?.sub);
+    return this.postsQuery.search(query, request.user?.sub);
   }
 
   @Get('feed')
@@ -123,7 +125,7 @@ export class PostsController {
     @Query() query: FeedQueryDto,
     @Req() request: AuthenticatedRequest,
   ): Promise<PostPageDto> {
-    return this.postsService.feed(query, request.user.sub);
+    return this.postsQuery.feed(query, request.user.sub);
   }
 
   @Get('bookmarks')
@@ -137,7 +139,7 @@ export class PostsController {
     @Query() query: CursorPaginationQueryDto,
     @Req() request: AuthenticatedRequest,
   ): Promise<PostPageDto> {
-    return this.postsService.listBookmarks(request.user.sub, query);
+    return this.postsQuery.listBookmarks(request.user.sub, query);
   }
 
   @Get('following')
@@ -151,7 +153,7 @@ export class PostsController {
     @Query() query: CursorPaginationQueryDto,
     @Req() request: AuthenticatedRequest,
   ): Promise<PostPageDto> {
-    return this.postsService.listFollowing(request.user.sub, query);
+    return this.postsQuery.listFollowing(request.user.sub, query);
   }
 
   @Get(':id')
@@ -168,7 +170,7 @@ export class PostsController {
     @Res({ passthrough: true }) response: Response,
   ): Promise<PostResponseDto> {
     if (request.user) response.setHeader('Cache-Control', 'private, no-store');
-    return this.postsService.findOne(id, request.user?.sub);
+    return this.postsQuery.findOne(id, request.user?.sub);
   }
 
   @Delete(':id')

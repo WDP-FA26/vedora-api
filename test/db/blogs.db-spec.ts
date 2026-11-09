@@ -12,7 +12,7 @@ import { PostSearchIndexService } from '../../src/posts/search/post-search-index
 import { PostSearchService } from '../../src/posts/search/post-search.service.js';
 import { BlogsService } from '../../src/posts/blogs/blogs.service.js';
 import { PostInteractionsService } from '../../src/posts/interactions/post-interactions.service.js';
-import { PostsService } from '../../src/posts/posts.service.js';
+import { PostsQueryService } from '../../src/posts/posts-query.service.js';
 import { PostRelationsService } from '../../src/posts/post-relations.service.js';
 import { NotificationsService } from '../../src/notifications/notifications.service.js';
 import { StorageService } from '../../src/storage/storage.service.js';
@@ -32,7 +32,7 @@ describe('Blog lifecycle with MongoDB', () => {
   let app: INestApplication;
   let db: MongoService;
   let blogs: BlogsService;
-  let posts: PostsService;
+  let posts: PostsQueryService;
   let interactions: PostInteractionsService;
   let authorId: string;
   let otherId: string;
@@ -45,7 +45,7 @@ describe('Blog lifecycle with MongoDB', () => {
     const moduleRef = await Test.createTestingModule({
       imports: [MongoModule.forTest(createTestMongoUrl('blog'))],
       providers: [
-        PostsService,
+        PostsQueryService,
         PostRelationsService,
         BlogsService,
         PostInteractionsService,
@@ -74,7 +74,7 @@ describe('Blog lifecycle with MongoDB', () => {
     await app.init();
     await prepareTestDatabase(app);
     db = app.get(MongoService);
-    posts = app.get(PostsService);
+    posts = app.get(PostsQueryService);
     blogs = app.get(BlogsService);
     interactions = app.get(PostInteractionsService);
     const author = await createUser(db, {

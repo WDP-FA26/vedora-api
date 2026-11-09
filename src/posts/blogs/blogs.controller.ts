@@ -47,7 +47,7 @@ import {
 } from '../dto/blog.dto.js';
 import { ListPostsQueryDto } from '../dto/list-posts-query.dto.js';
 import { PostPageDto } from '../dto/post-response.dto.js';
-import { PostsService } from '../posts.service.js';
+import { PostsQueryService } from '../posts-query.service.js';
 
 export class ListBlogsQueryDto extends OmitType(ListPostsQueryDto, ['type']) {}
 
@@ -56,7 +56,7 @@ export class ListBlogsQueryDto extends OmitType(ListPostsQueryDto, ['type']) {}
 export class BlogsController {
   constructor(
     private readonly blogs: BlogsService,
-    private readonly posts: PostsService,
+    private readonly postsQuery: PostsQueryService,
     private readonly images: BlogImagesService,
     private readonly cloudinary: CloudinaryService,
   ) {}
@@ -106,7 +106,7 @@ export class BlogsController {
     @Res({ passthrough: true }) response: Response,
   ) {
     if (request.user) response.setHeader('Cache-Control', 'private, no-store');
-    return this.posts.list(
+    return this.postsQuery.list(
       { ...query, type: PostType.BLOG },
       request.user?.sub,
     );

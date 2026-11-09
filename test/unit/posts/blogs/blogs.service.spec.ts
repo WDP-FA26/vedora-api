@@ -18,7 +18,7 @@ import {
   StorageTarget,
 } from '../../../../src/storage/storage.service.js';
 import { BlogsService } from '../../../../src/posts/blogs/blogs.service.js';
-import { PostsService } from '../../../../src/posts/posts.service.js';
+import { PostsQueryService } from '../../../../src/posts/posts-query.service.js';
 import { PostModerationService } from '../../../../src/media/post-moderation.service.js';
 
 const STORAGE = 'http://localhost:9000/vedora-blogs';
@@ -36,7 +36,7 @@ describe('BlogsService covers', () => {
       imports: [MongoModule.forTest(createTestMongoUrl('blogcovers'))],
       providers: [
         BlogsService,
-        { provide: PostsService, useValue: mockDeep<PostsService>() },
+        { provide: PostsQueryService, useValue: mockDeep<PostsQueryService>() },
         { provide: StorageService, useValue: mockDeep<StorageService>() },
         {
           provide: PostModerationService,
@@ -56,7 +56,7 @@ describe('BlogsService covers', () => {
     storage.keyFromPublicUrl.mockImplementation((_target, url) =>
       url.startsWith(`${STORAGE}/`) ? url.slice(STORAGE.length + 1) : null,
     );
-    const posts = mockDeep<PostsService>();
+    const posts = mockDeep<PostsQueryService>();
     posts.toResponses.mockResolvedValue([{}] as never);
     blogs = new BlogsService(
       db,
