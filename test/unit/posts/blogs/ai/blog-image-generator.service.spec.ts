@@ -7,6 +7,7 @@ import {
   StorageTarget,
 } from '../../../../../src/storage/storage.service.js';
 import { BlogImageGeneratorService } from '../../../../../src/posts/blogs/ai/blog-image-generator.service.js';
+import { AiCostTransportService } from '../../../../../src/ai/telemetry/ai-cost-transport.service.js';
 
 const USER_ID = '4a1e32e4-e18e-4dd7-8b4a-246ef2113ff2';
 const OTHER_ID = '9b2f43f5-f29f-4ee8-9c5b-357f03224003';
@@ -78,6 +79,7 @@ describe('BlogImageGeneratorService', () => {
       moderator,
       storage,
       aiUsage,
+      mockDeep<AiCostTransportService>(),
     );
   });
 

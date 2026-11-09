@@ -11,6 +11,7 @@ import { MODERATION_MODEL } from '../../../ai/guardrails/guardrail.js';
 import { decide } from '../../../common/decision/decision.js';
 import { DEFAULT_IMAGE_MODEL, imageModel } from '../../../ai/openrouter.js';
 import { AiUsageService } from '../../../subscriptions/ai-usage.service.js';
+import { AiCostTransportService } from '../../../ai/telemetry/ai-cost-transport.service.js';
 import {
   StorageService,
   StorageTarget,
@@ -47,6 +48,7 @@ export class BlogImageGeneratorService {
     private readonly moderator: Experimental_EvaluationModel,
     private readonly storage: StorageService,
     private readonly usage: AiUsageService,
+    costs: AiCostTransportService,
   ) {
     const apiKey = configService.getOrThrow<string>('OPENROUTER_API_KEY');
     this.imageModel = imageModel({
@@ -55,6 +57,7 @@ export class BlogImageGeneratorService {
         'OPENROUTER_IMAGE_MODEL',
         DEFAULT_IMAGE_MODEL,
       ),
+      fetch: costs.forModel(DEFAULT_IMAGE_MODEL),
     });
   }
 
