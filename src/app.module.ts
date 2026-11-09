@@ -21,6 +21,9 @@ import { MediaModule } from './media/media.module.js';
 import { NutritionChatModule } from './nutrition-chat/nutrition-chat.module.js';
 import { ModerationModule } from './moderation/moderation.module.js';
 import { NotificationsModule } from './notifications/notifications.module.js';
+import { PostsAdminModule } from './posts/admin/posts-admin.module.js';
+import { BlogsModule } from './posts/blogs/blogs.module.js';
+import { PostInteractionsModule } from './posts/interactions/post-interactions.module.js';
 import { PostsModule } from './posts/posts.module.js';
 import { MongoModule } from './mongo/mongo.module.js';
 import { ProfilesModule } from './profiles/profiles.module.js';
@@ -52,6 +55,9 @@ import { VerificationModule } from './verification/verification.module.js';
     PaymentsModule,
     MediaModule,
     PostsModule,
+    PostInteractionsModule,
+    BlogsModule,
+    PostsAdminModule,
     NotificationsModule,
     MessagingModule,
     ModerationModule,
