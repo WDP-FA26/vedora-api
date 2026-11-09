@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import type { Model } from 'mongoose';
-import { hashPassword } from '../auth/password.js';
+import { hashPassword } from '../auth-core/password.js';
 import { AccountStatus, User, UserRole } from '../mongo/models.js';
 import { MongoService } from '../mongo/mongo.service.js';
 import { CreateUserDto } from './dto/create-user.dto.js';

@@ -8,6 +8,7 @@ import { PaymentsModule } from './payments/payments.module.js';
 import { AppController } from './app.controller.js';
 import { AdminDashboardModule } from './admin-dashboard/admin-dashboard.module.js';
 import { AiModule } from './ai/ai.module.js';
+import { AuthCoreModule } from './auth-core/auth-core.module.js';
 import { AuthModule } from './auth/auth.module.js';
 import { StorageModule } from './storage/storage.module.js';
 import { StorageWebhookModule } from './webhooks/storage/storage-webhook.module.js';
@@ -48,6 +49,7 @@ import { VerificationModule } from './verification/verification.module.js';
     QdrantModule,
     RecipesModule,
     MealPlanModule,
+    AuthCoreModule,
     AuthModule,
     HealthModule,
     UsersModule,

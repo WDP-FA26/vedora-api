@@ -23,15 +23,15 @@ import {
   ApiUnauthorizedResponse,
 } from '@nestjs/swagger';
 import { UserRole } from '../../mongo/models.js';
-import { JwtAuthGuard } from '../../auth/jwt-auth.guard.js';
-import { Roles } from '../../auth/roles.decorator.js';
-import { RolesGuard } from '../../auth/roles.guard.js';
+import { JwtAuthGuard } from '../../auth-core/jwt-auth.guard.js';
+import { Roles } from '../../auth-core/roles.decorator.js';
+import { RolesGuard } from '../../auth-core/roles.guard.js';
 import {
   ApiPaginatedResponse,
   PaginatedResponseDto,
 } from '../../common/pagination/index.js';
 import { AdminPostsService } from './admin-posts.service.js';
-import type { AuthenticatedRequest } from '../../auth/auth.types.js';
+import type { AuthenticatedRequest } from '../../auth-core/auth.types.js';
 import {
   AdminPostDto,
   AdminPostsQueryDto,

@@ -20,8 +20,8 @@ import {
   ApiTags,
 } from '@nestjs/swagger';
 import { interval, map, merge, Observable } from 'rxjs';
-import type { AuthenticatedRequest } from '../auth/auth.types.js';
-import { JwtAuthGuard } from '../auth/jwt-auth.guard.js';
+import type { AuthenticatedRequest } from '../auth-core/auth.types.js';
+import { JwtAuthGuard } from '../auth-core/jwt-auth.guard.js';
 import { CursorPaginationQueryDto } from '../common/pagination/index.js';
 import { NotificationPageDto, UnreadCountDto } from './dto/notification.dto.js';
 import { NotificationsService } from './notifications.service.js';

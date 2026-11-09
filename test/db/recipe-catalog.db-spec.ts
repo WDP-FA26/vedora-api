@@ -21,7 +21,7 @@ import type { App } from 'supertest/types.js';
 import { configureApp } from '../../src/app.setup.js';
 import { MealPlanController } from '../../src/meal-plan/meal-plan.controller.js';
 import { MealPlannerChatService } from '../../src/meal-plan/meal-planner-chat.service.js';
-import { UserThrottlerGuard } from '../../src/auth/user-throttler.guard.js';
+import { UserThrottlerGuard } from '../../src/auth-core/user-throttler.guard.js';
 import type {
   MealPlanDto,
   SaveMealDayDto,

@@ -26,9 +26,9 @@ import {
   takeWhile,
   takeUntil,
 } from 'rxjs';
-import type { AuthenticatedRequest } from '../auth/auth.types.js';
-import { extractBearerToken } from '../auth/bearer-token.js';
-import { JwtAuthGuard } from '../auth/jwt-auth.guard.js';
+import type { AuthenticatedRequest } from '../auth-core/auth.types.js';
+import { extractBearerToken } from '../auth-core/bearer-token.js';
+import { JwtAuthGuard } from '../auth-core/jwt-auth.guard.js';
 import { AccountStatus, User } from '../mongo/models.js';
 import { PaymentEventsService } from './payment-events.service.js';
 import { PaymentsService } from './payments.service.js';

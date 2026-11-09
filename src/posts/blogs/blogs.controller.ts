@@ -28,9 +28,9 @@ import type { Response } from 'express';
 import type {
   AuthenticatedRequest,
   OptionalAuthenticatedRequest,
-} from '../../auth/auth.types.js';
-import { JwtAuthGuard } from '../../auth/jwt-auth.guard.js';
-import { OptionalJwtAuthGuard } from '../../auth/optional-jwt-auth.guard.js';
+} from '../../auth-core/auth.types.js';
+import { JwtAuthGuard } from '../../auth-core/jwt-auth.guard.js';
+import { OptionalJwtAuthGuard } from '../../auth-core/optional-jwt-auth.guard.js';
 import { BlogImagesService } from './blog-images.service.js';
 import { BlogsService } from './blogs.service.js';
 import { CloudinaryService } from '../../cloudinary/cloudinary.service.js';

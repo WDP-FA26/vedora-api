@@ -21,10 +21,10 @@ import {
   ApiUnauthorizedResponse,
 } from '@nestjs/swagger';
 import type { Response } from 'express';
-import type { OptionalAuthenticatedRequest } from '../auth/auth.types.js';
-import { OptionalJwtAuthGuard } from '../auth/optional-jwt-auth.guard.js';
-import { JwtAuthGuard } from '../auth/jwt-auth.guard.js';
-import type { AuthenticatedRequest } from '../auth/auth.types.js';
+import type { OptionalAuthenticatedRequest } from '../auth-core/auth.types.js';
+import { OptionalJwtAuthGuard } from '../auth-core/optional-jwt-auth.guard.js';
+import { JwtAuthGuard } from '../auth-core/jwt-auth.guard.js';
+import type { AuthenticatedRequest } from '../auth-core/auth.types.js';
 import {
   ApiPaginatedResponse,
   PaginatedResponseDto,

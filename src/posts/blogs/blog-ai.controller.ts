@@ -21,9 +21,9 @@ import {
 import { Throttle } from '@nestjs/throttler';
 import { pipeUIMessageStreamToResponse } from 'ai';
 import type { Response } from 'express';
-import type { AuthenticatedRequest } from '../../auth/auth.types.js';
-import { JwtAuthGuard } from '../../auth/jwt-auth.guard.js';
-import { UserThrottlerGuard } from '../../auth/user-throttler.guard.js';
+import type { AuthenticatedRequest } from '../../auth-core/auth.types.js';
+import { JwtAuthGuard } from '../../auth-core/jwt-auth.guard.js';
+import { UserThrottlerGuard } from '../../auth-core/user-throttler.guard.js';
 import { BlogAssistantService } from './ai/blog-assistant.service.js';
 import {
   BlogAssistantChatDto,

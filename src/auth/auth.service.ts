@@ -4,10 +4,10 @@ import { JwtService } from '@nestjs/jwt';
 import { compare } from 'bcryptjs';
 import { randomBytes } from 'node:crypto';
 import { AccountStatus } from '../mongo/models.js';
-import { assertAccountActive } from './account-access.js';
+import { assertAccountActive } from '../auth-core/account-access.js';
 import { AccountsService } from '../users/accounts.service.js';
 import { type PublicUser, toPublicUser } from '../users/public-user.js';
-import { JwtPayload } from './auth.types.js';
+import { JwtPayload } from '../auth-core/auth.types.js';
 import { AuthResponseDto } from './dto/auth-response.dto.js';
 import {
   ResendVerificationDto,
@@ -19,12 +19,12 @@ import {
   ForgotPasswordDto,
   ResetPasswordDto,
 } from './dto/password-reset.dto.js';
-import { RegisterDto } from './dto/register.dto.js';
+import { RegisterDto } from '../users/dto/register.dto.js';
 import {
   EmailVerificationService,
   SendResult,
 } from './email-verification.service.js';
-import { hashPassword } from './password.js';
+import { hashPassword } from '../auth-core/password.js';
 import { PasswordResetService } from './password-reset.service.js';
 import { GoogleProfileUser } from './google-auth.types.js';
 import {

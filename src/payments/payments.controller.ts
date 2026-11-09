@@ -26,10 +26,10 @@ import {
 } from '@nestjs/swagger';
 import { InjectModel } from '@nestjs/mongoose';
 import type { Model } from 'mongoose';
-import type { AuthenticatedRequest } from '../auth/auth.types.js';
-import { JwtAuthGuard } from '../auth/jwt-auth.guard.js';
-import { Roles } from '../auth/roles.decorator.js';
-import { RolesGuard } from '../auth/roles.guard.js';
+import type { AuthenticatedRequest } from '../auth-core/auth.types.js';
+import { JwtAuthGuard } from '../auth-core/jwt-auth.guard.js';
+import { Roles } from '../auth-core/roles.decorator.js';
+import { RolesGuard } from '../auth-core/roles.guard.js';
 import { PaymentWebhookReceipt, UserRole } from '../mongo/models.js';
 import {
   BillingCatalogDto,

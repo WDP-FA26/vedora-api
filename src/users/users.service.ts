@@ -2,8 +2,8 @@ import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { StateConflictException } from '../common/exceptions/state-conflict.exception.js';
 import type { ClientSession, Model, QueryFilter } from 'mongoose';
-import { assertAccountActive } from '../auth/account-access.js';
-import type { AuthenticatedUser } from '../auth/auth.types.js';
+import { assertAccountActive } from '../auth-core/account-access.js';
+import type { AuthenticatedUser } from '../auth-core/auth.types.js';
 import {
   createPaginatedResponse,
   getPaginationArgs,

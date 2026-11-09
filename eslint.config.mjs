@@ -3,6 +3,42 @@ import eslintConfigPrettier from 'eslint-config-prettier';
 import vitest from '@vitest/eslint-plugin';
 import tseslint from 'typescript-eslint';
 
+// Paths retired by the refactors, so they do not creep back. Every
+// `no-restricted-imports` block below must spread these: a later block for the
+// same files replaces the options of an earlier one instead of merging.
+const retiredPathPatterns = [
+  {
+    group: ['**/post-search/**'],
+    message: 'Post search now lives in src/posts/search.',
+  },
+  {
+    group: ['**/ai-usage/**'],
+    message: 'AI usage now lives in src/ai/usage.',
+  },
+  {
+    group: ['**/posts/ai/**'],
+    message: 'Blog AI now lives in src/posts/blogs/ai.',
+  },
+];
+
+// Modules above the shared layers; the layers below must never import them.
+const featureGroups = [
+  '**/auth/**',
+  '**/users/**',
+  '**/profiles/**',
+  '**/posts/**',
+  '**/media/**',
+  '**/recipes/**',
+  '**/meal-plan/**',
+  '**/nutrition-chat/**',
+  '**/payments/**',
+  '**/notifications/**',
+  '**/verification/**',
+  '**/admin-dashboard/**',
+  '**/knowledge/**',
+  '**/webhooks/**',
+];
+
 export default tseslint.config(
   { ignores: ['dist/**', 'node_modules/**', 'src/generated/**'] },
   eslint.configs.recommended,
@@ -49,20 +85,7 @@ export default tseslint.config(
       'no-restricted-imports': [
         'error',
         {
-          patterns: [
-            {
-              group: ['**/post-search/**'],
-              message: 'Post search now lives in src/posts/search.',
-            },
-            {
-              group: ['**/ai-usage/**'],
-              message: 'AI usage now lives in src/ai/usage.',
-            },
-            {
-              group: ['**/posts/ai/**'],
-              message: 'Blog AI now lives in src/posts/blogs/ai.',
-            },
-          ],
+          patterns: [...retiredPathPatterns],
         },
       ],
     },
@@ -76,18 +99,7 @@ export default tseslint.config(
         'error',
         {
           patterns: [
-            {
-              group: ['**/post-search/**'],
-              message: 'Post search now lives in src/posts/search.',
-            },
-            {
-              group: ['**/ai-usage/**'],
-              message: 'AI usage now lives in src/ai/usage.',
-            },
-            {
-              group: ['**/posts/ai/**'],
-              message: 'Blog AI now lives in src/posts/blogs/ai.',
-            },
+            ...retiredPathPatterns,
             {
               group: [
                 '**/auth/**',
@@ -126,18 +138,7 @@ export default tseslint.config(
         'error',
         {
           patterns: [
-            {
-              group: ['**/post-search/**'],
-              message: 'Post search now lives in src/posts/search.',
-            },
-            {
-              group: ['**/ai-usage/**'],
-              message: 'AI usage now lives in src/ai/usage.',
-            },
-            {
-              group: ['**/posts/ai/**'],
-              message: 'Blog AI now lives in src/posts/blogs/ai.',
-            },
+            ...retiredPathPatterns,
             {
               group: [
                 '**/auth/**',
@@ -160,6 +161,30 @@ export default tseslint.config(
               ],
               message:
                 'src/config only reads environment variables; features depend on config, not the other way round.',
+            },
+          ],
+        },
+      ],
+    },
+  },
+  // Auth core (guards, token types, password hashing) sits under every feature
+  // and under the login flow itself, so it imports none of them.
+  {
+    files: [
+      'src/auth-core/**/*.ts',
+      'src/captcha/**/*.ts',
+      'src/storage/**/*.ts',
+    ],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            ...retiredPathPatterns,
+            {
+              group: featureGroups,
+              message:
+                'auth-core, captcha and storage are shared layers; features depend on them, not the other way round.',
             },
           ],
         },

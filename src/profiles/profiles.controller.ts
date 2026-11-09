@@ -24,8 +24,8 @@ import {
   ApiTags,
 } from '@nestjs/swagger';
 import { ProfileImageKind } from '../mongo/models.js';
-import type { AuthenticatedRequest } from '../auth/auth.types.js';
-import { JwtAuthGuard } from '../auth/jwt-auth.guard.js';
+import type { AuthenticatedRequest } from '../auth-core/auth.types.js';
+import { JwtAuthGuard } from '../auth-core/jwt-auth.guard.js';
 import { CursorPaginationQueryDto } from '../common/pagination/index.js';
 import {
   FollowSuggestionListDto,

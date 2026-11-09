@@ -2,7 +2,7 @@ import { ContentModerationService } from '../../moderation/content-moderation.se
 import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import type { Model } from 'mongoose';
-import type { AuthenticatedUser } from '../../auth/auth.types.js';
+import type { AuthenticatedUser } from '../../auth-core/auth.types.js';
 import {
   afterCursor,
   createCursorPaginatedResponse,

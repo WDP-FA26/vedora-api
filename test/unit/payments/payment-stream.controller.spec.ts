@@ -2,7 +2,7 @@ import { MessageEvent } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { Subject } from 'rxjs';
 import type { Model } from 'mongoose';
-import type { AuthenticatedRequest } from '../../../src/auth/auth.types.js';
+import type { AuthenticatedRequest } from '../../../src/auth-core/auth.types.js';
 import type { User } from '../../../src/mongo/models.js';
 import {
   PaymentEventsService,

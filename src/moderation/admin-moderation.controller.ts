@@ -24,10 +24,10 @@ import {
   type ContentSettings,
   ModerationSettingsService,
 } from './moderation-settings.service.js';
-import type { AuthenticatedRequest } from '../auth/auth.types.js';
-import { JwtAuthGuard } from '../auth/jwt-auth.guard.js';
-import { Roles } from '../auth/roles.decorator.js';
-import { RolesGuard } from '../auth/roles.guard.js';
+import type { AuthenticatedRequest } from '../auth-core/auth.types.js';
+import { JwtAuthGuard } from '../auth-core/jwt-auth.guard.js';
+import { Roles } from '../auth-core/roles.decorator.js';
+import { RolesGuard } from '../auth-core/roles.guard.js';
 import { ErrorBodyDto } from '../common/exceptions/error-body.dto.js';
 import { FeatureUnavailableException } from '../common/exceptions/feature-unavailable.exception.js';
 import { UserRole } from '../mongo/models.js';

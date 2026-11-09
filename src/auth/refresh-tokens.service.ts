@@ -6,7 +6,7 @@ import type { ClientSession, Model } from 'mongoose';
 import { lockDocument } from '../mongo/document-lock.js';
 import { RefreshToken, User } from '../mongo/models.js';
 import { MongoService } from '../mongo/mongo.service.js';
-import { assertAccountActive } from './account-access.js';
+import { assertAccountActive } from '../auth-core/account-access.js';
 import { UnauthenticatedException } from '../common/exceptions/unauthenticated.exception.js';
 
 export interface IssuedRefreshToken {

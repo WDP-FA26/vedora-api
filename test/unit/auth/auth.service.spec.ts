@@ -25,7 +25,7 @@ import { EmailVerificationService } from '../../../src/auth/email-verification.s
 import { PasswordResetService } from '../../../src/auth/password-reset.service.js';
 import { RefreshTokensService } from '../../../src/auth/refresh-tokens.service.js';
 import { hashCode } from '../../../src/auth/one-time-code.js';
-import { hashPassword } from '../../../src/auth/password.js';
+import { hashPassword } from '../../../src/auth-core/password.js';
 import { AuthService } from '../../../src/auth/auth.service.js';
 import { AccountsService } from '../../../src/users/accounts.service.js';
 
