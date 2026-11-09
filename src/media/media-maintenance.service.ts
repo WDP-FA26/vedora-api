@@ -4,7 +4,7 @@ import { InjectModel } from '@nestjs/mongoose';
 import type { Model } from 'mongoose';
 import { MediaAsset, MediaStatus, Post, PostStatus } from '../mongo/models.js';
 import { CloudinaryService } from '../cloudinary/cloudinary.service.js';
-import { CaptionService } from './caption.service.js';
+import { CaptionService } from './captions/caption.service.js';
 import { MediaService } from './media.service.js';
 
 const STALE_AFTER_MS = 10 * 60 * 1000;

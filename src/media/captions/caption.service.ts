@@ -9,16 +9,16 @@ import {
   MediaStatus,
   Post,
   PostStatus,
-} from '../mongo/models.js';
-import { CloudinaryService } from '../cloudinary/cloudinary.service.js';
-import { extractSpeechAudio } from './captions/speech-audio.js';
-import { ExternalServiceException } from '../common/exceptions/external-service.exception.js';
+} from '../../mongo/models.js';
+import { CloudinaryService } from '../../cloudinary/cloudinary.service.js';
+import { extractSpeechAudio } from './speech-audio.js';
+import { ExternalServiceException } from '../../common/exceptions/external-service.exception.js';
 import {
   languageName,
   TranscriptionService,
   translationTarget,
-} from './captions/transcription.service.js';
-import { type Cue, toVtt, vttText } from './captions/vtt.js';
+} from './transcription.service.js';
+import { type Cue, toVtt, vttText } from './vtt.js';
 
 const BATCH_SIZE = 10;
 const STALE_AFTER_MS = 30 * 60 * 1000;

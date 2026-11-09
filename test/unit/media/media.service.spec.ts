@@ -21,7 +21,7 @@ import {
   type Post,
   PostStatus,
 } from '../../../src/mongo/models.js';
-import { CaptionService } from '../../../src/media/caption.service.js';
+import { CaptionService } from '../../../src/media/captions/caption.service.js';
 import {
   mediaId,
   ownerId,

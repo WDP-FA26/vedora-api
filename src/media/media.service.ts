@@ -20,7 +20,7 @@ import {
   STREAM_TRANSFORMATION,
   UPLOAD_SIGNATURE_TTL_SECONDS,
 } from '../cloudinary/cloudinary.service.js';
-import { CaptionService } from './caption.service.js';
+import { CaptionService } from './captions/caption.service.js';
 import { PostModerationService } from './post-moderation.service.js';
 import {
   CreateUploadResponseDto,

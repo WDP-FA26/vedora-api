@@ -11,7 +11,7 @@ import { CloudinaryService } from '../../../src/cloudinary/cloudinary.service.js
 import { MongoModule } from '../../../src/mongo/mongo.module.js';
 import { MongoService } from '../../../src/mongo/mongo.service.js';
 import { type MediaAsset, MediaStatus } from '../../../src/mongo/models.js';
-import { CaptionService } from '../../../src/media/caption.service.js';
+import { CaptionService } from '../../../src/media/captions/caption.service.js';
 import { MediaMaintenanceService } from '../../../src/media/media-maintenance.service.js';
 import { MediaService } from '../../../src/media/media.service.js';
 

@@ -2,28 +2,32 @@ import type { INestApplication } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Test } from '@nestjs/testing';
 import { mockDeep, type DeepMockProxy } from 'vitest-mock-extended';
-import { createMedia, createPost, createUser } from '../../support/fixtures.js';
+import {
+  createMedia,
+  createPost,
+  createUser,
+} from '../../../support/fixtures.js';
 import {
   createTestMongoUrl,
   dropTestDatabase,
   prepareTestDatabase,
-} from '../../support/mongo-test-db.js';
-import { CloudinaryService } from '../../../src/cloudinary/cloudinary.service.js';
-import { MongoModule } from '../../../src/mongo/mongo.module.js';
-import { MongoService } from '../../../src/mongo/mongo.service.js';
+} from '../../../support/mongo-test-db.js';
+import { CloudinaryService } from '../../../../src/cloudinary/cloudinary.service.js';
+import { MongoModule } from '../../../../src/mongo/mongo.module.js';
+import { MongoService } from '../../../../src/mongo/mongo.service.js';
 import {
   CaptionStatus,
   type MediaAsset,
   MediaStatus,
   type Post,
   PostStatus,
-} from '../../../src/mongo/models.js';
-import { CaptionService } from '../../../src/media/caption.service.js';
-import * as speechAudio from '../../../src/media/captions/speech-audio.js';
-import { TranscriptionService } from '../../../src/media/captions/transcription.service.js';
+} from '../../../../src/mongo/models.js';
+import { CaptionService } from '../../../../src/media/captions/caption.service.js';
+import * as speechAudio from '../../../../src/media/captions/speech-audio.js';
+import { TranscriptionService } from '../../../../src/media/captions/transcription.service.js';
 
 vi.mock(
-  '../../../src/media/captions/speech-audio.js',
+  '../../../../src/media/captions/speech-audio.js',
   async (importOriginal) => ({
     ...(await importOriginal<typeof speechAudio>()),
     extractSpeechAudio: vi.fn(),

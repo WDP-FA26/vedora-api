@@ -7,7 +7,7 @@ import {
 } from '../moderation/content-moderation.service.js';
 import type { ContentAssessment } from '../moderation/content-decision.js';
 import { NotificationsService } from '../notifications/notifications.service.js';
-import { CaptionService } from './caption.service.js';
+import { CaptionService } from './captions/caption.service.js';
 import { CloudinaryService } from '../cloudinary/cloudinary.service.js';
 import { fetchPublicImage } from '../common/http/fetch-public-image.js';
 import {
