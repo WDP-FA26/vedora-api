@@ -8,10 +8,6 @@ import type { ExpressAdapter } from '@nestjs/platform-express';
 import helmet from 'helmet';
 import { InvalidInputException } from './common/exceptions/invalid-input.exception.js';
 
-/**
- * Flattens class-validator errors into one message list. Nested failures keep
- * their path, e.g. `messages.0.role must be one of ...`, as Nest reports them.
- */
 function validationMessages(
   errors: ValidationError[],
   parentPath?: string,
@@ -32,14 +28,7 @@ function validationMessages(
   return messages;
 }
 
-/**
- * HTTP setup shared by `main.ts` and the e2e tests, so tests exercise the
- * same prefix, validation and security headers as production. The app must
- * be created with `rawBody: true` for Cloudinary notification signatures.
- */
 export function configureApp(app: INestApplication): void {
-  // Long articles can exceed Express's default 100 KB when encoded as UTF-8.
-  // Keep rawBody available for signed webhooks using Nest's parser options.
   (app.getHttpAdapter() as ExpressAdapter).useBodyParser('json', true, {
     limit: '512kb',
   });

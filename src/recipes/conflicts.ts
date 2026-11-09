@@ -16,11 +16,6 @@ export interface IngredientConflict {
   source: string | null;
 }
 
-/**
- * The pairs among `ingredientIds` that a rule forbids. A rule side matches an
- * ingredient directly or through one of its groups; an ingredient never
- * conflicts with itself, even when it sits on both sides of a rule.
- */
 export function detectConflicts(
   ingredientIds: readonly string[],
   groupsByIngredient: ReadonlyMap<string, ReadonlySet<string>>,

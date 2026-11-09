@@ -1,11 +1,6 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { ERROR_CODES, type ErrorCode } from './error-code.js';
 
-/**
- * The body of every error response. The filter builds it and Swagger documents
- * it, so the two cannot drift apart. Code-specific fields are listed in
- * docs/docs-for-FE/errors.md.
- */
 export class ErrorBodyDto {
   @ApiProperty({ example: 409, description: 'Same as the HTTP status.' })
   statusCode!: number;

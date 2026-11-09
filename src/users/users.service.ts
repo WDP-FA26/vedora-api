@@ -2,8 +2,8 @@ import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { StateConflictException } from '../common/exceptions/state-conflict.exception.js';
 import type { ClientSession, Model, QueryFilter } from 'mongoose';
-import { assertAccountActive } from '../auth/account-access.js';
-import type { AuthenticatedUser } from '../auth/auth.types.js';
+import { assertAccountActive } from '../auth-core/account-access.js';
+import type { AuthenticatedUser } from '../auth-core/auth.types.js';
 import {
   createPaginatedResponse,
   getPaginationArgs,
@@ -33,11 +33,6 @@ import { rethrowUniqueViolation } from './unique-conflict.js';
 import { AccessDeniedException } from '../common/exceptions/access-denied.exception.js';
 import { ResourceNotFoundException } from '../common/exceptions/resource-not-found.exception.js';
 
-/**
- * Self-service and admin management of accounts: reading one, editing its
- * profile, changing roles and status, and deleting it. Every operation goes
- * through `withAccountGate`, which decides whether the actor may act.
- */
 @Injectable()
 export class UsersService {
   constructor(
@@ -54,7 +49,6 @@ export class UsersService {
     const filters: QueryFilter<User>[] = [];
     if (query.status) filters.push({ status: query.status });
     if (query.q) {
-      // Case-insensitive match on any of the identifying fields.
       const pattern = { $regex: escapeRegExp(query.q), $options: 'i' };
       filters.push({
         $or: ['username', 'fullName', 'email'].map((field) => ({
@@ -105,7 +99,6 @@ export class UsersService {
         .findOneAndUpdate(
           { _id: id },
           {
-            // Explicit fields keep account permissions out of profile updates.
             $set: {
               ...(dto.username !== undefined && { username: dto.username }),
               ...(dto.fullName !== undefined && { fullName: dto.fullName }),
@@ -268,7 +261,6 @@ export class UsersService {
     }
   }
 
-  /** Sets a role or status and moves the account to its next version. */
   private async changeAccount(
     session: ClientSession,
     target: User,
@@ -320,10 +312,6 @@ export class UsersService {
     operation: (target: User, session: ClientSession) => Promise<T>,
   ): Promise<T> {
     return this.mongo.withTransaction(async (session) => {
-      // One gate serializes all role/status/deletion paths, including
-      // changes to different admins. Per-account locks also order these
-      // changes against refresh-token issuance. Locks are taken in a fixed
-      // order.
       await lockDocument(this.mongo, session, 'account-gate');
       for (const lockId of [...new Set([id, actor.sub])].sort()) {
         await lockDocument(this.mongo, session, 'user', lockId);

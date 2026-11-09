@@ -1,6 +1,5 @@
 import { createUIMessageStream } from 'ai';
 
-/** A refusal sent as if it were the assistant's reply, so clients render it. */
 export function cannedReply(text: string) {
   return createUIMessageStream({
     execute: ({ writer }) => {

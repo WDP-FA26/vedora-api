@@ -13,7 +13,7 @@ import {
   MaxLength,
 } from 'class-validator';
 import { PaginationQueryDto } from '../../common/pagination/index.js';
-import { PostAuthorDto } from './post-response.dto.js';
+import { PostAuthorDto } from '../../common/dto/post-author.dto.js';
 
 export const MAX_VIEW_BATCH = 50;
 export const MAX_REPORT_DETAILS_LENGTH = 500;

@@ -23,7 +23,7 @@ services:
       OPENROUTER_API_KEY: ${OPENROUTER_API_KEY}
       OPENROUTER_MODEL: ${OPENROUTER_MODEL:-openrouter/auto}
       OPENROUTER_REASONING_EFFORT: ${OPENROUTER_REASONING_EFFORT:-low}
-      OPENROUTER_MODERATION_MODEL: ${OPENROUTER_MODERATION_MODEL:-openai/gpt-oss-safeguard-20b}
+      OPENROUTER_MODERATION_MODEL: ${OPENROUTER_MODERATION_MODEL:-typesafe/jev-1.14}
       STORAGE_ENDPOINT: http://rustfs:9000
       STORAGE_PUBLIC_URL: ${STORAGE_PUBLIC_URL:-http://localhost:9000}
       STORAGE_ACCESS_KEY: ${STORAGE_ACCESS_KEY:-vedora}
@@ -79,7 +79,9 @@ services:
     restart: unless-stopped
     command: ["redis-server", "--save", "", "--appendonly", "no"]
     ports:
-      - "127.0.0.1:6379:6379"
+      # REDIS_BIND defaults to loopback. Redis here has no password, so only
+      # set REDIS_BIND=0.0.0.0 on the VPS together with a firewall rule.
+      - "${REDIS_BIND:-127.0.0.1}:6379:6379"
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
@@ -107,7 +109,10 @@ services:
       MONGO_INITDB_ROOT_PASSWORD: ${MONGO_PASSWORD:-vedora_local_password}
       MONGO_INITDB_DATABASE: ${MONGO_DB:-vedora}
     ports:
-      - "127.0.0.1:27017:27017"
+      # MONGO_BIND defaults to loopback. Set MONGO_BIND=0.0.0.0 in .env on the
+      # VPS to accept connections from other machines (open the port in the
+      # firewall and restrict it to known IPs).
+      - "${MONGO_BIND:-127.0.0.1}:27017:27017"
     volumes:
       - mongo_data:/data/db
       - mongo_config:/data/configdb

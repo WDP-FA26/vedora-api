@@ -28,7 +28,6 @@ import {
 import { ResourceNotFoundException } from '../common/exceptions/resource-not-found.exception.js';
 import { StateConflictException } from '../common/exceptions/state-conflict.exception.js';
 
-/** A recipe with its ingredients and their names. */
 type RecipeRow = Omit<Recipe, 'ingredients'> & {
   ingredients: (RecipeIngredient & { ingredient: Ingredient })[];
 };
@@ -43,7 +42,6 @@ export interface RecipeSuggestion {
   ingredients: string[];
 }
 
-/** Checked new content for some days, and what is wrong with it. */
 export type MealPlanPreview = MealPlanPreviewDto;
 
 const MAX_SUGGESTIONS = 30;
@@ -60,12 +58,6 @@ const dishes = (day: DaySections | undefined): RecipeRow[] =>
 
 const toRef = ({ id, title }: RecipeRow): RecipeRef => ({ id, title });
 
-/**
- * A user's weekly timetable: each day has breakfast, lunch, dinner and
- * "other", each an ordered list of dishes. Two rules are enforced on every
- * write: no ingredient the user avoids, and no incompatible ingredients
- * anywhere in one day.
- */
 @Injectable()
 export class MealPlanService {
   constructor(
@@ -100,7 +92,6 @@ export class MealPlanService {
     };
   }
 
-  /** What replacing the content of `days` would do, without saving. */
   async preview(
     userId: string,
     days: SaveMealDayDto[],
@@ -129,7 +120,6 @@ export class MealPlanService {
 
     const next: Week = new Map();
     const problems: MealPlanProblemDto[] = [];
-    // only days that gain a dish are checked, so a dish can always be removed
     const daysToCheck: Weekday[] = [];
     for (const input of days) {
       const ids = requested(input);
@@ -194,8 +184,6 @@ export class MealPlanService {
         })),
       ),
     );
-    // The days are replaced as a whole: their old entries and the new ones
-    // change together.
     const saved = await this.mongo.withTransaction(async (session) => {
       await lockDocument(this.mongo, session, 'user', userId);
       const user = await this.users
@@ -210,7 +198,6 @@ export class MealPlanService {
           { session },
         )
         .exec();
-      // insertMany rejects an empty list (a day saved empty).
       if (entries.length > 0) {
         await this.entries
           .insertMany(entries, { session })
@@ -222,7 +209,6 @@ export class MealPlanService {
             ),
           );
       }
-      // The timetable as this save left it, not as a following save leaves it.
       return this.entries
         .find({ userId })
         .sort({ position: 1 })
@@ -232,7 +218,6 @@ export class MealPlanService {
     return this.toPlan(userId, await this.weekOf(saved));
   }
 
-  /** Recipes the user can eat: nothing avoided, no clash inside the recipe. */
   async suggestions(
     userId: string,
     query: string | undefined,
@@ -284,7 +269,6 @@ export class MealPlanService {
     );
   }
 
-  /** The timetable of `rows`, by day and section, in their order. */
   private async weekOf(
     rows: Pick<MealPlanEntry, 'day' | 'section' | 'recipeId'>[],
   ): Promise<Week> {
@@ -305,7 +289,6 @@ export class MealPlanService {
     return week;
   }
 
-  /** Adds each recipe's ingredients with their names. */
   private async recipeRows(
     recipes: HydratedDocument<Recipe>[],
   ): Promise<RecipeRow[]> {
@@ -342,7 +325,6 @@ export class MealPlanService {
   ): Promise<MealPlanProblemDto[]> {
     const checked = WEEKDAYS.filter((day) => days.includes(day)).flatMap(
       (day) => {
-        // a dish in two sections of the day is one dish here
         const recipes = [...new Set(dishes(week.get(day)))];
         return recipes.length > 0 ? [{ day, recipes }] : [];
       },

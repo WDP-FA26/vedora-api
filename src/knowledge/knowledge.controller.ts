@@ -19,8 +19,8 @@ import {
   ApiTags,
   ApiUnsupportedMediaTypeResponse,
 } from '@nestjs/swagger';
-import type { AuthenticatedRequest } from '../auth/auth.types.js';
-import { JwtAuthGuard } from '../auth/jwt-auth.guard.js';
+import type { AuthenticatedRequest } from '../auth-core/auth.types.js';
+import { JwtAuthGuard } from '../auth-core/jwt-auth.guard.js';
 import { CreateKnowledgeUploadDto } from './dto/create-knowledge-upload.dto.js';
 import {
   CreateKnowledgeUploadResponseDto,
@@ -29,7 +29,6 @@ import {
 import { KnowledgeService } from './knowledge.service.js';
 import { ErrorBodyDto } from '../common/exceptions/error-body.dto.js';
 
-// TODO: restrict to admins once users have roles; any signed-in user for now.
 @ApiTags('knowledge')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard)

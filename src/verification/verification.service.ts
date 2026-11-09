@@ -41,7 +41,6 @@ const IMAGE_EXTENSIONS: Record<string, string> = {
   'image/webp': 'webp',
 };
 const MAX_PROOF_BYTES = 10 * 1024 * 1024;
-/** Uploads a user may hold without submitting them. */
 const MAX_UNSUBMITTED_PROOFS = 12;
 const CLEANUP_AGE_MS = 48 * 60 * 60 * 1000;
 const PROOF_URL_TTL_SECONDS = 10 * 60;
@@ -112,7 +111,6 @@ export class VerificationService {
 
     const requestId = randomUUID();
     await this.mongo.withTransaction(async (session) => {
-      // Two submits at once must not both see "no pending request".
       await lockDocument(this.mongo, session, 'user', userId);
       const user = await this.users
         .findOne({ _id: userId })
@@ -148,8 +146,6 @@ export class VerificationService {
         ],
         { session },
       );
-      // Claims only proofs still unsubmitted, so a concurrent submit of
-      // the same images fails instead of sharing them.
       const claimed = await this.proofs.updateMany(
         { _id: { $in: dto.proofIds }, ownerId: userId, requestId: null },
         { $set: { requestId } },
@@ -236,7 +232,6 @@ export class VerificationService {
     reviewerId: string,
     dto: ReviewVerificationRequestDto,
   ): Promise<AdminVerificationRequestDto> {
-    // The decision and the badge it grants are written together.
     await this.mongo.withTransaction(async (session) => {
       const now = new Date();
       const reviewed = await this.requests.updateOne(
@@ -282,7 +277,6 @@ export class VerificationService {
     return decided;
   }
 
-  /** Deletes images that were uploaded but never submitted, or whose request is gone. */
   @Cron(CronExpression.EVERY_HOUR)
   async purgeUnusedProofs(): Promise<void> {
     if (!this.storage.isConfigured()) return;
@@ -310,7 +304,6 @@ export class VerificationService {
     }
   }
 
-  /** Adds how many proof images each request has. */
   private async toDtos(
     rows: VerificationRequest[],
   ): Promise<VerificationRequestDto[]> {
@@ -332,7 +325,6 @@ export class VerificationService {
     }));
   }
 
-  /** Adds the applicant. */
   private async toAdminDtos(
     rows: VerificationRequest[],
   ): Promise<AdminVerificationRequestDto[]> {

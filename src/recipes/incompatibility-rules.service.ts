@@ -31,7 +31,6 @@ import { StateConflictException } from '../common/exceptions/state-conflict.exce
 
 type Named = { id: string; name: string };
 
-/** A rule with the ingredient or group named on each side. */
 type RuleRow = IncompatibilityRule & {
   aIngredient: Named | null;
   aGroup: Named | null;
@@ -46,7 +45,6 @@ const toSide = ({ kind, id }: RuleSideInputDto): Side =>
     ? { ingredientId: id, groupId: null }
     : { ingredientId: null, groupId: id };
 
-/** "A should not be eaten with B" rules, and the conflicts they cause. */
 @Injectable()
 export class IncompatibilityRulesService {
   constructor(
@@ -114,7 +112,6 @@ export class IncompatibilityRulesService {
     return toDto(withSides);
   }
 
-  /** The forbidden pairs in one set of ingredients, with their names. */
   async findConflicts(ingredientIds: string[]): Promise<RecipeConflictDto[]> {
     const [conflicts] = await this.findConflictsForEach([ingredientIds]);
     if (conflicts.length === 0) return [];
@@ -129,7 +126,6 @@ export class IncompatibilityRulesService {
     });
   }
 
-  /** Conflicts of several ingredient sets, reading groups and rules once. */
   async findConflictsForEach(
     ingredientSets: string[][],
   ): Promise<IngredientConflict[][]> {
@@ -210,7 +206,6 @@ export class IncompatibilityRulesService {
       bIngredientId: second.ingredientId,
       bGroupId: second.groupId,
     });
-    // A side names either an ingredient or a group; only the named ones are checked.
     const ingredientIds: string[] = [];
     const groupIds: string[] = [];
     for (const side of [a, b]) {
@@ -247,7 +242,6 @@ export class IncompatibilityRulesService {
     };
   }
 
-  /** Resolves each rule's sides to ingredient or group names. */
   private async attachSides(
     rows: HydratedDocument<IncompatibilityRule>[],
   ): Promise<RuleRow[]> {

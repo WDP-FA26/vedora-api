@@ -7,9 +7,11 @@ import { validateEnvironment } from './config/environment.js';
 import { PaymentsModule } from './payments/payments.module.js';
 import { AppController } from './app.controller.js';
 import { AdminDashboardModule } from './admin-dashboard/admin-dashboard.module.js';
+import { AiModule } from './ai/ai.module.js';
+import { AuthCoreModule } from './auth-core/auth-core.module.js';
 import { AuthModule } from './auth/auth.module.js';
 import { StorageModule } from './storage/storage.module.js';
-import { StorageWebhookModule } from './storage/storage-webhook.module.js';
+import { StorageWebhookModule } from './webhooks/storage/storage-webhook.module.js';
 import { HealthModule } from './health/health.module.js';
 import { KnowledgeModule } from './knowledge/knowledge.module.js';
 import { CloudinaryModule } from './cloudinary/cloudinary.module.js';
@@ -18,7 +20,11 @@ import { MessagingModule } from './messaging/messaging.module.js';
 import { MealPlanModule } from './meal-plan/meal-plan.module.js';
 import { MediaModule } from './media/media.module.js';
 import { NutritionChatModule } from './nutrition-chat/nutrition-chat.module.js';
+import { ModerationModule } from './moderation/moderation.module.js';
 import { NotificationsModule } from './notifications/notifications.module.js';
+import { PostsAdminModule } from './posts/admin/posts-admin.module.js';
+import { BlogsModule } from './posts/blogs/blogs.module.js';
+import { PostInteractionsModule } from './posts/interactions/post-interactions.module.js';
 import { PostsModule } from './posts/posts.module.js';
 import { MongoModule } from './mongo/mongo.module.js';
 import { ProfilesModule } from './profiles/profiles.module.js';
@@ -36,12 +42,14 @@ import { VerificationModule } from './verification/verification.module.js';
     }),
     ScheduleModule.forRoot(),
     MongoModule.forRoot(),
+    AiModule,
     MailModule,
     CloudinaryModule,
     StorageModule,
     QdrantModule,
     RecipesModule,
     MealPlanModule,
+    AuthCoreModule,
     AuthModule,
     HealthModule,
     UsersModule,
@@ -49,8 +57,12 @@ import { VerificationModule } from './verification/verification.module.js';
     PaymentsModule,
     MediaModule,
     PostsModule,
+    PostInteractionsModule,
+    BlogsModule,
+    PostsAdminModule,
     NotificationsModule,
     MessagingModule,
+    ModerationModule,
     NutritionChatModule,
     KnowledgeModule,
     ProfilesModule,

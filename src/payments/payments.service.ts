@@ -73,7 +73,6 @@ export class PaymentsService {
     };
   }
 
-  /** Overlapping transactions on one key conflict, and the driver retries. */
   private async lock(
     session: ClientSession,
     kind: 'payer' | 'transaction',
@@ -116,7 +115,6 @@ export class PaymentsService {
 
   async overview(userId: string): Promise<BillingOverviewDto> {
     const now = new Date();
-    // The latest capture is the membership; a new purchase replaces it.
     const [latest, pending, recent] = await Promise.all([
       this.intents
         .findOne({ userId, status: PaymentStatus.SUCCEEDED })
@@ -275,9 +273,6 @@ export class PaymentsService {
       try {
         return this.serialize(await attemptCreate());
       } catch (error) {
-        // A duplicate payment code aborts the transaction: retry the whole
-        // transaction with a new code. The driver already retried write
-        // conflicts. Other errors escape.
         const codeTaken =
           isUniqueViolation(error) && 'paymentCode' in (error.keyPattern ?? {});
         if (!codeTaken) throw error;
@@ -333,7 +328,6 @@ export class PaymentsService {
     const payloadHash = hash(event);
     let changed: PaymentChanged | undefined;
     await this.mongo.withTransaction(async (session) => {
-      // Event lock precedes payer lock consistently. Unique indexes are the final guard.
       await this.lock(session, 'transaction', event.providerTransactionId);
       const record = async (outcome: string, intentId?: string) => {
         await this.receipts.create(

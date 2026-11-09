@@ -6,7 +6,6 @@ import {
 } from '@nestjs/swagger';
 import { errorResponses } from './common/exceptions/swagger-error-responses.js';
 
-/** The OpenAPI document, with the shared error body on every error status. */
 export function buildApiDocument(app: INestApplication): OpenAPIObject {
   const config = new DocumentBuilder()
     .setTitle('Vedora API')

@@ -50,7 +50,6 @@ export class CreateBlogDto {
     (_object, value: unknown) => value !== undefined && value !== null,
   )
   @Transform(trim)
-  // narrowed in BlogsService: http only for Vedora's own storage
   @IsUrl({
     protocols: ['http', 'https'],
     require_protocol: true,

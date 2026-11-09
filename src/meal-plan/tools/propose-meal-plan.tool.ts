@@ -33,7 +33,6 @@ const input = z.object({
     ),
 });
 
-/** Checks new day lists and shows them to the user, who saves them. Writes nothing. */
 export function proposeMealPlanTool(mealPlan: MealPlanService, userId: string) {
   return tool({
     description:

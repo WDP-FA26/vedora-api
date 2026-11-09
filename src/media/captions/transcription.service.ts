@@ -1,8 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { chatModel, DEFAULT_CHAT_MODEL } from '../../ai/openrouter.js';
-import type { ReasoningEffort } from '../../ai/reasoning.js';
-import { generateText, type LanguageModel, Output } from 'ai';
+import { AiService } from '@nestjs/ai';
 import { z } from 'zod';
 import { parsePayload, validatePayload } from '../../common/validation.js';
 import { ExternalServiceException } from '../../common/exceptions/external-service.exception.js';
@@ -10,80 +8,79 @@ import { type SpeechAudio, toOriginalTime } from './speech-audio.js';
 import {
   OpenRouterErrorBody,
   TranscriptionResponse,
+  type TranscriptionWord,
 } from './transcription.dto.js';
 import type { Cue } from './vtt.js';
 
 const OPENROUTER_API = 'https://openrouter.ai/api/v1';
 const TRANSCRIBE_TIMEOUT_MS = 3 * 60_000;
-const TRANSLATE_TIMEOUT_MS = 2 * 60_000;
 
-/** Biases transcription toward these spellings. */
 const CAPTION_PROMPT =
   'Vedora, tàu hủ, đậu hũ, chao, nấm mèo, bún tàu, hạt nêm, dầu điều, nước tương, mắm chay, tempeh, seitan.';
 const NEVER_TRANSLATE = ['Vedora'];
 
-/** Whisper's own guess that a segment is not speech. */
 const MAX_NO_SPEECH_PROB = 0.6;
-/** Below this, Whisper was guessing at words. */
 const MIN_AVG_LOGPROB = -1;
-/**
- * Lines Whisper is known to invent for music or noise, learned from
- * subtitled YouTube videos. Silence is cut before transcription, so these
- * only slip through over background sound.
- */
 const HALLUCINATIONS = [
   /ghiền mì gõ/i,
   /đăng ký kênh/i,
   /subscribe cho kênh/i,
   /thanks for watching/i,
 ];
-/** Longer cues are split at sentence breaks so they fit on screen. */
 const MAX_CUE_SEC = 7;
 
-/** Whisper names some languages in full instead of by code. */
+const CUE_GAP_SEC = 0.8;
+
 const LANGUAGE_CODES: Record<string, string> = {
   vietnamese: 'vi',
+  vie: 'vi',
   english: 'en',
+  eng: 'en',
+  chinese: 'zh',
+  zho: 'zh',
+  cmn: 'zh',
+  japanese: 'ja',
+  jpn: 'ja',
+  korean: 'ko',
+  kor: 'ko',
+  french: 'fr',
+  fra: 'fr',
+  german: 'de',
+  deu: 'de',
+  spanish: 'es',
+  spa: 'es',
+  thai: 'th',
+  tha: 'th',
+  indonesian: 'id',
+  ind: 'id',
 };
 
-// zod stays for the AI SDK's structured output; the HTTP bodies above are
-// class-validator DTOs.
 const translationOutput = z.object({ lines: z.array(z.string()) });
 
+interface TimedText extends Cue {
+  no_speech_prob?: number;
+  avg_logprob?: number;
+}
+
 export interface Transcript {
-  /** e.g. `vi`. */
   language: string;
-  /** Timed against the original video; empty when nothing was said. */
   cues: Cue[];
 }
 
-/**
- * Turns speech into timed captions with Whisper on OpenRouter, and
- * translates them with the chat model.
- */
 @Injectable()
 export class TranscriptionService {
   private readonly apiKey: string;
   private readonly transcriptionModel: string;
-  private readonly translationModel: LanguageModel;
 
-  constructor(configService: ConfigService) {
+  constructor(
+    configService: ConfigService,
+    private readonly ai: AiService,
+  ) {
     this.apiKey = configService.getOrThrow<string>('OPENROUTER_API_KEY');
     this.transcriptionModel = configService.get<string>(
       'TRANSCRIPTION_MODEL',
-      'openai/whisper-large-v3',
+      'elevenlabs/scribe-v2',
     );
-    this.translationModel = chatModel({
-      apiKey: this.apiKey,
-      modelId: configService.get<string>(
-        'OPENROUTER_MODEL',
-        DEFAULT_CHAT_MODEL,
-      ),
-      reasoningEffort: configService.get<ReasoningEffort>(
-        'OPENROUTER_REASONING_EFFORT',
-        'low',
-      ),
-    });
   }
 
   async transcribe({ audio, speech }: SpeechAudio): Promise<Transcript> {
@@ -97,6 +94,7 @@ export class TranscriptionService {
         model: this.transcriptionModel,
         input_audio: { data: audio.toString('base64'), format: 'mp3' },
         response_format: 'verbose_json',
+        timestamp_granularities: ['word'],
         prompt: CAPTION_PROMPT,
         temperature: 0,
       }),
@@ -116,12 +114,11 @@ export class TranscriptionService {
       (sum, { start, end }) => sum + end - start,
       0,
     );
-    // Not every provider returns segments; then the text spans all speech.
-    const segments = result.segments ?? [
-      { start: 0, end: audioEnd, text: result.text },
-    ];
+    const timed: TimedText[] = result.words?.length
+      ? cuesFromWords(result.words)
+      : (result.segments ?? [{ start: 0, end: audioEnd, text: result.text }]);
 
-    const cues = segments
+    const cues = timed
       .filter(
         (segment) =>
           (segment.no_speech_prob ?? 0) <= MAX_NO_SPEECH_PROB &&
@@ -138,29 +135,56 @@ export class TranscriptionService {
     return { language: languageCode(result.language ?? ''), cues };
   }
 
-  /** The same cues in `to`, one line per cue; throws if lines go missing. */
   async translate(cues: Cue[], from: string, to: string): Promise<Cue[]> {
-    const { output } = await generateText({
-      model: this.translationModel,
+    const { object } = await this.ai.generateObject({
+      label: 'translate-captions',
       instructions: `You translate video captions about plant-based cooking from ${languageName(from, 'en')} to ${languageName(to, 'en')}. Return exactly one translated line per input line, in the same order, as {"lines": [...]}. Keep these words unchanged: ${NEVER_TRANSLATE.join(', ')}. Never merge, split or skip lines.`,
       prompt: JSON.stringify(cues.map((cue) => cue.text)),
-      output: Output.object({ schema: translationOutput }),
-      abortSignal: AbortSignal.timeout(TRANSLATE_TIMEOUT_MS),
+      schema: translationOutput,
+      timeout: '2m',
     });
-    if (output.lines.length !== cues.length) {
+    if (object.lines.length !== cues.length) {
       throw new ExternalServiceException(
         'openrouter',
-        `Translation returned ${output.lines.length} lines for ${cues.length} cues`,
+        `Translation returned ${object.lines.length} lines for ${cues.length} cues`,
       );
     }
     return cues.map((cue, index) => ({
       ...cue,
-      text: output.lines[index].trim(),
+      text: object.lines[index].trim(),
     }));
   }
 }
 
-/** Splits a cue longer than `MAX_CUE_SEC` at sentence breaks, by length. */
+export function cuesFromWords(words: TranscriptionWord[]): Cue[] {
+  const cues: Cue[] = [];
+  let current: TranscriptionWord[] = [];
+  const flush = () => {
+    const first = current[0];
+    const last = current.at(-1);
+    if (first && last) {
+      cues.push({
+        start: first.start,
+        end: last.end,
+        text: current.map(({ word }) => word).join(' '),
+      });
+    }
+    current = [];
+  };
+  for (const word of words) {
+    const previous = current.at(-1);
+    const paused =
+      previous !== undefined && word.start - previous.end > CUE_GAP_SEC;
+    const tooLong =
+      current[0] !== undefined && word.end - current[0].start > MAX_CUE_SEC;
+    if (paused || tooLong) flush();
+    current.push(word);
+    if (/[.!?…]$/.test(word.word)) flush();
+  }
+  flush();
+  return cues;
+}
+
 export function splitLongCue(cue: Cue): Cue[] {
   const duration = cue.end - cue.start;
   if (duration <= MAX_CUE_SEC) return [cue];
@@ -182,12 +206,10 @@ export function languageCode(language: string): string {
   return LANGUAGE_CODES[lower] ?? lower.split(/[-_]/)[0] ?? lower;
 }
 
-/** Vietnamese videos get English captions; everything else gets Vietnamese. */
 export function translationTarget(language: string): string {
   return language === 'vi' ? 'en' : 'vi';
 }
 
-/** The name of `language` in `displayLanguage`, e.g. "Tiếng Việt" in `vi`. */
 export function languageName(
   language: string,
   displayLanguage = language,
@@ -199,8 +221,6 @@ export function languageName(
     if (name && name !== language) {
       return name.charAt(0).toLocaleUpperCase(displayLanguage) + name.slice(1);
     }
-  } catch {
-    // Not a valid language tag.
-  }
+  } catch {}
   return language;
 }

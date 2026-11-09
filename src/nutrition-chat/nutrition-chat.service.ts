@@ -1,20 +1,19 @@
-import { Injectable, Logger } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
-import { type LanguageModel, toUIMessageStream } from 'ai';
+import { Inject, Injectable, Logger } from '@nestjs/common';
+import { InjectModel } from '@nestjs/ai';
+import {
+  type Experimental_EvaluationModel,
+  type LanguageModel,
+  toUIMessageStream,
+} from 'ai';
 import { cannedReply } from '../ai/chat/canned-reply.js';
 import { chatErrorCode, failedStatus } from '../ai/chat/errors.js';
 import { replyFilter } from '../ai/chat/reply-filter.js';
 import {
-  moderateWithRetry,
+  MODERATION_MODEL,
   type ModerationVerdict,
-} from '../ai/moderation/moderation.js';
-import { NUTRITION_POLICY } from '../ai/moderation/policies/nutrition.js';
-import {
-  chatModel,
-  DEFAULT_CHAT_MODEL,
-  DEFAULT_MODERATION_MODEL,
-} from '../ai/openrouter.js';
-import type { ReasoningEffort } from '../ai/reasoning.js';
+} from '../ai/guardrails/guardrail.js';
+import { decide } from '../common/decision/decision.js';
+import { NUTRITION_POLICY } from '../ai/guardrails/policies/nutrition.js';
 import { KnowledgeSearchService } from '../knowledge/retrieval/knowledge-search.service.js';
 import type { ChatMessageDto } from './dto/nutrition-chat.dto.js';
 import { NutritionAgent } from './nutrition-chat.agent.js';
@@ -40,30 +39,14 @@ export class NutritionChatService {
   private readonly logger = new Logger(NutritionChatService.name);
 
   private readonly agent: NutritionAgent;
-  private readonly moderationModel: LanguageModel;
 
-  constructor(configService: ConfigService, knowledge: KnowledgeSearchService) {
-    const apiKey = configService.getOrThrow<string>('OPENROUTER_API_KEY');
-    this.agent = new NutritionAgent({
-      apiKey,
-      modelId: configService.get<string>(
-        'OPENROUTER_MODEL',
-        DEFAULT_CHAT_MODEL,
-      ),
-      reasoningEffort: configService.get<ReasoningEffort>(
-        'OPENROUTER_REASONING_EFFORT',
-        'low',
-      ),
-      knowledge,
-    });
-    this.moderationModel = chatModel({
-      apiKey,
-      modelId: configService.get<string>(
-        'OPENROUTER_MODERATION_MODEL',
-        DEFAULT_MODERATION_MODEL,
-      ),
-      reasoningEffort: 'low',
-    });
+  constructor(
+    @Inject(MODERATION_MODEL)
+    private readonly moderator: Experimental_EvaluationModel,
+    @InjectModel() model: LanguageModel,
+    knowledge: KnowledgeSearchService,
+  ) {
+    this.agent = new NutritionAgent({ model, knowledge });
   }
 
   async stream(messages: ChatMessageDto[], abortSignal: AbortSignal) {
@@ -98,19 +81,18 @@ export class NutritionChatService {
     });
   }
 
-  // our own short backoff: the only provider sometimes answers 429, and the
-  // SDK's backoff would outlast the timeout
   private async moderate(
     text: string,
     abortSignal: AbortSignal,
   ): Promise<ModerationVerdict> {
     try {
-      return await moderateWithRetry(
-        this.moderationModel,
+      const { choice } = await decide(
+        this.moderator,
         text,
         abortSignal,
         NUTRITION_POLICY,
       );
+      return choice;
     } catch (error) {
       if (abortSignal.aborted) throw error;
       this.logger.error(`Moderation failed: ${String(error)}`);

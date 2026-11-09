@@ -1,6 +1,5 @@
 import { AppException } from './app-exception.js';
 
-/** The caller is signed in but not allowed to do this. 403. */
 export const ACCESS_DENIED_CODES = [
   'FORBIDDEN',
   'EMAIL_NOT_VERIFIED',

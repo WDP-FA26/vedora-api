@@ -1,6 +1,9 @@
 import { Injectable } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
-import { StorageService, StorageTarget } from '../../storage/storage.service.js';
+import {
+  StorageService,
+  StorageTarget,
+} from '../../storage/storage.service.js';
 import {
   BlogImageUploadDto,
   CreateBlogImageUploadDto,
@@ -13,10 +16,6 @@ const EXTENSIONS: Record<CreateBlogImageUploadDto['contentType'], string> = {
   'image/gif': 'gif',
 };
 
-/**
- * Images for blog bodies. They're only referenced by URL from the Markdown,
- * so nothing is recorded per upload.
- */
 @Injectable()
 export class BlogImagesService {
   constructor(private readonly storage: StorageService) {}

@@ -28,9 +28,9 @@ import type { Response } from 'express';
 import type {
   AuthenticatedRequest,
   OptionalAuthenticatedRequest,
-} from '../../auth/auth.types.js';
-import { JwtAuthGuard } from '../../auth/jwt-auth.guard.js';
-import { OptionalJwtAuthGuard } from '../../auth/optional-jwt-auth.guard.js';
+} from '../../auth-core/auth.types.js';
+import { JwtAuthGuard } from '../../auth-core/jwt-auth.guard.js';
+import { OptionalJwtAuthGuard } from '../../auth-core/optional-jwt-auth.guard.js';
 import { BlogImagesService } from './blog-images.service.js';
 import { BlogsService } from './blogs.service.js';
 import { CloudinaryService } from '../../cloudinary/cloudinary.service.js';
@@ -47,7 +47,7 @@ import {
 } from '../dto/blog.dto.js';
 import { ListPostsQueryDto } from '../dto/list-posts-query.dto.js';
 import { PostPageDto } from '../dto/post-response.dto.js';
-import { PostsService } from '../posts.service.js';
+import { PostsQueryService } from '../posts-query.service.js';
 
 export class ListBlogsQueryDto extends OmitType(ListPostsQueryDto, ['type']) {}
 
@@ -56,7 +56,7 @@ export class ListBlogsQueryDto extends OmitType(ListPostsQueryDto, ['type']) {}
 export class BlogsController {
   constructor(
     private readonly blogs: BlogsService,
-    private readonly posts: PostsService,
+    private readonly postsQuery: PostsQueryService,
     private readonly images: BlogImagesService,
     private readonly cloudinary: CloudinaryService,
   ) {}
@@ -106,7 +106,7 @@ export class BlogsController {
     @Res({ passthrough: true }) response: Response,
   ) {
     if (request.user) response.setHeader('Cache-Control', 'private, no-store');
-    return this.posts.list(
+    return this.postsQuery.list(
       { ...query, type: PostType.BLOG },
       request.user?.sub,
     );

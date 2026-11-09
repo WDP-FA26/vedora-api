@@ -18,24 +18,15 @@ const MIN_IMAGE_PT = 48;
 const MAX_IMAGE_PX = 1024;
 const MAX_IMAGES_PER_DOCUMENT = 100;
 const JPEG_QUALITY = 80;
-// share of the text layer's words OCR must keep before the layer is trusted
-// over it; Mistral OCR can drop columns of dense, borderless tables
 const MIN_OCR_COVERAGE = 0.9;
 
-/**
- * MuPDF pulls out the images; Mistral OCR reads the text, so tables,
- * multi-column layouts and scans come back as Markdown. Images are blanked
- * before OCR since OpenRouter returns at most 8 per PDF.
- */
 @Injectable()
 export class PdfExtractor {
   private readonly logger = new Logger(PdfExtractor.name);
 
   constructor(private readonly models: KnowledgeModelsService) {}
 
-  /** Throws `DocumentExtractionError` for files that can't be ingested. */
   async extract(file: Uint8Array): Promise<ExtractedSection[]> {
-    // ESM-only with top-level await; module: nodenext keeps this a real import()
     const mupdf = await import('mupdf');
 
     let document: MuPdfDocument;

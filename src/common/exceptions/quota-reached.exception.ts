@@ -1,6 +1,5 @@
 import { AppException } from './app-exception.js';
 
-/** A quota, rate limit or attempt limit was reached. Retry later. 429. */
 export const QUOTA_REACHED_CODES = [
   'TOO_MANY_REQUESTS',
   'AI_QUOTA_EXCEEDED',

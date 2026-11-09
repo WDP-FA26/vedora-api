@@ -1,18 +1,13 @@
-import { isStepCount, ToolLoopAgent } from 'ai';
-import { chatModel } from '../ai/openrouter.js';
-import type { ReasoningEffort } from '../ai/reasoning.js';
-import { searchKnowledgeTool } from '../ai/tools/search-knowledge.tool.js';
+import { isStepCount, type LanguageModel, ToolLoopAgent } from 'ai';
+import { searchKnowledgeTool } from '../knowledge/tools/search-knowledge.tool.js';
 import type { KnowledgeSearchService } from '../knowledge/retrieval/knowledge-search.service.js';
 import { INSTRUCTIONS } from './nutrition-chat.prompt.js';
 
-// guests get two searches and an answer, and a bounded reply
 const MAX_STEPS = 3;
 const MAX_OUTPUT_TOKENS = 1000;
 
 interface NutritionAgentOptions {
-  apiKey: string;
-  modelId: string;
-  reasoningEffort: ReasoningEffort;
+  model: LanguageModel;
   knowledge: KnowledgeSearchService;
 }
 
@@ -21,14 +16,9 @@ type NutritionTools = {
 };
 
 export class NutritionAgent extends ToolLoopAgent<never, NutritionTools> {
-  constructor({
-    apiKey,
-    modelId,
-    reasoningEffort,
-    knowledge,
-  }: NutritionAgentOptions) {
+  constructor({ model, knowledge }: NutritionAgentOptions) {
     super({
-      model: chatModel({ apiKey, modelId, reasoningEffort }),
+      model,
       instructions: INSTRUCTIONS,
       maxOutputTokens: MAX_OUTPUT_TOKENS,
       tools: { searchKnowledge: searchKnowledgeTool(knowledge) },

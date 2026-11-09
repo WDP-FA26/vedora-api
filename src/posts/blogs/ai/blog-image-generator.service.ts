@@ -1,24 +1,22 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Inject, Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { AiFeature } from '../../../mongo/models.js';
-import { generateImage, type ImageModel, type LanguageModel } from 'ai';
-import { randomUUID } from 'node:crypto';
-import { moderateWithRetry } from '../../../ai/moderation/moderation.js';
 import {
-  chatModel,
-  DEFAULT_IMAGE_MODEL,
-  DEFAULT_MODERATION_MODEL,
-  imageModel,
-} from '../../../ai/openrouter.js';
+  type Experimental_EvaluationModel,
+  generateImage,
+  type ImageModel,
+} from 'ai';
+import { randomUUID } from 'node:crypto';
+import { MODERATION_MODEL } from '../../../ai/guardrails/guardrail.js';
+import { decide } from '../../../common/decision/decision.js';
+import { DEFAULT_IMAGE_MODEL, imageModel } from '../../../ai/openrouter.js';
 import { AiUsageService } from '../../../ai/usage/ai-usage.service.js';
 import {
   StorageService,
   StorageTarget,
 } from '../../../storage/storage.service.js';
-import {
-  BLOG_ASSISTANT_POLICY,
-  blogRefusal,
-} from './blog-assistant.moderation.js';
+import { BLOG_ASSISTANT_POLICY } from '../../../ai/guardrails/policies/blog-assistant.js';
+import { blogRefusal } from './blog-assistant.moderation.js';
 
 export const IMAGE_ASPECT_RATIOS = ['1:1', '4:3', '3:4', '16:9'] as const;
 export type ImageAspectRatio = (typeof IMAGE_ASPECT_RATIOS)[number];
@@ -38,21 +36,15 @@ const EXTENSIONS: Record<string, string> = {
   'image/webp': 'webp',
 };
 
-/**
- * Generates and edits blog illustrations with a cheap OpenRouter image model,
- * then stores them beside the user's uploaded blog images. Each image counts
- * against the daily `BLOG_IMAGE` allowance, given back when nothing is made.
- * Failures come back as an error code, never thrown, so the agent can tell the
- * user what happened.
- */
 @Injectable()
 export class BlogImageGeneratorService {
   private readonly logger = new Logger(BlogImageGeneratorService.name);
   private readonly imageModel: ImageModel;
-  private readonly moderationModel: LanguageModel;
 
   constructor(
     configService: ConfigService,
+    @Inject(MODERATION_MODEL)
+    private readonly moderator: Experimental_EvaluationModel,
     private readonly storage: StorageService,
     private readonly usage: AiUsageService,
   ) {
@@ -63,14 +55,6 @@ export class BlogImageGeneratorService {
         'OPENROUTER_IMAGE_MODEL',
         DEFAULT_IMAGE_MODEL,
       ),
-    });
-    this.moderationModel = chatModel({
-      apiKey,
-      modelId: configService.get<string>(
-        'OPENROUTER_MODERATION_MODEL',
-        DEFAULT_MODERATION_MODEL,
-      ),
-      reasoningEffort: 'low',
     });
   }
 
@@ -91,15 +75,12 @@ export class BlogImageGeneratorService {
     );
   }
 
-  /** Edits an image the user already has in the blogs bucket. */
   async edit(
     userId: string,
     imageUrl: string,
     instruction: string,
     abortSignal?: AbortSignal,
   ): Promise<ImageResult> {
-    // only the user's own blog images: never another user's, never a URL
-    // the server would have to fetch from elsewhere
     const key = this.storage.keyFromPublicUrl(StorageTarget.Blogs, imageUrl);
     if (!key?.startsWith(`blogs/${userId}/`))
       return { error: 'IMAGE_NOT_OWNED' };
@@ -123,8 +104,8 @@ export class BlogImageGeneratorService {
     if (!(await this.usage.consume(userId, AiFeature.BLOG_IMAGE)))
       return { error: 'IMAGE_QUOTA_EXCEEDED' };
     try {
-      const verdict = await moderateWithRetry(
-        this.moderationModel,
+      const { choice: verdict } = await decide(
+        this.moderator,
         prompt,
         abortSignal ?? new AbortController().signal,
         BLOG_ASSISTANT_POLICY,

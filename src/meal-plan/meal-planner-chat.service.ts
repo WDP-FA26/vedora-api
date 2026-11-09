@@ -1,6 +1,7 @@
-import { Injectable, Logger } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
+import { Inject, Injectable, Logger } from '@nestjs/common';
+import { InjectModel } from '@nestjs/ai';
 import {
+  type Experimental_EvaluationModel,
   isStepCount,
   type LanguageModel,
   ToolLoopAgent,
@@ -9,15 +10,10 @@ import {
 import { cannedReply } from '../ai/chat/canned-reply.js';
 import { chatErrorCode } from '../ai/chat/errors.js';
 import { replyFilter } from '../ai/chat/reply-filter.js';
-import { moderateWithRetry } from '../ai/moderation/moderation.js';
-import { NUTRITION_POLICY } from '../ai/moderation/policies/nutrition.js';
-import {
-  chatModel,
-  DEFAULT_CHAT_MODEL,
-  DEFAULT_MODERATION_MODEL,
-} from '../ai/openrouter.js';
-import type { ReasoningEffort } from '../ai/reasoning.js';
-import { searchKnowledgeTool } from '../ai/tools/search-knowledge.tool.js';
+import { MODERATION_MODEL } from '../ai/guardrails/guardrail.js';
+import { decide } from '../common/decision/decision.js';
+import { NUTRITION_POLICY } from '../ai/guardrails/policies/nutrition.js';
+import { searchKnowledgeTool } from '../knowledge/tools/search-knowledge.tool.js';
 import { KnowledgeSearchService } from '../knowledge/retrieval/knowledge-search.service.js';
 import { DietaryService } from '../recipes/dietary.service.js';
 import type { PlannerMessageDto } from './dto/meal-plan.dto.js';
@@ -28,57 +24,29 @@ import { proposeMealPlanTool } from './tools/propose-meal-plan.tool.js';
 import { searchRecipesTool } from './tools/search-recipes.tool.js';
 import { FeatureUnavailableException } from '../common/exceptions/feature-unavailable.exception.js';
 
-// room to search, then propose again after a rejected proposal
 const MAX_STEPS = 8;
 const SEARCH_TIMEOUT_MS = 5000;
 
-/**
- * Vedora's assistant for signed-in users: it plans the weekly timetable
- * (reading the user's restrictions, asking what it needs, proposing changes
- * that only the user saves) and answers nutrition questions from the knowledge
- * base. The guest-facing nutrition chat stays a separate, narrower agent.
- */
 @Injectable()
 export class MealPlannerChatService {
   private readonly logger = new Logger(MealPlannerChatService.name);
-  private readonly model: LanguageModel;
-  private readonly moderationModel: LanguageModel;
 
   constructor(
-    configService: ConfigService,
+    @Inject(MODERATION_MODEL)
+    private readonly moderator: Experimental_EvaluationModel,
+    @InjectModel() private readonly model: LanguageModel,
     private readonly mealPlan: MealPlanService,
     private readonly dietary: DietaryService,
     private readonly knowledge: KnowledgeSearchService,
-  ) {
-    const apiKey = configService.getOrThrow<string>('OPENROUTER_API_KEY');
-    this.moderationModel = chatModel({
-      apiKey,
-      modelId: configService.get<string>(
-        'OPENROUTER_MODERATION_MODEL',
-        DEFAULT_MODERATION_MODEL,
-      ),
-      reasoningEffort: 'low',
-    });
-    this.model = chatModel({
-      apiKey,
-      modelId: configService.get<string>(
-        'OPENROUTER_MODEL',
-        DEFAULT_CHAT_MODEL,
-      ),
-      reasoningEffort: configService.get<ReasoningEffort>(
-        'OPENROUTER_REASONING_EFFORT',
-        'low',
-      ),
-    });
-  }
+  ) {}
 
   async stream(
     userId: string,
     messages: PlannerMessageDto[],
     abortSignal: AbortSignal,
   ) {
-    const verdict = await moderateWithRetry(
-      this.moderationModel,
+    const { choice: verdict } = await decide(
+      this.moderator,
       messages.at(-1)?.text ?? '',
       abortSignal,
       NUTRITION_POLICY,

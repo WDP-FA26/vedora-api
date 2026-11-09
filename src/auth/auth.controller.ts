@@ -22,11 +22,12 @@ import {
   ApiTooManyRequestsResponse,
   ApiUnauthorizedResponse,
 } from '@nestjs/swagger';
-import { TurnstileService } from '../nutrition-chat/guest/turnstile.service.js';
+import { TurnstileService } from '../captcha/turnstile.service.js';
 import { type PublicUser } from '../users/public-user.js';
 import { AuthService } from './auth.service.js';
-import { AuthenticatedRequest } from './auth.types.js';
-import { AuthResponseDto, UserResponseDto } from './dto/auth-response.dto.js';
+import { AuthenticatedRequest } from '../auth-core/auth.types.js';
+import { AuthResponseDto } from './dto/auth-response.dto.js';
+import { UserResponseDto } from '../users/dto/user-response.dto.js';
 import { AccessDeniedException } from '../common/exceptions/access-denied.exception.js';
 import {
   ResendVerificationDto,
@@ -39,8 +40,8 @@ import {
   ResetPasswordDto,
 } from './dto/password-reset.dto.js';
 import { RefreshTokenDto } from './dto/refresh-token.dto.js';
-import { RegisterDto } from './dto/register.dto.js';
-import { JwtAuthGuard } from './jwt-auth.guard.js';
+import { RegisterDto } from '../users/dto/register.dto.js';
+import { JwtAuthGuard } from '../auth-core/jwt-auth.guard.js';
 import { GoogleAuthorizationDto, GoogleExchangeDto } from './dto/google.dto.js';
 import { GoogleOAuthService } from './google-oauth.service.js';
 import { ErrorBodyDto } from '../common/exceptions/error-body.dto.js';
@@ -123,8 +124,6 @@ export class AuthController {
     description: 'Missing/invalid login fields or turnstileToken',
   })
   async login(@Body() dto: LoginDto): Promise<AuthResponseDto> {
-    // Login is forwarded by the FE Server Action. Do not send the FE server's
-    // socket IP as the visitor's remoteip; Cloudflare makes that field optional.
     if (!(await this.turnstile.verify(dto.turnstileToken, undefined))) {
       throw new AccessDeniedException(
         'CAPTCHA_FAILED',

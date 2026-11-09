@@ -33,9 +33,6 @@ export class ShoppingListService {
   ): Promise<ShoppingListDto> {
     const days = WEEKDAYS.filter((day) => query.days.includes(day));
     const { loaded, ingredientById } = await this.load(userId, days);
-    // Enums are plain strings in MongoDB and sort alphabetically, so the
-    // day and section order (Mon..Sun, breakfast..other) is applied here.
-    // The sort is stable: position and recipe order carry over within one.
     const entries = loaded.sort(
       (a, b) =>
         WEEKDAYS.indexOf(a.day) - WEEKDAYS.indexOf(b.day) ||
@@ -49,8 +46,6 @@ export class ShoppingListService {
       for (const source of recipe.ingredients) {
         const ingredient = ingredientById.get(source.ingredientId);
         if (!ingredient) continue;
-        // Empty/whitespace legacy units mean unspecified. Do not case-fold or
-        // convert units: g, kg, ml and individual pieces stay separate.
         const unit = source.unit?.trim() || null;
         const key = JSON.stringify([source.ingredientId, unit]);
         let group = groups.get(key);
@@ -99,11 +94,6 @@ export class ShoppingListService {
     return { days, quantityBasis: 'RECIPE_PER_OCCURRENCE', items };
   }
 
-  /**
-   * The timetable entries of `days` with their recipes and ingredient names.
-   * Read in one transaction, so a timetable or recipe changed mid-read can't
-   * mix old and new data.
-   */
   private load(userId: string, days: Weekday[]) {
     return this.mongo.withTransaction(async (session) => {
       const entries = await this.entries

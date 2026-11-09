@@ -2,21 +2,8 @@ import { ApiProperty } from '@nestjs/swagger';
 import { PostStatus, PostType } from '../../mongo/models.js';
 import { CursorPaginatedResponseDto } from '../../common/pagination/index.js';
 import { MediaResponseDto } from '../../media/dto/media-response.dto.js';
+import { PostAuthorDto } from '../../common/dto/post-author.dto.js';
 import { BlogSummaryDto } from './blog-summary.dto.js';
-
-export class PostAuthorDto {
-  @ApiProperty({ format: 'uuid' })
-  id!: string;
-
-  @ApiProperty({ example: 'vedora.user' })
-  username!: string;
-
-  @ApiProperty({ example: 'Vedora User' })
-  fullName!: string;
-
-  @ApiProperty({ nullable: true, type: String })
-  avatarUrl!: string | null;
-}
 
 export class PostResponseDto {
   @ApiProperty({ format: 'uuid' })
@@ -28,9 +15,25 @@ export class PostResponseDto {
   @ApiProperty({
     enum: PostStatus,
     description:
-      'Blogs start DRAFT; videos start PROCESSING. Only the author sees non-PUBLISHED posts',
+      'Blogs start DRAFT; posts and published blogs are PROCESSING until video and content moderation finish, then PUBLISHED or REJECTED. Only the author sees non-PUBLISHED posts',
   })
   status!: PostStatus;
+
+  @ApiProperty({
+    nullable: true,
+    type: String,
+    description:
+      'Why a REJECTED post was blocked: sexual, violence, hate, harassment, self_harm, illegal or spam. Null otherwise',
+  })
+  moderationVerdict!: string | null;
+
+  @ApiProperty({
+    nullable: true,
+    type: String,
+    description:
+      '`moderationVerdict` worded for the author, e.g. "bạo lực hoặc đe dọa". Null if the category no longer exists',
+  })
+  moderationReason!: string | null;
 
   @ApiProperty({ nullable: true, type: String })
   body!: string | null;

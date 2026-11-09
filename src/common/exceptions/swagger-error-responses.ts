@@ -13,7 +13,6 @@ const ERROR_RESPONSES: { status: number; description: string }[] = [
   { status: 503, description: 'The feature is unavailable' },
 ];
 
-/** Every operation documents the shared error body for each error status. */
 export function errorResponses(): ApiResponseOptions[] {
   return ERROR_RESPONSES.map(({ status, description }) => ({
     status,

@@ -1,9 +1,10 @@
-import { Injectable, Logger } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
+import { Inject, Injectable, Logger } from '@nestjs/common';
+import { InjectModel as InjectAiModel } from '@nestjs/ai';
 import { InjectModel } from '@nestjs/mongoose';
 import type { Model } from 'mongoose';
 import {
   convertToModelMessages,
+  type Experimental_EvaluationModel,
   isStepCount,
   isTextUIPart,
   isToolUIPart,
@@ -16,12 +17,8 @@ import {
 import { cannedReply } from '../../../ai/chat/canned-reply.js';
 import { chatErrorCode } from '../../../ai/chat/errors.js';
 import { replyFilter } from '../../../ai/chat/reply-filter.js';
-import { moderateWithRetry } from '../../../ai/moderation/moderation.js';
-import {
-  chatModel,
-  DEFAULT_CHAT_MODEL,
-  DEFAULT_MODERATION_MODEL,
-} from '../../../ai/openrouter.js';
+import { MODERATION_MODEL } from '../../../ai/guardrails/guardrail.js';
+import { decide } from '../../../common/decision/decision.js';
 import { AiUsageService } from '../../../ai/usage/ai-usage.service.js';
 import { KnowledgeSearchService } from '../../../knowledge/retrieval/knowledge-search.service.js';
 import {
@@ -36,8 +33,8 @@ import {
   type BlogAssistantQuotaDto,
   MAX_SELECTION,
 } from '../../dto/blog-ai.dto.js';
+import { BLOG_ASSISTANT_POLICY } from '../../../ai/guardrails/policies/blog-assistant.js';
 import {
-  BLOG_ASSISTANT_POLICY,
   BLOG_ASSISTANT_REFUSALS,
   blogRefusal,
 } from './blog-assistant.moderation.js';
@@ -55,28 +52,18 @@ import { InvalidInputException } from '../../../common/exceptions/invalid-input.
 import { QuotaReachedException } from '../../../common/exceptions/quota-reached.exception.js';
 import { ResourceNotFoundException } from '../../../common/exceptions/resource-not-found.exception.js';
 
-// room to search, generate an image and propose a couple of edits
 const MAX_STEPS = 8;
 const MAX_OUTPUT_TOKENS = 4000;
 const SEARCH_TIMEOUT_MS = 5000;
 
-/**
- * The writing assistant beside the blog editor. It edits the draft through
- * editor tools that run in the browser (the user accepts or rejects each
- * change), grounds nutrition facts in the knowledge base and the blog's
- * recipes, and generates illustrations. Every request, including the one
- * that resumes after the browser answers an editor tool, counts against the
- * daily `BLOG_CHAT` allowance: the history comes from the client, so a resume
- * cannot be told apart from a new turn.
- */
 @Injectable()
 export class BlogAssistantService {
   private readonly logger = new Logger(BlogAssistantService.name);
-  private readonly model: LanguageModel;
-  private readonly moderationModel: LanguageModel;
 
   constructor(
-    configService: ConfigService,
+    @Inject(MODERATION_MODEL)
+    private readonly moderator: Experimental_EvaluationModel,
+    @InjectAiModel('blog') private readonly model: LanguageModel,
     private readonly knowledge: KnowledgeSearchService,
     private readonly images: BlogImageGeneratorService,
     private readonly usage: AiUsageService,
@@ -84,26 +71,7 @@ export class BlogAssistantService {
     @InjectModel(Recipe.name) private readonly recipes: Model<Recipe>,
     @InjectModel(Ingredient.name)
     private readonly ingredients: Model<Ingredient>,
-  ) {
-    const apiKey = configService.getOrThrow<string>('OPENROUTER_API_KEY');
-    this.moderationModel = chatModel({
-      apiKey,
-      modelId: configService.get<string>(
-        'OPENROUTER_MODERATION_MODEL',
-        DEFAULT_MODERATION_MODEL,
-      ),
-      reasoningEffort: 'low',
-    });
-    // `openrouter/auto` may route to a model that calls tools poorly; pin one
-    // for this agent with BLOG_AI_MODEL
-    this.model = chatModel({
-      apiKey,
-      modelId:
-        configService.get<string>('BLOG_AI_MODEL') ||
-        configService.get<string>('OPENROUTER_MODEL', DEFAULT_CHAT_MODEL),
-      reasoningEffort: configService.get('OPENROUTER_REASONING_EFFORT', 'low'),
-    });
-  }
+  ) {}
 
   async quota(userId: string): Promise<BlogAssistantQuotaDto> {
     const [messages, images] = await Promise.all([
@@ -132,10 +100,9 @@ export class BlogAssistantService {
       );
     }
 
-    // a resumed turn only carries editor tool outputs, checked by schema
     if (last.role === 'user') {
-      const verdict = await moderateWithRetry(
-        this.moderationModel,
+      const { choice: verdict } = await decide(
+        this.moderator,
         textOf(last),
         abortSignal,
         BLOG_ASSISTANT_POLICY,
@@ -177,7 +144,6 @@ export class BlogAssistantService {
     return toUIMessageStream({
       stream: result.stream,
       tools: agent.tools,
-      // resuming after an editor tool continues the same assistant message
       originalMessages: messages,
       onError: (error) => {
         this.logger.error(
@@ -257,11 +223,6 @@ export class BlogAssistantService {
   }
 }
 
-/**
- * Checks the client's history against the tools' schemas, then that it ends
- * with either a user message or an assistant message whose tool calls all
- * have outputs (the browser resuming the turn after an editor tool).
- */
 export async function parseMessages(
   raw: unknown[],
   tools: BlogAssistantTools,

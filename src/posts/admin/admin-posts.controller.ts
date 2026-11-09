@@ -4,13 +4,17 @@ import {
   Get,
   HttpCode,
   HttpStatus,
+  Body,
   Param,
   ParseUUIDPipe,
+  Post,
   Query,
+  Req,
   UseGuards,
 } from '@nestjs/common';
 import {
   ApiBearerAuth,
+  ApiConflictResponse,
   ApiForbiddenResponse,
   ApiNoContentResponse,
   ApiOkResponse,
@@ -19,15 +23,20 @@ import {
   ApiUnauthorizedResponse,
 } from '@nestjs/swagger';
 import { UserRole } from '../../mongo/models.js';
-import { JwtAuthGuard } from '../../auth/jwt-auth.guard.js';
-import { Roles } from '../../auth/roles.decorator.js';
-import { RolesGuard } from '../../auth/roles.guard.js';
+import { JwtAuthGuard } from '../../auth-core/jwt-auth.guard.js';
+import { Roles } from '../../auth-core/roles.decorator.js';
+import { RolesGuard } from '../../auth-core/roles.guard.js';
 import {
   ApiPaginatedResponse,
   PaginatedResponseDto,
 } from '../../common/pagination/index.js';
 import { AdminPostsService } from './admin-posts.service.js';
-import { AdminPostDto, AdminPostsQueryDto } from '../dto/admin-post.dto.js';
+import type { AuthenticatedRequest } from '../../auth-core/auth.types.js';
+import {
+  AdminPostDto,
+  AdminPostsQueryDto,
+  ModeratePostDto,
+} from '../dto/admin-post.dto.js';
 import { PostsService } from '../posts.service.js';
 import { ErrorBodyDto } from '../../common/exceptions/error-body.dto.js';
 
@@ -71,6 +80,31 @@ export class AdminPostsController {
   @ApiOkResponse({ type: AdminPostDto })
   findOne(@Param('id', ParseUUIDPipe) id: string): Promise<AdminPostDto> {
     return this.adminPosts.findOne(id);
+  }
+
+  @Post(':id/moderation')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Decide a post held for review, or overturn a rejection',
+    description:
+      'List the queue with GET /admin/posts?status=PENDING_REVIEW (or REJECTED). APPROVE publishes the post; REJECT blocks it. The decision, admin and note are stored in `moderation`.',
+  })
+  @ApiOkResponse({ type: AdminPostDto })
+  @ApiConflictResponse({
+    type: ErrorBodyDto,
+    description: 'The post is not PENDING_REVIEW or REJECTED',
+  })
+  moderate(
+    @Req() request: AuthenticatedRequest,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: ModeratePostDto,
+  ): Promise<AdminPostDto> {
+    return this.adminPosts.moderate(
+      id,
+      request.user.sub,
+      dto.decision,
+      dto.note,
+    );
   }
 
   @Delete(':id')

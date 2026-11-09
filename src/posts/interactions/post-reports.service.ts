@@ -113,7 +113,6 @@ export class PostReportsService {
     reviewerId: string,
     status: ReportDecision,
   ): Promise<AdminPostReportDto> {
-    // Conditional, so two admins can't both decide the same report.
     const decided = await this.reports
       .findOneAndUpdate(
         { _id: id, status: PostReportStatus.PENDING },
@@ -134,7 +133,6 @@ export class PostReportsService {
     return dto;
   }
 
-  /** Adds the reporter and the reported post with its author. */
   private async toAdminDtos(
     reports: PostReport[],
   ): Promise<AdminPostReportDto[]> {

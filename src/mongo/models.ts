@@ -1,4 +1,16 @@
-// The schema classes, so services can type their models and name them for
-// `@InjectModel`, plus the enums. `id` is the string view of `_id`.
 export * from './enums.js';
-export * from './schemas/index.js';
+export * from './schemas/identified.js';
+export * from './schemas/user.schema.js';
+export * from './schemas/follow.schema.js';
+export * from './schemas/notification.schema.js';
+export * from './schemas/profile-image.schema.js';
+export * from './schemas/credential.schema.js';
+export * from './schemas/post.schema.js';
+export * from './schemas/media.schema.js';
+export * from './schemas/knowledge.schema.js';
+export * from './schemas/moderation.schema.js';
+export * from './schemas/verification.schema.js';
+export * from './schemas/recipe.schema.js';
+export * from './schemas/payment.schema.js';
+export * from './schemas/ai-usage.schema.js';
+export * from './schemas/messaging.schema.js';

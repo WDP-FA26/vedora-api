@@ -11,9 +11,7 @@ import {
   ValidateNested,
 } from 'class-validator';
 
-// the agent sees its instructions plus only the latest turns
 const MAX_CHAT_MESSAGES = 5;
-// assistant turns come back as context, so this also bounds a reply
 const MAX_CHAT_MESSAGE_LENGTH = 2000;
 
 export class ChatMessageDto {

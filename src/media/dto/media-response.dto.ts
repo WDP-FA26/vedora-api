@@ -81,7 +81,7 @@ export class AdminMediaDto extends MediaResponseDto {
     nullable: true,
     type: String,
     example: 'vi',
-    description: 'Spoken language Whisper detected',
+    description: 'Spoken language the transcription model detected',
   })
   captionLanguage!: string | null;
 }

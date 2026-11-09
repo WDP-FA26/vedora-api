@@ -5,7 +5,7 @@ import { defineConfig } from 'vitest/config';
 // random database, builds the schema indexes, and drops it afterwards.
 export default defineConfig({
   test: {
-    include: ['test/**/*.db-spec.ts'],
+    include: ['test/db/**/*.db-spec.ts'],
     globals: true,
     hookTimeout: 60_000,
     testTimeout: 15_000,

@@ -26,10 +26,6 @@ export enum StorageTarget {
   Blogs = 'blogs',
 }
 
-/**
- * How each bucket is set up at startup: whether RustFS reports its uploads to
- * `/webhooks/storage/<target>`, and whether anyone may read its objects.
- */
 const BUCKET_SETUP: Record<
   StorageTarget,
   { webhook: boolean; publicRead: boolean }
@@ -37,11 +33,9 @@ const BUCKET_SETUP: Record<
   [StorageTarget.Knowledge]: { webhook: true, publicRead: false },
   [StorageTarget.Profiles]: { webhook: true, publicRead: true },
   [StorageTarget.Verifications]: { webhook: false, publicRead: false },
-  // blog images are not tracked per upload, so nothing needs the event
   [StorageTarget.Blogs]: { webhook: false, publicRead: true },
 };
 
-/** Targets whose uploads RustFS reports to `/webhooks/storage/<target>`. */
 export const WebhookStorageTarget = {
   Knowledge: StorageTarget.Knowledge,
   Profiles: StorageTarget.Profiles,
@@ -102,8 +96,6 @@ export class StorageService implements OnModuleInit {
         region: this.region,
         forcePathStyle: true,
         credentials: { accessKeyId, secretAccessKey },
-        // Otherwise presigned PUTs carry a CRC32 of an empty body, which S3
-        // rejects once the browser sends the real file.
         requestChecksumCalculation: 'WHEN_REQUIRED',
         requestHandler: { connectionTimeout: 3000, requestTimeout: 10_000 },
       });
@@ -131,7 +123,6 @@ export class StorageService implements OnModuleInit {
         ),
       );
     } catch (error) {
-      // the API still starts; uploads fail until RustFS is reachable
       this.logger.error(`Could not set up storage buckets: ${String(error)}`);
     }
   }
@@ -167,7 +158,6 @@ export class StorageService implements OnModuleInit {
     };
   }
 
-  /** A short-lived read URL for an object in a private bucket. */
   presignDownload(
     target: StorageTarget,
     key: string,
@@ -192,7 +182,6 @@ export class StorageService implements OnModuleInit {
     }
   }
 
-  /** Public URL of an object in a public-read bucket. */
   publicObjectUrl(target: StorageTarget, key: string): string {
     return `${this.publicUrl}/${this.buckets[target]}/${key}`;
   }
@@ -205,7 +194,6 @@ export class StorageService implements OnModuleInit {
     return Body.transformToByteArray();
   }
 
-  /** Writes an object the API produced itself, e.g. a generated image. */
   async putBytes(
     target: StorageTarget,
     key: string,
@@ -222,10 +210,6 @@ export class StorageService implements OnModuleInit {
     );
   }
 
-  /**
-   * The key of an object in `target` that `url` points at, or null when the
-   * URL belongs to another host or bucket.
-   */
   keyFromPublicUrl(target: StorageTarget, url: string): string | null {
     const prefix = `${this.publicUrl}/${this.buckets[target]}/`;
     if (!url.startsWith(prefix)) return null;
@@ -255,7 +239,6 @@ export class StorageService implements OnModuleInit {
         !key
       )
         return [];
-      // S3 events URL-encode keys, with "+" for spaces
       return [decodeURIComponent(key.replace(/\+/g, ' '))];
     });
   }
@@ -292,7 +275,6 @@ export class StorageService implements OnModuleInit {
             QueueConfigurations: [
               {
                 Id: `${target}-created`,
-                // the webhook target named <target> in RustFS's environment
                 QueueArn: `arn:rustfs:sqs:${this.region}:${target}:webhook`,
                 Events: ['s3:ObjectCreated:*'],
               },

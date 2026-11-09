@@ -13,7 +13,6 @@ import {
 } from '../mongo/models.js';
 import type { BlogSummaryDto } from './dto/blog-summary.dto.js';
 
-/** What a post card shows besides the post itself. */
 export interface PostRelations {
   author: Pick<User, 'id' | 'username' | 'fullName' | 'avatarUrl'>;
   media: MediaAsset[];
@@ -26,13 +25,6 @@ export interface PostRelations {
   isBookmarked: boolean;
 }
 
-/**
- * Loads the author, media, blog summary, counts and the viewer's own
- * interactions of `posts`.
- *
- * It owns the collections it joins, so the services that render post cards
- * depend on one collaborator instead of seven models.
- */
 @Injectable()
 export class PostRelationsService {
   constructor(
@@ -48,7 +40,6 @@ export class PostRelationsService {
     @InjectModel(Recipe.name) private readonly recipes: Model<Recipe>,
   ) {}
 
-  /** Relations of `posts`, keyed by post id. */
   async hydrate(
     posts: readonly Post[],
     viewerId?: string,
@@ -114,10 +105,6 @@ export class PostRelationsService {
     return relations;
   }
 
-  /**
-   * Builds the summary of each blog post in `posts` from its embedded `blog`
-   * subdocument, resolving linked recipes in order.
-   */
   private async blogSummaries(
     posts: readonly Post[],
   ): Promise<Map<string, BlogSummaryDto>> {

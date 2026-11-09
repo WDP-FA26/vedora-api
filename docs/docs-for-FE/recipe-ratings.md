@@ -84,7 +84,7 @@ khi đưa code mới phục vụ request; không cần seed lại công thức/u
 ```powershell
 npm run start:dev    # Mongoose tự tạo collection/index khi khởi động
 npm run build
-npm run test:e2e -- test/recipe-ratings.e2e-spec.ts
+npm run test:e2e -- test/e2e/recipe-ratings.e2e-spec.ts
 ```
 
 PostgreSQL integration tests dùng database test riêng, mỗi suite tạo schema

@@ -19,8 +19,8 @@ import {
   ApiTags,
   ApiTooManyRequestsResponse,
 } from '@nestjs/swagger';
-import type { AuthenticatedRequest } from '../auth/auth.types.js';
-import { JwtAuthGuard } from '../auth/jwt-auth.guard.js';
+import type { AuthenticatedRequest } from '../auth-core/auth.types.js';
+import { JwtAuthGuard } from '../auth-core/jwt-auth.guard.js';
 import { CreateUploadDto } from './dto/create-upload.dto.js';
 import {
   CreateUploadResponseDto,

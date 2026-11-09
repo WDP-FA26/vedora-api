@@ -79,8 +79,6 @@ export class KnowledgeService {
   }
 
   async markUploaded(key: string): Promise<void> {
-    // The conditional update claims the document, so a repeated event for the
-    // same upload cannot start a second ingestion.
     const document = await this.documents
       .findOneAndUpdate(
         {
@@ -91,7 +89,6 @@ export class KnowledgeService {
         { returnDocument: 'after' },
       )
       .exec();
-    // don't hold the event open during extraction; failures land on the row
     if (document) void this.ingest(document);
     else this.logger.warn(`No waiting document for ${key}`);
   }
@@ -178,7 +175,6 @@ export class KnowledgeService {
     return toResponse(await this.findDocument(id));
   }
 
-  /** Deletes the row last, so a failure leaves it to retry from. */
   async remove(id: string): Promise<void> {
     const document = await this.findDocument(id);
     await this.storage.delete(StorageTarget.Knowledge, document.storageKey);

@@ -40,7 +40,6 @@ export const MEAL_PLAN_PROBLEM_CODES = [
   'DAY_CONFLICT',
 ] as const;
 
-/** The complete new content of one day; an empty list clears that section. */
 export class SaveMealDayDto {
   @ApiProperty({ enum: Weekday })
   @IsEnum(Weekday)

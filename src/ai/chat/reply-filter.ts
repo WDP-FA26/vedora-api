@@ -5,8 +5,6 @@ const IMAGE = /!\[[^\]]*\]\([^)]*\)/g;
 const LINK = /\[([^\]]*)\]\([^)]*\)/g;
 const URL = /<?\bhttps?:\/\/[^\s>)]*>?/gi;
 const HTML_TAG = /<\/?[a-z][^>]*>/gi;
-// a line holding one of these waits until it is complete, so a split
-// construct (a fence, an image, a link or a tag) is never half-sent
 const MARKUP_START = /[`~![<]/;
 
 function clean(text: string): string {
@@ -17,7 +15,6 @@ function clean(text: string): string {
     .replace(HTML_TAG, '');
 }
 
-/** Drops code blocks and strips images, links, URLs and HTML from the reply as it streams. */
 export function replyFilter<
   TOOLS extends ToolSet,
 >(): StreamTextTransform<TOOLS> {

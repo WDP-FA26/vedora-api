@@ -4,14 +4,12 @@ import type {
 } from './paginated-response.dto.js';
 import type { PaginationQueryDto } from './pagination-query.dto.js';
 
-/** Only derive database offsets from a validated page/limit query. */
 export function getPaginationArgs(
   query: Pick<PaginationQueryDto, 'page' | 'limit'>,
 ): { skip: number; take: number } {
   return { skip: (query.page - 1) * query.limit, take: query.limit };
 }
 
-/** The query has already been validated and the items already sliced by the DB. */
 export function createPaginatedResponse<T>(
   items: T[],
   totalItems: number,
@@ -32,7 +30,6 @@ export function createPaginatedResponse<T>(
   };
 }
 
-/** Fetch limit + 1 rows with a stable order; the extra row is only a lookahead. */
 export function createCursorPaginatedResponse<T extends { id: string }>(
   rows: T[],
   limit: number,

@@ -90,6 +90,6 @@ Meal Planner tuần hiện có thành mô hình có ngày/thay đổi số ngư�
 | 401 | Thiếu/sai token hoặc account không còn |
 
 Không cần migration, seed hoặc provider AI. Test HTTP:
-`npm run test:e2e -- test/shopping-list.e2e-spec.ts`.
+`npm run test:e2e -- test/e2e/shopping-list.e2e-spec.ts`.
 Test PostgreSQL dùng TEST_DATABASE_URL của database test riêng:
 `npm run test:db -- test/shopping-list.db-spec.ts`.

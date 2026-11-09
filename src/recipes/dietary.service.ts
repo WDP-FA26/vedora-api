@@ -10,7 +10,6 @@ import {
 } from './dto/dietary.dto.js';
 import { InvalidInputException } from '../common/exceptions/invalid-input.exception.js';
 
-/** What a user does not eat (ingredients and whole groups) and the ingredients they like. Never shown to others. */
 @Injectable()
 export class DietaryService {
   constructor(
@@ -21,7 +20,6 @@ export class DietaryService {
     @InjectModel(User.name) private readonly users: Model<User>,
   ) {}
 
-  /** Every ingredient, and the groups admins marked as food categories. */
   async options(): Promise<DietaryOptionsDto> {
     const [ingredients, groups] = await Promise.all([
       this.ingredients.find().sort({ name: 1 }).exec(),
@@ -74,7 +72,6 @@ export class DietaryService {
     };
   }
 
-  /** Every ingredient the user avoids, directly or through a group. */
   async avoidedIngredientIds(userId: string): Promise<Set<string>> {
     const user = await this.preferences(userId);
     const viaGroups = await this.groups

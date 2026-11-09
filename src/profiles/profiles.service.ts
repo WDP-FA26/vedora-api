@@ -8,7 +8,7 @@ import {
   CursorPaginationQueryDto,
 } from '../common/pagination/index.js';
 import { NotificationsService } from '../notifications/notifications.service.js';
-import { assertAccountActive } from '../auth/account-access.js';
+import { assertAccountActive } from '../auth-core/account-access.js';
 import { MongoService } from '../mongo/mongo.service.js';
 import { withUserLocks } from '../mongo/with-user-locks.js';
 import { MessagingEventsService } from '../messaging/messaging-events.service.js';
@@ -184,7 +184,6 @@ export class ProfilesService {
     query: CursorPaginationQueryDto,
   ): Promise<ProfileListDto> {
     await this.requirePublicUser(id);
-    // The cursor is the follower's id; the follow gives its place.
     return this.followList({ followingId: id }, 'followerId', query);
   }
 
@@ -193,11 +192,9 @@ export class ProfilesService {
     query: CursorPaginationQueryDto,
   ): Promise<ProfileListDto> {
     await this.requirePublicUser(id);
-    // The cursor is the followed account's id; the follow gives its place.
     return this.followList({ followerId: id }, 'followingId', query);
   }
 
-  /** One page of follows, joined to the accounts on `accountField`. */
   private async followList(
     filter: QueryFilter<Follow>,
     accountField: 'followerId' | 'followingId',
@@ -225,7 +222,6 @@ export class ProfilesService {
       .find({ _id: { $in: rows.map((row) => row[accountField]) } })
       .exec();
     const byId = new Map(accounts.map((user) => [user.id, user]));
-    // MongoDB has no relation filters: unverified accounts drop out here.
     const items: ProfileSummaryDto[] = [];
     for (const row of rows) {
       const user = byId.get(row[accountField]);
@@ -317,13 +313,11 @@ export class ProfilesService {
     if (!this.storage.isConfigured()) return;
     const cutoff = new Date(Date.now() - CLEANUP_AGE_MS);
     let after: { id: string; createdAt: Date } | undefined;
-    // Keyset paging keeps active images from blocking cleanup of later rows.
     for (;;) {
       const filter: QueryFilter<ProfileImageUpload> = {
         createdAt: { $lt: cutoff },
       };
       if (after) {
-        // Ascending keyset: the rows after the last one handled.
         filter.$or = [
           { createdAt: { $gt: after.createdAt } },
           { createdAt: after.createdAt, _id: { $gt: after.id } },

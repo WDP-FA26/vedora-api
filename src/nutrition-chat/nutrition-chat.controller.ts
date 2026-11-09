@@ -23,16 +23,11 @@ import {
   GUEST_SESSION_TTL_SEC,
   GuestSessionService,
 } from './guest/guest-session.service.js';
-import { TurnstileService } from './guest/turnstile.service.js';
+import { TurnstileService } from '../captcha/turnstile.service.js';
 import { NutritionChatService } from './nutrition-chat.service.js';
 import { AccessDeniedException } from '../common/exceptions/access-denied.exception.js';
 import { ErrorBodyDto } from '../common/exceptions/error-body.dto.js';
 
-/**
- * The landing page's nutrition chat, open to guests. A visitor trades a
- * Turnstile token for a guest session, then spends its daily messages here;
- * signed-in users talk to the assistant at `/meal-plan/chat` instead.
- */
 @ApiTags('nutrition-chat')
 @Controller('nutrition-chat')
 export class NutritionChatController {
