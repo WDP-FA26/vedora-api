@@ -22,6 +22,7 @@ import {
 } from '../dto/blog.dto.js';
 import { PostPageDto } from '../dto/post-response.dto.js';
 import { PostsService } from '../posts.service.js';
+import { PostModerationService } from '../../media/post-moderation.service.js';
 import { InvalidInputException } from '../../common/exceptions/invalid-input.exception.js';
 import { ResourceNotFoundException } from '../../common/exceptions/resource-not-found.exception.js';
 
@@ -31,16 +32,18 @@ export class BlogsService {
     private readonly mongo: MongoService,
     private readonly posts: PostsService,
     private readonly storage: StorageService,
+    private readonly postModeration: PostModerationService,
     @InjectModel(Post.name) private readonly postsModel: Model<Post>,
     @InjectModel(Recipe.name) private readonly recipesModel: Model<Recipe>,
   ) {}
 
   async create(authorId: string, dto: CreateBlogDto): Promise<BlogDetailDto> {
     this.validateCover(dto.coverImageUrl);
-    const status: PostStatus =
-      (dto.status as PostStatus | undefined) ?? PostStatus.DRAFT;
+    const requested = this.requestedStatus(PostStatus.DRAFT, dto.status);
     const content = dto.content ?? '';
-    this.validatePublication(status, content);
+    this.validatePublication(requested, content);
+    const status =
+      requested === PostStatus.PUBLISHED ? PostStatus.PROCESSING : requested;
     await this.validateRecipes(dto.recipeIds);
     const now = new Date();
     const post = await this.postsModel.create({
@@ -58,10 +61,15 @@ export class BlogsService {
       },
       searchIndexedAt: null,
       viewCount: 0,
-      publishedAt: status === PostStatus.PUBLISHED ? now : null,
+      moderation: null,
+      publishedAt: null,
       createdAt: now,
       updatedAt: now,
     });
+    if (status === PostStatus.PROCESSING) {
+      await this.postModeration.settle([post.id]);
+      return this.loadDetail(post.id, authorId);
+    }
     return this.toDetail(post, authorId);
   }
 
@@ -122,15 +130,23 @@ export class BlogsService {
       );
     this.validateCover(dto.coverImageUrl);
     await this.validateRecipes(dto.recipeIds);
+    let needsReview = false;
     await this.mongo.withTransaction(async (session) => {
       const current = await this.lockOwned(session, id, authorId);
       const blog = current.blog;
       if (!blog)
         throw new ResourceNotFoundException('NOT_FOUND', 'Blog not found');
-      const status: PostStatus =
-        (dto.status as PostStatus | undefined) ?? current.status;
+      const requested = this.requestedStatus(current.status, dto.status);
       const content = dto.content ?? blog.content;
-      this.validatePublication(status, content);
+      this.validatePublication(requested, content);
+      const changesReviewedContent =
+        dto.title !== undefined ||
+        dto.content !== undefined ||
+        dto.coverImageUrl !== undefined;
+      needsReview =
+        requested === PostStatus.PUBLISHED &&
+        (current.status !== PostStatus.PUBLISHED || changesReviewedContent);
+      const status = needsReview ? PostStatus.PROCESSING : requested;
       const now = new Date();
       await this.postsModel
         .updateOne(
@@ -138,11 +154,7 @@ export class BlogsService {
           {
             $set: {
               status,
-              // Edits and re-publication keep the original feed position.
-              publishedAt:
-                status === PostStatus.PUBLISHED
-                  ? (current.publishedAt ?? now)
-                  : current.publishedAt,
+              publishedAt: current.publishedAt,
               'blog.title': dto.title ?? blog.title,
               'blog.content': content,
               'blog.excerpt':
@@ -161,7 +173,24 @@ export class BlogsService {
         )
         .exec();
     });
+    if (needsReview) await this.postModeration.settle([id]);
     return this.loadDetail(id, authorId);
+  }
+
+  private requestedStatus(
+    current: PostStatus,
+    requested: 'DRAFT' | 'PUBLISHED' | undefined,
+  ): PostStatus {
+    if (requested === 'PUBLISHED') return PostStatus.PUBLISHED;
+    if (requested === 'DRAFT') return PostStatus.DRAFT;
+    if (current === PostStatus.REJECTED) return PostStatus.DRAFT;
+    if (
+      current === PostStatus.PROCESSING ||
+      current === PostStatus.PENDING_REVIEW
+    ) {
+      return PostStatus.PUBLISHED;
+    }
+    return current;
   }
 
   async remove(id: string, authorId: string): Promise<void> {
@@ -171,14 +200,11 @@ export class BlogsService {
     });
   }
 
-  /** Locks and returns the author's blog post. */
   private async lockOwned(
     session: ClientSession,
     id: string,
     authorId: string,
   ) {
-    // Serialize edit/publish/delete so publication cannot validate an old
-    // content value while another edit replaces it with an empty draft.
     await lockDocument(this.mongo, session, 'post', id);
     const owned = await this.postsModel
       .findOne({ _id: id, authorId, type: PostType.BLOG })
@@ -198,11 +224,6 @@ export class BlogsService {
     }
   }
 
-  /**
-   * A cover is any https image on a public host, or an image in Vedora's own
-   * blog storage, which serves plain http outside production. The first image
-   * of the article becomes the cover, whether uploaded or AI-generated.
-   */
   private validateCover(url: string | null | undefined) {
     if (!url) return;
     if (isURL(url, { protocols: ['https'], require_protocol: true })) return;

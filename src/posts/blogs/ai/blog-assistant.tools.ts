@@ -11,10 +11,6 @@ import {
 export const MAX_EDIT_MARKDOWN = 8000;
 const MAX_TITLE = 150;
 
-/**
- * What the editor answers after the user accepts or rejects a change. A
- * rejected change may carry the user's reason.
- */
 const editorOutput = z.object({
   applied: z.boolean(),
   error: z.enum(['NO_SELECTION', 'NOT_FOUND', 'AMBIGUOUS', 'STALE']).optional(),
@@ -24,12 +20,6 @@ export type EditorToolOutput = z.infer<typeof editorOutput>;
 
 const markdown = z.string().min(1).max(MAX_EDIT_MARKDOWN);
 
-/**
- * Editor tools have no `execute`: the stream ends at the call, the browser
- * shows the change for the user to accept or reject, applies it to its own
- * editor and sends the outcome back with `addToolOutput`. Nothing is saved
- * here; the user saves the blog as usual.
- */
 export const editorTools = {
   replaceSelection: tool({
     description:
@@ -71,7 +61,6 @@ export const editorTools = {
     description:
       'Insert an image into the draft, or swap one already there for it (`replaces`). The only way to add or change an image: never put image Markdown in the other editor tools. Only use a URL returned by generateImage or editImage, copied exactly: never change its scheme, host or path.',
     inputSchema: z.object({
-      // storage serves plain http outside production, e.g. localhost:9000
       url: z.url({ protocol: /^https?$/ }),
       alt: z
         .string()

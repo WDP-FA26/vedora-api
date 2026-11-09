@@ -22,7 +22,6 @@ import { ResourceNotFoundException } from '../common/exceptions/resource-not-fou
 import { StateConflictException } from '../common/exceptions/state-conflict.exception.js';
 import { InvalidInputException } from '../common/exceptions/invalid-input.exception.js';
 
-/** The ingredient catalog and the groups that share incompatibility rules. */
 @Injectable()
 export class IngredientsService {
   constructor(
@@ -124,7 +123,6 @@ export class IngredientsService {
     return this.findIngredient(id);
   }
 
-  /** Refused while a recipe still uses the ingredient. */
   async remove(id: string): Promise<void> {
     await this.mongo.withTransaction(async (session) => {
       const inUse = await this.recipes
@@ -220,7 +218,6 @@ export class IngredientsService {
     return this.findGroup(id);
   }
 
-  /** Also deletes the rules that name the group and pulls it from user preferences. */
   async removeGroup(id: string): Promise<void> {
     await this.mongo.withTransaction(async (session) => {
       const { deletedCount } = await this.groups
@@ -235,7 +232,6 @@ export class IngredientsService {
     });
   }
 
-  /** Runs a catalog write; a duplicate name is a 409. */
   private async write(
     subject: string,
     run: (session: ClientSession) => Promise<void>,
@@ -288,7 +284,6 @@ export class IngredientsService {
     return dto;
   }
 
-  /** Adds each ingredient's groups and how many recipes use it. */
   private async toIngredients(rows: Ingredient[]): Promise<IngredientDto[]> {
     const ids = rows.map(({ id }) => id);
     const [groups, recipeCounts] = await Promise.all([
@@ -316,7 +311,6 @@ export class IngredientsService {
     }));
   }
 
-  /** Adds each group's ingredients. */
   private async toGroups(
     rows: IngredientGroup[],
   ): Promise<IngredientGroupDto[]> {

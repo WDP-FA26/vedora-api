@@ -1,7 +1,3 @@
-// Stored enum values, kept identical to what existing documents hold. Values
-// sort alphabetically nowhere in this API: services order by the arrays they
-// declare.
-
 export enum BillingPlan {
   PRO = 'PRO',
   PREMIUM = 'PREMIUM',
@@ -37,6 +33,9 @@ export enum NotificationType {
   COMMENT = 'COMMENT',
   REPOST = 'REPOST',
   FOLLOW = 'FOLLOW',
+  POST_PENDING_REVIEW = 'POST_PENDING_REVIEW',
+  POST_APPROVED = 'POST_APPROVED',
+  POST_REJECTED = 'POST_REJECTED',
 }
 
 export enum FollowSuggestionReason {
@@ -69,6 +68,8 @@ export enum PostStatus {
   PROCESSING = 'PROCESSING',
   PUBLISHED = 'PUBLISHED',
   FAILED = 'FAILED',
+  PENDING_REVIEW = 'PENDING_REVIEW',
+  REJECTED = 'REJECTED',
 }
 
 export enum PostReportReason {

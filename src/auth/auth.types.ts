@@ -14,7 +14,6 @@ export interface OptionalAuthenticatedRequest extends Request {
   user?: AuthenticatedUser;
 }
 
-/** Current account permissions, loaded from the database by JwtAuthGuard. */
 export interface AuthenticatedUser extends JwtPayload {
   role: UserRole;
 }

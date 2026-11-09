@@ -3,13 +3,6 @@ import { ConfigService } from '@nestjs/config';
 
 export type QuotaVerdict = 'ok' | 'guest' | 'ip' | 'budget';
 
-/**
- * Daily caps on guest messages: per guest session, per IP address (a cleared
- * browser gets a new session, not a new address; the cap is higher because
- * homes, schools and mobile carriers share addresses) and across all guests,
- * which bounds what the public chat can cost in a day. Counters live in this
- * process and reset at midnight UTC; move them to Redis to share instances.
- */
 @Injectable()
 export class GuestQuotaService {
   private readonly perGuest: number;
@@ -26,7 +19,6 @@ export class GuestQuotaService {
     this.budget = configService.get<number>('GUEST_DAILY_BUDGET', 500);
   }
 
-  /** Counts one message, unless a cap is already reached. */
   consume(guestId: string, ip: string): QuotaVerdict {
     this.rollOver();
     const guestKey = `guest:${guestId}`;

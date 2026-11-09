@@ -7,19 +7,14 @@ import {
 } from 'ai';
 import type { ReasoningEffort } from './reasoning.js';
 
-/** Used when the deployment does not pin a chat model. */
 export const DEFAULT_CHAT_MODEL = 'openrouter/auto';
-export const DEFAULT_MODERATION_MODEL = 'openai/gpt-oss-safeguard-20b';
+export const DEFAULT_MODERATION_MODEL = 'typesafe/jev-1.14';
+export const DEFAULT_CONTENT_MODERATION_MODEL = 'perplexity/pplx-decider-v1.2';
 export const DEFAULT_EMBEDDING_MODEL = 'google/gemini-embedding-2';
 export const DEFAULT_IMAGE_MODEL = 'qwen/qwen-image-2.1-turbo';
 
 const EMBEDDING_BATCH_SIZE = 64;
 
-/**
- * One place that builds OpenRouter models, so features never construct the
- * provider themselves. Reasoning is excluded from the stream: Vedora renders
- * only the answer.
- */
 export function chatModel({
   apiKey,
   modelId,

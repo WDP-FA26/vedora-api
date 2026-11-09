@@ -12,29 +12,13 @@ import { QdrantService } from '../../qdrant/qdrant.service.js';
 import { DENSE_VECTOR, toEpochSeconds } from './post-search-collection.js';
 import { PostSearchIndexService } from './post-search-index.service.js';
 
-/** How deep the feed goes; each source fetches at most this many. */
 export const MAX_FEED_RESULTS = 200;
-/** The recent posts the viewer liked, saved or commented on that set their taste. */
 const TASTE_POSTS = 20;
-/** Only posts this recent are picked by taste. */
 const WINDOW_SECONDS = 7 * 24 * 60 * 60;
-/** A post's freshness bonus halves every this many seconds. */
 const HALF_LIFE_SECONDS = 2 * 24 * 60 * 60;
-/**
- * The freshness bonus at publication, next to a similarity of up to 1. With
- * gemini-embedding-2, short cooking posts on different topics score within
- * about 0.02 of each other, so a larger bonus outranks taste with recency.
- */
 const FRESHNESS_WEIGHT = 0.05;
-/** Every this-many-th post is the newest one, whatever the viewer's taste. */
 const EXPLORE_EVERY = 5;
 
-/**
- * "For you": recent posts closest in meaning to any post the viewer recently
- * liked, saved or commented on, nudged towards newer ones, with every fifth
- * slot given to the newest post so the feed doesn't narrow to one topic. A
- * viewer with no interactions (or with Qdrant down) gets the newest posts.
- */
 @Injectable()
 export class PostFeedService {
   private readonly logger = new Logger(PostFeedService.name);
@@ -50,7 +34,6 @@ export class PostFeedService {
     private readonly comments: Model<PostComment>,
   ) {}
 
-  /** The first `count` post ids of the viewer's feed as of `asOf`. */
   async feed(viewerId: string, asOf: Date, count: number): Promise<string[]> {
     const [similar, latest] = await Promise.all([
       this.tastePosts(viewerId, asOf).then((liked) =>
@@ -64,15 +47,8 @@ export class PostFeedService {
     return interleave(similar, latest, EXPLORE_EVERY).slice(0, count);
   }
 
-  /**
-   * Interactions up to `asOf` only, so every page of one scroll ranks
-   * against the same taste: a like made mid-scroll neither reorders nor
-   * hides the posts of later pages.
-   */
   private async tastePosts(viewerId: string, asOf: Date): Promise<string[]> {
     const until = { createdAt: { $lte: asOf } };
-    // MongoDB has no relation filters: load each interaction's post and keep
-    // the published ones.
     const [likes, bookmarks, comments] = await Promise.all([
       this.likes
         .find({ userId: viewerId, ...until })
@@ -104,7 +80,6 @@ export class PostFeedService {
     const newestFirst = interactions
       .filter(({ postId }) => live.has(postId))
       .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
-    // Single pass: first (newest) occurrence wins, stop once the page is full.
     const recentPostIds = new Set<string>();
     for (const { postId } of newestFirst) {
       recentPostIds.add(postId);
@@ -113,7 +88,6 @@ export class PostFeedService {
     return Array.from(recentPostIds);
   }
 
-  /** Recent posts by others, best `best_score` match plus freshness first. */
   private async similar(
     likedIds: string[],
     viewerId: string,
@@ -122,8 +96,6 @@ export class PostFeedService {
   ): Promise<string[]> {
     if (likedIds.length === 0) return [];
     await this.index.ensureCollection();
-    // Posts without text or speech have no point; recommending from a
-    // missing id fails, so pass the vectors of those that exist.
     const liked = await this.qdrant.retrieve(this.index.collection, {
       ids: likedIds,
       with_vector: [DENSE_VECTOR],
@@ -182,7 +154,6 @@ export class PostFeedService {
     return points.map(({ id }) => String(id));
   }
 
-  /** Published posts by others, newest first, up to `asOf`. */
   private async latest(
     viewerId: string,
     asOf: Date,
@@ -202,10 +173,6 @@ export class PostFeedService {
   }
 }
 
-/**
- * `similar` with every `every`-th slot taken from `latest`, without repeats.
- * When one list runs out the other fills the rest.
- */
 export function interleave(
   similar: string[],
   latest: string[],

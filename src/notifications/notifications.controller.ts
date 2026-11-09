@@ -26,7 +26,6 @@ import { CursorPaginationQueryDto } from '../common/pagination/index.js';
 import { NotificationPageDto, UnreadCountDto } from './dto/notification.dto.js';
 import { NotificationsService } from './notifications.service.js';
 
-/** Proxies drop idle connections; a comment frame every 25s keeps it open. */
 const HEARTBEAT_MS = 25_000;
 
 @ApiTags('notifications')
@@ -36,7 +35,6 @@ const HEARTBEAT_MS = 25_000;
 export class NotificationsController {
   constructor(private readonly notifications: NotificationsService) {}
 
-  // Declared before `:id/read` so `sse` is never read as an id.
   @Sse('sse')
   @ApiOperation({
     summary: 'Live notification stream (text/event-stream)',

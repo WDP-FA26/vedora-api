@@ -1,6 +1,5 @@
 import { AppException } from './app-exception.js';
 
-/** The request is malformed or breaks a rule that does not depend on the stored state. 400. */
 export const INVALID_INPUT_CODES = [
   'BAD_REQUEST',
   'VALIDATION_FAILED',

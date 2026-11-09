@@ -7,9 +7,6 @@ import {
   ValidateNested,
 } from 'class-validator';
 
-// Whisper's verbose JSON, as class-validator DTOs: parsed with
-// `parsePayload`, which strips the fields we do not read.
-
 export class WhisperSegment {
   @IsNumber()
   start!: number;
@@ -29,6 +26,17 @@ export class WhisperSegment {
   no_speech_prob?: number;
 }
 
+export class TranscriptionWord {
+  @IsString()
+  word!: string;
+
+  @IsNumber()
+  start!: number;
+
+  @IsNumber()
+  end!: number;
+}
+
 export class TranscriptionResponse {
   @IsString()
   text!: string;
@@ -42,6 +50,12 @@ export class TranscriptionResponse {
   @ValidateNested({ each: true })
   @Type(() => WhisperSegment)
   segments?: WhisperSegment[];
+
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => TranscriptionWord)
+  words?: TranscriptionWord[];
 }
 
 export class OpenRouterError {

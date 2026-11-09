@@ -29,8 +29,6 @@ export function searchKnowledgeTool(knowledge: KnowledgeSearchService) {
         const hits = await knowledge.search(query, abortSignal);
         return { status: 'ok' as const, hits };
       } catch (error) {
-        // Keep the chat alive, but tell the model the search failed: an empty
-        // result would read as "the documents have no data".
         logger.warn(`Knowledge search failed: ${String(error)}`);
         return { status: 'unavailable' as const };
       }
@@ -55,7 +53,6 @@ function passages(hits: KnowledgeHit[]): string {
     .join('\n');
 }
 
-// an uploaded file must not close the wrapper and speak outside it
 function stripTags(text: string): string {
   return text.replace(/<\/?document\b[^>]*>?/gi, '').replaceAll('"', "'");
 }

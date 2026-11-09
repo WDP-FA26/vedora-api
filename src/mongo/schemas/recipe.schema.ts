@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { MealSection, Weekday } from '../enums.js';
-import { collectionSchema, onDelete } from './common.js';
+import { cascadeOnDelete, collectionSchema } from './common.js';
 import { Identified } from './user.schema.js';
 
 @Schema(collectionSchema('ingredients'))
@@ -25,39 +25,13 @@ export class Ingredient extends Identified {
 export const IngredientSchema = SchemaFactory.createForClass(Ingredient);
 IngredientSchema.index({ name: 1 }, { unique: true });
 
-onDelete(IngredientSchema, async (db, ids, session) => {
-  const inIds = { $in: ids };
-  await db
-    .model('IngredientGroup')
-    .updateMany(
-      { ingredientIds: inIds },
-      { $pull: { ingredientIds: inIds } },
-      { session, timestamps: false },
-    )
-    .exec();
-  await db
-    .model('IncompatibilityRule')
-    .deleteMany(
-      { $or: [{ aIngredientId: inIds }, { bIngredientId: inIds }] },
-      { session },
-    )
-    .exec();
-  await db
-    .model('User')
-    .updateMany(
-      {
-        $or: [{ avoidedIngredientIds: inIds }, { likedIngredientIds: inIds }],
-      },
-      {
-        $pull: {
-          avoidedIngredientIds: inIds,
-          likedIngredientIds: inIds,
-        },
-      },
-      { session, timestamps: false },
-    )
-    .exec();
-});
+cascadeOnDelete(IngredientSchema, [
+  { model: 'IngredientGroup', field: 'ingredientIds', action: 'pull' },
+  { model: 'IncompatibilityRule', field: 'aIngredientId', action: 'delete' },
+  { model: 'IncompatibilityRule', field: 'bIngredientId', action: 'delete' },
+  { model: 'User', field: 'avoidedIngredientIds', action: 'pull' },
+  { model: 'User', field: 'likedIngredientIds', action: 'pull' },
+]);
 
 @Schema(collectionSchema('ingredient_groups'))
 export class IngredientGroup extends Identified {
@@ -88,24 +62,11 @@ export const IngredientGroupSchema =
 IngredientGroupSchema.index({ name: 1 }, { unique: true });
 IngredientGroupSchema.index({ ingredientIds: 1 });
 
-onDelete(IngredientGroupSchema, async (db, ids, session) => {
-  const inIds = { $in: ids };
-  await db
-    .model('IncompatibilityRule')
-    .deleteMany(
-      { $or: [{ aGroupId: inIds }, { bGroupId: inIds }] },
-      { session },
-    )
-    .exec();
-  await db
-    .model('User')
-    .updateMany(
-      { avoidedGroupIds: inIds },
-      { $pull: { avoidedGroupIds: inIds } },
-      { session, timestamps: false },
-    )
-    .exec();
-});
+cascadeOnDelete(IngredientGroupSchema, [
+  { model: 'IncompatibilityRule', field: 'aGroupId', action: 'delete' },
+  { model: 'IncompatibilityRule', field: 'bGroupId', action: 'delete' },
+  { model: 'User', field: 'avoidedGroupIds', action: 'pull' },
+]);
 
 @Schema(collectionSchema('incompatibility_rules'))
 export class IncompatibilityRule extends Identified {
@@ -148,7 +109,6 @@ for (const field of [
   IncompatibilityRuleSchema.index({ [field]: 1 });
 }
 
-/** One ingredient line inside a recipe, ordered by array position. */
 @Schema({ _id: false })
 export class RecipeIngredient {
   @Prop({ type: String, required: true })
@@ -213,27 +173,12 @@ export const RecipeSchema = SchemaFactory.createForClass(Recipe);
 RecipeSchema.index({ postId: 1 });
 RecipeSchema.index({ 'ingredients.ingredientId': 1 });
 
-onDelete(RecipeSchema, async (db, ids, session) => {
-  const inIds = { $in: ids };
-  await db
-    .model('Post')
-    .updateMany(
-      { 'blog.recipeIds': inIds },
-      { $pull: { 'blog.recipeIds': inIds } },
-      { session, timestamps: false },
-    )
-    .exec();
-  for (const modelName of [
-    'RecipeFavorite',
-    'RecipeRating',
-    'MealPlanEntry',
-  ] as const) {
-    await db
-      .model(modelName)
-      .deleteMany({ recipeId: inIds }, { session })
-      .exec();
-  }
-});
+cascadeOnDelete(RecipeSchema, [
+  { model: 'Post', field: 'blog.recipeIds', action: 'pull' },
+  { model: 'RecipeFavorite', field: 'recipeId', action: 'delete' },
+  { model: 'RecipeRating', field: 'recipeId', action: 'delete' },
+  { model: 'MealPlanEntry', field: 'recipeId', action: 'delete' },
+]);
 
 @Schema(collectionSchema('recipe_favorites', 'created'))
 export class RecipeFavorite extends Identified {

@@ -3,7 +3,6 @@ import { searchKnowledgeTool } from '../ai/tools/search-knowledge.tool.js';
 import type { KnowledgeSearchService } from '../knowledge/retrieval/knowledge-search.service.js';
 import { INSTRUCTIONS } from './nutrition-chat.prompt.js';
 
-// guests get two searches and an answer, and a bounded reply
 const MAX_STEPS = 3;
 const MAX_OUTPUT_TOKENS = 1000;
 

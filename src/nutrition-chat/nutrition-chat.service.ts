@@ -1,14 +1,19 @@
-import { Injectable, Logger } from '@nestjs/common';
-import { AiService, InjectModel } from '@nestjs/ai';
-import { type LanguageModel, toUIMessageStream } from 'ai';
+import { Inject, Injectable, Logger } from '@nestjs/common';
+import { InjectModel } from '@nestjs/ai';
+import {
+  type Experimental_EvaluationModel,
+  type LanguageModel,
+  toUIMessageStream,
+} from 'ai';
 import { cannedReply } from '../ai/chat/canned-reply.js';
 import { chatErrorCode, failedStatus } from '../ai/chat/errors.js';
 import { replyFilter } from '../ai/chat/reply-filter.js';
 import {
-  moderate,
+  MODERATION_MODEL,
   type ModerationVerdict,
-} from '../ai/moderation/moderation.js';
-import { NUTRITION_POLICY } from '../ai/moderation/policies/nutrition.js';
+} from '../ai/guardrails/guardrail.js';
+import { decide } from '../common/decision/decision.js';
+import { NUTRITION_POLICY } from '../ai/guardrails/policies/nutrition.js';
 import { KnowledgeSearchService } from '../knowledge/retrieval/knowledge-search.service.js';
 import type { ChatMessageDto } from './dto/nutrition-chat.dto.js';
 import { NutritionAgent } from './nutrition-chat.agent.js';
@@ -36,7 +41,8 @@ export class NutritionChatService {
   private readonly agent: NutritionAgent;
 
   constructor(
-    private readonly ai: AiService,
+    @Inject(MODERATION_MODEL)
+    private readonly moderator: Experimental_EvaluationModel,
     @InjectModel() model: LanguageModel,
     knowledge: KnowledgeSearchService,
   ) {
@@ -80,7 +86,13 @@ export class NutritionChatService {
     abortSignal: AbortSignal,
   ): Promise<ModerationVerdict> {
     try {
-      return await moderate(this.ai, text, abortSignal, NUTRITION_POLICY);
+      const { choice } = await decide(
+        this.moderator,
+        text,
+        abortSignal,
+        NUTRITION_POLICY,
+      );
+      return choice;
     } catch (error) {
       if (abortSignal.aborted) throw error;
       this.logger.error(`Moderation failed: ${String(error)}`);

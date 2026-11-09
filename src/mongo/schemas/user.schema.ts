@@ -10,9 +10,8 @@ import {
   UserAccountAction,
   UserRole,
 } from '../enums.js';
-import { collectionSchema, onDelete } from './common.js';
+import { cascadeOnDelete, collectionSchema } from './common.js';
 
-/** The string `id` a Mongoose document exposes for its stored `_id`. */
 export abstract class Identified {
   id!: string;
 }
@@ -98,54 +97,38 @@ UserSchema.index(
   },
 );
 
-onDelete(UserSchema, async (db, ids, session) => {
-  const inIds = { $in: ids };
-  await db.model('Post').deleteMany({ authorId: inIds }, { session }).exec();
-  await db
-    .model('VerificationRequest')
-    .deleteMany({ userId: inIds }, { session })
-    .exec();
-  const cascadeModels: Array<[string, Record<string, unknown>]> = [
-    ['Conversation', { $or: [{ lowId: inIds }, { highId: inIds }] }],
-    ['MessagingEvent', { userIds: inIds }],
-    ['Follow', { $or: [{ followerId: inIds }, { followingId: inIds }] }],
-    ['Notification', { $or: [{ recipientId: inIds }, { actorId: inIds }] }],
-    ['FollowSuggestion', { $or: [{ userId: inIds }, { candidateId: inIds }] }],
-    ['SuggestionDismissal', { userId: inIds }],
-    ['RefreshToken', { userId: inIds }],
-    ['OneTimeCode', { userId: inIds }],
-    ['PostComment', { authorId: inIds }],
-    ['PostLike', { userId: inIds }],
-    ['PostRepost', { userId: inIds }],
-    ['PostBookmark', { userId: inIds }],
-    ['PostReport', { reporterId: inIds }],
-    ['RecipeFavorite', { userId: inIds }],
-    ['RecipeRating', { userId: inIds }],
-    ['MealPlanEntry', { userId: inIds }],
-    ['AiUsage', { userId: inIds }],
-  ];
-  for (const [modelName, filter] of cascadeModels) {
-    await db.model(modelName).deleteMany(filter, { session }).exec();
-  }
-  for (const [modelName, field] of [
-    ['ProfileImageUpload', 'ownerId'],
-    ['PostReport', 'reviewedById'],
-    ['MediaAsset', 'ownerId'],
-    ['KnowledgeDocument', 'uploadedById'],
-    ['VerificationRequest', 'reviewedById'],
-    ['VerificationProof', 'ownerId'],
-    ['Recipe', 'createdById'],
-  ] as const) {
-    await db
-      .model(modelName)
-      .updateMany(
-        { [field]: inIds },
-        { $set: { [field]: null } },
-        { session, timestamps: false },
-      )
-      .exec();
-  }
-});
+cascadeOnDelete(UserSchema, [
+  { model: 'Post', field: 'authorId', action: 'delete' },
+  { model: 'VerificationRequest', field: 'userId', action: 'delete' },
+  { model: 'Conversation', field: 'lowId', action: 'delete' },
+  { model: 'Conversation', field: 'highId', action: 'delete' },
+  { model: 'MessagingEvent', field: 'userIds', action: 'delete' },
+  { model: 'Follow', field: 'followerId', action: 'delete' },
+  { model: 'Follow', field: 'followingId', action: 'delete' },
+  { model: 'Notification', field: 'recipientId', action: 'delete' },
+  { model: 'Notification', field: 'actorId', action: 'delete' },
+  { model: 'FollowSuggestion', field: 'userId', action: 'delete' },
+  { model: 'FollowSuggestion', field: 'candidateId', action: 'delete' },
+  { model: 'SuggestionDismissal', field: 'userId', action: 'delete' },
+  { model: 'RefreshToken', field: 'userId', action: 'delete' },
+  { model: 'OneTimeCode', field: 'userId', action: 'delete' },
+  { model: 'PostComment', field: 'authorId', action: 'delete' },
+  { model: 'PostLike', field: 'userId', action: 'delete' },
+  { model: 'PostRepost', field: 'userId', action: 'delete' },
+  { model: 'PostBookmark', field: 'userId', action: 'delete' },
+  { model: 'PostReport', field: 'reporterId', action: 'delete' },
+  { model: 'RecipeFavorite', field: 'userId', action: 'delete' },
+  { model: 'RecipeRating', field: 'userId', action: 'delete' },
+  { model: 'MealPlanEntry', field: 'userId', action: 'delete' },
+  { model: 'AiUsage', field: 'userId', action: 'delete' },
+  { model: 'ProfileImageUpload', field: 'ownerId', action: 'unset' },
+  { model: 'PostReport', field: 'reviewedById', action: 'unset' },
+  { model: 'MediaAsset', field: 'ownerId', action: 'unset' },
+  { model: 'KnowledgeDocument', field: 'uploadedById', action: 'unset' },
+  { model: 'VerificationRequest', field: 'reviewedById', action: 'unset' },
+  { model: 'VerificationProof', field: 'ownerId', action: 'unset' },
+  { model: 'Recipe', field: 'createdById', action: 'unset' },
+]);
 
 @Schema(collectionSchema('user_account_audits', 'created'))
 export class UserAccountAudit extends Identified {
@@ -220,11 +203,17 @@ export class Notification extends Identified {
   @Prop({ type: String, required: true })
   recipientId!: string;
 
-  @Prop({ type: String, required: true })
-  actorId!: string;
+  @Prop({ type: String, default: null })
+  actorId!: string | null;
 
   @Prop({ type: String, enum: Object.values(NotificationType), required: true })
   type!: NotificationType;
+
+  @Prop({ type: String, default: null })
+  reason!: string | null;
+
+  @Prop({ type: String, default: null })
+  note!: string | null;
 
   @Prop({ type: String, default: null })
   postId!: string | null;
@@ -396,7 +385,6 @@ export class OneTimeCode extends Identified {
 export const OneTimeCodeSchema = SchemaFactory.createForClass(OneTimeCode);
 OneTimeCodeSchema.index({ userId: 1, purpose: 1 }, { unique: true });
 
-/** `_id` is the email address, so codes survive deleting and re-registering. */
 @Schema(collectionSchema('email_verification_guesses', 'none'))
 export class EmailVerificationGuesses {
   @Prop({ type: String, required: true })

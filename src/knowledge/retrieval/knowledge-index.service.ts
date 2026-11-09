@@ -77,7 +77,6 @@ export class KnowledgeIndexService {
         },
         payload: payload(document, page, 'text', text),
       })),
-      // an image carries its page text for the chatbot; keyword search skips it
       ...images.map(({ page, text }, index) => ({
         id: randomUUID(),
         vector: { [DENSE_VECTOR]: imageVectors[index] },

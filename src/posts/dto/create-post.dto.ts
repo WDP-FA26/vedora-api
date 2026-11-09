@@ -15,11 +15,9 @@ import {
 } from 'class-validator';
 
 export const MAX_POST_BODY_WORDS = 250;
-/** Only bounds a body of very long "words"; 250 ordinary words fit easily. */
 export const MAX_POST_BODY_LENGTH = 2000;
 export const MAX_POST_MEDIA = 4;
 
-/** Runs of non-whitespace, the way the composer counts them. */
 export function countWords(text: string): number {
   return text.split(/\s+/).filter(Boolean).length;
 }

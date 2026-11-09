@@ -18,7 +18,6 @@ export type PaymentSignal =
 type Client = ReturnType<typeof createClient>;
 type Pair = { publisher: Client; subscriber: Client };
 
-/** Database-independent, best-effort invalidation bus. Never stores payment state. */
 @Injectable()
 export class PaymentEventsService implements OnModuleDestroy {
   private readonly logger = new Logger(PaymentEventsService.name);
@@ -58,7 +57,6 @@ export class PaymentEventsService implements OnModuleDestroy {
     });
   }
 
-  /** Called only after the domain transaction resolves; failures cannot undo payment. */
   async publish(event: PaymentChanged): Promise<void> {
     if (!this.config.get<string>('PAYMENT_REDIS_URL', '') || this.stopped)
       return;
@@ -119,9 +117,7 @@ export class PaymentEventsService implements OnModuleDestroy {
               );
               if (parsed.value && this.pair === pair && !this.stopped)
                 this.signals.next({ type: 'changed', ...parsed.value });
-            } catch {
-              /* Ignore malformed bus data; no payload is logged. */
-            }
+            } catch {}
           });
         })(),
         new Promise<never>((_, reject) => {

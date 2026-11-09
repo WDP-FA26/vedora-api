@@ -8,6 +8,7 @@ import {
   createCursorPaginatedResponse,
   CursorPaginationQueryDto,
 } from '../common/pagination/index.js';
+import { ModerationSettingsService } from '../moderation/moderation-settings.service.js';
 import { MediaService } from '../media/media.service.js';
 import { CloudinaryService } from '../cloudinary/cloudinary.service.js';
 import {
@@ -48,6 +49,7 @@ export class PostsService {
     private readonly postSearch: PostSearchService,
     private readonly postFeed: PostFeedService,
     private readonly relations: PostRelationsService,
+    private readonly moderationSettings: ModerationSettingsService,
     @InjectModel(Post.name) private readonly posts: Model<Post>,
     @InjectModel(MediaAsset.name) private readonly media: Model<MediaAsset>,
     @InjectModel(PostBookmark.name)
@@ -55,10 +57,6 @@ export class PostsService {
     @InjectModel(Follow.name) private readonly follows: Model<Follow>,
   ) {}
 
-  /**
-   * Creates the post right away, even while its video is still processing:
-   * it stays PROCESSING (author-only) and publishes when the video is ready.
-   */
   async create(authorId: string, dto: CreatePostDto): Promise<PostResponseDto> {
     const body = dto.body || null;
     const mediaIds = dto.mediaIds ?? [];
@@ -89,14 +87,11 @@ export class PostsService {
       await this.mediaService.claimForPost(session, authorId, id, mediaIds);
     });
     await this.mediaService.settlePosts([id]);
-    // A text-only post is published by now; one with video is indexed by the
-    // catch-up cron once Cloudinary finishes.
     this.searchIndex.schedule();
 
     return this.load(id, authorId);
   }
 
-  /** Published posts matching `q`, best match first. */
   async search(
     query: SearchPostsQueryDto,
     viewerId?: string,
@@ -133,7 +128,6 @@ export class PostsService {
     };
   }
 
-  /** The viewer's "for you" feed; see `PostFeedService`. */
   async feed(query: FeedQueryDto, viewerId: string): Promise<PostPageDto> {
     const cursor = query.cursor ? FEED_CURSOR.exec(query.cursor) : null;
     const offset = cursor ? Number(cursor[1]) : 0;
@@ -141,7 +135,6 @@ export class PostsService {
     const limit = Math.min(query.limit, MAX_FEED_RESULTS - offset);
     if (limit <= 0) return { items: [], nextCursor: null };
 
-    // One extra id tells whether another page follows.
     const ids = await this.postFeed.feed(viewerId, asOf, offset + limit + 1);
     const page = ids.slice(offset, offset + limit);
     const posts = await this.posts
@@ -197,14 +190,12 @@ export class PostsService {
     };
   }
 
-  /** The published posts a user saved, most recently saved first. */
   async listBookmarks(
     userId: string,
     query: CursorPaginationQueryDto,
   ): Promise<PostPageDto> {
     const filter: Record<string, unknown> = { userId };
     if (query.cursor) {
-      // The cursor is the post id; the bookmark gives its place in the order.
       const cursor = await this.bookmarks
         .findOne({ userId, postId: query.cursor })
         .exec();
@@ -223,7 +214,6 @@ export class PostsService {
       .find({ _id: { $in: rows.map(({ postId }) => postId) } })
       .exec();
     const postById = new Map(posts.map((post) => [post.id, post]));
-    // MongoDB has no relation filters: unpublished posts drop out here.
     const page = createCursorPaginatedResponse(
       rows
         .flatMap(({ postId }) => postById.get(postId) ?? [])
@@ -236,7 +226,6 @@ export class PostsService {
     };
   }
 
-  /** Published posts from the accounts the user follows, newest first. */
   async listFollowing(
     userId: string,
     query: CursorPaginationQueryDto,
@@ -253,7 +242,6 @@ export class PostsService {
       type: PostType.POST,
     };
     if (query.cursor) {
-      // The cursor is the post id; the post gives its place in the order.
       const cursor = await this.posts
         .findOne({ _id: query.cursor, authorId: { $in: authorIds } })
         .exec();
@@ -282,7 +270,6 @@ export class PostsService {
       throw new ResourceNotFoundException('NOT_FOUND', 'Post not found');
     }
 
-    // Without webhooks, the author's polling is what moves the video along.
     if (
       post.status === PostStatus.PROCESSING &&
       !this.cloudinary.webhooksEnabled
@@ -320,7 +307,6 @@ export class PostsService {
     await this.destroy(id);
   }
 
-  /** Deletes anyone's post; the caller has checked the account is an admin. */
   async removeAsAdmin(id: string): Promise<void> {
     const post = await this.posts.findOne({ _id: id }).select('_id').exec();
     if (!post) {
@@ -335,8 +321,6 @@ export class PostsService {
       this.posts.deleteOne({ _id: id }, { session }).exec(),
     );
     await this.searchIndex.remove(id);
-    // The media rows were detached (onDelete SetNull); remove them from
-    // Cloudinary the same way as discarded uploads, retried until confirmed.
     await this.mediaService.discard({
       _id: { $in: media.map((item) => item.id) },
     });
@@ -350,12 +334,12 @@ export class PostsService {
     return response;
   }
 
-  /** Post cards for `posts`, in the same order. */
   async toResponses(
     posts: readonly Post[],
     viewerId?: string,
   ): Promise<PostResponseDto[]> {
     const relations = await this.relations.hydrate(posts, viewerId);
+    const reasonTexts = await this.moderationSettings.reasonTexts();
     return posts.flatMap((post) => {
       const related = relations.get(post.id);
       if (!related) return [];
@@ -364,6 +348,14 @@ export class PostsService {
           id: post.id,
           type: post.type,
           status: post.status,
+          moderationVerdict:
+            post.status === PostStatus.REJECTED
+              ? (post.moderation?.verdict ?? null)
+              : null,
+          moderationReason:
+            post.status === PostStatus.REJECTED && post.moderation
+              ? (reasonTexts.get(post.moderation.verdict) ?? null)
+              : null,
           body: post.body,
           blog: related.blog,
           publishedAt: post.publishedAt,

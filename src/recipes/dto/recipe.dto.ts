@@ -198,7 +198,6 @@ export class RecipeDetailDto extends RecipeDto {
   ingredients!: RecipeIngredientDto[];
 }
 
-/** The card fields of a detail, for lists. */
 export function toRecipeCard({
   description: _description,
   steps: _steps,

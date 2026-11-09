@@ -17,8 +17,6 @@ import {
 const PREFETCH_LIMIT = 40;
 const CANDIDATES = 20;
 const RESULTS = 6;
-// Cohere scores off-topic questions below ~0.03, but a Vietnamese question
-// against an English passage only 0.08–0.3 even when it answers it
 const MIN_RELEVANCE = 0.08;
 const RERANK_BUDGET_MS = 800;
 
@@ -57,7 +55,6 @@ export class KnowledgeSearchService {
       limit: CANDIDATES,
       with_payload: true,
     });
-    // images on one page all carry that page's text
     const candidates = [
       ...new Map(
         points.map(({ payload }) => {

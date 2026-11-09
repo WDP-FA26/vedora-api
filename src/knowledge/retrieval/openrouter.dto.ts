@@ -10,9 +10,6 @@ import {
   ValidateNested,
 } from 'class-validator';
 
-// The bodies OpenRouter answers with, as class-validator DTOs: parsed with
-// `validatePayload`, which strips the fields we do not read.
-
 export class OpenRouterError {
   @IsString()
   message!: string;
@@ -57,7 +54,6 @@ export class RerankResponse {
   results!: RerankItem[];
 }
 
-/** One part of a parsed PDF page: its Markdown, or an embedded image. */
 export class OcrFileContentPart {
   @IsIn(['text', 'image_url'])
   type!: 'text' | 'image_url';
@@ -115,7 +111,6 @@ export class OcrError {
   metadata?: OcrErrorMetadata;
 }
 
-/** A carrier completion: the parse rides on its annotations, even on errors. */
 export class OcrResponse {
   @IsOptional()
   @IsArray()

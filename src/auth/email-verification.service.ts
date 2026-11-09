@@ -25,13 +25,8 @@ import { ResourceNotFoundException } from '../common/exceptions/resource-not-fou
 
 export type { SendResult } from './one-time-code.js';
 
-/** `locked`: the email used up its guesses for the day. */
 export type VerifyResult = 'verified' | 'invalid' | 'locked';
 
-/**
- * Six-digit email verification codes. Each user has at most one pending code;
- * sending a new one replaces it. The limits are in `one-time-code.ts`.
- */
 const PURPOSE = OneTimeCodePurpose.EMAIL_VERIFICATION;
 
 @Injectable()
@@ -45,11 +40,6 @@ export class EmailVerificationService {
     private readonly mailService: MailService,
   ) {}
 
-  /**
-   * Emails a fresh code when the cooldown and resend limit allow it. If the
-   * email can't be sent, the previous state is restored so the failed attempt
-   * doesn't cost the user a resend.
-   */
   async send(user: { id: string; email: string }): Promise<SendResult> {
     const now = new Date();
     const pending = await this.codes.findOne(codeKey(user.id, PURPOSE)).exec();
@@ -96,14 +86,12 @@ export class EmailVerificationService {
     return 'sent';
   }
 
-  /** Checks `code` and, when it matches, marks the email verified. */
   async verify(
     user: { id: string; email: string },
     code: string,
   ): Promise<VerifyResult> {
     if (!(await countGuess(this.guesses, user.email))) return 'locked';
 
-    // Count the attempt before comparing, so parallel guesses can't exceed the cap.
     const counted = await this.codes.updateOne(
       {
         ...codeKey(user.id, PURPOSE),

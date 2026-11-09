@@ -1,20 +1,22 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Inject, Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { AiService } from '@nestjs/ai';
 import { AiFeature } from '../../../mongo/models.js';
-import { generateImage, type ImageModel } from 'ai';
+import {
+  type Experimental_EvaluationModel,
+  generateImage,
+  type ImageModel,
+} from 'ai';
 import { randomUUID } from 'node:crypto';
-import { moderate } from '../../../ai/moderation/moderation.js';
+import { MODERATION_MODEL } from '../../../ai/guardrails/guardrail.js';
+import { decide } from '../../../common/decision/decision.js';
 import { DEFAULT_IMAGE_MODEL, imageModel } from '../../../ai/openrouter.js';
 import { AiUsageService } from '../../../ai/usage/ai-usage.service.js';
 import {
   StorageService,
   StorageTarget,
 } from '../../../storage/storage.service.js';
-import {
-  BLOG_ASSISTANT_POLICY,
-  blogRefusal,
-} from './blog-assistant.moderation.js';
+import { BLOG_ASSISTANT_POLICY } from '../../../ai/guardrails/policies/blog-assistant.js';
+import { blogRefusal } from './blog-assistant.moderation.js';
 
 export const IMAGE_ASPECT_RATIOS = ['1:1', '4:3', '3:4', '16:9'] as const;
 export type ImageAspectRatio = (typeof IMAGE_ASPECT_RATIOS)[number];
@@ -34,13 +36,6 @@ const EXTENSIONS: Record<string, string> = {
   'image/webp': 'webp',
 };
 
-/**
- * Generates and edits blog illustrations with a cheap OpenRouter image model,
- * then stores them beside the user's uploaded blog images. Each image counts
- * against the daily `BLOG_IMAGE` allowance, given back when nothing is made.
- * Failures come back as an error code, never thrown, so the agent can tell the
- * user what happened.
- */
 @Injectable()
 export class BlogImageGeneratorService {
   private readonly logger = new Logger(BlogImageGeneratorService.name);
@@ -48,7 +43,8 @@ export class BlogImageGeneratorService {
 
   constructor(
     configService: ConfigService,
-    private readonly ai: AiService,
+    @Inject(MODERATION_MODEL)
+    private readonly moderator: Experimental_EvaluationModel,
     private readonly storage: StorageService,
     private readonly usage: AiUsageService,
   ) {
@@ -79,15 +75,12 @@ export class BlogImageGeneratorService {
     );
   }
 
-  /** Edits an image the user already has in the blogs bucket. */
   async edit(
     userId: string,
     imageUrl: string,
     instruction: string,
     abortSignal?: AbortSignal,
   ): Promise<ImageResult> {
-    // only the user's own blog images: never another user's, never a URL
-    // the server would have to fetch from elsewhere
     const key = this.storage.keyFromPublicUrl(StorageTarget.Blogs, imageUrl);
     if (!key?.startsWith(`blogs/${userId}/`))
       return { error: 'IMAGE_NOT_OWNED' };
@@ -111,8 +104,8 @@ export class BlogImageGeneratorService {
     if (!(await this.usage.consume(userId, AiFeature.BLOG_IMAGE)))
       return { error: 'IMAGE_QUOTA_EXCEEDED' };
     try {
-      const verdict = await moderate(
-        this.ai,
+      const { choice: verdict } = await decide(
+        this.moderator,
         prompt,
         abortSignal ?? new AbortController().signal,
         BLOG_ASSISTANT_POLICY,

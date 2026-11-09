@@ -48,8 +48,6 @@ export class JwtAuthGuard implements CanActivate {
       );
     }
 
-    // JWT claims can outlive an account or its permissions. Read the current
-    // role every time, and never grant access using a role supplied in a JWT.
     const user = await this.users
       .findOne({ _id: payload.sub })
       .select('username role status')

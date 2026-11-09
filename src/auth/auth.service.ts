@@ -41,7 +41,6 @@ import { UnauthenticatedException } from '../common/exceptions/unauthenticated.e
 const DUMMY_PASSWORD_HASH =
   '$2b$12$eMcBdg./eJofytkZPDuoGOyif9iLSXILzYk0MY95Vq6P7M6.c9nTe';
 
-/** Unverified sign-ups older than this give up their email and username. */
 const UNVERIFIED_ACCOUNT_TTL_MS = 60 * 60 * 1000;
 
 @Injectable()
@@ -60,7 +59,6 @@ export class AuthService {
     this.accessTokenTtl = configService.get<number>('JWT_ACCESS_TTL', 3600);
   }
 
-  /** Creates an unverified account and emails a code. No tokens until verified. */
   async register(dto: RegisterDto): Promise<VerificationRequiredDto> {
     const passwordHash = await hashPassword(dto.password);
     await this.accounts.deleteStaleUnverified(
@@ -99,7 +97,6 @@ export class AuthService {
     ) {
       assertAccountActive(user.status);
     }
-    // Only reached with the right password, so it doesn't reveal the email.
     if (!user.emailVerifiedAt) {
       await this.sendCodeQuietly(user);
       throw new AccessDeniedException(
@@ -144,10 +141,6 @@ export class AuthService {
     return this.createAuthResponse(toPublicUser(user));
   }
 
-  /**
-   * Succeeds for unknown and verified emails too, so it can't be used to probe
-   * which addresses exist. Only a pending sign-up can hit the resend limit.
-   */
   async resendVerification(dto: ResendVerificationDto): Promise<void> {
     const user = await this.accounts.findByEmail(dto.email);
     if (!user || user.emailVerifiedAt) return;
@@ -170,10 +163,6 @@ export class AuthService {
     }
   }
 
-  /**
-   * Emails a password reset code. Like resends, it succeeds for unknown
-   * emails, so it can't be used to probe which addresses exist.
-   */
   async forgotPassword(dto: ForgotPasswordDto): Promise<void> {
     const user = await this.accounts.findByEmail(dto.email);
     if (!user) return;
@@ -196,9 +185,7 @@ export class AuthService {
     }
   }
 
-  /** Sets a new password with an emailed code and signs out every session. */
   async resetPassword(dto: ResetPasswordDto): Promise<void> {
-    // Hashed first, so an over-long password is rejected before using a guess.
     const passwordHash = await hashPassword(dto.password);
     const user = await this.accounts.findByEmail(dto.email);
     const result = user
@@ -216,7 +203,6 @@ export class AuthService {
         'Invalid or expired reset code',
       );
     }
-    // Whoever knew the old password is signed out everywhere.
     await this.refreshTokensService.revokeAllForUser(user.id);
   }
 
@@ -258,8 +244,6 @@ export class AuthService {
         profile.googleId,
       );
       if (!existingUser.emailVerifiedAt) {
-        // Whoever registered this address never proved they own it: end any
-        // session they have and drop their pending code.
         await Promise.all([
           this.refreshTokensService.revokeAllForUser(user.id),
           this.emailVerificationService.discard(user.id),
@@ -279,10 +263,6 @@ export class AuthService {
     return this.createAuthResponse(user);
   }
 
-  /**
-   * Sign-up and login still succeed when the email can't be sent; the user
-   * can ask for another code from the verification screen.
-   */
   private async sendCodeQuietly(user: { id: string; email: string }) {
     await this.emailVerificationService.send(user).catch((error: unknown) => {
       this.logger.error(`Verification email failed: ${String(error)}`);
@@ -293,8 +273,6 @@ export class AuthService {
     user: PublicUser,
     issuedRefreshToken?: IssuedRefreshToken,
   ): Promise<AuthResponseDto> {
-    // Verification/linking may have changed status; never issue from a stale
-    // pre-verification account snapshot.
     user = await this.getCurrentUser(user.id);
     const payload: JwtPayload = { sub: user.id, username: user.username };
     const [accessToken, refreshToken] = await Promise.all([

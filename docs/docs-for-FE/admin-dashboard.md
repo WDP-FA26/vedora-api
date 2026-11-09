@@ -85,8 +85,8 @@ dữ liệu chat/dietary/meal-plan. Không có migration, provider AI, Redis/Bul
 ```powershell
 npm run build
 npm run lint
-npm test -- src/admin-dashboard/dashboard-range.spec.ts
-npm run test:e2e -- test/admin-dashboard.e2e-spec.ts
+npm test -- test/unit/admin-dashboard/dashboard-range.spec.ts
+npm run test:e2e -- test/e2e/admin-dashboard.e2e-spec.ts
 $env:TEST_DATABASE_URL = "mongodb://vedora:vedora_local_password@localhost:27017/?authSource=admin&directConnection=true"
 npm run test:db -- test/admin-dashboard.db-spec.ts
 ```

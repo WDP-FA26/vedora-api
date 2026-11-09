@@ -1,6 +1,9 @@
 import { tool } from 'ai';
 import { z } from 'zod';
-import type { MealPlanService, RecipeSuggestion } from '../meal-plan.service.js';
+import type {
+  MealPlanService,
+  RecipeSuggestion,
+} from '../meal-plan.service.js';
 
 export function searchRecipesTool(mealPlan: MealPlanService, userId: string) {
   return tool({

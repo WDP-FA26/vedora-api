@@ -7,7 +7,6 @@ const TIMEOUT_MS = 5000;
 
 const turnstileResultSchema = z.object({ success: z.boolean().optional() });
 
-/** Checks a Cloudflare Turnstile token: proof that a browser, not a script, is asking. */
 @Injectable()
 export class TurnstileService {
   private readonly logger = new Logger(TurnstileService.name);
@@ -17,7 +16,6 @@ export class TurnstileService {
     this.secret = configService.getOrThrow<string>('TURNSTILE_SECRET_KEY');
   }
 
-  /** A token passes once; Cloudflare rejects a second use. */
   async verify(token: string, ip: string | undefined): Promise<boolean> {
     try {
       const response = await fetch(VERIFY_URL, {

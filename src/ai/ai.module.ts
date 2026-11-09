@@ -1,6 +1,8 @@
-import { Module } from '@nestjs/common';
+import { Global, Module } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { AiModule as NestAiModule } from '@nestjs/ai';
+import { evaluationModel } from '../common/decision/decision.js';
+import { MODERATION_MODEL } from './guardrails/guardrail.js';
 import {
   chatModel,
   DEFAULT_CHAT_MODEL,
@@ -10,11 +12,12 @@ import {
 } from './openrouter.js';
 import type { ReasoningEffort } from './reasoning.js';
 
+@Global()
 @Module({
   imports: [
     NestAiModule.forRootAsync({
       isGlobal: true,
-      modelNames: ['default', 'blog', 'moderation'],
+      modelNames: ['default', 'blog'],
       embeddingModelNames: ['default', 'posts'],
       inject: [ConfigService],
       useFactory: (config: ConfigService) => {
@@ -34,28 +37,11 @@ import type { ReasoningEffort } from './reasoning.js';
               modelId: defaultModelId,
               reasoningEffort,
             }),
-            // `openrouter/auto` may route to a model that calls tools poorly;
-            // pin one for the blog agent with BLOG_AI_MODEL
             blog: chatModel({
               apiKey,
               modelId: config.get<string>('BLOG_AI_MODEL') || defaultModelId,
               reasoningEffort,
             }),
-            moderation: {
-              model: chatModel({
-                apiKey,
-                modelId: config.get<string>(
-                  'OPENROUTER_MODERATION_MODEL',
-                  DEFAULT_MODERATION_MODEL,
-                ),
-                reasoningEffort: 'low',
-              }),
-              timeout: '4s',
-              retry: {
-                attempts: 3,
-                backoff: { delay: '400ms', maxDelay: '2s', jitter: 'none' },
-              },
-            },
           },
           embeddingModels: {
             default: embeddingModel({
@@ -88,5 +74,20 @@ import type { ReasoningEffort } from './reasoning.js';
       },
     }),
   ],
+  providers: [
+    {
+      provide: MODERATION_MODEL,
+      inject: [ConfigService],
+      useFactory: (config: ConfigService) =>
+        evaluationModel({
+          apiKey: config.getOrThrow<string>('OPENROUTER_API_KEY'),
+          modelId: config.get<string>(
+            'OPENROUTER_MODERATION_MODEL',
+            DEFAULT_MODERATION_MODEL,
+          ),
+        }),
+    },
+  ],
+  exports: [MODERATION_MODEL],
 })
 export class AiModule {}

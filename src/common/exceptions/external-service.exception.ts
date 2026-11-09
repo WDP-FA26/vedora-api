@@ -7,10 +7,6 @@ export const EXTERNAL_SERVICES = [
 ] as const;
 export type ExternalService = (typeof EXTERNAL_SERVICES)[number];
 
-/**
- * A third-party dependency failed. The public message stays generic; `reason`
- * (vendor status, vendor message) is only logged. 502.
- */
 export class ExternalServiceException extends AppException<'EXTERNAL_SERVICE_FAILED'> {
   readonly statusCode = 502;
 

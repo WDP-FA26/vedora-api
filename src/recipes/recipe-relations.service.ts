@@ -7,12 +7,6 @@ import { RecipeDetailDto } from './dto/recipe.dto.js';
 import { IncompatibilityRulesService } from './incompatibility-rules.service.js';
 import { InvalidInputException } from '../common/exceptions/invalid-input.exception.js';
 
-/**
- * Reads the collections a recipe card joins: its ingredient names, the source
- * post and its author, and the conflicts between the ingredients. It owns
- * those collections, so the services that render recipes depend on one
- * collaborator instead of four models.
- */
 @Injectable()
 export class RecipeRelationsService {
   constructor(
@@ -23,7 +17,6 @@ export class RecipeRelationsService {
     private readonly rules: IncompatibilityRulesService,
   ) {}
 
-  /** Recipe details for `rows`, in the same order. */
   async hydrate(rows: readonly Recipe[]): Promise<RecipeDetailDto[]> {
     const postIds = rows.flatMap(({ postId }) => (postId ? [postId] : []));
     const ingredientIds = [
@@ -100,7 +93,6 @@ export class RecipeRelationsService {
     });
   }
 
-  /** The source posts among `postIds` that are published. */
   async publishedPostIds(postIds: readonly string[]): Promise<Set<string>> {
     const posts = await this.posts
       .find({
@@ -112,13 +104,11 @@ export class RecipeRelationsService {
     return new Set(posts.map(({ id }) => id));
   }
 
-  /** The ingredients and the source post must exist: there are no foreign keys. */
   async assertReferences(
     ingredients: readonly { ingredientId: string }[],
     postId?: string,
   ): Promise<void> {
     const ingredientIds = ingredients.map(({ ingredientId }) => ingredientId);
-    // An omitted postId means "no source post", which needs no existence check.
     const postIds = postId === undefined ? [] : [postId];
     const [found, post] = await Promise.all([
       allExist(this.ingredients, ingredientIds),
@@ -133,7 +123,6 @@ export class RecipeRelationsService {
   }
 }
 
-/** The source post ids of recipes; recipes without a source post are skipped. */
 export function sourcePostIds(
   recipes: readonly { postId?: string | null }[],
 ): string[] {

@@ -13,17 +13,11 @@ import {
 import { rethrowUniqueViolation } from './unique-conflict.js';
 import { ResourceNotFoundException } from '../common/exceptions/resource-not-found.exception.js';
 
-/** What a new account may set; everything else starts at its default. */
 export type NewUser = Pick<User, 'username' | 'fullName' | 'email'> &
   Partial<
     Pick<User, 'passwordHash' | 'googleId' | 'emailVerifiedAt' | 'status'>
   >;
 
-/**
- * Creates accounts and finds them by the identity auth uses (username, email
- * or Google id). Nothing here is permission-aware: callers have already
- * decided who may act.
- */
 @Injectable()
 export class AccountsService {
   constructor(
@@ -79,11 +73,6 @@ export class AccountsService {
     return user && toPublicUser(user);
   }
 
-  /**
-   * Links Google to an existing account with the same email. If that account
-   * never verified its email, anyone could have registered it, so its password
-   * is removed and Google's verification takes over.
-   */
   async linkGoogleAccount(user: User, googleId: string): Promise<PublicUser> {
     try {
       const linked = await this.users
@@ -115,11 +104,6 @@ export class AccountsService {
     }
   }
 
-  /**
-   * Frees an email or username held by a password account that was never
-   * verified and is older than `createdBefore`, so nobody can squat on an
-   * address they don't own.
-   */
   async deleteStaleUnverified(
     { email, username }: { email: string; username: string },
     createdBefore: Date,

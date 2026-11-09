@@ -6,7 +6,6 @@ import { setupSwagger } from './swagger.setup.js';
 
 async function bootstrap(): Promise<void> {
   const app = await NestFactory.create(AppModule, {
-    // Cloudinary notification signatures are computed over the exact request body.
     rawBody: true,
   });
   configureApp(app);

@@ -123,7 +123,6 @@ export class RefreshTokensService {
     await this.revokeFamily(storedToken.familyId, new Date());
   }
 
-  /** Signs the user out everywhere. */
   async revokeAllForUser(userId: string): Promise<void> {
     await this.tokens.updateMany(
       { userId, revokedAt: null },

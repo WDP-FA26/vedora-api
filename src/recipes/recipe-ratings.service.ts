@@ -41,15 +41,12 @@ export class RecipeRatingsService {
     };
   }
 
-  /** Caller identity comes from the guard. null removes the caller's score. */
   async set(
     recipeId: string,
     userId: string,
     value: number | null,
   ): Promise<MyRecipeRatingDto> {
     return this.mongo.withTransaction(async (session) => {
-      // Account -> recipe lock order. Account updates/deletion cannot race
-      // verification, and concurrent scores on a recipe settle sequentially.
       await lockDocument(this.mongo, session, 'user', userId);
       const actor = await this.users
         .findOne({ _id: userId })
@@ -121,12 +118,6 @@ export class RecipeRatingsService {
       throw new ResourceNotFoundException('NOT_FOUND', 'Recipe not found');
   }
 
-  /**
-   * The count and mean of the recipe's scores. No stored aggregate to drift
-   * under retries/account deletion. Until the account lifecycle feature
-   * exists, verified email is the eligibility gate. Inside `set` it runs in
-   * the transaction, so the result includes that write.
-   */
   private async aggregate(
     recipeId: string,
     session?: ClientSession,

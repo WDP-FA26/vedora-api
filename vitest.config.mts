@@ -5,7 +5,7 @@ import { defineConfig } from 'vitest/config';
 // decorator metadata Nest's dependency injection reads.
 export default defineConfig({
   test: {
-    include: ['src/**/*.spec.ts'],
+    include: ['test/unit/**/*.spec.ts'],
     globals: true,
     root: './',
     // Specs that touch data use a database of their own (test/mongo-test-db.ts).

@@ -84,7 +84,6 @@ export class RecipeFavoritesService {
     return this.mongo.withTransaction(async (session) => {
       await lockDocument(this.mongo, session, 'user', userId);
       await lockDocument(this.mongo, session, 'recipe', recipeId);
-      // One session runs one operation at a time.
       const user = await this.users
         .findOne({ _id: userId })
         .session(session)
@@ -101,7 +100,6 @@ export class RecipeFavoritesService {
       if (!recipe)
         throw new ResourceNotFoundException('NOT_FOUND', 'Recipe not found');
       if (isFavorite) {
-        // Duplicate retries preserve the original savedAt and ordering.
         await this.favorites
           .updateOne(
             { recipeId, userId },

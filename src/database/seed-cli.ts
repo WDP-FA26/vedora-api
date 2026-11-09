@@ -1,6 +1,6 @@
 import 'dotenv/config';
 import mongoose from 'mongoose';
-import { registerModels } from '../mongo/schemas/index.js';
+import { registerModels } from '../mongo/schemas/model-definitions.js';
 import { MongoService } from '../mongo/mongo.service.js';
 import { seedDatabase } from './seed.js';
 import { seedCatalog } from './seed-catalog.js';

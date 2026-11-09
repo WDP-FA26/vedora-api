@@ -1,6 +1,5 @@
 import type { User } from '../mongo/models.js';
 
-/** The account fields every response exposes. */
 export const publicUserFields = [
   'id',
   'username',
@@ -15,7 +14,6 @@ export const publicUserFields = [
 
 export type PublicUser = Pick<User, (typeof publicUserFields)[number]>;
 
-/** The stored fields behind `publicUserFields` (`id` is the `_id` virtual). */
 export const publicUserProjection = publicUserFields
   .filter((field) => field !== 'id')
   .join(' ');

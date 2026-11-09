@@ -12,15 +12,9 @@ export interface AiUsageSummary {
   feature: AiFeature;
   used: number;
   limit: number;
-  /** Next midnight in Asia/Bangkok, when every count starts over. */
   resetsAt: Date;
 }
 
-/**
- * Daily allowances for paid AI features, counted per user in MongoDB so
- * every API instance sees the same totals. Days follow Asia/Bangkok, like the
- * admin dashboard.
- */
 @Injectable()
 export class AiUsageService {
   private readonly limits: Record<AiFeature, number>;
@@ -41,10 +35,6 @@ export class AiUsageService {
     };
   }
 
-  /**
-   * Counts one use, unless today's allowance is spent. Each step is a single
-   * conditional write, so parallel requests cannot both take the last use.
-   */
   async consume(
     userId: string,
     feature: AiFeature,
@@ -66,13 +56,11 @@ export class AiUsageService {
       await this.usage.create({ userId, day, feature, count: 1 });
       return true;
     } catch (error) {
-      // The row exists: it is full, or a parallel request just created it.
       if (!isUniqueViolation(error)) throw error;
       return take();
     }
   }
 
-  /** Gives back a use that produced nothing (refused or failed upstream). */
   async refund(
     userId: string,
     feature: AiFeature,
@@ -105,13 +93,11 @@ export class AiUsageService {
       feature,
       used: row?.count ?? 0,
       limit: this.limits[feature],
-      // Bangkok is UTC+07:00 with no DST
       resetsAt: new Date(Date.parse(`${day}T00:00:00+07:00`) + DAY_MS),
     };
   }
 }
 
-/** The calendar day in Asia/Bangkok, as YYYY-MM-DD. */
 export function bangkokDay(now: Date): string {
   return new Intl.DateTimeFormat('en-CA', {
     timeZone: TIME_ZONE,

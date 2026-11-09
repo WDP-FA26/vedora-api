@@ -18,7 +18,6 @@ export class PaymentIntent extends Identified {
   @Prop({ type: Number, required: true })
   durationDays!: number;
 
-  /** Int64 in the database; read as `bigint`. */
   @Prop({ type: BigInt, required: true })
   amount!: bigint;
 

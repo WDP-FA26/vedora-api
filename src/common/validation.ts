@@ -6,16 +6,10 @@ import {
 } from './exceptions/external-service.exception.js';
 
 export interface ValidationResult<T> {
-  /** The payload as the DTO class, or null when any rule failed. */
   value: T | null;
   errors: string[];
 }
 
-/**
- * Validates a payload that did not come through `ValidationPipe`: a signed
- * webhook body, a Redis message, a provider response. Unknown properties are
- * stripped, as the global pipe does for request bodies.
- */
 export function validatePayload<T extends object>(
   cls: ClassConstructor<T>,
   payload: unknown,
@@ -45,10 +39,6 @@ function errorMessages(errors: ValidationError[], path = ''): string[] {
   });
 }
 
-/**
- * `validatePayload`, throwing instead of returning the failures. Only for
- * responses from an external service: a malformed one is that service's fault.
- */
 export function parsePayload<T extends object>(
   service: ExternalService,
   cls: ClassConstructor<T>,

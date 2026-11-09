@@ -18,7 +18,6 @@ export async function seedDatabase(mongo: MongoService): Promise<void> {
   const existingUser = await users.findOne({ email: 'admin@vedora.local' });
 
   if (existingUser) {
-    // Never promote an account created by somebody squatting on the seed email.
     if (
       existingUser.username !== 'vedora.admin' ||
       !existingUser.emailVerifiedAt ||
@@ -52,7 +51,6 @@ export async function seedDatabase(mongo: MongoService): Promise<void> {
       email: 'admin@vedora.local',
       fullName: 'Vedora Admin',
       role: UserRole.ADMIN,
-      // admin@vedora.local can't receive mail.
       emailVerifiedAt: new Date(),
       status: AccountStatus.ACTIVE,
       accountVersion: 0,

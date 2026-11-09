@@ -3,10 +3,8 @@ import { Type } from 'class-transformer';
 import { IsInt, IsOptional, Max, Min } from 'class-validator';
 import { PaginationLimitDto } from './pagination-limit.dto.js';
 
-// Keeps calculated skip values sane before they reach MongoDB.
 export const MAX_PAGE_NUMBER = 1_000_000;
 
-/** Extend this DTO with a collection's filters, never with user-provided skip. */
 export class PaginationQueryDto extends PaginationLimitDto {
   @ApiPropertyOptional({
     minimum: 1,
