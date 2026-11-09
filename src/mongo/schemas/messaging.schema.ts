@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { collectionSchema, onDelete } from './common.js';
-import { Identified } from './user.schema.js';
+import { Identified } from './identified.js';
 
 export enum MessagingEventType {
   MESSAGE_CREATED = 'message.created',

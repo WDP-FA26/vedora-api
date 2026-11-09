@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import type { ClientSession, Model, QueryFilter } from 'mongoose';
-import { assertAccountActive } from '../auth/account-access.js';
+import { assertAccountActive } from '../auth-core/account-access.js';
 import { AccessDeniedException } from '../common/exceptions/access-denied.exception.js';
 import { InvalidInputException } from '../common/exceptions/invalid-input.exception.js';
 import { ResourceNotFoundException } from '../common/exceptions/resource-not-found.exception.js';

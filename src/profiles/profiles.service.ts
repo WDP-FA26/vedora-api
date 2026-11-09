@@ -8,7 +8,7 @@ import {
   CursorPaginationQueryDto,
 } from '../common/pagination/index.js';
 import { NotificationsService } from '../notifications/notifications.service.js';
-import { assertAccountActive } from '../auth/account-access.js';
+import { assertAccountActive } from '../auth-core/account-access.js';
 import { MongoService } from '../mongo/mongo.service.js';
 import { withUserLocks } from '../mongo/with-user-locks.js';
 import { MessagingEventsService } from '../messaging/messaging-events.service.js';

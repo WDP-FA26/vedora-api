@@ -33,9 +33,9 @@ import {
   takeUntil,
   takeWhile,
 } from 'rxjs';
-import type { AuthenticatedRequest } from '../auth/auth.types.js';
-import { JwtAuthGuard } from '../auth/jwt-auth.guard.js';
-import { extractBearerToken } from '../auth/bearer-token.js';
+import type { AuthenticatedRequest } from '../auth-core/auth.types.js';
+import { JwtAuthGuard } from '../auth-core/jwt-auth.guard.js';
+import { extractBearerToken } from '../auth-core/bearer-token.js';
 import { CursorPaginationQueryDto } from '../common/pagination/index.js';
 import { UnauthenticatedException } from '../common/exceptions/unauthenticated.exception.js';
 import { AccountStatus, User } from '../mongo/models.js';

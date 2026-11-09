@@ -2,6 +2,9 @@
 // import the schemas that import them.
 export const MODEL_NAMES = [
   'DocumentLock',
+  'Conversation',
+  'DirectMessage',
+  'MessagingEvent',
   'User',
   'UserAccountAudit',
   'Follow',
