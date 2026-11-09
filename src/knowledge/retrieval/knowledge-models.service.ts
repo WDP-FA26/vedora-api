@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { AiService } from '@nestjs/ai';
+import { AiCostTransportService } from '../../ai/telemetry/ai-cost-transport.service.js';
 import type { ClassConstructor } from 'class-transformer';
 import { parsePayload, validatePayload } from '../../common/validation.js';
 import { ExternalServiceException } from '../../common/exceptions/external-service.exception.js';
@@ -34,6 +35,7 @@ export class KnowledgeModelsService {
   constructor(
     configService: ConfigService,
     private readonly ai: AiService,
+    private readonly costs: AiCostTransportService,
   ) {
     this.apiKey = configService.getOrThrow<string>('OPENROUTER_API_KEY');
     this.embeddingModel = configService.get<string>(
@@ -198,7 +200,7 @@ export class KnowledgeModelsService {
     body: object,
     signal: AbortSignal,
   ): Promise<Response> {
-    return fetch(`${OPENROUTER_API}${path}`, {
+    return this.costs.fetch(`${OPENROUTER_API}${path}`, {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${this.apiKey}`,

@@ -2,6 +2,7 @@ import { ConfigService } from '@nestjs/config';
 import { AiService } from '@nestjs/ai';
 import { mockDeep } from 'vitest-mock-extended';
 import { KnowledgeModelsService } from '../../../../src/knowledge/retrieval/knowledge-models.service.js';
+import { AiCostTransportService } from '../../../../src/ai/telemetry/ai-cost-transport.service.js';
 
 const fetchMock = vi.fn<typeof fetch>();
 let ai = mockDeep<AiService>();
@@ -10,6 +11,7 @@ function createService(config: Record<string, unknown> = {}) {
   return new KnowledgeModelsService(
     new ConfigService({ OPENROUTER_API_KEY: 'key', ...config }),
     ai,
+    Object.assign(mockDeep<AiCostTransportService>(), { fetch: fetchMock }),
   );
 }
 
