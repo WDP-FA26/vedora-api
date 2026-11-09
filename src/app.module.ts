@@ -18,6 +18,7 @@ import { MailModule } from './mail/mail.module.js';
 import { MealPlanModule } from './meal-plan/meal-plan.module.js';
 import { MediaModule } from './media/media.module.js';
 import { NutritionChatModule } from './nutrition-chat/nutrition-chat.module.js';
+import { ModerationModule } from './moderation/moderation.module.js';
 import { NotificationsModule } from './notifications/notifications.module.js';
 import { PostsModule } from './posts/posts.module.js';
 import { MongoModule } from './mongo/mongo.module.js';
@@ -51,6 +52,7 @@ import { VerificationModule } from './verification/verification.module.js';
     MediaModule,
     PostsModule,
     NotificationsModule,
+    ModerationModule,
     NutritionChatModule,
     KnowledgeModule,
     ProfilesModule,

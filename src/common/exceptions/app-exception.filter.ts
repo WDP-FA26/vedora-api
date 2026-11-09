@@ -11,7 +11,6 @@ import { ErrorBodyDto } from './error-body.dto.js';
 import type { ErrorCode } from './error-code.js';
 import { ExternalServiceException } from './external-service.exception.js';
 
-/** Codes for framework errors (Throttler, route 404, body size) that carry no code of their own. */
 const FRAMEWORK_CODE_BY_STATUS: Partial<Record<number, ErrorCode>> = {
   400: 'BAD_REQUEST',
   401: 'UNAUTHORIZED',
@@ -47,7 +46,6 @@ export function toErrorBody(exception: unknown): ErrorBodyDto {
       message: exception.message,
     };
   }
-  // Unknown failures never leak their message to clients.
   return {
     statusCode: 500,
     code: 'INTERNAL_ERROR',
@@ -64,7 +62,6 @@ export class AppExceptionFilter implements ExceptionFilter {
     const body = toErrorBody(exception);
     if (body.statusCode >= 500) this.logServerError(exception);
     if (response.headersSent) {
-      // An SSE stream that already started cannot receive a JSON error body.
       this.logger.warn(`Error after headers were sent: ${body.code}`);
       return;
     }

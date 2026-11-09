@@ -27,11 +27,6 @@ export class CloudinaryEagerResult {
   error?: unknown;
 }
 
-/**
- * The fields we read from a Cloudinary notification. `upload` carries the
- * video's details; `eager` reports the HLS job, one item per transformation.
- * Unknown types (delete, rename, …) pass the other fields and are ignored.
- */
 export class CloudinaryNotification {
   @IsString()
   @IsNotEmpty()

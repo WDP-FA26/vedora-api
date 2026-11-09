@@ -12,11 +12,7 @@ import {
 import { validatePayload } from '../common/validation.js';
 import { InvalidInputException } from '../common/exceptions/invalid-input.exception.js';
 
-/** SePay's "Banking" webhook body, as sent on a completed transfer. */
 class BankWebhookPayload {
-  // SePay sends a number for recent transactions and a string once it grows.
-  // A number beyond the safe-integer range is imprecise: keep it a number so
-  // the format rule rejects it instead of rounding it silently.
   @Transform(({ value }: { value: unknown }): unknown =>
     typeof value === 'number'
       ? Number.isSafeInteger(value) && value > 0
@@ -73,7 +69,6 @@ export function parseBankWebhook(body: unknown) {
     );
   const localIso = data.transactionDate.replace(' ', 'T');
   const paidAt = new Date(`${localIso}+07:00`);
-  // Strict round-trip rejects invalid dates and leap/clock overflows.
   if (
     !Number(data.transactionDate.slice(0, 4)) ||
     !Number.isFinite(paidAt.getTime()) ||

@@ -1,6 +1,7 @@
-import { Injectable, Logger } from '@nestjs/common';
-import { AiService, InjectModel } from '@nestjs/ai';
+import { Inject, Injectable, Logger } from '@nestjs/common';
+import { InjectModel } from '@nestjs/ai';
 import {
+  type Experimental_EvaluationModel,
   isStepCount,
   type LanguageModel,
   ToolLoopAgent,
@@ -9,8 +10,9 @@ import {
 import { cannedReply } from '../ai/chat/canned-reply.js';
 import { chatErrorCode } from '../ai/chat/errors.js';
 import { replyFilter } from '../ai/chat/reply-filter.js';
-import { moderate } from '../ai/moderation/moderation.js';
-import { NUTRITION_POLICY } from '../ai/moderation/policies/nutrition.js';
+import { MODERATION_MODEL } from '../ai/guardrails/guardrail.js';
+import { decide } from '../common/decision/decision.js';
+import { NUTRITION_POLICY } from '../ai/guardrails/policies/nutrition.js';
 import { searchKnowledgeTool } from '../ai/tools/search-knowledge.tool.js';
 import { KnowledgeSearchService } from '../knowledge/retrieval/knowledge-search.service.js';
 import { DietaryService } from '../recipes/dietary.service.js';
@@ -22,22 +24,16 @@ import { proposeMealPlanTool } from './tools/propose-meal-plan.tool.js';
 import { searchRecipesTool } from './tools/search-recipes.tool.js';
 import { FeatureUnavailableException } from '../common/exceptions/feature-unavailable.exception.js';
 
-// room to search, then propose again after a rejected proposal
 const MAX_STEPS = 8;
 const SEARCH_TIMEOUT_MS = 5000;
 
-/**
- * Vedora's assistant for signed-in users: it plans the weekly timetable
- * (reading the user's restrictions, asking what it needs, proposing changes
- * that only the user saves) and answers nutrition questions from the knowledge
- * base. The guest-facing nutrition chat stays a separate, narrower agent.
- */
 @Injectable()
 export class MealPlannerChatService {
   private readonly logger = new Logger(MealPlannerChatService.name);
 
   constructor(
-    private readonly ai: AiService,
+    @Inject(MODERATION_MODEL)
+    private readonly moderator: Experimental_EvaluationModel,
     @InjectModel() private readonly model: LanguageModel,
     private readonly mealPlan: MealPlanService,
     private readonly dietary: DietaryService,
@@ -49,8 +45,8 @@ export class MealPlannerChatService {
     messages: PlannerMessageDto[],
     abortSignal: AbortSignal,
   ) {
-    const verdict = await moderate(
-      this.ai,
+    const { choice: verdict } = await decide(
+      this.moderator,
       messages.at(-1)?.text ?? '',
       abortSignal,
       NUTRITION_POLICY,

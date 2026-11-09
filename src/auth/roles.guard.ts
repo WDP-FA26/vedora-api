@@ -5,7 +5,6 @@ import { AuthenticatedRequest } from './auth.types.js';
 import { ROLES_KEY } from './roles.decorator.js';
 import { AccessDeniedException } from '../common/exceptions/access-denied.exception.js';
 
-/** Run after JwtAuthGuard, which supplies the account's current role. */
 @Injectable()
 export class RolesGuard implements CanActivate {
   constructor(private readonly reflector: Reflector) {}

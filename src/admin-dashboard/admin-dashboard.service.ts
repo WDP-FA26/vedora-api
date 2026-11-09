@@ -28,7 +28,6 @@ type DayAggregator = {
   aggregate<T>(pipeline: PipelineStage[]): { exec(): Promise<T[]> };
 };
 
-/** Pipeline counting the matching documents per Asia/Bangkok calendar day. */
 const dailyCounts = (
   dateField: string,
   match: Record<string, unknown>,
@@ -48,7 +47,6 @@ const dailyCounts = (
   },
 ];
 
-/** Joins the per-event results (`[{ _id: 'YYYY-MM-DD', count }]`) by day. */
 function mergeDays(
   results: Record<keyof DayCounts, DayCount[]>,
 ): DatabaseDay[] {
@@ -105,9 +103,6 @@ export class AdminDashboardService {
       const recipesCreated = await this.recipes
         .countDocuments({ createdAt: { $gte: start, $lt: endExclusive } })
         .exec();
-      // Only aggregate values cross the DB boundary: each event kind is
-      // grouped by Asia/Bangkok day in the database; there is no per-day
-      // query or PII.
       const bounds = { $gte: start, $lt: endExclusive };
       const days = (
         model: DayAggregator,

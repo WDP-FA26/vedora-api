@@ -9,16 +9,22 @@ import {
 import { AdminMediaDto } from '../../media/dto/media-response.dto.js';
 import { MediaService } from '../../media/media.service.js';
 import { type MediaAsset, Post } from '../../mongo/models.js';
-import { AdminPostDto, AdminPostsQueryDto } from '../dto/admin-post.dto.js';
+import {
+  AdminPostDto,
+  AdminPostsQueryDto,
+  type ModerationDecision,
+} from '../dto/admin-post.dto.js';
+import { PostModerationService } from '../../media/post-moderation.service.js';
+import { StateConflictException } from '../../common/exceptions/state-conflict.exception.js';
 import { PostRelationsService } from '../post-relations.service.js';
 import { ResourceNotFoundException } from '../../common/exceptions/resource-not-found.exception.js';
 
-/** Every post whatever its status, for the admin content page. */
 @Injectable()
 export class AdminPostsService {
   constructor(
     private readonly mediaService: MediaService,
     private readonly relations: PostRelationsService,
+    private readonly postModeration: PostModerationService,
     @InjectModel(Post.name) private readonly posts: Model<Post>,
   ) {}
 
@@ -47,6 +53,30 @@ export class AdminPostsService {
     return dto;
   }
 
+  async moderate(
+    id: string,
+    adminId: string,
+    decision: ModerationDecision,
+    note: string | undefined,
+  ): Promise<AdminPostDto> {
+    const exists = await this.posts.exists({ _id: id });
+    if (!exists)
+      throw new ResourceNotFoundException('NOT_FOUND', 'Post not found');
+    const applied = await this.postModeration.decide(
+      id,
+      adminId,
+      decision,
+      note ?? null,
+    );
+    if (!applied) {
+      throw new StateConflictException(
+        'POST_NOT_REVIEWABLE',
+        'Only a post waiting for review or a rejected one can be moderated',
+      );
+    }
+    return this.findOne(id);
+  }
+
   private async toDtos(rows: Post[]): Promise<AdminPostDto[]> {
     const relations = await this.relations.hydrate(rows);
     return rows.flatMap((row) => {
@@ -67,6 +97,7 @@ export class AdminPostsService {
           likeCount: related.likeCount,
           repostCount: related.repostCount,
           viewCount: row.viewCount,
+          moderation: row.moderation,
         },
       ];
     });

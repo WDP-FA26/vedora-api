@@ -51,8 +51,6 @@ export class BlogAiController {
 
   @Post('chat')
   @UseGuards(UserThrottlerGuard)
-  // one user turn may take several requests: each editor tool the browser
-  // answers resumes the turn
   @Throttle({ default: { limit: 30, ttl: 60_000 } })
   @ApiOperation({
     summary: 'Talk to the blog writing assistant',

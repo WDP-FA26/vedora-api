@@ -5,7 +5,6 @@ import { IsInt, IsOptional, Max, Min } from 'class-validator';
 export const DEFAULT_PAGE_LIMIT = 20;
 export const MAX_PAGE_LIMIT = 50;
 
-/** Shared size limit for page-based and cursor-based collection endpoints. */
 export class PaginationLimitDto {
   @ApiPropertyOptional({
     minimum: 1,

@@ -15,6 +15,10 @@ import {
   ValidateIf,
   validateSync,
 } from 'class-validator';
+import {
+  DEFAULT_CONTENT_MODERATION_MODEL,
+  DEFAULT_MODERATION_MODEL,
+} from '../ai/openrouter.js';
 import { REASONING_EFFORTS } from '../ai/reasoning.js';
 
 const toBoolean = ({ value }: { value: unknown }): unknown => {
@@ -25,13 +29,8 @@ const toBoolean = ({ value }: { value: unknown }): unknown => {
   return value;
 };
 
-/** Cloudflare's always-pass secret; only outside production. */
 export const TURNSTILE_TEST_SECRET = '1x0000000000000000000000000000000AA';
 
-/**
- * Every environment variable the API reads, with the defaults and the
- * conditional requirements the Joi schema used to declare.
- */
 export class EnvironmentVariables {
   @IsIn(['development', 'test', 'production'])
   NODE_ENV = 'development';
@@ -79,7 +78,6 @@ export class EnvironmentVariables {
   @IsUrl({ require_tld: false })
   GOOGLE_CALLBACK_URL = '';
 
-  /** Empty outside production: verification codes go to the log instead. */
   @ValidateIf((env: EnvironmentVariables) => env.NODE_ENV === 'production')
   @IsString()
   @IsNotEmpty()
@@ -91,7 +89,6 @@ export class EnvironmentVariables {
   @IsUrl({ require_tld: false })
   FRONTEND_URL = 'http://localhost:3000';
 
-  /** Empty: video uploads answer 503. */
   @IsString()
   CLOUDINARY_CLOUD_NAME = '';
 
@@ -104,7 +101,6 @@ export class EnvironmentVariables {
   @IsString()
   CLOUDINARY_FOLDER = 'vedora';
 
-  /** False: pending media is refreshed from the Admin API on read. */
   @Transform(toBoolean)
   @IsBoolean()
   CLOUDINARY_WEBHOOKS_ENABLED = false;
@@ -119,7 +115,7 @@ export class EnvironmentVariables {
   CAPTIONS_ENABLED = true;
 
   @IsString()
-  TRANSCRIPTION_MODEL = 'openai/whisper-large-v3';
+  TRANSCRIPTION_MODEL = 'elevenlabs/scribe-v2';
 
   @IsString()
   @IsNotEmpty()
@@ -186,7 +182,22 @@ export class EnvironmentVariables {
   KNOWLEDGE_EMBEDDING_DIMENSIONS = 1536;
 
   @IsString()
-  OPENROUTER_MODERATION_MODEL = 'openai/gpt-oss-safeguard-20b';
+  OPENROUTER_MODERATION_MODEL = DEFAULT_MODERATION_MODEL;
+
+  @IsString()
+  OPENROUTER_CONTENT_MODERATION_MODEL = DEFAULT_CONTENT_MODERATION_MODEL;
+
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  @Max(1)
+  MODERATION_REJECT_THRESHOLD = 0.85;
+
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  @Max(1)
+  MODERATION_REVIEW_THRESHOLD = 0.3;
 
   @ValidateIf((env: EnvironmentVariables) => env.NODE_ENV === 'production')
   @IsString()
@@ -208,7 +219,6 @@ export class EnvironmentVariables {
   @Min(1)
   GUEST_DAILY_BUDGET = 500;
 
-  /** Empty: the socket address. */
   @IsString()
   CLIENT_IP_HEADER = '';
 
@@ -232,7 +242,6 @@ export class EnvironmentVariables {
   @IsString()
   OPENROUTER_RERANK_MODEL = 'cohere/rerank-v3.5';
 
-  /** Empty: OPENROUTER_MODEL. */
   @IsString()
   BLOG_AI_MODEL = '';
 
@@ -249,10 +258,7 @@ export class EnvironmentVariables {
   @Min(1)
   BLOG_AI_DAILY_IMAGES = 10;
 
-  // SePay banking QR: disabled until a receiving account is configured.
-
   @ValidateIf((env: EnvironmentVariables) => env.PAYMENT_REDIS_URL !== '')
-  // Compose names the Redis service `redis`, a hostname without a TLD.
   @IsUrl({
     protocols: ['redis', 'rediss'],
     require_protocol: true,
@@ -333,12 +339,9 @@ export class EnvironmentVariables {
   SEPAY_BANK_WEBHOOK_API_KEY = '';
 }
 
-/** `ConfigModule.forRoot({ validate })`: class-validator instead of Joi. */
 export function validateEnvironment(
   config: Record<string, unknown>,
 ): EnvironmentVariables {
-  // Joi treated an empty key as absent; keep the test secret outside
-  // production without weakening the production requirement.
   const source = { ...config };
   if (!source.TURNSTILE_SECRET_KEY && source.NODE_ENV !== 'production')
     source.TURNSTILE_SECRET_KEY = TURNSTILE_TEST_SECRET;

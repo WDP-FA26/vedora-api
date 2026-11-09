@@ -1,3 +1,4 @@
+import { ContentModerationService } from '../../moderation/content-moderation.service.js';
 import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import type { Model } from 'mongoose';
@@ -54,6 +55,7 @@ function toCommentDto(comment: PostComment, author: User): CommentResponseDto {
 export class PostInteractionsService {
   constructor(
     private readonly notifications: NotificationsService,
+    private readonly contentModeration: ContentModerationService,
     @InjectModel(Post.name) private readonly posts: Model<Post>,
     @InjectModel(PostComment.name)
     private readonly comments: Model<PostComment>,
@@ -72,7 +74,6 @@ export class PostInteractionsService {
     await this.requirePublishedPost(postId);
     const filter: Record<string, unknown> = { postId };
     if (query.cursor) {
-      // A cursor from another post must never affect this post's pagination.
       const cursor = await this.comments
         .findOne({ ...filter, _id: query.cursor })
         .exec();
@@ -113,6 +114,9 @@ export class PostInteractionsService {
     dto: CommentBodyDto,
   ): Promise<CommentResponseDto> {
     const post = await this.requirePublishedPost(postId);
+    await this.contentModeration.requireAllowed([
+      { kind: 'text', text: dto.body },
+    ]);
     const comment = await this.comments.create({
       postId,
       authorId,
@@ -141,6 +145,9 @@ export class PostInteractionsService {
         'FORBIDDEN',
         'Only the author can edit this comment',
       );
+    await this.contentModeration.requireAllowed([
+      { kind: 'text', text: dto.body },
+    ]);
     const updated = await this.comments
       .findOneAndUpdate(
         { _id: commentId, postId, authorId: actor.sub },
@@ -170,7 +177,6 @@ export class PostInteractionsService {
         'You cannot delete this comment',
       );
     }
-    // A concurrent deletion simply deletes nothing.
     await this.comments.deleteOne({ _id: commentId, postId }).exec();
   }
 
@@ -186,7 +192,6 @@ export class PostInteractionsService {
         await this.likes.create({ postId, userId });
         created = true;
       } catch (error) {
-        // The unique (post, user) index: it is liked already.
         if (!isUniqueViolation(error)) throw error;
       }
     } else {
@@ -216,7 +221,6 @@ export class PostInteractionsService {
         await this.reposts.create({ postId, userId });
         created = true;
       } catch (error) {
-        // The unique (post, user) index: it is reposted already.
         if (!isUniqueViolation(error)) throw error;
       }
     } else {
@@ -244,7 +248,6 @@ export class PostInteractionsService {
       try {
         await this.bookmarks.create({ postId, userId });
       } catch (error) {
-        // The unique (post, user) index: it is saved already.
         if (!isUniqueViolation(error)) throw error;
       }
     } else {

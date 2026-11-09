@@ -16,12 +16,6 @@ import { RawBody } from './raw-body.decorator.js';
 import { FeatureUnavailableException } from '../common/exceptions/feature-unavailable.exception.js';
 import { InvalidInputException } from '../common/exceptions/invalid-input.exception.js';
 
-/**
- * Cloudinary calls this for upload and eager events. It is public; the
- * signature (keyed by `CLOUDINARY_API_SECRET`) proves the request came from
- * Cloudinary. Register `https://<api>/api/v1/webhooks/cloudinary` under
- * Settings → Webhook Notifications for the Upload and Eager types.
- */
 @ApiExcludeController()
 @Controller('webhooks')
 export class CloudinaryWebhookController {

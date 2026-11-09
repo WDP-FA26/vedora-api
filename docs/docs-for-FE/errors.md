@@ -37,6 +37,7 @@ Thay đổi so với body mặc định của NestJS trước đây: không còn
 | `UNKNOWN_REFERENCE` | Có ID nguyên liệu/nhóm/công thức không tồn tại | — |
 | `CONFLICTING_PREFERENCE` | Nguyên liệu vừa thích vừa tránh | — |
 | `SAME_INGREDIENT` | Quy tắc xung đột với chính nguyên liệu đó | — |
+| `CONTENT_REJECTED` (HTTP 422) | Bình luận vi phạm quy tắc cộng đồng, chưa được lưu | `category`: `sexual`, `violence`, `hate`, `harassment`, `self_harm`, `illegal`, `spam` |
 
 ### 401
 
@@ -84,6 +85,7 @@ Thay đổi so với body mặc định của NestJS trước đây: không còn
 | `CAPTURE_CONFLICT` | Giao dịch đã thay đổi khi nhận callback | — |
 | `FAVORITE_CONFLICT` | Yêu thích công thức bị xung đột khi ghi đồng thời; tải lại và thử lại | — |
 | `RATING_CONFLICT` | Đánh giá bị xung đột khi ghi đồng thời; tải lại và thử lại | — |
+| `POST_NOT_REVIEWABLE` | Admin kiểm duyệt bài không ở trạng thái `PENDING_REVIEW` hoặc `REJECTED` | — |
 | `MEAL_PLAN_CONFLICT` | Thực đơn bị xung đột khi lưu đồng thời; tải lại và lưu lại | — |
 
 ### 413 / 415

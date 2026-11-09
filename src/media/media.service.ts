@@ -21,6 +21,7 @@ import {
   UPLOAD_SIGNATURE_TTL_SECONDS,
 } from '../cloudinary/cloudinary.service.js';
 import { CaptionService } from './caption.service.js';
+import { PostModerationService } from './post-moderation.service.js';
 import {
   CreateUploadResponseDto,
   MediaResponseDto,
@@ -34,19 +35,13 @@ const PENDING: readonly MediaStatus[] = [
   MediaStatus.PROCESSING,
 ];
 
-/** Rows that haven't been discarded; every user-facing query uses it. */
 const LIVE: QueryFilter<MediaAsset> = { discardedAt: null };
 
-/** Unattached uploads a user may hold at once, so one account can't flood Cloudinary. */
 const MAX_UNATTACHED_UPLOADS = 5;
-/** Slack after the signature expires for a last chunk still in flight. */
 const UPLOAD_GRACE_MS = 10 * 60 * 1000;
-/** Polls of one row's Admin API state are at least this far apart (500 calls/hour). */
 const REFRESH_INTERVAL_MS = 15 * 1000;
-/** A stream that isn't built by now never will be. */
 const ENCODING_TIMEOUT_MS = 60 * 60 * 1000;
 
-/** Whether the HLS eager job has finished, judging by the derived files. */
 function streamBuilt(video: CloudinaryVideo): boolean {
   const profile = STREAM_TRANSFORMATION.split('/')[0];
   return (video.derived ?? []).some(
@@ -55,11 +50,6 @@ function streamBuilt(video: CloudinaryVideo): boolean {
   );
 }
 
-/**
- * `16:9` from the pixel size Cloudinary reports for the displayed frame, else
- * from the display aspect ratio. The `dar` of a phone video ignores its
- * rotation flag, so a portrait clip would read as landscape.
- */
 function aspectRatio(video: CloudinaryVideo): string | null {
   if (video.width && video.height) {
     const gcd = (a: number, b: number): number => (b ? gcd(b, a % b) : a);
@@ -72,25 +62,10 @@ function aspectRatio(video: CloudinaryVideo): string | null {
   return null;
 }
 
-/**
- * Videos go straight from the browser to Cloudinary: `createUpload` signs a
- * direct upload that also starts an eager job building the HLS stream.
- * Cloudinary reports the upload and the finished stream through
- * notifications (`handleNotification`). When those aren't configured (local
- * dev) or one was missed, `refresh` asks the Admin API instead. Every
- * transition is a conditional update, so replays and out-of-order
- * notifications are harmless.
- *
- * Discarding is two-phase: `discard` marks the row, then `purge` deletes the
- * Cloudinary files and only drops the row once nothing can arrive any more.
- * A file whose upload finishes after its row is gone is deleted by its
- * notification, so nothing lingers in Cloudinary.
- */
 @Injectable()
 export class MediaService {
   private readonly logger = new Logger(MediaService.name);
   private readonly maxVideoDurationSec: number;
-  /** When each row last asked the Admin API, to stay under its rate limit. */
   private readonly lastRefresh = new Map<string, number>();
 
   constructor(
@@ -99,6 +74,7 @@ export class MediaService {
     @InjectModel(Post.name) private readonly posts: Model<Post>,
     private readonly cloudinary: CloudinaryService,
     private readonly captions: CaptionService,
+    private readonly postModeration: PostModerationService,
     configService: ConfigService,
   ) {
     this.maxVideoDurationSec = configService.get<number>(
@@ -107,7 +83,6 @@ export class MediaService {
     );
   }
 
-  /** Only VIDEO for now; IMAGE will get presigned storage URLs. */
   async createUpload(
     ownerId: string,
     type: MediaType,
@@ -159,7 +134,6 @@ export class MediaService {
     return this.toResponse(media!);
   }
 
-  /** Removes an upload the user dropped from the composer before posting. */
   async removeOwned(id: string, ownerId: string): Promise<void> {
     const media = await this.mediaAssets
       .findOne({ ...LIVE, _id: id, ownerId })
@@ -176,10 +150,6 @@ export class MediaService {
     await this.discard({ _id: id, postId: null });
   }
 
-  /**
-   * Hides the matching media from every query, then deletes it from
-   * Cloudinary. Rows that can't be confirmed gone yet are retried by `purge`.
-   */
   async discard(filter: QueryFilter<MediaAsset>): Promise<void> {
     const media = await this.mediaAssets.find({ ...filter, ...LIVE }).exec();
     if (media.length === 0) return;
@@ -192,13 +162,6 @@ export class MediaService {
     }
   }
 
-  /**
-   * Deletes a discarded video from Cloudinary, then from our database.
-   * Cloudinary goes first: if it fails, the row stays (still discarded) and
-   * the `purgeDiscarded` cron tries again. A row whose upload could still
-   * finish also stays until its signature has expired. Returns whether the
-   * video is fully gone.
-   */
   async purge(
     media: Pick<MediaAsset, 'id' | 'status' | 'captionStatus' | 'createdAt'>,
   ): Promise<boolean> {
@@ -215,12 +178,6 @@ export class MediaService {
     return true;
   }
 
-  /**
-   * Attaches the owner's uploads to a new post, in `mediaIds` order. Runs in
-   * the post's transaction (`session`); each claim is conditional, so media
-   * that belongs to someone else, is already attached or has failed is
-   * rejected.
-   */
   async claimForPost(
     session: ClientSession,
     ownerId: string,
@@ -250,14 +207,6 @@ export class MediaService {
     }
   }
 
-  /**
-   * Moves the PROCESSING posts among `postIds` to FAILED if any of their
-   * media failed, or to PUBLISHED once all of it is READY (a post without
-   * media publishes at once). Call it after any change to media status or
-   * attachment has been committed: whichever change lands last then sees the
-   * final state, so concurrent updates can't strand a post. Videos of posts
-   * it publishes are then queued for captions.
-   */
   async settlePosts(postIds: string[]): Promise<void> {
     const media = await this.mediaAssets
       .find({ postId: { $in: postIds } })
@@ -279,19 +228,11 @@ export class MediaService {
         { $set: { status: PostStatus.FAILED } },
       )
       .exec();
-    const published = await this.posts
-      .updateMany(
-        {
-          _id: { $in: postIds, $nin: [...waiting] },
-          status: PostStatus.PROCESSING,
-        },
-        { $set: { status: PostStatus.PUBLISHED, publishedAt: new Date() } },
-      )
-      .exec();
-    if (published.modifiedCount > 0) this.captions.schedule();
+    const ready = postIds.filter((id) => !waiting.has(id) && !failed.has(id));
+    const published = await this.postModeration.settle(ready);
+    if (published > 0) this.captions.schedule();
   }
 
-  /** Applies a verified Cloudinary notification. */
   async handleNotification(
     notification: CloudinaryNotification,
   ): Promise<void> {
@@ -324,7 +265,6 @@ export class MediaService {
     }
   }
 
-  /** Brings pending media up to date from the Admin API, for missed notifications. */
   async refresh(media: MediaAsset): Promise<void> {
     if (!PENDING.includes(media.status) || !this.cloudinary.configured) return;
     const last = this.lastRefresh.get(media.id) ?? 0;
@@ -354,11 +294,6 @@ export class MediaService {
     }
   }
 
-  /**
-   * Deletes the Cloudinary side of `media`. Returns whether Cloudinary is
-   * confirmed to hold nothing for it; failures are logged, not thrown, so
-   * callers can retry later.
-   */
   async deleteFromCloudinary(
     media: Pick<MediaAsset, 'id' | 'captionStatus'>,
   ): Promise<boolean> {
@@ -401,7 +336,6 @@ export class MediaService {
     };
   }
 
-  /** No file in Cloudinary: still uploading, expired, or deleted. */
   private async handleMissing(media: MediaAsset): Promise<void> {
     if (media.status === MediaStatus.PROCESSING) {
       await this.markFailed(
@@ -422,13 +356,11 @@ export class MediaService {
     }
   }
 
-  /** The file arrived: record its length and shape, enforce the limit. */
   private async applyUploaded(video: CloudinaryVideo): Promise<void> {
     const media = await this.mediaAssets
       .findOne({ publicId: video.public_id })
       .exec();
     if (!media || media.discardedAt) {
-      // Discarded, or its row is already gone: nobody will post this file.
       if (media) await this.purge(media);
       else await this.deleteOrphan(video.public_id);
       return;
@@ -451,11 +383,6 @@ export class MediaService {
     );
   }
 
-  /**
-   * The HLS stream is built. The stream can finish before the upload
-   * notification arrives; the duration check needs the upload's details,
-   * so those are read from the Admin API first.
-   */
   private async applyStreamBuilt(
     publicId: string,
     video?: CloudinaryVideo,
@@ -498,13 +425,10 @@ export class MediaService {
       this.logger.log(`Media ${media.id} failed: ${reason}`);
       this.lastRefresh.delete(media.id);
       if (media.postId) await this.settlePosts([media.postId]);
-      // A failed video can never play; free the storage now. The row stays
-      // so the author sees why, and discarding it later retries this.
       await this.deleteFromCloudinary(media);
     }
   }
 
-  /** Deletes a file in our folder that no row claims. */
   private async deleteOrphan(publicId: string): Promise<void> {
     const mediaId = this.cloudinary.mediaIdOf(publicId);
     if (!mediaId) return;

@@ -1,4 +1,3 @@
-/** One caption line, timed against the original video in seconds. */
 export interface Cue {
   start: number;
   end: number;
@@ -14,7 +13,6 @@ function timestamp(seconds: number): string {
   return `${pad(hours)}:${pad(minutes)}:${pad(secs)}.${pad(ms % 1000, 3)}`;
 }
 
-/** A WebVTT file for `cues`; `-->` in the text can't end a cue early. */
 export function toVtt(cues: Cue[]): string {
   const body = cues
     .map(
@@ -25,7 +23,6 @@ export function toVtt(cues: Cue[]): string {
   return `WEBVTT\n\n${body}\n`;
 }
 
-/** The text of every cue in `vtt`, in order and joined by spaces. */
 export function vttText(vtt: string): string {
   return vtt
     .split(/\r?\n\r?\n/)

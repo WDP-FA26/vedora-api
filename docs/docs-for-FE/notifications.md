@@ -41,3 +41,8 @@ Luồng chỉ phát tới các client đang kết nối vào **cùng một insta
 ```
 
 `postId` là `null` với `FOLLOW`; `commentId` chỉ có với `COMMENT`.
+
+
+## Thông báo từ hệ thống (kiểm duyệt)
+
+`type` có thêm `POST_PENDING_REVIEW`, `POST_APPROVED`, `POST_REJECTED`. Với chúng `actor` là `null`, và có thêm `postType`, `reason`, `note`. Xem `content-moderation.md`.

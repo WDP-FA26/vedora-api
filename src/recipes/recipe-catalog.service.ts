@@ -64,7 +64,6 @@ export class RecipeCatalogService {
       rows.map((row, index) => ({
         ...toRecipeCard(recipes[index]),
         isFavorite: favoriteIds.has(row.id),
-        // Admin-authored recipes are public, but their source post may not be.
         post:
           row.postId && publishedPosts.has(row.postId)
             ? recipes[index].post
@@ -93,9 +92,6 @@ export class RecipeCatalogService {
     };
   }
 
-  /**
-   * The recipes of one catalog page, newest first, and how many match in all.
-   */
   private async catalogPage(
     query: RecipeCatalogQueryDto,
     paging: { skip: number; take: number },
@@ -115,7 +111,6 @@ export class RecipeCatalogService {
     }
     if (query.maxMinutes !== undefined) {
       const max = query.maxMinutes;
-      // A recipe with both times unknown never matches.
       matching = matching.filter((row) => {
         const minutes = totalMinutes(row);
         return minutes !== null && minutes <= max;
@@ -139,7 +134,6 @@ export class RecipeCatalogService {
     };
   }
 
-  /** Title, description, or an ingredient whose name or alias contains `text`. */
   private async matchingRecipeIds(text: string): Promise<Set<string>> {
     const pattern = escapeRegExp(text);
     const matchingIngredients = await this.ingredients

@@ -1,6 +1,5 @@
 import { AppException } from './app-exception.js';
 
-/** The caller is not signed in, or the account cannot act. 401. */
 export const UNAUTHENTICATED_CODES = [
   'UNAUTHORIZED',
   'ACCOUNT_SUSPENDED',

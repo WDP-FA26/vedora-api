@@ -7,20 +7,11 @@ import { FeatureUnavailableException } from '../common/exceptions/feature-unavai
 import { UnauthenticatedException } from '../common/exceptions/unauthenticated.exception.js';
 
 export interface GoogleAuthorization {
-  /** Google's consent screen URL. */
   url: string;
-  /** Nonce the caller must store and compare with `state` on return. */
   state: string;
-  /** PKCE secret the caller must keep and send back with the `code`. */
   codeVerifier: string;
 }
 
-/**
- * Google's authorization-code flow with PKCE. Google redirects the browser to
- * the frontend (`GOOGLE_CALLBACK_URL`), never to this API: the frontend keeps
- * `state` and `codeVerifier` from `authorize`, checks `state`, then hands the
- * `code` and verifier to `exchangeCode`.
- */
 @Injectable()
 export class GoogleOAuthService {
   private readonly logger = new Logger(GoogleOAuthService.name);
@@ -69,7 +60,6 @@ export class GoogleOAuthService {
         tokens: { id_token: idToken },
       } = await client.getToken({ code, codeVerifier }));
     } catch (error) {
-      // invalid_grant: expired or reused code, wrong verifier or redirect URI.
       this.logger.warn(`Google code exchange failed: ${String(error)}`);
       throw new UnauthenticatedException(
         'UNAUTHORIZED',

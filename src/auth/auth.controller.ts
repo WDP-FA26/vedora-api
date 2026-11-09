@@ -123,8 +123,6 @@ export class AuthController {
     description: 'Missing/invalid login fields or turnstileToken',
   })
   async login(@Body() dto: LoginDto): Promise<AuthResponseDto> {
-    // Login is forwarded by the FE Server Action. Do not send the FE server's
-    // socket IP as the visitor's remoteip; Cloudflare makes that field optional.
     if (!(await this.turnstile.verify(dto.turnstileToken, undefined))) {
       throw new AccessDeniedException(
         'CAPTCHA_FAILED',

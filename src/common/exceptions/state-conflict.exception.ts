@@ -1,6 +1,5 @@
 import { AppException } from './app-exception.js';
 
-/** The request conflicts with the current state of a resource. 409. */
 export const STATE_CONFLICT_CODES = [
   'CONFLICT',
   'ALREADY_VERIFIED',
@@ -22,6 +21,7 @@ export const STATE_CONFLICT_CODES = [
   'FAVORITE_CONFLICT',
   'RATING_CONFLICT',
   'MEAL_PLAN_CONFLICT',
+  'POST_NOT_REVIEWABLE',
 ] as const;
 
 export type StateConflictCode = (typeof STATE_CONFLICT_CODES)[number];

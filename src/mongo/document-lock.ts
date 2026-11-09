@@ -17,13 +17,6 @@ export class DocumentLock extends Identified {
 
 export const DocumentLockSchema = SchemaFactory.createForClass(DocumentLock);
 
-/**
- * Serializes transactions that touch the same document. MongoDB has no row
- * locks, so each one writes a lock document: two transactions writing the
- * same document conflict, and `session.withTransaction` retries the later
- * one instead of letting them interleave. Take locks in a fixed order, and
- * release them by ending the transaction.
- */
 export async function lockDocument(
   mongo: { readonly connection: Connection },
   session: ClientSession,

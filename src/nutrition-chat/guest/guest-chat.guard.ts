@@ -7,7 +7,6 @@ import { FeatureUnavailableException } from '../../common/exceptions/feature-una
 import { QuotaReachedException } from '../../common/exceptions/quota-reached.exception.js';
 import { UnauthenticatedException } from '../../common/exceptions/unauthenticated.exception.js';
 
-/** Lets a guest session through while it has messages left today. */
 @Injectable()
 export class GuestChatGuard implements CanActivate {
   constructor(

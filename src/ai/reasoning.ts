@@ -1,7 +1,3 @@
-/**
- * Reasoning effort levels accepted by OpenRouter models that support them.
- * Kept in the AI platform so config does not depend on a feature.
- */
 export const REASONING_EFFORTS = [
   'none',
   'minimal',

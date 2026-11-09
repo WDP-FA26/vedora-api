@@ -22,13 +22,8 @@ const OPENROUTER_API = 'https://openrouter.ai/api/v1';
 const IMAGE_BATCH = 8;
 const EMBED_TIMEOUT_MS = 60_000;
 const OCR_TIMEOUT_MS = 5 * 60_000;
-// file-parser only runs inside a chat completion; this cheap model receives
-// the parsed text and its reply is discarded
 const OCR_CARRIER_MODEL = 'google/gemini-3.1-flash-lite';
 
-// Text embeddings go through `AiService`; image embeddings, reranking and PDF
-// OCR use fetch since the AI SDK embeds text only and does not expose OCR
-// annotations.
 @Injectable()
 export class KnowledgeModelsService {
   private readonly apiKey: string;
@@ -126,7 +121,6 @@ export class KnowledgeModelsService {
       },
       AbortSignal.timeout(OCR_TIMEOUT_MS),
     );
-    // a failed carrier completion still carries the parse
     const body = parsePayload('openrouter', OcrResponse, await response.json());
     const annotations =
       body.choices?.[0]?.message.annotations ??

@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectModel } from '@nestjs/mongoose';
 import type { Model } from 'mongoose';
+import { Subject } from 'rxjs';
 import {
   CaptionStatus,
   MediaAsset,
@@ -20,26 +21,17 @@ import {
 import { type Cue, toVtt, vttText } from './captions/vtt.js';
 
 const BATCH_SIZE = 10;
-/** A TRANSCRIBING row untouched this long was cut off by a restart. */
 const STALE_AFTER_MS = 30 * 60 * 1000;
 const TRACK_TIMEOUT_MS = 15_000;
 
-/**
- * Captions published videos inside this process: ffmpeg extracts the audio
- * and cuts out the silence, Whisper transcribes what's left (timestamps are
- * mapped back onto the video), and the chat model translates Vietnamese to
- * English and everything else to Vietnamese. Both tracks are stored on
- * Cloudinary as WebVTT and listed in `media_assets.captions`.
- *
- * Each video is claimed with a conditional status update, so the cron and
- * `schedule` calls can race without transcribing it twice.
- */
 @Injectable()
 export class CaptionService {
   private readonly logger = new Logger(CaptionService.name);
   private readonly enabled: boolean;
   private draining: Promise<void> | null = null;
   private drainAgain = false;
+
+  readonly transcribed = new Subject<string>();
 
   constructor(
     @InjectModel(MediaAsset.name)
@@ -52,7 +44,10 @@ export class CaptionService {
     this.enabled = configService.get<boolean>('CAPTIONS_ENABLED', true);
   }
 
-  /** Captions waiting videos in the background; never throws. */
+  get active(): boolean {
+    return this.enabled && this.cloudinary.configured;
+  }
+
   schedule(): void {
     if (!this.enabled || !this.cloudinary.configured) return;
     if (this.draining) {
@@ -72,12 +67,9 @@ export class CaptionService {
       });
   }
 
-  /** Captions every waiting video, a batch at a time. */
   async drain(): Promise<void> {
     let found: number;
     do {
-      // MongoDB has no relation filters: load each video's post and keep
-      // those of published posts.
       const waiting = await this.mediaAssets
         .find({
           discardedAt: null,
@@ -90,13 +82,17 @@ export class CaptionService {
         .find({ _id: { $in: waiting.map(({ postId }) => postId) } })
         .select('status')
         .exec();
-      const published = new Set(
+      const captionable = new Set(
         posts
-          .filter(({ status }) => status === PostStatus.PUBLISHED)
+          .filter(
+            ({ status }) =>
+              status === PostStatus.PUBLISHED ||
+              status === PostStatus.PROCESSING,
+          )
           .map(({ id }) => id),
       );
       const media = waiting
-        .filter(({ postId }) => postId !== null && published.has(postId))
+        .filter(({ postId }) => postId !== null && captionable.has(postId))
         .slice(0, BATCH_SIZE);
       found = media.length;
       for (const item of media) {
@@ -105,7 +101,6 @@ export class CaptionService {
     } while (found === BATCH_SIZE);
   }
 
-  /** Lets videos whose captioning a restart cut off be picked up again. */
   async releaseStale(): Promise<void> {
     await this.mediaAssets.updateMany(
       {
@@ -116,11 +111,6 @@ export class CaptionService {
     );
   }
 
-  /**
-   * Fills `transcript` for videos captioned before it existed, from their
-   * stored spoken-language track, and marks their posts for embedding again.
-   * A track that fails to download is retried on the next run.
-   */
   async backfillTranscripts(): Promise<void> {
     const media = await this.mediaAssets
       .find({
@@ -161,7 +151,6 @@ export class CaptionService {
     }
   }
 
-  /** Transcribes, translates and stores the captions of one video. */
   async caption(
     media: Pick<MediaAsset, 'id' | 'publicId' | 'durationSec' | 'postId'>,
   ): Promise<void> {
@@ -173,7 +162,6 @@ export class CaptionService {
       )
       .exec();
     if (!claimed) return;
-    // Every later write requires TRANSCRIBING, so a released run can't write.
     const current = {
       _id: media.id,
       captionStatus: CaptionStatus.TRANSCRIBING,
@@ -191,11 +179,16 @@ export class CaptionService {
         await this.mediaAssets.updateOne(current, {
           $set: { captionStatus: CaptionStatus.NO_SPEECH },
         });
+        this.announce(media.postId);
         return;
       }
 
       const { language, cues } = transcript;
       await this.store(media.id, language, cues, true);
+      await this.mediaAssets.updateOne(current, {
+        $set: { transcript: cues.map((cue) => cue.text).join(' ') },
+      });
+      this.announce(media.postId);
       await this.translate(media.id, language, cues);
       const done = await this.mediaAssets
         .findOneAndUpdate(
@@ -210,7 +203,6 @@ export class CaptionService {
           { returnDocument: 'after' },
         )
         .exec();
-      // The post is embedded again, now with what the video says.
       if (done && media.postId) {
         await this.posts.updateOne(
           { _id: media.postId },
@@ -222,10 +214,14 @@ export class CaptionService {
       await this.mediaAssets.updateOne(current, {
         $set: { captionStatus: CaptionStatus.FAILED },
       });
+      this.announce(media.postId);
     }
   }
 
-  /** The spoken-language captions are useful alone, so failures only log. */
+  private announce(postId: string | null): void {
+    if (postId) this.transcribed.next(postId);
+  }
+
   private async translate(
     mediaId: string,
     language: string,
@@ -263,8 +259,6 @@ export class CaptionService {
       isOriginal,
       url,
     };
-    // One track per language. Only this process captions the video (it
-    // holds TRANSCRIBING), so reading and then replacing the list is safe.
     const media = await this.mediaAssets
       .findOne({ _id: mediaId })
       .select('captions')

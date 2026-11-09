@@ -73,7 +73,6 @@ export class BlogAssistantChatDto {
   @IsUUID()
   blogId?: string;
 
-  // sent by `DefaultChatTransport` alongside the messages
   @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(100) id?: string;
   @ApiPropertyOptional()
   @IsOptional()

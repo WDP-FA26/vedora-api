@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { VerificationStatus } from '../enums.js';
-import { collectionSchema, onDelete } from './common.js';
+import { cascadeOnDelete, collectionSchema } from './common.js';
 import { Identified } from './user.schema.js';
 
 @Schema(collectionSchema('verification_requests'))
@@ -44,16 +44,9 @@ export const VerificationRequestSchema =
 VerificationRequestSchema.index({ status: 1, createdAt: 1 });
 VerificationRequestSchema.index({ userId: 1, createdAt: 1 });
 
-onDelete(VerificationRequestSchema, async (db, ids, session) => {
-  await db
-    .model('VerificationProof')
-    .updateMany(
-      { requestId: { $in: ids } },
-      { $set: { requestId: null } },
-      { session, timestamps: false },
-    )
-    .exec();
-});
+cascadeOnDelete(VerificationRequestSchema, [
+  { model: 'VerificationProof', field: 'requestId', action: 'unset' },
+]);
 
 @Schema(collectionSchema('verification_proofs', 'created'))
 export class VerificationProof extends Identified {

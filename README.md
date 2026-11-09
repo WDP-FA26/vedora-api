@@ -30,7 +30,7 @@ Backend starter cho Vedora, sử dụng NestJS, Mongoose (MongoDB, tự host b�
 │   │   ├── interactions/      # Bình luận, like và báo cáo
 │   │   ├── admin/             # Duyệt bài và xử lý báo cáo
 │   │   └── search/            # Tìm kiếm và feed "dành cho bạn" trên Qdrant
-│   ├── media/                 # Upload video, webhook, phụ đề Whisper, dọn dẹp định kỳ
+│   ├── media/                 # Upload video, webhook, phụ đề (ElevenLabs Scribe), dọn dẹp định kỳ
 │   ├── recipes/ meal-plan/    # Danh mục công thức, thực đơn và đi chợ
 │   ├── knowledge/ nutrition-chat/
 │   ├── payments/ notifications/ verification/
@@ -208,11 +208,14 @@ trong API:
 
 1. Tải file gốc về thư mục tạm, ffmpeg (`ffmpeg-static`, hoặc `FFMPEG_PATH`) tách âm
    thanh và tìm đoạn im lặng (`silencedetect`, dưới -35 dB, dài từ 0,6 giây).
-2. Cắt bỏ im lặng, chỉ gửi phần có tiếng (mono 16 kHz MP3) cho Whisper
-   (`TRANSCRIPTION_MODEL`, mặc định `openai/whisper-large-v3` qua OpenRouter
-   `/audio/transcriptions`). Video im lặng hoàn toàn không gọi Whisper và nhận
-   `NO_SPEECH`, nên Whisper không "bịa" câu cho đoạn im lặng.
-3. Mốc thời gian của Whisper được ánh xạ ngược về video gốc, nên phụ đề vẫn khớp hình.
+2. Cắt bỏ im lặng, chỉ gửi phần có tiếng (mono 16 kHz MP3) cho model ghi lời
+   (`TRANSCRIPTION_MODEL`, mặc định `elevenlabs/scribe-v2` qua OpenRouter
+   `/audio/transcriptions`, lấy mốc thời gian theo từng từ). Video im lặng hoàn
+   toàn không gọi model và nhận `NO_SPEECH`, nên model không "bịa" câu cho đoạn im lặng.
+3. Mốc thời gian được ánh xạ ngược về video gốc, nên phụ đề vẫn khớp hình.
+4. Ngay khi có transcript, kiểm duyệt đọc nó cùng khung hình trước khi bài được
+   xuất bản (xem `docs/docs-for-FE/content-moderation.md`). Tắt `CAPTIONS_ENABLED`
+   cũng tắt bước chấm transcript.
 4. `OPENROUTER_MODEL` dịch từng dòng: tiếng Việt sang tiếng Anh, ngôn ngữ khác sang tiếng
    Việt. Dịch lỗi thì vẫn giữ phụ đề gốc.
 5. Mỗi ngôn ngữ là một file WebVTT trên Cloudinary (`<folder>/captions/<mediaId>/<lang>.vtt`),
@@ -368,7 +371,7 @@ npm run seed        # seed tài khoản admin + danh mục khởi đầu
 npm run seed:prod   # chạy seed từ dist (container)
 ```
 
-Test dùng Vitest + `@nestjs/testing` theo [hướng dẫn của NestJS](https://docs.nestjs.com/fundamentals/testing). Unit test (`src/**/*.spec.ts`) và DB test (`test/**/*.db-spec.ts`) dựng module với `MongoModule.forTest(...)`, trỏ vào một database tạm riêng cho từng file (`test/mongo-test-db.ts`), rồi xoá database đó sau khi chạy. E2E (`test/**/*.e2e-spec.ts`) chạy cả `AppModule` qua HTTP với `configureApp` giống production trên database tạm.
+Test dùng Vitest + `@nestjs/testing` theo [hướng dẫn của NestJS](https://docs.nestjs.com/fundamentals/testing). Unit test (`test/unit/**/*.spec.ts`) và DB test (`test/db/**/*.db-spec.ts`) dựng module với `MongoModule.forTest(...)`, trỏ vào một database tạm riêng cho từng file (`test/support/mongo-test-db.ts`), rồi xoá database đó sau khi chạy. E2E (`test/e2e/**/*.e2e-spec.ts`) chạy cả `AppModule` qua HTTP với `configureApp` giống production trên database tạm.
 
 Khi sửa schema, sửa class trong `src/mongo/schemas/`: Mongoose tạo collection và index còn thiếu khi API khởi động (`autoIndex`) và trong test qua `prepareTestDatabase`. MongoDB không có migration, nên không có lịch sử thay đổi để review: kiểm tra kỹ thay đổi schema (đặc biệt index unique và partial filter) trước khi merge.
 
@@ -535,8 +538,8 @@ Cấu hình được kiểm tra khi API khởi động: thiếu biến bắt bu�
 | `CLOUDINARY_API_SECRET` | Khi upload video | — | API secret; cũng dùng để kiểm chữ ký webhook |
 | `CLOUDINARY_FOLDER` | Không | `vedora` | Thư mục gốc của video và phụ đề |
 | `CLOUDINARY_WEBHOOKS_ENABLED` | Production | `false` | `true` khi Console đã trỏ webhook Upload/Eager về API; `false` thì tự hỏi Admin API khi đọc |
-| `CAPTIONS_ENABLED` | Không | `true` | Ghi lời (Whisper) và dịch phụ đề cho video đã đăng |
-| `TRANSCRIPTION_MODEL` | Không | `openai/whisper-large-v3` | Model ghi lời trên OpenRouter |
+| `CAPTIONS_ENABLED` | Không | `true` | Ghi lời và dịch phụ đề cho video; transcript được kiểm duyệt trước khi đăng |
+| `TRANSCRIPTION_MODEL` | Không | `elevenlabs/scribe-v2` | Model ghi lời trên OpenRouter |
 | `FFMPEG_PATH` | Không | ffmpeg của `ffmpeg-static` | ffmpeg dùng để tách âm thanh; image Docker dùng `/usr/bin/ffmpeg` |
 | `FRONTEND_URL` | Không | `http://localhost:3000` | Origin của frontend |
 | `MAX_VIDEO_DURATION_SEC` | Không | `180` | Video dài hơn bị đánh dấu `FAILED` và xoá khỏi Cloudinary |

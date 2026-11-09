@@ -65,8 +65,8 @@ migration hoặc dependency mới. Swagger `/docs` mô tả token trong LoginDto
 ```powershell
 npm run build
 npm run lint
-npm run test:e2e -- test/login-turnstile.e2e-spec.ts
-npm test -- src/nutrition-chat/guest/turnstile.service.spec.ts
+npm run test:e2e -- test/e2e/login-turnstile.e2e-spec.ts
+npm test -- test/unit/nutrition-chat/guest/turnstile.service.spec.ts
 ```
 
 Test bao phủ missing/empty/oversized/invalid tokens, không xử lý mật khẩu khi

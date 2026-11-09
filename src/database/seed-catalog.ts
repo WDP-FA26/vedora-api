@@ -10,12 +10,6 @@ import type {
 } from '../mongo/models.js';
 import type { MongoService } from '../mongo/mongo.service.js';
 
-// The starter catalog: plant-based Vietnamese ingredients, groups,
-// incompatibility rules and recipes from `seed-data/recipes.json`.
-// It runs on every production start, so it only adds what is missing: rows
-// are matched by name or title, and nothing an admin edited is overwritten
-// or deleted. An existing recipe only gains a photo when it has none.
-
 const sideSchema = z.object({
   kind: z.enum(['INGREDIENT', 'GROUP']),
   name: z.string(),
@@ -65,7 +59,6 @@ const seedDataSchema = z.object({
 type Side = z.infer<typeof sideSchema>;
 export type SeedData = z.infer<typeof seedDataSchema>;
 
-/** Read from the working directory: the production image ships `seed-data/` beside `dist/`. */
 export function loadCatalog(): SeedData {
   const raw: unknown = JSON.parse(
     readFileSync(join(process.cwd(), 'seed-data', 'recipes.json'), 'utf8'),

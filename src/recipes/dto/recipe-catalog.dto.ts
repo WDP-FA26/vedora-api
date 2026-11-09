@@ -73,7 +73,6 @@ export class CatalogRecipeDetailDto extends RecipeDetailDto {
   totalMinutes!: number | null;
 }
 
-/** Prep + cook minutes; null when both are unknown. */
 export function totalMinutes(recipe: {
   prepMinutes: number | null;
   cookMinutes: number | null;

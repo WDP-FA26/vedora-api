@@ -18,12 +18,9 @@ import {
   FollowSuggestionListDto,
 } from './dto/follow-suggestion.dto.js';
 
-/** Newest followings of a user, and newest followings of each of those. */
 const FAN_OUT = 200;
 const KEPT_PER_USER = 30;
-/** Users rebuilt per round of queries. */
 const BATCH_SIZE = 200;
-/** A follow-back outranks any realistic mutual count. */
 const FOLLOWS_YOU_SCORE = 1000;
 const ACTIVE_WINDOW_MS = 30 * 24 * 60 * 60 * 1000;
 const ACTIVE_POOL_SIZE = 50;
@@ -36,10 +33,6 @@ interface SuggestionRow {
   followsYou: boolean;
 }
 
-/**
- * "Who to follow": friends-of-friends and follow-backs, rebuilt hourly into
- * `follow_suggestions`, with recently active authors filling the gaps.
- */
 @Injectable()
 export class FollowSuggestionsService {
   private readonly logger = new Logger(FollowSuggestionsService.name);
@@ -61,8 +54,6 @@ export class FollowSuggestionsService {
       await this.dismissals.find({ userId }).select('candidateId').exec()
     ).map((row) => row.candidateId);
 
-    // At most KEPT_PER_USER rows. MongoDB has no relation filters, so the
-    // candidates' state is checked here.
     const suggestions = await this.suggestions
       .find({ userId, candidateId: { $nin: dismissed } })
       .sort({ score: -1, candidateId: 1 })
@@ -108,12 +99,10 @@ export class FollowSuggestionsService {
     return { items };
   }
 
-  /** Remembers the choice so the person never comes back as a suggestion. */
   async dismiss(userId: string, candidateId: string): Promise<void> {
     try {
       await this.dismissals.create({ userId, candidateId });
     } catch (error) {
-      // Dismissed already.
       if (!isUniqueViolation(error)) throw error;
     }
     await this.suggestions.deleteOne({ userId, candidateId });
@@ -149,11 +138,7 @@ export class FollowSuggestionsService {
     this.logger.log(`Rebuilt follow suggestions for ${users} users`);
   }
 
-  /** Replaces the stored suggestions of `userIds` in one transaction. */
   async rebuild(userIds: string[]): Promise<void> {
-    // Per user: people followed by the people they follow (capped fan-out),
-    // plus their own followers. Excludes themselves, anyone they already
-    // follow, dismissed people and unverified accounts.
     const rows = await this.suggestionRows(userIds);
 
     await this.mongo.withTransaction(async (session) => {
@@ -161,7 +146,6 @@ export class FollowSuggestionsService {
         { userId: { $in: userIds } },
         { session },
       );
-      // insertMany rejects an empty list.
       if (rows.length === 0) return;
       await this.suggestions.insertMany(
         rows.map((row) => ({
@@ -178,9 +162,7 @@ export class FollowSuggestionsService {
     });
   }
 
-  /** Ranked candidates for each of `userIds`, best first, `KEPT_PER_USER` each. */
   private async suggestionRows(userIds: string[]): Promise<SuggestionRow[]> {
-    // The newest FAN_OUT followings of each user, and who follows them back.
     const [followings, followers] = await Promise.all([
       this.follows
         .find({ followerId: { $in: userIds } })
@@ -199,7 +181,6 @@ export class FollowSuggestionsService {
       via.set(followerId, list);
     }
 
-    // The newest FAN_OUT followings of each person they follow.
     const viaIdSet = new Set<string>();
     for (const ids of via.values()) {
       for (const id of ids) viaIdSet.add(id);
@@ -249,8 +230,6 @@ export class FollowSuggestionsService {
       signal(followingId, followerId).followsYou = true;
     }
 
-    // Drop themselves, unverified accounts, people they already follow and
-    // dismissed people.
     const candidateIds = [
       ...new Set([...signals.values()].flatMap((map) => [...map.keys()])),
     ];
@@ -302,7 +281,6 @@ export class FollowSuggestionsService {
     return rows;
   }
 
-  /** Authors with the most recent published posts, shared by every user. */
   private async activePool(): Promise<string[]> {
     if (this.activeAuthors && this.activeAuthors.expiresAt > Date.now()) {
       return this.activeAuthors.ids;
@@ -319,7 +297,6 @@ export class FollowSuggestionsService {
         { $sort: { posts: -1, _id: 1 } },
       ])
       .exec();
-    // MongoDB has no relation filters: unverified authors drop out here.
     const verified = await this.users
       .find({
         _id: { $in: groups.map((group) => group._id) },
@@ -346,11 +323,9 @@ export class FollowSuggestionsService {
     const followed = await this.followedAmong(userId, pool);
     const ids = pool.filter((id) => !followed.has(id)).slice(0, count);
     const users = await this.users.find({ _id: { $in: ids } }).exec();
-    // A filter by ids ignores their order.
     return ids.flatMap((id) => users.find((user) => user.id === id) ?? []);
   }
 
-  /** Which of `ids` the user follows. */
   private async followedAmong(
     userId: string,
     ids: string[],

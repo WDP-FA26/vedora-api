@@ -16,26 +16,13 @@ import {
 } from './post-search-collection.js';
 
 const BATCH_SIZE = 64;
-/**
- * Characters per embedded chunk, well inside the embedding model's input
- * limit. Every chunk of a post is embedded, so none of its text is dropped.
- */
 const CHUNK_LENGTH = 1500;
 
-/**
- * The posts search covers: published short posts. One with neither text nor
- * speech is marked indexed without a point; captioning marks it again.
- */
 export const SEARCHABLE_POST = {
   type: PostType.POST,
   status: PostStatus.PUBLISHED,
 } as const;
 
-/**
- * Keeps the Qdrant post collection in step with MongoDB. A post is indexed
- * once it is published; `searchIndexedAt` records that, so posts published
- * while OpenRouter or Qdrant was down are caught up by the cron.
- */
 @Injectable()
 export class PostSearchIndexService {
   private readonly logger = new Logger(PostSearchIndexService.name);
@@ -54,7 +41,6 @@ export class PostSearchIndexService {
   ) {
     this.collection = configService.get<string>(
       'QDRANT_POSTS_COLLECTION',
-      // v2 adds `publishedAt` to the payload for the feed.
       'vedora_posts_v2',
     );
     this.dimensions = configService.get<number>(
@@ -63,7 +49,6 @@ export class PostSearchIndexService {
     );
   }
 
-  /** Indexes pending posts in the background; never throws. */
   schedule(): void {
     if (this.draining) {
       this.drainAgain = true;
@@ -82,13 +67,11 @@ export class PostSearchIndexService {
       });
   }
 
-  /** Catches up on posts published by Cloudinary notifications or during an outage. */
   @Cron(CronExpression.EVERY_MINUTE)
   catchUp(): void {
     this.schedule();
   }
 
-  /** Indexes every pending post, a batch at a time. */
   async drain(): Promise<void> {
     let indexed: number;
     do {
@@ -96,7 +79,6 @@ export class PostSearchIndexService {
     } while (indexed === BATCH_SIZE);
   }
 
-  /** Removes a deleted post; a leftover point is pruned when search finds it. */
   async remove(postId: string): Promise<void> {
     try {
       await this.qdrant.delete(this.collection, {
@@ -151,7 +133,6 @@ export class PostSearchIndexService {
       })
       .filter(({ chunks }) => chunks.length > 0);
     if (texts.length > 0) {
-      // One request for every chunk of the batch, then one vector per post.
       const { embeddings: chunkVectors } = await this.ai.embedMany({
         model: 'posts',
         label: 'index-posts',
@@ -183,10 +164,7 @@ export class PostSearchIndexService {
         ),
       });
     }
-    // Only posts unchanged since they were read: one whose captioning
-    // finished meanwhile was marked for indexing again, with its transcript.
     const indexedAt = new Date();
-    // A post edited since it was read keeps waiting for the next batch.
     for (const { post } of posts) {
       await this.posts
         .updateOne(
@@ -230,7 +208,6 @@ export class PostSearchIndexService {
       field_schema: { type: 'integer', lookup: false, range: true },
       wait: true,
     });
-    // A new (or recreated) collection is empty: index every post again.
     const { modifiedCount } = await this.posts
       .updateMany(
         { searchIndexedAt: { $ne: null } },
@@ -243,7 +220,6 @@ export class PostSearchIndexService {
   }
 }
 
-/** A post's body, then the transcripts of its videos, in full. */
 function postText(post: {
   body: string | null;
   media: { transcript: string | null }[];
@@ -253,10 +229,6 @@ function postText(post: {
     .join('\n');
 }
 
-/**
- * `text` in pieces of at most `size` characters, cut at the last space or
- * line break before the limit (mid-word only when a piece has none).
- */
 export function chunkText(text: string, size = CHUNK_LENGTH): string[] {
   const chunks: string[] = [];
   let rest = text.trim();
@@ -273,7 +245,6 @@ export function chunkText(text: string, size = CHUNK_LENGTH): string[] {
   return chunks;
 }
 
-/** The normalized mean of `vectors`: one point stands for a post's chunks. */
 export function meanVector(vectors: number[][]): number[] {
   if (vectors.length === 1) return vectors[0];
   const sum = vectors[0].map((_, i) =>

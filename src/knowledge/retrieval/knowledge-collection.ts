@@ -16,9 +16,7 @@ export function bm25(text: string, folded: boolean) {
   };
 }
 
-/** The payload stored with every Qdrant point of the knowledge base. */
 export class KnowledgePointPayload {
-  /** Qdrant treats a payload as an open map. */
   [key: string]: unknown;
 
   @IsString()

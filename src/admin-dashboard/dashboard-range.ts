@@ -50,8 +50,6 @@ export function resolveDashboardRange(
   const first = dayEpoch(from);
   const dayCount = (last - first) / DAY_MS + 1;
   if (dayCount < 1 || dayCount > MAX_DASHBOARD_DAYS) invalidRange();
-  // Bangkok is UTC+07:00 with no DST. Boundaries are explicit, independent
-  // of the Node process or database connection's local timezone.
   return {
     from,
     to,

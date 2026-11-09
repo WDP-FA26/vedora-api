@@ -11,7 +11,6 @@ import {
 import { collectionSchema } from './common.js';
 import { Identified } from './user.schema.js';
 
-/** One WebVTT track of a video, embedded in the asset. */
 @Schema({ _id: false })
 export class MediaCaption {
   @Prop({ type: String, required: true })

@@ -14,7 +14,6 @@ import { MailService } from './mail.service.js';
       inject: [ConfigService],
       useFactory: (config: ConfigService) => {
         const apiKey = config.get<string>('RESEND_API_KEY', '');
-        // Without a key (allowed only outside production) codes go to the log.
         return {
           transport: apiKey
             ? new ResendTransport({ apiKey })

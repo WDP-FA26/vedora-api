@@ -3,7 +3,6 @@ import { ConfigService } from '@nestjs/config';
 import { QdrantClient } from '@qdrant/js-client-rest';
 import { ExternalServiceException } from '../common/exceptions/external-service.exception.js';
 
-/** How long startup waits for Qdrant before refusing to start. */
 const STARTUP_TIMEOUT_MS = 5_000;
 
 @Injectable()
@@ -20,11 +19,6 @@ export class QdrantService extends QdrantClient implements OnModuleInit {
     this.url = url;
   }
 
-  /**
-   * The API cannot answer search or assistant requests without Qdrant, so a
-   * bad URL, key or an unreachable server stops startup instead of surfacing
-   * on the first request.
-   */
   async onModuleInit(): Promise<void> {
     let timer: NodeJS.Timeout | undefined;
     const timeout = new Promise<never>((_, reject) => {
@@ -37,8 +31,6 @@ export class QdrantService extends QdrantClient implements OnModuleInit {
 
     try {
       const probe = this.getCollections();
-      // When the timeout wins, the request may still settle later; don't let
-      // its rejection crash the process.
       probe.catch(() => undefined);
       await Promise.race([probe, timeout]);
     } catch (error) {
@@ -53,7 +45,6 @@ export class QdrantService extends QdrantClient implements OnModuleInit {
   }
 }
 
-/** Node's fetch reports a refused connection only in `cause`. */
 function describeError(error: unknown): string {
   if (!(error instanceof Error)) return String(error);
   if (error.cause instanceof Error)

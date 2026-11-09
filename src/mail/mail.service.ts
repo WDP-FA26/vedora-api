@@ -1,11 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { Mailer } from '@nestjs/mail';
 
-/**
- * Transactional email through `@nestjs/mail`. The transport is chosen in
- * `MailModule`: Resend, or the log when `RESEND_API_KEY` is empty (allowed only
- * outside production), so local sign-up works without an email account.
- */
 @Injectable()
 export class MailService {
   constructor(private readonly mailer: Mailer) {}

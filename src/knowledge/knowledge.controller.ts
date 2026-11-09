@@ -29,7 +29,6 @@ import {
 import { KnowledgeService } from './knowledge.service.js';
 import { ErrorBodyDto } from '../common/exceptions/error-body.dto.js';
 
-// TODO: restrict to admins once users have roles; any signed-in user for now.
 @ApiTags('knowledge')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard)
