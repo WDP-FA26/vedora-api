@@ -10,6 +10,7 @@ import {
 } from 'ai/test';
 import { type DeepMockProxy, mockDeep } from 'vitest-mock-extended';
 import { AiModule } from '../../../src/ai/ai.module.js';
+import { AiCostTransportService } from '../../../src/ai/telemetry/ai-cost-transport.service.js';
 import { ModerationSettingsService } from '../../../src/moderation/moderation-settings.service.js';
 import { NUTRITION_POLICY } from '../../../src/ai/guardrails/policies/nutrition.js';
 import { KnowledgeSearchService } from '../../../src/knowledge/retrieval/knowledge-search.service.js';
@@ -129,6 +130,8 @@ async function createService() {
       { provide: KnowledgeSearchService, useValue: knowledge },
     ],
   })
+    .overrideProvider(AiCostTransportService)
+    .useValue({ forModel: () => fetch })
     .overrideProvider(ModerationSettingsService)
     .useValue({})
     .compile();
@@ -168,7 +171,10 @@ describe('NutritionChatService', () => {
       'Còn gì nữa?',
     );
 
-    expect(createOpenRouter).toHaveBeenCalledWith({ apiKey: 'key' });
+    expect(createOpenRouter).toHaveBeenCalledWith({
+      apiKey: 'key',
+      fetch,
+    });
     expect(languageModel).toHaveBeenCalledWith('test/model', {
       reasoning: { effort: 'low', exclude: true },
     });
