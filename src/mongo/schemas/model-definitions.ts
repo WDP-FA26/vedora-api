@@ -1,7 +1,8 @@
 import type { Connection, Schema } from 'mongoose';
 import { DocumentLockSchema } from '../document-lock.js';
+import type { MongoModelName } from './model-names.js';
+import { AiUsageSchema } from './ai-usage.schema.js';
 import {
-  AiUsageSchema,
   PaymentIntentSchema,
   PaymentRequestSchema,
   PaymentWebhookReceiptSchema,
@@ -14,18 +15,19 @@ import {
   PostRepostSchema,
   PostSchema,
 } from './post.schema.js';
+import { UserAccountAuditSchema, UserSchema } from './user.schema.js';
 import {
-  EmailVerificationGuessesSchema,
   FollowSchema,
   FollowSuggestionSchema,
-  NotificationSchema,
-  OneTimeCodeSchema,
-  ProfileImageUploadSchema,
-  RefreshTokenSchema,
   SuggestionDismissalSchema,
-  UserAccountAuditSchema,
-  UserSchema,
-} from './user.schema.js';
+} from './follow.schema.js';
+import { NotificationSchema } from './notification.schema.js';
+import { ProfileImageUploadSchema } from './profile-image.schema.js';
+import {
+  EmailVerificationGuessesSchema,
+  OneTimeCodeSchema,
+  RefreshTokenSchema,
+} from './credential.schema.js';
 import {
   IngredientGroupSchema,
   IngredientSchema,
@@ -35,7 +37,8 @@ import {
   RecipeRatingSchema,
   RecipeSchema,
 } from './recipe.schema.js';
-import { KnowledgeDocumentSchema, MediaAssetSchema } from './media.schema.js';
+import { KnowledgeDocumentSchema } from './knowledge.schema.js';
+import { MediaAssetSchema } from './media.schema.js';
 import { ModerationSettingsSchema } from './moderation.schema.js';
 import {
   VerificationProofSchema,
@@ -84,9 +87,15 @@ export const MODEL_DEFINITIONS = [
   { name: 'PaymentRequest', schema: PaymentRequestSchema },
   { name: 'PaymentWebhookReceipt', schema: PaymentWebhookReceiptSchema },
   { name: 'AiUsage', schema: AiUsageSchema },
-] as const satisfies readonly { name: string; schema: Schema }[];
+] as const satisfies readonly { name: MongoModelName; schema: Schema }[];
 
-export type MongoModelName = (typeof MODEL_DEFINITIONS)[number]['name'];
+// Fails to compile when a name in MODEL_NAMES has no definition above.
+type RegisteredModelName = (typeof MODEL_DEFINITIONS)[number]['name'];
+export const _everyModelNameIsRegistered: [MongoModelName] extends [
+  RegisteredModelName,
+]
+  ? true
+  : never = true;
 
 export function registerModels(connection: Connection): void {
   for (const { name, schema } of MODEL_DEFINITIONS) {

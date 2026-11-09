@@ -1,7 +1,7 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import type { ClientSession, Connection, Model } from 'mongoose';
 import { collectionSchema } from './schemas/common.js';
-import { Identified } from './schemas/user.schema.js';
+import { Identified } from './schemas/identified.js';
 
 export type LockKind =
   'user' | 'recipe' | 'post' | 'account-gate' | 'payer' | 'transaction';

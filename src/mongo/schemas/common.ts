@@ -1,6 +1,6 @@
 import type { SchemaOptions } from '@nestjs/mongoose';
 import type { ClientSession, Connection, Schema } from 'mongoose';
-import type { MongoModelName } from './model-definitions.js';
+import type { MongoModelName } from './model-names.js';
 
 type Timestamps = 'both' | 'created' | 'updated' | 'none';
 

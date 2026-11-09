@@ -37,6 +37,7 @@ const featureGroups = [
   '**/admin-dashboard/**',
   '**/knowledge/**',
   '**/webhooks/**',
+  '**/moderation/**',
 ];
 
 export default tseslint.config(
@@ -174,6 +175,8 @@ export default tseslint.config(
       'src/auth-core/**/*.ts',
       'src/captcha/**/*.ts',
       'src/storage/**/*.ts',
+      'src/mongo/**/*.ts',
+      'src/common/**/*.ts',
     ],
     rules: {
       'no-restricted-imports': [
@@ -184,7 +187,7 @@ export default tseslint.config(
             {
               group: featureGroups,
               message:
-                'auth-core, captcha and storage are shared layers; features depend on them, not the other way round.',
+                'auth-core, captcha, storage, mongo and common are shared layers; features depend on them, not the other way round.',
             },
           ],
         },

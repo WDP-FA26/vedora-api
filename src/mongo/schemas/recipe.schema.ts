@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { MealSection, Weekday } from '../enums.js';
 import { cascadeOnDelete, collectionSchema } from './common.js';
-import { Identified } from './user.schema.js';
+import { Identified } from './identified.js';
 
 @Schema(collectionSchema('ingredients'))
 export class Ingredient extends Identified {

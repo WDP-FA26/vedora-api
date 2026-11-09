@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { VerificationStatus } from '../enums.js';
 import { cascadeOnDelete, collectionSchema } from './common.js';
-import { Identified } from './user.schema.js';
+import { Identified } from './identified.js';
 
 @Schema(collectionSchema('verification_requests'))
 export class VerificationRequest extends Identified {

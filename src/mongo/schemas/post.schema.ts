@@ -7,7 +7,7 @@ import {
   PostType,
 } from '../enums.js';
 import { cascadeOnDelete, collectionSchema } from './common.js';
-import { Identified } from './user.schema.js';
+import { Identified } from './identified.js';
 
 @Schema({ _id: false })
 export class Blog {
