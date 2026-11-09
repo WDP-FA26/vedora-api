@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { AiService } from '@nestjs/ai';
+import { AiCostTransportService } from '../../ai/telemetry/ai-cost-transport.service.js';
 import { z } from 'zod';
 import { parsePayload, validatePayload } from '../../common/validation.js';
 import { ExternalServiceException } from '../../common/exceptions/external-service.exception.js';
@@ -75,6 +76,7 @@ export class TranscriptionService {
   constructor(
     configService: ConfigService,
     private readonly ai: AiService,
+    private readonly costs: AiCostTransportService,
   ) {
     this.apiKey = configService.getOrThrow<string>('OPENROUTER_API_KEY');
     this.transcriptionModel = configService.get<string>(
@@ -84,22 +86,25 @@ export class TranscriptionService {
   }
 
   async transcribe({ audio, speech }: SpeechAudio): Promise<Transcript> {
-    const response = await fetch(`${OPENROUTER_API}/audio/transcriptions`, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${this.apiKey}`,
-        'Content-Type': 'application/json',
+    const response = await this.costs.fetch(
+      `${OPENROUTER_API}/audio/transcriptions`,
+      {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${this.apiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: this.transcriptionModel,
+          input_audio: { data: audio.toString('base64'), format: 'mp3' },
+          response_format: 'verbose_json',
+          timestamp_granularities: ['word'],
+          prompt: CAPTION_PROMPT,
+          temperature: 0,
+        }),
+        signal: AbortSignal.timeout(TRANSCRIBE_TIMEOUT_MS),
       },
-      body: JSON.stringify({
-        model: this.transcriptionModel,
-        input_audio: { data: audio.toString('base64'), format: 'mp3' },
-        response_format: 'verbose_json',
-        timestamp_granularities: ['word'],
-        prompt: CAPTION_PROMPT,
-        temperature: 0,
-      }),
-      signal: AbortSignal.timeout(TRANSCRIBE_TIMEOUT_MS),
-    });
+    );
     const body: unknown = await response.json().catch(() => null);
     if (!response.ok) {
       const message = validatePayload(OpenRouterErrorBody, body).value?.error
