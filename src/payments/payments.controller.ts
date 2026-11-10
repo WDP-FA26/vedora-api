@@ -56,8 +56,7 @@ export class PaymentsController {
   @Header('Cache-Control', 'private, no-store')
   @Header('Vary', 'Authorization')
   @ApiOperation({
-    summary:
-      'Server-owned Pro/Premium prices; neither plan grants privileges yet',
+    summary: 'Server-owned Plus/Pro prices and shared AI allowances',
   })
   @ApiOkResponse({ type: BillingCatalogDto })
   plans(): BillingCatalogDto {

@@ -6,9 +6,10 @@ import { MealPlanService } from './meal-plan.service.js';
 import { MealPlannerChatService } from './meal-planner-chat.service.js';
 import { ShoppingListController } from './shopping-list.controller.js';
 import { ShoppingListService } from './shopping-list.service.js';
+import { SubscriptionsModule } from '../subscriptions/subscriptions.module.js';
 
 @Module({
-  imports: [RecipesModule, KnowledgeModule],
+  imports: [RecipesModule, KnowledgeModule, SubscriptionsModule],
   controllers: [MealPlanController, ShoppingListController],
   providers: [MealPlanService, MealPlannerChatService, ShoppingListService],
 })

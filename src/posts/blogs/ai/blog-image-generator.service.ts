@@ -10,7 +10,7 @@ import { randomUUID } from 'node:crypto';
 import { MODERATION_MODEL } from '../../../ai/guardrails/guardrail.js';
 import { decide } from '../../../common/decision/decision.js';
 import { DEFAULT_IMAGE_MODEL, imageModel } from '../../../ai/openrouter.js';
-import { AiUsageService } from '../../../ai/usage/ai-usage.service.js';
+import { AiUsageService } from '../../../subscriptions/ai-usage.service.js';
 import {
   StorageService,
   StorageTarget,
@@ -101,8 +101,11 @@ export class BlogImageGeneratorService {
     abortSignal: AbortSignal | undefined,
     produce: () => ReturnType<typeof generateImage>,
   ): Promise<ImageResult> {
-    if (!(await this.usage.consume(userId, AiFeature.BLOG_IMAGE)))
-      return { error: 'IMAGE_QUOTA_EXCEEDED' };
+    const ticket = await this.usage.consume(userId, AiFeature.BLOG_IMAGE, {
+      input: { prompt },
+      prompt,
+    });
+    if (!ticket) return { error: 'IMAGE_QUOTA_EXCEEDED' };
     try {
       const { choice: verdict } = await decide(
         this.moderator,
@@ -112,7 +115,7 @@ export class BlogImageGeneratorService {
       );
       if (blogRefusal(verdict)) {
         this.logger.warn(`Image prompt moderation answered ${verdict}`);
-        await this.usage.refund(userId, AiFeature.BLOG_IMAGE);
+        await this.usage.refund(ticket);
         return { error: 'IMAGE_PROMPT_REFUSED' };
       }
       const { image } = await produce();
@@ -124,12 +127,11 @@ export class BlogImageGeneratorService {
         image.uint8Array,
         EXTENSIONS[image.mediaType] ? image.mediaType : 'image/png',
       );
+      await this.usage.complete(ticket);
       return { url: this.storage.publicObjectUrl(StorageTarget.Blogs, key) };
     } catch (error) {
       this.logger.error(`Image generation failed: ${String(error)}`);
-      await this.usage
-        .refund(userId, AiFeature.BLOG_IMAGE)
-        .catch(() => undefined);
+      await this.usage.refund(ticket).catch(() => undefined);
       return { error: 'IMAGE_FAILED' };
     }
   }

@@ -1,3 +1,5 @@
+import { APP_FILTER } from '@nestjs/core';
+import { AppExceptionFilter } from '../../src/common/exceptions/app-exception.filter.js';
 import { randomUUID } from 'node:crypto';
 import { INestApplication } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
@@ -22,6 +24,9 @@ import {
   PaymentReconciliationController,
   SePayWebhookController,
 } from '../../src/payments/payments.controller.js';
+import { SubscriptionsModule } from '../../src/subscriptions/subscriptions.module.js';
+import { AiUsageService } from '../../src/subscriptions/ai-usage.service.js';
+import { AiFeature } from '../../src/mongo/models.js';
 import { PaymentsService } from '../../src/payments/payments.service.js';
 import { SePayProvider } from '../../src/payments/sepay.provider.js';
 import { SePayWebhookGuard } from '../../src/payments/sepay-webhook.guard.js';
@@ -48,8 +53,8 @@ describe('SePay payments with MongoDB and HTTP', () => {
     SEPAY_BANK_GATEWAY: 'Vietcombank',
     SEPAY_QR_ACCOUNT_NUMBER: '0012345678',
     SEPAY_QR_ACCOUNT_HOLDER: 'VEDORA TEST',
-    BILLING_PRO_PRICE_VND: 49000,
-    BILLING_PREMIUM_PRICE_VND: 99000,
+    SUBSCRIPTION_PLUS_PRICE_VND: 49000,
+    SUBSCRIPTION_PRO_PRICE_VND: 99000,
     BILLING_DURATION_DAYS: 30,
   };
   let db: MongoService;
@@ -82,7 +87,7 @@ describe('SePay payments with MongoDB and HTTP', () => {
   };
   const create = async (
     user: { id: string },
-    planCode: 'PRO' | 'PREMIUM' = 'PRO',
+    planCode: 'PLUS' | 'PRO' = 'PLUS',
     key = randomUUID(),
   ) => service.create(user.id, planCode as BillingPlan, key);
   const event = (
@@ -122,6 +127,7 @@ describe('SePay payments with MongoDB and HTTP', () => {
       imports: [
         MongoModule.forTest(createTestMongoUrl('payment')),
         JwtModule.register({ secret: 'sepay-db-test-jwt-secret' }),
+        SubscriptionsModule,
       ],
       controllers: [
         PaymentStreamController,
@@ -130,6 +136,7 @@ describe('SePay payments with MongoDB and HTTP', () => {
         PaymentReconciliationController,
       ],
       providers: [
+        { provide: APP_FILTER, useClass: AppExceptionFilter },
         PaymentsService,
         SePayProvider,
         SePayWebhookGuard,
@@ -183,11 +190,11 @@ describe('SePay payments with MongoDB and HTTP', () => {
     const generate = vi.spyOn(paymentCodes, 'generatePaymentCode');
     generate.mockReturnValueOnce(stored.paymentCode);
     const key = randomUUID();
-    const payment = await create(user, 'PRO', key);
+    const payment = await create(user, 'PLUS', key);
     expect(generate).toHaveBeenCalledTimes(2);
     expect(payment.paymentCode).toMatch(/^VED[A-Z0-9]{6}$/);
     expect(payment.paymentCode).not.toBe(stored.paymentCode);
-    expect((await create(user, 'PRO', key)).id).toBe(payment.id);
+    expect((await create(user, 'PLUS', key)).id).toBe(payment.id);
     expect(await intents().countDocuments({ userId: user.id })).toBe(1);
     expect(await requests().countDocuments({ actorId: user.id })).toBe(1);
   });
@@ -199,15 +206,15 @@ describe('SePay payments with MongoDB and HTTP', () => {
     const generate = vi
       .spyOn(paymentCodes, 'generatePaymentCode')
       .mockReturnValue(stored.paymentCode);
-    await expect(create(user, 'PRO', key)).rejects.toMatchObject({
-      status: 503,
-      response: { code: 'PAYMENT_CODE_UNAVAILABLE' },
+    await expect(create(user, 'PLUS', key)).rejects.toMatchObject({
+      statusCode: 503,
+      code: 'PAYMENT_CODE_UNAVAILABLE',
     });
     expect(generate).toHaveBeenCalledTimes(5);
     expect(await intents().countDocuments({ userId: user.id })).toBe(0);
     expect(await requests().countDocuments({ actorId: user.id })).toBe(0);
     generate.mockRestore();
-    expect((await create(user, 'PRO', key)).status).toBe('PENDING');
+    expect((await create(user, 'PLUS', key)).status).toBe('PENDING');
   });
 
   it('resolves a short-code collision between concurrent purchases by different payers', async () => {
@@ -263,6 +270,95 @@ describe('SePay payments with MongoDB and HTTP', () => {
     } finally {
       await intents().collection.dropIndex('reject_test_same_price');
     }
+  });
+
+  it('requires an explicit catalogue version so legacy PRO cannot buy the new Pro accidentally', async () => {
+    const user = await makeUser();
+    for (const body of [
+      { planCode: 'PRO' },
+      { planCode: 'PREMIUM', planVersion: 2 },
+    ]) {
+      await request(app.getHttpServer())
+        .post(`${path}/billing/payment-intents`)
+        .auth(user.token, { type: 'bearer' })
+        .set('Idempotency-Key', randomUUID())
+        .send(body)
+        .expect(400);
+    }
+    expect(await intents().countDocuments({ userId: user.id })).toBe(0);
+  });
+
+  it('keeps legacy financial labels and captures legacy pending Pro as Plus', async () => {
+    const user = await makeUser(),
+      payment = await create(user);
+    await intents().updateOne(
+      { _id: payment.id },
+      {
+        $set: { planCode: BillingPlan.PRO },
+        $unset: { planVersion: 1, textLimit: 1, imageLimit: 1 },
+      },
+    );
+    expect(await service.get(payment.id, user.id)).toMatchObject({
+      planCode: 'PLUS',
+      planVersion: 1,
+      purchasedPlanName: 'Pro (gói cũ)',
+      amount: '49000',
+    });
+    await callback(event(payment)).expect(200);
+    expect((await service.overview(user.id)).membership.planCode).toBe('PLUS');
+    expect((await intents().findById(payment.id).exec())!.planCode).toBe(
+      BillingPlan.PRO,
+    );
+  });
+
+  it('charges full Pro price and starts a fresh 30 days and quota on upgrade and repurchase', async () => {
+    const user = await makeUser(),
+      plus = await create(user),
+      usage = app.get(AiUsageService);
+    await callback(event(plus)).expect(200);
+    await intents().updateOne(
+      { _id: plus.id },
+      { $set: { capturedAt: new Date(Date.now() - 15 * 86400000) } },
+    );
+    const used = await usage.consume(user.id, AiFeature.BLOG_CHAT);
+    await usage.complete(used!);
+    const pro = await create(user, 'PRO');
+    expect(pro).toMatchObject({
+      amount: '99000',
+      planVersion: 2,
+      planCode: 'PRO',
+      textLimit: 900,
+      imageLimit: 40,
+    });
+    await callback(event(pro, { transferAmount: 25000 })).expect(200);
+    expect(await service.overview(user.id)).toMatchObject({
+      membership: { planCode: 'PLUS' },
+      usage: { text: { used: 1 } },
+    });
+    const before = Date.now();
+    await callback(event(pro)).expect(200);
+    const billing = await service.overview(user.id);
+    expect(billing).toMatchObject({
+      membership: { planCode: 'PRO' },
+      usage: { text: { used: 0, remaining: 900 }, images: { remaining: 40 } },
+    });
+    expect(Date.parse(billing.membership.startsAt!)).toBeGreaterThanOrEqual(
+      before,
+    );
+    expect(
+      Date.parse(billing.membership.expiresAt!) -
+        Date.parse(billing.membership.startsAt!),
+    ).toBe(30 * 86400000);
+    const ticket = await usage.consume(user.id, AiFeature.MEAL_PLAN_CHAT);
+    await usage.complete(ticket!);
+    const renewed = await create(user, 'PRO');
+    const body = event(renewed);
+    await callback(body).expect(200);
+    expect((await service.overview(user.id)).usage.text.used).toBe(0);
+    const newUse = await usage.consume(user.id, AiFeature.BLOG_CHAT);
+    await usage.complete(newUse!);
+    await callback(body).expect(200);
+    expect((await service.overview(user.id)).usage.text.used).toBe(1);
   });
 
   it('requires provider code and never infers a payment from transfer content', async () => {
@@ -402,10 +498,24 @@ describe('SePay payments with MongoDB and HTTP', () => {
     }
   });
 
-  it('publishes confirmed server prices and no paid privileges', () => {
+  it('publishes versioned Plus/Pro prices and shared AI entitlements', () => {
     expect(service.catalog().plans).toEqual([
-      { code: 'PRO', name: 'Pro', priceVnd: '49000', durationDays: 30 },
-      { code: 'PREMIUM', name: 'Premium', priceVnd: '99000', durationDays: 30 },
+      {
+        code: 'PLUS',
+        name: 'Plus',
+        priceVnd: '49000',
+        durationDays: 30,
+        textLimit: 300,
+        imageLimit: 10,
+      },
+      {
+        code: 'PRO',
+        name: 'Pro',
+        priceVnd: '99000',
+        durationDays: 30,
+        textLimit: 900,
+        imageLimit: 40,
+      },
     ]);
   });
   it('creates QR from server price and snapshots the contract', async () => {
@@ -414,7 +524,7 @@ describe('SePay payments with MongoDB and HTTP', () => {
       .post(`${path}/billing/payment-intents`)
       .auth(user.token, { type: 'bearer' })
       .set('Idempotency-Key', randomUUID())
-      .send({ planCode: 'PRO' })
+      .send({ planCode: 'PLUS', planVersion: 2 })
       .expect(200);
     const payment = res.body as PaymentDto;
     expect(payment.amount).toBe('49000');
@@ -429,9 +539,9 @@ describe('SePay payments with MongoDB and HTTP', () => {
     const user = await makeUser();
     await request(app.getHttpServer())
       .post(`${path}/billing/payment-intents`)
-      .send({ planCode: 'PRO' })
+      .send({ planCode: 'PLUS', planVersion: 2 })
       .expect(401);
-    for (const body of [{ planCode: 'PRO', amount: '1' }, { planCode: 'VIP' }])
+    for (const body of [{ planCode: 'PLUS', amount: '1' }, { planCode: 'VIP' }])
       await request(app.getHttpServer())
         .post(`${path}/billing/payment-intents`)
         .auth(user.token, { type: 'bearer' })
@@ -441,16 +551,16 @@ describe('SePay payments with MongoDB and HTTP', () => {
     await request(app.getHttpServer())
       .post(`${path}/billing/payment-intents`)
       .auth(user.token, { type: 'bearer' })
-      .send({ planCode: 'PRO' })
+      .send({ planCode: 'PLUS', planVersion: 2 })
       .expect(400);
   });
   it('reuses same key/body and binds the key to its original body', async () => {
     const user = await makeUser(),
       key = randomUUID();
-    const payment = await create(user, 'PRO', key);
-    expect((await create(user, 'PRO', key)).id).toBe(payment.id);
-    await expect(create(user, 'PREMIUM', key)).rejects.toMatchObject({
-      status: 409,
+    const payment = await create(user, 'PLUS', key);
+    expect((await create(user, 'PLUS', key)).id).toBe(payment.id);
+    await expect(create(user, 'PRO', key)).rejects.toMatchObject({
+      statusCode: 409,
     });
     expect(await intents().countDocuments({ userId: user.id })).toBe(1);
   });
@@ -458,7 +568,7 @@ describe('SePay payments with MongoDB and HTTP', () => {
     const user = await makeUser(),
       key = randomUUID();
     const same = await Promise.all(
-      Array.from({ length: 6 }, () => create(user, 'PRO', key)),
+      Array.from({ length: 6 }, () => create(user, 'PLUS', key)),
     );
     const other = await Promise.all(
       Array.from({ length: 4 }, () => create(user)),
@@ -469,8 +579,8 @@ describe('SePay payments with MongoDB and HTTP', () => {
   it('rejects another plan while a payment is pending', async () => {
     const user = await makeUser();
     await create(user);
-    await expect(create(user, 'PREMIUM')).rejects.toMatchObject({
-      status: 409,
+    await expect(create(user, 'PRO')).rejects.toMatchObject({
+      statusCode: 409,
     });
   });
 
@@ -478,21 +588,21 @@ describe('SePay payments with MongoDB and HTTP', () => {
     const user = await makeUser(),
       payment = await create(user);
     const config = app.get(ConfigService);
-    config.set('BILLING_PRO_PRICE_VND', 59000);
+    config.set('SUBSCRIPTION_PLUS_PRICE_VND', 59000);
     config.set('BILLING_DURATION_DAYS', 60);
     config.set('SEPAY_QR_ACCOUNT_NUMBER', 'NEWACCOUNT');
     try {
       const stored = await service.get(payment.id, user.id);
       expect(stored.amount).toBe('49000');
       expect(stored.qr?.accountNumber).toBe('0012345678');
-      await expect(create(user)).rejects.toMatchObject({ status: 409 });
+      await expect(create(user)).rejects.toMatchObject({ statusCode: 409 });
       await callback(event(payment)).expect(200);
       const membership = await membershipOf(user.id);
       expect(
         membership.expiresAt.getTime() - membership.startsAt.getTime(),
       ).toBe(30 * 86_400_000);
     } finally {
-      config.set('BILLING_PRO_PRICE_VND', 49000);
+      config.set('SUBSCRIPTION_PLUS_PRICE_VND', 49000);
       config.set('BILLING_DURATION_DAYS', 30);
       config.set('SEPAY_QR_ACCOUNT_NUMBER', '0012345678');
     }
@@ -574,7 +684,7 @@ describe('SePay payments with MongoDB and HTTP', () => {
     const membership = await membershipOf(user.id);
     expect(stored.status).toBe('SUCCEEDED');
     expect(stored.activeIntentKey).toBeNull();
-    expect(membership.planCode).toBe('PRO');
+    expect(membership.planCode).toBe('PLUS');
     expect(membership.startsAt.getTime()).toBeGreaterThanOrEqual(before);
     expect(membership.expiresAt.getTime() - membership.startsAt.getTime()).toBe(
       30 * 86_400_000,
@@ -643,12 +753,12 @@ describe('SePay payments with MongoDB and HTTP', () => {
   it('cancels idempotently, preserves old keys, and refuses late payment resurrection', async () => {
     const user = await makeUser(),
       key = randomUUID(),
-      payment = await create(user, 'PRO', key);
+      payment = await create(user, 'PLUS', key);
     await service.cancel(payment.id, user.id);
     await service.cancel(payment.id, user.id);
     await callback(event(payment)).expect(200);
     expect((await service.get(payment.id, user.id)).status).toBe('CANCELLED');
-    expect((await create(user, 'PRO', key)).id).toBe(payment.id);
+    expect((await create(user, 'PLUS', key)).id).toBe(payment.id);
     expect((await create(user)).id).not.toBe(payment.id);
     expect(await captures({ _id: payment.id })).toBe(0);
   });
@@ -670,11 +780,11 @@ describe('SePay payments with MongoDB and HTTP', () => {
     const user = await makeUser(),
       first = await create(user);
     await callback(event(first)).expect(200);
-    const second = await create(user, 'PREMIUM');
+    const second = await create(user, 'PRO');
     await callback(event(second)).expect(200);
     const membership = await membershipOf(user.id);
     const { capturedAt } = (await intents().findOne({ _id: second.id }))!;
-    expect(membership.planCode).toBe('PREMIUM');
+    expect(membership.planCode).toBe('PRO');
     expect(membership.startsAt).toEqual(capturedAt);
     expect(membership.expiresAt.getTime() - membership.startsAt.getTime()).toBe(
       30 * 86_400_000,
@@ -709,7 +819,7 @@ describe('SePay payments with MongoDB and HTTP', () => {
       .spyOn(app.get(PaymentEventsService), 'publish')
       .mockResolvedValue();
     const user = await makeUser(),
-      payment = await create(user, 'PREMIUM'),
+      payment = await create(user, 'PRO'),
       body = event(payment);
     const [info] = await db.connection
       .db!.listCollections({ name: 'payment_webhook_receipts' })

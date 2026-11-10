@@ -1,5 +1,5 @@
 import { Module } from '@nestjs/common';
-import { AiUsageModule } from '../../ai/usage/ai-usage.module.js';
+import { SubscriptionsModule } from '../../subscriptions/subscriptions.module.js';
 import { KnowledgeModule } from '../../knowledge/knowledge.module.js';
 import { MediaModule } from '../../media/media.module.js';
 import { PostsModule } from '../posts.module.js';
@@ -11,7 +11,7 @@ import { BlogsController } from './blogs.controller.js';
 import { BlogsService } from './blogs.service.js';
 
 @Module({
-  imports: [PostsModule, MediaModule, KnowledgeModule, AiUsageModule],
+  imports: [PostsModule, MediaModule, KnowledgeModule, SubscriptionsModule],
   controllers: [BlogAiController, BlogsController],
   providers: [
     BlogsService,

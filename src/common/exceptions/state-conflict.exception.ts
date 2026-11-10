@@ -1,6 +1,9 @@
 import { AppException } from './app-exception.js';
 
 export const STATE_CONFLICT_CODES = [
+  'AI_REQUEST_IN_PROGRESS',
+  'AI_REQUEST_ALREADY_PROCESSED',
+  'AI_REQUEST_EXPIRED',
   'CONFLICT',
   'ALREADY_VERIFIED',
   'PROOF_NOT_UPLOADED',

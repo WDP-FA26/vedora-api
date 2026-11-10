@@ -1,4 +1,4 @@
-# SePay: gói Pro/Premium và thanh toán QR
+# SePay: gói Plus/Pro và thanh toán QR
 
 Phạm vi triển khai từ `PAYMENT_FLOW_BLUEPRINT.md`: Banking QR + webhook,
 payment intent, idempotency và membership. Không port domain
@@ -6,14 +6,13 @@ marketplace, báo giá, credit hoặc ví nhà bán của dự án nguồn.
 
 ## Quy tắc được duyệt
 
-- Pro: **49.000 VND / 30 ngày**. Premium: **99.000 VND / 30 ngày**.
+- Plus: **49.000 VND / 30 ngày**. Pro: **99.000 VND / 30 ngày**.
 - Mỗi ngày = 24 giờ. Gói bắt đầu tại `capturedAt` (thời điểm BE commit capture),
   không bắt đầu khi tạo QR hoặc dựa trên thời gian mở trình duyệt.
 - Mua mới, kể cả mua lại cùng gói, thay thế thời hạn cũ ngay. Không cộng dồn,
   không prorate, không quy đổi thời gian còn lại. FE thông báo trước khi mua.
-- Gói chỉ ghi nhận trạng thái: chưa cấp bất kỳ đặc quyền, role, credit hoặc
-  giới hạn sử dụng nào. Không recurring/auto-renew. Hết hạn đọc thành FREE,
-  không cần worker/cron/BullMQ.
+- Quyền lợi AI và chuyển đổi gói cũ được mô tả tại [subscriptions.md](subscriptions.md).
+  Không recurring/auto-renew. Hết hạn đọc thành FREE, không cần worker/cron/BullMQ.
 - Price/duration do BE cấu hình; intent snapshot chúng. Thay giá/config ngân
   hàng không sửa intent cũ. Webhook match tài khoản/bank đã snapshot của intent.
 
@@ -25,9 +24,9 @@ khác qua API người dùng. Không có API cho FE tự đánh dấu đã trả
 
 | Method | Path | Contract |
 | --- | --- | --- |
-| GET | `/billing/plans` | `{paymentsEnabled, plans:[{code,name,priceVnd,durationDays}]}` |
-| GET | `/billing/me` | `{membership:{planCode,startsAt,expiresAt},pendingPayment,recentPayments}` |
-| POST | `/billing/payment-intents` | Header `Idempotency-Key`; body **chỉ** `{planCode:"PRO"}` hoặc PREMIUM |
+| GET | `/billing/plans` | `{planVersion:2,paymentsEnabled,freeLimits,plans:[{code,name,priceVnd,durationDays,textLimit,imageLimit}]}` |
+| GET | `/billing/me` | `{membership:{planCode,startsAt,expiresAt},usage:{text,images},pendingPayment,recentPayments}` |
+| POST | `/billing/payment-intents` | Header `Idempotency-Key`; body **chỉ** `{planCode:"PLUS",planVersion:2}` hoặc PRO |
 | GET | `/payment-intents/:id` | Payment thuộc tài khoản, 404 cho ID không thuộc quyền |
 | GET | `/payment-intents/:id/events` | SSE thuộc đúng người mua; dùng Authorization header, không token trong URL |
 | POST | `/payment-intents/:id/cancel` | Hủy PENDING, lặp CANCELLED trả cùng kết quả; SUCCEEDED trả 409 |
@@ -40,7 +39,7 @@ FREE trả `startsAt=null, expiresAt=null`; lịch sử thanh toán vẫn còn.
 
 Payment trả `id`, `planCode`, `durationDays`, `amount`, `currency`, `status`,
 `invoiceNumber`, `paymentCode`, `createdAt`, `paidAt`, `capturedAt`,
-`cancelledAt`, `qr`. QR chỉ có khi PENDING và thanh toán đang bật:
+`cancelledAt`, `planVersion`, `purchasedPlanName`, `textLimit`, `imageLimit`, `qr`. QR chỉ có khi PENDING và thanh toán đang bật:
 `imageUrl`, `downloadUrl`, `bankCode`, `bankGateway`, `accountNumber`,
 `accountHolder`, `storeName`, `transferContent`, `amount`, `currency`.
 Không trả email/userId, provider reference hoặc raw callback.

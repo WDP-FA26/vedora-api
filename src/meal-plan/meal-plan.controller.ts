@@ -119,6 +119,7 @@ export class MealPlanController {
         request.user.sub,
         dto.messages,
         abort.signal,
+        dto.requestId,
       ),
     });
   }

@@ -13,7 +13,7 @@ import {
 } from 'ai/test';
 import type { Model } from 'mongoose';
 import { type DeepMockProxy, mockDeep } from 'vitest-mock-extended';
-import { AiUsageService } from '../../../../../src/ai/usage/ai-usage.service.js';
+import { AiUsageService } from '../../../../../src/subscriptions/ai-usage.service.js';
 import { KnowledgeSearchService } from '../../../../../src/knowledge/retrieval/knowledge-search.service.js';
 import {
   createIngredient,
@@ -168,8 +168,13 @@ describe('BlogAssistantService', () => {
     model.doStreamCalls.length = 0;
     vi.mocked(moderator.doEvaluate).mockClear();
     aiUsage = mockDeep<AiUsageService>();
-    aiUsage.consume.mockResolvedValue(true);
+    aiUsage.consume.mockResolvedValue({
+      id: 'ticket',
+      token: 'lease',
+      hash: 'hash',
+    });
     aiUsage.refund.mockResolvedValue();
+    aiUsage.complete.mockResolvedValue();
     service = new BlogAssistantService(
       moderator,
       model,
@@ -204,7 +209,11 @@ describe('BlogAssistantService', () => {
       'searchKnowledge',
       'setTitle',
     ]);
-    expect(aiUsage.consume).toHaveBeenCalledWith(USER_ID, AiFeature.BLOG_CHAT);
+    expect(aiUsage.consume).toHaveBeenCalledWith(
+      USER_ID,
+      AiFeature.BLOG_CHAT,
+      expect.any(Object),
+    );
   });
 
   it('stops at an editor tool call for the browser to answer', async () => {
@@ -267,7 +276,11 @@ describe('BlogAssistantService', () => {
 
     expect(model.doStreamCalls).toHaveLength(0);
     expect(replyText(chunks)).toContain('soạn và chỉnh sửa bài blog');
-    expect(aiUsage.refund).toHaveBeenCalledWith(USER_ID, AiFeature.BLOG_CHAT);
+    expect(aiUsage.refund).toHaveBeenCalledWith({
+      id: 'ticket',
+      token: 'lease',
+      hash: 'hash',
+    });
   });
 
   it('lets writing requests on any topic through', async () => {
@@ -284,7 +297,7 @@ describe('BlogAssistantService', () => {
   });
 
   it('refuses once the daily allowance is spent', async () => {
-    aiUsage.consume.mockResolvedValue(false);
+    aiUsage.consume.mockResolvedValue(null);
 
     const error = await send({}).catch((caught: unknown) => caught);
 

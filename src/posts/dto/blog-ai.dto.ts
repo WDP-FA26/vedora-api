@@ -90,7 +90,10 @@ export class AiQuotaDto {
   @ApiProperty({ enum: AiFeature }) feature!: AiFeature;
   @ApiProperty() used!: number;
   @ApiProperty() limit!: number;
-  @ApiProperty({ description: 'Next midnight in Asia/Bangkok' })
+  @ApiProperty({
+    description:
+      'Next midnight in Asia/Bangkok for Free, or subscription expiry for Plus/Pro',
+  })
   resetsAt!: Date;
 }
 
