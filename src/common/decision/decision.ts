@@ -18,11 +18,15 @@ const MAX_RETRIES = 2;
 export function evaluationModel({
   apiKey,
   modelId,
+  fetch: customFetch,
 }: {
   apiKey: string;
   modelId: string;
+  fetch?: typeof fetch;
 }): Experimental_EvaluationModel {
-  return createOpenRouter({ apiKey }).evaluationModel(modelId);
+  return createOpenRouter({ apiKey, fetch: customFetch }).evaluationModel(
+    modelId,
+  );
 }
 
 export async function decide<V extends string>(

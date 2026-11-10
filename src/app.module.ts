@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { AdminAiCostsModule } from './admin-ai-costs/admin-ai-costs.module.js';
 import { APP_FILTER } from '@nestjs/core';
 import { AppExceptionFilter } from './common/exceptions/app-exception.filter.js';
 import { ConfigModule } from '@nestjs/config';
@@ -54,6 +55,7 @@ import { VerificationModule } from './verification/verification.module.js';
     HealthModule,
     UsersModule,
     AdminDashboardModule,
+    AdminAiCostsModule,
     PaymentsModule,
     MediaModule,
     PostsModule,

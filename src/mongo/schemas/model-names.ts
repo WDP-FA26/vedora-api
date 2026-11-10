@@ -38,6 +38,7 @@ export const MODEL_NAMES = [
   'PaymentWebhookReceipt',
   'AiUsage',
   'AiRequest',
+  'AiCostCall',
 ] as const;
 
 export type MongoModelName = (typeof MODEL_NAMES)[number];

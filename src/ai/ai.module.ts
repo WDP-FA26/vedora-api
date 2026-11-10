@@ -11,16 +11,20 @@ import {
   embeddingModel,
 } from './openrouter.js';
 import type { ReasoningEffort } from './reasoning.js';
+import { AiTelemetryModule } from './telemetry/ai-telemetry.module.js';
+import { AiCostTransportService } from './telemetry/ai-cost-transport.service.js';
 
 @Global()
 @Module({
   imports: [
+    AiTelemetryModule,
     NestAiModule.forRootAsync({
       isGlobal: true,
       modelNames: ['default', 'blog'],
       embeddingModelNames: ['default', 'posts'],
-      inject: [ConfigService],
-      useFactory: (config: ConfigService) => {
+      imports: [AiTelemetryModule],
+      inject: [ConfigService, AiCostTransportService],
+      useFactory: (config: ConfigService, costs: AiCostTransportService) => {
         const apiKey = config.getOrThrow<string>('OPENROUTER_API_KEY');
         const defaultModelId = config.get<string>(
           'OPENROUTER_MODEL',
@@ -36,11 +40,15 @@ import type { ReasoningEffort } from './reasoning.js';
               apiKey,
               modelId: defaultModelId,
               reasoningEffort,
+              fetch: costs.forModel(defaultModelId),
             }),
             blog: chatModel({
               apiKey,
               modelId: config.get<string>('BLOG_AI_MODEL') || defaultModelId,
               reasoningEffort,
+              fetch: costs.forModel(
+                config.get<string>('BLOG_AI_MODEL') || defaultModelId,
+              ),
             }),
           },
           embeddingModels: {
@@ -54,6 +62,7 @@ import type { ReasoningEffort } from './reasoning.js';
                 'KNOWLEDGE_EMBEDDING_DIMENSIONS',
                 1536,
               ),
+              fetch: costs.forModel(DEFAULT_EMBEDDING_MODEL, 'KNOWLEDGE'),
             }),
             posts: {
               model: embeddingModel({
@@ -66,6 +75,7 @@ import type { ReasoningEffort } from './reasoning.js';
                   'POST_SEARCH_EMBEDDING_DIMENSIONS',
                   768,
                 ),
+                fetch: costs.forModel(DEFAULT_EMBEDDING_MODEL, 'POSTS'),
               }),
               timeout: '30s',
             },
@@ -77,14 +87,15 @@ import type { ReasoningEffort } from './reasoning.js';
   providers: [
     {
       provide: MODERATION_MODEL,
-      inject: [ConfigService],
-      useFactory: (config: ConfigService) =>
+      inject: [ConfigService, AiCostTransportService],
+      useFactory: (config: ConfigService, costs: AiCostTransportService) =>
         evaluationModel({
           apiKey: config.getOrThrow<string>('OPENROUTER_API_KEY'),
           modelId: config.get<string>(
             'OPENROUTER_MODERATION_MODEL',
             DEFAULT_MODERATION_MODEL,
           ),
+          fetch: costs.forModel(DEFAULT_MODERATION_MODEL, 'CONTENT_MODERATION'),
         }),
     },
   ],

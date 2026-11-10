@@ -3,6 +3,7 @@ import { DocumentLockSchema } from '../document-lock.js';
 import type { MongoModelName } from './model-names.js';
 import { AiUsageSchema } from './ai-usage.schema.js';
 import { AiRequestSchema } from './ai-request.schema.js';
+import { AiCostCallSchema } from './ai-cost-call.schema.js';
 import {
   PaymentIntentSchema,
   PaymentRequestSchema,
@@ -89,6 +90,7 @@ export const MODEL_DEFINITIONS = [
   { name: 'PaymentWebhookReceipt', schema: PaymentWebhookReceiptSchema },
   { name: 'AiUsage', schema: AiUsageSchema },
   { name: 'AiRequest', schema: AiRequestSchema },
+  { name: 'AiCostCall', schema: AiCostCallSchema },
 ] as const satisfies readonly { name: MongoModelName; schema: Schema }[];
 
 // Fails to compile when a name in MODEL_NAMES has no definition above.

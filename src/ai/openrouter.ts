@@ -19,12 +19,14 @@ export function chatModel({
   apiKey,
   modelId,
   reasoningEffort = 'low',
+  fetch: customFetch,
 }: {
   apiKey: string;
   modelId: string;
   reasoningEffort?: ReasoningEffort;
+  fetch?: typeof fetch;
 }): LanguageModel {
-  return createOpenRouter({ apiKey })(modelId, {
+  return createOpenRouter({ apiKey, fetch: customFetch })(modelId, {
     reasoning: { effort: reasoningEffort, exclude: true },
   });
 }
@@ -33,15 +35,20 @@ export function embeddingModel({
   apiKey,
   modelId,
   dimensions,
+  fetch: customFetch,
 }: {
   apiKey: string;
   modelId: string;
   dimensions: number;
+  fetch?: typeof fetch;
 }): EmbeddingModel {
   return wrapEmbeddingModel({
-    model: createOpenRouter({ apiKey }).textEmbeddingModel(modelId, {
-      extraBody: { dimensions, encoding_format: 'float' },
-    }),
+    model: createOpenRouter({ apiKey, fetch: customFetch }).textEmbeddingModel(
+      modelId,
+      {
+        extraBody: { dimensions, encoding_format: 'float' },
+      },
+    ),
     middleware: {
       overrideMaxEmbeddingsPerCall: () => EMBEDDING_BATCH_SIZE,
     },
@@ -51,9 +58,11 @@ export function embeddingModel({
 export function imageModel({
   apiKey,
   modelId,
+  fetch: customFetch,
 }: {
   apiKey: string;
   modelId: string;
+  fetch?: typeof fetch;
 }): ImageModel {
-  return createOpenRouter({ apiKey }).imageModel(modelId);
+  return createOpenRouter({ apiKey, fetch: customFetch }).imageModel(modelId);
 }
