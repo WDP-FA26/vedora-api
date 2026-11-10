@@ -9,7 +9,7 @@ import type { ReasoningEffort } from './reasoning.js';
 
 export const DEFAULT_CHAT_MODEL = 'openrouter/auto';
 export const DEFAULT_MODERATION_MODEL = 'typesafe/jev-1.14';
-export const DEFAULT_CONTENT_MODERATION_MODEL = 'liquid/d1-ultra';
+export const DEFAULT_CONTENT_MODERATION_MODEL = 'openai/gpt-6-luna-decisions';
 export const DEFAULT_EMBEDDING_MODEL = 'google/gemini-embedding-2';
 export const DEFAULT_IMAGE_MODEL = 'qwen/qwen-image-2.1-turbo';
 

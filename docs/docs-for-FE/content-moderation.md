@@ -1,6 +1,6 @@
 # Kiểm duyệt nội dung
 
-Mọi nội dung người dùng đăng (bài viết, video, blog, bình luận) được model quyết định (mặc định `liquid/d1-ultra` qua OpenRouter, xem `OPENROUTER_CONTENT_MODERATION_MODEL`) kiểm tra theo chính sách an toàn trước khi hiển thị. Chính sách chỉ xét an toàn, không xét chủ đề hay chế độ ăn.
+Mọi nội dung người dùng đăng (bài viết, video, blog, bình luận) được model quyết định (mặc định `openai/gpt-6-luna-decisions` qua OpenRouter, xem `OPENROUTER_CONTENT_MODERATION_MODEL`) kiểm tra theo chính sách an toàn trước khi hiển thị. Chính sách chỉ xét an toàn, không xét chủ đề hay chế độ ăn.
 
 ## Bình luận
 
