@@ -107,6 +107,8 @@ PaymentIntentSchema.index(
 );
 PaymentIntentSchema.index({ userId: 1, createdAt: 1 });
 PaymentIntentSchema.index({ userId: 1, status: 1, capturedAt: 1 });
+PaymentIntentSchema.index({ createdAt: -1, _id: -1 });
+PaymentIntentSchema.index({ status: 1, capturedAt: -1, _id: -1 });
 
 @Schema(collectionSchema('payment_requests', 'created'))
 export class PaymentRequest extends Identified {
@@ -159,3 +161,5 @@ export const PaymentWebhookReceiptSchema = SchemaFactory.createForClass(
 );
 PaymentWebhookReceiptSchema.index({ providerTransactionId: 1, createdAt: 1 });
 PaymentWebhookReceiptSchema.index({ intentId: 1, createdAt: 1 });
+PaymentWebhookReceiptSchema.index({ createdAt: -1, _id: -1 });
+PaymentWebhookReceiptSchema.index({ outcome: 1, createdAt: -1 });
