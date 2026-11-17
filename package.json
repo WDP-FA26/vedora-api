@@ -21,7 +21,9 @@
     "test:db": "vitest run --config ./vitest.config.db.mts",
     "redteam": "node scripts/redteam.mts",
     "seed": "tsx src/database/seed-cli.ts",
-    "seed:prod": "node dist/database/seed-cli.js"
+    "seed:prod": "node dist/database/seed-cli.js",
+    "fix:blog-covers": "tsx src/database/fix-blog-covers.ts",
+    "fix:blog-covers:prod": "node dist/database/fix-blog-covers.js"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1146.0",

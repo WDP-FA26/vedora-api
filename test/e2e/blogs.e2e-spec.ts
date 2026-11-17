@@ -238,19 +238,31 @@ describe('Blogs (HTTP)', () => {
     ).expect(400);
   });
 
-  it('supports partial edit, clearing a cover and replacing recipe links', async () => {
+  it('supports partial edit, a cover that follows the content and replacing recipe links', async () => {
     const blog = await createBlog({
-      coverImageUrl: 'https://example.com/a.jpg',
+      content: '![Bìa](https://example.com/a.jpg)\n\nNấu đậu hũ với cà chua.',
+      coverImageUrl: 'https://example.com/ignored.jpg',
     });
     expect(blog.blog?.recipes).toHaveLength(1);
+    expect(blog.blog?.coverImageUrl).toBe('https://example.com/a.jpg');
+    const recipesOnly = await asAuthor(
+      request(server()).patch(`/api/v1/blogs/${blog.id}`),
+    )
+      .send({ recipeIds: [] })
+      .expect(200);
+    expect(recipesOnly.body).toMatchObject({
+      status: 'DRAFT',
+      content: blog.content,
+      blog: { coverImageUrl: 'https://example.com/a.jpg', recipes: [] },
+    });
     const edited = await asAuthor(
       request(server()).patch(`/api/v1/blogs/${blog.id}`),
     )
-      .send({ coverImageUrl: null, recipeIds: [] })
+      .send({ content: 'Không còn ảnh.', coverImageUrl: null })
       .expect(200);
     expect(edited.body).toMatchObject({
       status: 'DRAFT',
-      content: blog.content,
+      content: 'Không còn ảnh.',
       blog: { coverImageUrl: null, recipes: [] },
     });
     await asAuthor(request(server()).patch(`/api/v1/blogs/${blog.id}`))
