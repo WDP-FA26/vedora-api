@@ -16,3 +16,6 @@ npm-debug.log*
 .vscode/
 .DS_Store
 Thumbs.db
+
+# TypeScript incremental build cache
+*.tsbuildinfo
