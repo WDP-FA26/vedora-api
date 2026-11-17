@@ -14,6 +14,9 @@ export class UserResponseDto {
   @ApiProperty({ example: 'hello@vedora.vn' })
   email!: string;
 
+  @ApiProperty({ type: String, nullable: true, format: 'uri' })
+  avatarUrl!: string | null;
+
   @ApiProperty({ enum: UserRole, example: UserRole.USER })
   role!: UserRole;
 

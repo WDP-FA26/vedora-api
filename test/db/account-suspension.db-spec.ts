@@ -394,6 +394,7 @@ describe('Account administration with MongoDB', () => {
         'username',
         'fullName',
         'email',
+        'avatarUrl',
         'role',
         'status',
         'accountVersion',
