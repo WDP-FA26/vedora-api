@@ -10,6 +10,7 @@ import { NotificationsService } from '../notifications/notifications.service.js'
 import { CaptionService } from './captions/caption.service.js';
 import { CloudinaryService } from '../cloudinary/cloudinary.service.js';
 import { fetchPublicImage } from '../common/http/fetch-public-image.js';
+import { extractMarkdownMediaUrls } from '../common/text.js';
 import {
   CaptionStatus,
   MediaAsset,
@@ -29,7 +30,6 @@ const STATUS_BY_DECISION: Record<ContentAssessment['decision'], PostStatus> = {
 
 const FRAME_COUNT = 4;
 const MAX_INLINE_IMAGES = 5;
-const MARKDOWN_IMAGE = /!\[[^\]]*\]\(\s*<?([^\s)>]+)>?[^)]*\)/g;
 
 @Injectable()
 export class PostModerationService implements OnModuleInit {
@@ -257,9 +257,13 @@ export class PostModerationService implements OnModuleInit {
     ];
     const urls: string[] = [];
     if (blog.coverImageUrl) urls.push(blog.coverImageUrl);
-    for (const match of blog.content.matchAll(MARKDOWN_IMAGE)) {
-      const url = match[1];
-      if (url && !urls.includes(url)) urls.push(url);
+    for (const url of extractMarkdownMediaUrls(blog.content)) {
+      if (
+        !urls.includes(url) &&
+        this.storage.keyFromPublicUrl(StorageTarget.Blogs, url) !== null
+      ) {
+        urls.push(url);
+      }
     }
     const sources = await Promise.all(
       urls
@@ -274,9 +278,8 @@ export class PostModerationService implements OnModuleInit {
 
   private async downloadImage(url: string): Promise<Buffer | null> {
     const key = this.storage.keyFromPublicUrl(StorageTarget.Blogs, url);
-    if (key)
-      return Buffer.from(await this.storage.getBytes(StorageTarget.Blogs, key));
-    return fetchPublicImage(url);
+    if (!key) return null;
+    return Buffer.from(await this.storage.getBytes(StorageTarget.Blogs, key));
   }
 
   private readyVideos(postId: string): Promise<MediaAsset[]> {

@@ -1,5 +1,6 @@
 import type { INestApplication } from '@nestjs/common';
 import { getModelToken } from '@nestjs/mongoose';
+import { StateConflictException } from '../../../../src/common/exceptions/state-conflict.exception.js';
 import { ResourceNotFoundException } from '../../../../src/common/exceptions/resource-not-found.exception.js';
 import { Test } from '@nestjs/testing';
 import type { Model } from 'mongoose';
@@ -34,10 +35,12 @@ describe('AdminPostsService', () => {
   let db: MongoService;
   let service: AdminPostsService;
   let mediaService: DeepMockProxy<MediaService>;
+  let postModeration: DeepMockProxy<PostModerationService>;
   let post: Post;
 
   beforeAll(async () => {
     mediaService = mockDeep<MediaService>();
+    postModeration = mockDeep<PostModerationService>();
     mediaService.toResponse.mockImplementation((item) => ({
       id: item.id,
       type: item.type,
@@ -65,7 +68,7 @@ describe('AdminPostsService', () => {
         { provide: MediaService, useValue: mediaService },
         {
           provide: PostModerationService,
-          useValue: mockDeep<PostModerationService>(),
+          useValue: postModeration,
         },
       ],
     }).compile();
@@ -150,6 +153,39 @@ describe('AdminPostsService', () => {
   it('answers 404 for an unknown post', async () => {
     await expect(service.findOne(crypto.randomUUID())).rejects.toBeInstanceOf(
       ResourceNotFoundException,
+    );
+  });
+
+  it('moderates a post, handles missing/non-reviewable posts, and forwards optional notes', async () => {
+    const adminId = crypto.randomUUID();
+    await expect(
+      service.moderate(crypto.randomUUID(), adminId, 'APPROVE', 'ok'),
+    ).rejects.toBeInstanceOf(ResourceNotFoundException);
+
+    postModeration.decide.mockResolvedValueOnce(false);
+    await expect(
+      service.moderate(post.id, adminId, 'APPROVE', undefined),
+    ).rejects.toBeInstanceOf(StateConflictException);
+    expect(postModeration.decide).toHaveBeenCalledWith(
+      post.id,
+      adminId,
+      'APPROVE',
+      null,
+    );
+
+    postModeration.decide.mockResolvedValueOnce(true);
+    const moderated = await service.moderate(
+      post.id,
+      adminId,
+      'REJECT',
+      'Policy violation',
+    );
+    expect(moderated.id).toBe(post.id);
+    expect(postModeration.decide).toHaveBeenCalledWith(
+      post.id,
+      adminId,
+      'REJECT',
+      'Policy violation',
     );
   });
 });

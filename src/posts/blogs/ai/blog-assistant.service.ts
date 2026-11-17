@@ -17,6 +17,10 @@ import {
 import { cannedReply } from '../../../ai/chat/canned-reply.js';
 import { chatErrorCode } from '../../../ai/chat/errors.js';
 import { replyFilter } from '../../../ai/chat/reply-filter.js';
+import {
+  conversationModerationState,
+  type ModerationTurn,
+} from '../../../ai/guardrails/conversation-state.js';
 import { MODERATION_MODEL } from '../../../ai/guardrails/guardrail.js';
 import { decide } from '../../../common/decision/decision.js';
 import {
@@ -121,7 +125,7 @@ export class BlogAssistantService {
       if (last.role === 'user') {
         const { choice: verdict } = await decide(
           this.moderator,
-          textOf(last),
+          conversationModerationState(moderationTurns(messages)),
           abortSignal,
           BLOG_ASSISTANT_POLICY,
         ).catch((error: unknown) => {
@@ -285,4 +289,14 @@ function textOf(message: UIMessage): string {
     .filter(isTextUIPart)
     .map(({ text }) => text)
     .join('\n');
+}
+
+function moderationTurns(messages: readonly UIMessage[]): ModerationTurn[] {
+  const turns: ModerationTurn[] = [];
+  for (const message of messages) {
+    if (message.role !== 'user' && message.role !== 'assistant') continue;
+    const text = textOf(message);
+    if (text) turns.push({ role: message.role, text });
+  }
+  return turns;
 }

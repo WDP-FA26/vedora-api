@@ -1,3 +1,4 @@
+import { ResourceNotFoundException } from '../../../src/common/exceptions/resource-not-found.exception.js';
 import { StateConflictException } from '../../../src/common/exceptions/state-conflict.exception.js';
 import type { INestApplication } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
@@ -15,6 +16,7 @@ import {
 import { MongoModule } from '../../../src/mongo/mongo.module.js';
 import {
   type IncompatibilityRule,
+  type IngredientGroup,
   type MealPlanEntry,
   MealSection,
   Weekday,
@@ -41,6 +43,9 @@ describe('MealPlanService', () => {
 
   const entries = () => mongo.connection.model<MealPlanEntry>('MealPlanEntry');
   const users = () => mongo.connection.model('User');
+  const groups = () =>
+    mongo.connection.model<IngredientGroup>('IngredientGroup');
+  const ingredients = () => mongo.connection.model('Ingredient');
   const rules = () =>
     mongo.connection.model<IncompatibilityRule>('IncompatibilityRule');
 
@@ -300,5 +305,127 @@ describe('MealPlanService', () => {
       day: Weekday.WED,
     });
     expect(wednesday).toMatchObject({ recipeId: SPINACH_RECIPE });
+  });
+
+  it('returns all 7 days in find() and reports problems on the saved timetable', async () => {
+    await saved(Weekday.MON, MealSection.LUNCH, TOFU_RECIPE);
+    await saved(Weekday.MON, MealSection.DINNER, SPINACH_RECIPE);
+    // Orphan entry pointing to non-existent recipe should be skipped
+    await saved(
+      Weekday.TUE,
+      MealSection.BREAKFAST,
+      'd1a2d3e4-0000-4000-8000-000000000099',
+    );
+
+    const plan = await service.find(USER_ID);
+
+    expect(plan.days).toHaveLength(7);
+    expect(plan.days[0].day).toBe(Weekday.MON);
+    expect(plan.days[0].sections.map((s) => s.section)).toEqual([
+      MealSection.BREAKFAST,
+      MealSection.LUNCH,
+      MealSection.DINNER,
+      MealSection.OTHER,
+    ]);
+    expect(plan.days[0].sections[1].recipes[0]).toMatchObject({
+      id: TOFU_RECIPE,
+      title: 'Đậu hũ sốt cà',
+      ingredients: [{ name: 'Đậu hũ', quantity: null, unit: null, note: null }],
+    });
+    expect(plan.days[1].sections[0].recipes).toEqual([]);
+    expect(plan.problems).toHaveLength(1);
+    expect(plan.problems[0].code).toBe('DAY_CONFLICT');
+  });
+
+  it('clears a day when empty sections are applied and rejects apply for a missing user', async () => {
+    await saved(Weekday.MON, MealSection.LUNCH, RICE_RECIPE);
+
+    const updated = await service.apply(USER_ID, [
+      {
+        day: Weekday.MON,
+        breakfast: [],
+        lunch: [],
+        dinner: [],
+        others: [],
+      },
+    ]);
+    expect(updated.days[0].sections.every((s) => s.recipes.length === 0)).toBe(
+      true,
+    );
+    expect(await entries().countDocuments({ userId: USER_ID })).toBe(0);
+
+    await expect(
+      service.apply('4a1e32e4-e18e-4dd7-8b4a-246ef2113fff', [
+        {
+          day: Weekday.MON,
+          breakfast: [RICE_RECIPE],
+          lunch: [],
+          dinner: [],
+          others: [],
+        },
+      ]),
+    ).rejects.toBeInstanceOf(ResourceNotFoundException);
+  });
+
+  it('returns safe suggestions filtered by dietary profile, internal conflicts, and search query', async () => {
+    const groupId = 'b1a2d3e4-0000-4000-8000-000000000001';
+    await groups().create({
+      _id: groupId,
+      name: 'Nhóm đậu',
+      dietary: true,
+      ingredientIds: [TOFU_ID],
+    });
+    await users().updateOne(
+      { _id: USER_ID },
+      { $set: { avoidedGroupIds: [groupId] } },
+    );
+    await ingredients().updateOne(
+      { _id: RICE_ID },
+      { $set: { aliases: ['brown rice'] } },
+    );
+    const conflictRecipeId = 'd1a2d3e4-0000-4000-8000-000000000004';
+    await createRecipe(
+      mongo,
+      {
+        id: conflictRecipeId,
+        title: 'Canh kỵ nhau',
+        prepMinutes: null,
+        cookMinutes: null,
+      },
+      [TOFU_ID, SPINACH_ID],
+    );
+    const noTimeRecipeId = 'd1a2d3e4-0000-4000-8000-000000000005';
+    await createRecipe(
+      mongo,
+      {
+        id: noTimeRecipeId,
+        title: 'Canh rau đơn giản',
+        description: 'Món thanh đạm',
+        prepMinutes: null,
+        cookMinutes: null,
+      },
+      [SPINACH_ID],
+    );
+
+    const allSafe = await service.suggestions(USER_ID, undefined);
+    expect(allSafe.map((r) => r.id)).toEqual(
+      expect.arrayContaining([RICE_RECIPE, noTimeRecipeId]),
+    );
+    expect(allSafe.map((r) => r.id)).not.toContain(TOFU_RECIPE);
+    expect(allSafe.map((r) => r.id)).not.toContain(conflictRecipeId);
+    expect(allSafe.find((r) => r.id === noTimeRecipeId)?.minutes).toBeNull();
+    expect(allSafe.find((r) => r.id === RICE_RECIPE)?.minutes).toBe(15);
+
+    const byAlias = await service.suggestions(USER_ID, 'brown rice');
+    expect(byAlias.map((r) => r.id)).toEqual([RICE_RECIPE]);
+
+    const byDescription = await service.suggestions(USER_ID, 'thanh đạm');
+    expect(byDescription.map((r) => r.id)).toEqual([noTimeRecipeId]);
+
+    const byIngredient = await service.suggestions(USER_ID, 'Rau bina');
+    expect(byIngredient.map((r) => r.id)).toEqual(
+      expect.arrayContaining([SPINACH_RECIPE, noTimeRecipeId]),
+    );
+    expect(byIngredient).toHaveLength(2);
   });
 });

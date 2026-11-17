@@ -34,7 +34,8 @@ Thay đổi so với body mặc định của NestJS trước đây: không còn
 | `INVALID_DASHBOARD_RANGE` | Khoảng ngày dashboard sai | — |
 | `BLOG_AI_INVALID_MESSAGES` | Lịch sử chat trợ lý blog không hợp lệ | — |
 | `BLOG_CONTENT_REQUIRED` | Blog xuất bản cần nội dung | — |
-| `BLOG_COVER_NOT_ALLOWED` | Ảnh bìa không phải https hoặc không thuộc kho blog | — |
+| `BLOG_COVER_NOT_ALLOWED` | Ảnh bìa không thuộc kho blog của hệ thống | — |
+| `BLOG_MEDIA_NOT_ALLOWED` | Ảnh hoặc video trong nội dung blog không thuộc kho media của hệ thống | — |
 | `BLOG_RECIPE_NOT_FOUND` | Có công thức liên kết không tồn tại | `recipeIds: string[]` — các ID không tồn tại |
 | `UNKNOWN_REFERENCE` | Có ID nguyên liệu/nhóm/công thức không tồn tại | — |
 | `CONFLICTING_PREFERENCE` | Nguyên liệu vừa thích vừa tránh | — |

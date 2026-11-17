@@ -64,4 +64,11 @@ describe('PostSearchService', () => {
       hasMore: false,
     });
   });
+
+  it('prunes missing post ids through the search index', async () => {
+    index.removeMany.mockResolvedValue();
+
+    await expect(service.prune(['p1', 'p2'])).resolves.toBeUndefined();
+    expect(index.removeMany).toHaveBeenCalledWith(['p1', 'p2']);
+  });
 });

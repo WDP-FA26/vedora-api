@@ -69,7 +69,8 @@ GET/PATCH thành công trả `200`, POST tạo tài khoản trả `201`, DELETE 
 không có body. Tài khoản không tồn tại trả `404` khi người gọi có quyền thao tác;
 USER truy cập ID khác trả `403` trước khi tra cứu tài khoản đó.
 
-Profile update vẫn chỉ nhận `username`, `fullName`, `email`. Gửi thêm `role` vào
+Profile update vẫn chỉ nhận `username` và `fullName`; đổi `email` qua `PATCH /users/:id`
+không được hỗ trợ và bị từ chối `400`. Gửi thêm `role` (hoặc `email` ở update) vào
 đăng ký, tạo tài khoản hoặc sửa profile sẽ bị từ chối `400`, kể cả người gọi là admin.
 
 API bài đăng và media vẫn giữ quy tắc sở hữu hiện tại: chỉ tác giả xóa bài,

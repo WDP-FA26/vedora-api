@@ -9,6 +9,11 @@ import { cannedReply } from '../ai/chat/canned-reply.js';
 import { chatErrorCode, failedStatus } from '../ai/chat/errors.js';
 import { replyFilter } from '../ai/chat/reply-filter.js';
 import {
+  assertLastMessageFromUser,
+  conversationModerationState,
+  type ModerationTurn,
+} from '../ai/guardrails/conversation-state.js';
+import {
   MODERATION_MODEL,
   type ModerationVerdict,
 } from '../ai/guardrails/guardrail.js';
@@ -50,10 +55,8 @@ export class NutritionChatService {
   }
 
   async stream(messages: ChatMessageDto[], abortSignal: AbortSignal) {
-    const verdict = await this.moderate(
-      messages.at(-1)?.text ?? '',
-      abortSignal,
-    );
+    assertLastMessageFromUser(messages);
+    const verdict = await this.moderate(messages, abortSignal);
     if (verdict !== 'allow') {
       this.logger.warn(`Moderation answered ${verdict}`);
       return cannedReply(REFUSALS[verdict]);
@@ -82,13 +85,13 @@ export class NutritionChatService {
   }
 
   private async moderate(
-    text: string,
+    messages: readonly ModerationTurn[],
     abortSignal: AbortSignal,
   ): Promise<ModerationVerdict> {
     try {
       const { choice } = await decide(
         this.moderator,
-        text,
+        conversationModerationState(messages),
         abortSignal,
         NUTRITION_POLICY,
       );

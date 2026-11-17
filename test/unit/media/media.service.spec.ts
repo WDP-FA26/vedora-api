@@ -52,6 +52,7 @@ describe('MediaService', () => {
   let app: INestApplication;
   let db: MongoService;
   let service: MediaService;
+  let cloudinary: CloudinaryService;
   let findVideo: MockInstance<CloudinaryService['findVideo']>;
   let deleteMedia: MockInstance<CloudinaryService['deleteMedia']>;
   let schedule: ReturnType<typeof vi.fn>;
@@ -112,7 +113,7 @@ describe('MediaService', () => {
     await prepareTestDatabase(app);
     db = app.get(MongoService);
     service = app.get(MediaService);
-    const cloudinary = app.get(CloudinaryService);
+    cloudinary = app.get(CloudinaryService);
     findVideo = vi.spyOn(cloudinary, 'findVideo').mockResolvedValue(null);
     deleteMedia = vi.spyOn(cloudinary, 'deleteMedia').mockResolvedValue();
     await createUser(db, { id: ownerId });
@@ -544,6 +545,283 @@ describe('MediaService', () => {
       expect(deleteMedia).toHaveBeenCalledWith(mediaId, false);
       expect(await assets().countDocuments()).toBe(0);
       expect((await post())?.status).toBe(PostStatus.PROCESSING);
+    });
+  });
+
+  describe('findOwned and toResponse', () => {
+    it('throws 404 when media is missing, owned by someone else, or discarded', async () => {
+      await addMedia({ ownerId: 'other-user' });
+      await expect(service.findOwned(mediaId, ownerId)).rejects.toMatchObject({
+        statusCode: 404,
+      });
+
+      await assets().updateOne(
+        { _id: mediaId },
+        { $set: { ownerId, discardedAt: new Date() } },
+      );
+      await expect(service.findOwned(mediaId, ownerId)).rejects.toMatchObject({
+        statusCode: 404,
+      });
+
+      await expect(
+        service.findOwned('non-existent', ownerId),
+      ).rejects.toMatchObject({ statusCode: 404 });
+    });
+
+    it('refreshes pending media on findOwned when webhooks are disabled', async () => {
+      await addMedia({ postId, status: MediaStatus.PROCESSING });
+      findVideo.mockResolvedValue({
+        public_id: publicId,
+        duration: 15,
+        derived: [{ transformation: 'sp_auto/m3u8', format: 'm3u8' }],
+      });
+
+      const dto = await service.findOwned(mediaId, ownerId);
+
+      expect(findVideo).toHaveBeenCalledWith(publicId);
+      expect(dto.status).toBe(MediaStatus.READY);
+      expect(dto.playbackUrl).toBe(
+        `https://res.cloudinary.com/demo/video/upload/sp_auto/${publicId}.m3u8`,
+      );
+      expect(dto.posterUrl).toBe(
+        `https://res.cloudinary.com/demo/video/upload/so_0,q_auto/${publicId}.jpg`,
+      );
+    });
+
+    it('skips refresh on findOwned when webhooks are enabled or media is already READY', async () => {
+      await addMedia({
+        status: MediaStatus.READY,
+        captions: [
+          {
+            languageCode: 'en',
+            name: 'English',
+            isOriginal: false,
+            url: 'https://cdn/en.vtt',
+          },
+          {
+            languageCode: 'vi',
+            name: 'Tiếng Việt',
+            isOriginal: true,
+            url: 'https://cdn/vi.vtt',
+          },
+        ],
+      });
+
+      const readyDto = await service.findOwned(mediaId, ownerId);
+      expect(findVideo).not.toHaveBeenCalled();
+      expect(readyDto.captions.map((c) => c.languageCode)).toEqual([
+        'vi',
+        'en',
+      ]);
+
+      const pending = await createMedia(db, {
+        ownerId,
+        status: MediaStatus.PROCESSING,
+      });
+      Object.defineProperty(cloudinary, 'webhooksEnabled', {
+        value: true,
+        configurable: true,
+      });
+      try {
+        const pendingDto = await service.findOwned(pending.id, ownerId);
+        expect(findVideo).not.toHaveBeenCalled();
+        expect(pendingDto.playbackUrl).toBeNull();
+        expect(pendingDto.posterUrl).toBeNull();
+      } finally {
+        Object.defineProperty(cloudinary, 'webhooksEnabled', {
+          value: false,
+          configurable: true,
+        });
+      }
+    });
+  });
+
+  describe('removeOwned and discard edge cases', () => {
+    it('throws 404 when removing missing or unowned media', async () => {
+      await addMedia({ ownerId: 'someone-else' });
+      await expect(service.removeOwned(mediaId, ownerId)).rejects.toMatchObject(
+        { statusCode: 404 },
+      );
+    });
+
+    it('does nothing when discard filter matches no live media', async () => {
+      await expect(service.discard({ _id: 'none' })).resolves.toBeUndefined();
+      expect(deleteMedia).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('replacePostMedia', () => {
+    const replace = (ids: string[]) =>
+      db.withTransaction((session: ClientSession) =>
+        service.replacePostMedia(session, ownerId, postId, ids),
+      );
+
+    it('returns changed: false when attached media order is unchanged', async () => {
+      const first = await createMedia(db, { ownerId, postId, position: 0 });
+      const second = await createMedia(db, { ownerId, postId, position: 1 });
+
+      const result = await replace([first.id, second.id]);
+
+      expect(result).toEqual({ changed: false, detachedIds: [] });
+    });
+
+    it('rejects keeping an attached media that failed processing', async () => {
+      const failed = await createMedia(db, {
+        ownerId,
+        postId,
+        status: MediaStatus.FAILED,
+      });
+
+      await expect(replace([failed.id])).rejects.toMatchObject({
+        code: 'MEDIA_UNAVAILABLE',
+      });
+    });
+
+    it('detaches removed media, reorders kept media, and claims new uploads', async () => {
+      const kept = await createMedia(db, { ownerId, postId, position: 0 });
+      const removed = await createMedia(db, { ownerId, postId, position: 1 });
+      const added = await createMedia(db, { ownerId, postId: null });
+
+      const result = await replace([added.id, kept.id]);
+
+      expect(result).toEqual({ changed: true, detachedIds: [removed.id] });
+      expect((await assets().findById(removed.id).exec())?.postId).toBeNull();
+      expect((await assets().findById(added.id).exec())?.position).toBe(0);
+      expect((await assets().findById(kept.id).exec())?.position).toBe(1);
+    });
+  });
+
+  describe('notification and refresh edge cases', () => {
+    it('ignores non-video, missing public_id, and unknown notification types', async () => {
+      await addMedia();
+
+      await service.handleNotification({
+        notification_type: 'upload',
+        resource_type: 'image',
+        public_id: publicId,
+      });
+      await service.handleNotification({
+        notification_type: 'upload',
+        resource_type: 'video',
+      });
+      await service.handleNotification({
+        notification_type: 'delete',
+        resource_type: 'video',
+        public_id: publicId,
+      });
+
+      expect((await media())?.status).toBe(MediaStatus.WAITING_UPLOAD);
+    });
+
+    it('marks media ENCODING_FAILED when eager item carries an error', async () => {
+      await addMedia({ postId, status: MediaStatus.PROCESSING });
+
+      await service.handleNotification({
+        ...streamBuilt(),
+        eager: [{ error: 'corrupt stream' }],
+      });
+
+      expect(await media()).toMatchObject({
+        status: MediaStatus.FAILED,
+        failureReason: MediaFailureReason.ENCODING_FAILED,
+      });
+    });
+
+    it('falls back to video.dar or null for aspectRatio and ignores duplicate upload notification', async () => {
+      await addMedia({ status: MediaStatus.WAITING_UPLOAD });
+
+      await service.handleNotification({
+        notification_type: 'upload',
+        resource_type: 'video',
+        public_id: publicId,
+        duration: 12,
+        video: { dar: '16:9' },
+      });
+      expect((await media())?.aspectRatio).toBe('16:9');
+
+      // Second upload notification while PROCESSING is a no-op
+      await service.handleNotification({
+        notification_type: 'upload',
+        resource_type: 'video',
+        public_id: publicId,
+        duration: 999,
+      });
+      expect((await media())?.durationSec).toBe(12);
+
+      const second = await createMedia(db, { ownerId });
+      await service.handleNotification({
+        notification_type: 'upload',
+        resource_type: 'video',
+        public_id: second.publicId,
+        video: { dar: 'invalid' },
+      });
+      expect((await assets().findById(second.id).exec())?.aspectRatio).toBeNull();
+    });
+
+    it('does nothing on streamBuilt for WAITING_UPLOAD when findVideo returns null', async () => {
+      await addMedia({ status: MediaStatus.WAITING_UPLOAD });
+      findVideo.mockResolvedValue(null);
+
+      await service.handleNotification(streamBuilt());
+
+      expect((await media())?.status).toBe(MediaStatus.WAITING_UPLOAD);
+    });
+
+    it('marks PROCESSING media UPLOAD_ERRORED if missing in Cloudinary and ENCODING_FAILED if timed out', async () => {
+      const missing = await addMedia({
+        postId,
+        status: MediaStatus.PROCESSING,
+      });
+      findVideo.mockResolvedValueOnce(null);
+
+      await service.refresh(missing);
+      expect(await media()).toMatchObject({
+        status: MediaStatus.FAILED,
+        failureReason: MediaFailureReason.UPLOAD_ERRORED,
+      });
+
+      const timedOut = await createMedia(db, {
+        ownerId,
+        postId,
+        status: MediaStatus.PROCESSING,
+      });
+      await assets().updateOne(
+        { _id: timedOut.id },
+        { $set: { updatedAt: new Date(Date.now() - 2 * 60 * 60 * 1000) } },
+        { timestamps: false },
+      );
+      findVideo.mockResolvedValueOnce({
+        public_id: timedOut.publicId,
+        duration: 20,
+        derived: [],
+      });
+
+      await service.refresh((await assets().findById(timedOut.id).exec())!);
+      expect(await assets().findById(timedOut.id).exec()).toMatchObject({
+        status: MediaStatus.FAILED,
+        failureReason: MediaFailureReason.ENCODING_FAILED,
+      });
+    });
+
+    it('swallows findVideo errors during refresh and skips non-pending or unconfigured refresh', async () => {
+      const ready = await addMedia({ status: MediaStatus.READY });
+      await service.refresh(ready);
+      expect(findVideo).not.toHaveBeenCalled();
+
+      const pending = await createMedia(db, {
+        ownerId,
+        status: MediaStatus.WAITING_UPLOAD,
+      });
+      findVideo.mockRejectedValueOnce(new Error('rate limit'));
+      await expect(service.refresh(pending)).resolves.toBeUndefined();
+
+      vi.spyOn(cloudinary, 'configured', 'get').mockReturnValueOnce(false);
+      await expect(
+        service.deleteFromCloudinary({
+          id: mediaId,
+          captionStatus: CaptionStatus.NONE,
+        }),
+      ).resolves.toBe(true);
     });
   });
 });

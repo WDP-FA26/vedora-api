@@ -10,6 +10,7 @@ import {
   MinLength,
   ValidateNested,
 } from 'class-validator';
+import { LastMessageFromUser } from '../../ai/guardrails/conversation-state.js';
 
 const MAX_CHAT_MESSAGES = 5;
 const MAX_CHAT_MESSAGE_LENGTH = 2000;
@@ -35,6 +36,7 @@ export class NutritionChatDto {
   @IsArray()
   @ArrayMinSize(1)
   @ArrayMaxSize(MAX_CHAT_MESSAGES)
+  @LastMessageFromUser()
   @ValidateNested({ each: true })
   @Type(() => ChatMessageDto)
   messages!: ChatMessageDto[];

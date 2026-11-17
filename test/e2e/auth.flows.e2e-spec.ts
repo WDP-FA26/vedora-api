@@ -948,7 +948,6 @@ describe('Auth flows (e2e)', () => {
       expect(google.exchangeCode).not.toHaveBeenCalled();
     });
 
-    // BUG-3: PATCH /users/:id changes the email without re-verification
     it('never signs a Google user into an account that only claimed their email without verifying it', async () => {
       const attacker = await registerAndVerify();
       const victimEmail = `${uniqueName('victim')}@gmail.test`;

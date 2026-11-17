@@ -28,6 +28,8 @@ import {
   prepareTestDatabase,
 } from '../support/mongo-test-db.js';
 
+const BLOG_STORAGE = 'http://localhost:9000/vedora-blogs';
+
 describe('Blog lifecycle with MongoDB', () => {
   let app: INestApplication;
   let db: MongoService;
@@ -62,7 +64,12 @@ describe('Blog lifecycle with MongoDB', () => {
         { provide: PostFeedService, useValue: mockDeep<PostFeedService>() },
         {
           provide: StorageService,
-          useValue: { keyFromPublicUrl: () => null },
+          useValue: {
+            keyFromPublicUrl: (_target: unknown, url: string) =>
+              url.startsWith(`${BLOG_STORAGE}/`)
+                ? url.slice(BLOG_STORAGE.length + 1)
+                : null,
+          },
         },
         {
           provide: NotificationsService,
@@ -140,19 +147,21 @@ describe('Blog lifecycle with MongoDB', () => {
   });
 
   it('preserves omitted fields, replaces links in input order and takes the cover from the content', async () => {
-    const withImage = '![Bìa](https://example.com/cover.jpg)\n\nNội dung';
+    const coverUrl = `${BLOG_STORAGE}/blogs/${authorId}/cover.jpg`;
+    const ignoredUrl = `${BLOG_STORAGE}/blogs/${authorId}/ignored.jpg`;
+    const withImage = `![Bìa](${coverUrl})\n\nNội dung`;
     const article = await blogs.create(authorId, {
       title: 'Nấu chay',
       content: withImage,
-      coverImageUrl: 'https://example.com/ignored.jpg',
+      coverImageUrl: ignoredUrl,
       recipeIds,
     });
-    expect(article.blog?.coverImageUrl).toBe('https://example.com/cover.jpg');
+    expect(article.blog?.coverImageUrl).toBe(coverUrl);
     const edited = await blogs.update(article.id, authorId, {
       title: 'Nấu chay mỗi ngày',
     });
     expect(edited.content).toBe(withImage);
-    expect(edited.blog?.coverImageUrl).toBe('https://example.com/cover.jpg');
+    expect(edited.blog?.coverImageUrl).toBe(coverUrl);
     expect(edited.blog?.recipes.map(({ id }) => id)).toEqual(recipeIds);
     const linked = await blogs.update(article.id, authorId, {
       recipeIds: [...recipeIds].reverse(),

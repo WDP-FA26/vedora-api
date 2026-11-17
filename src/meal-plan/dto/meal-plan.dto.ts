@@ -16,6 +16,7 @@ import {
   MinLength,
   ValidateNested,
 } from 'class-validator';
+import { LastMessageFromUser } from '../../ai/guardrails/conversation-state.js';
 
 export const WEEKDAYS = Object.values(Weekday);
 export const MEAL_SECTIONS = Object.values(MealSection);
@@ -208,6 +209,7 @@ export class MealPlannerChatDto {
   @IsArray()
   @ArrayMinSize(1)
   @ArrayMaxSize(MAX_PLANNER_MESSAGES)
+  @LastMessageFromUser()
   @ValidateNested({ each: true })
   @Type(() => PlannerMessageDto)
   messages!: PlannerMessageDto[];

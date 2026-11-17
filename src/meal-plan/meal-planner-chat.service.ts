@@ -10,6 +10,10 @@ import {
 import { cannedReply } from '../ai/chat/canned-reply.js';
 import { chatErrorCode } from '../ai/chat/errors.js';
 import { replyFilter } from '../ai/chat/reply-filter.js';
+import {
+  assertLastMessageFromUser,
+  conversationModerationState,
+} from '../ai/guardrails/conversation-state.js';
 import { MODERATION_MODEL } from '../ai/guardrails/guardrail.js';
 import { decide } from '../common/decision/decision.js';
 import { NUTRITION_POLICY } from '../ai/guardrails/policies/nutrition.js';
@@ -51,6 +55,7 @@ export class MealPlannerChatService {
     abortSignal: AbortSignal,
     requestId?: string,
   ) {
+    assertLastMessageFromUser(messages);
     abortSignal = AbortSignal.any([
       abortSignal,
       AbortSignal.timeout(5 * 60_000),
@@ -68,7 +73,7 @@ export class MealPlannerChatService {
     try {
       const { choice: verdict } = await decide(
         this.moderator,
-        messages.at(-1)?.text ?? '',
+        conversationModerationState(messages),
         abortSignal,
         NUTRITION_POLICY,
       ).catch((error: unknown) => {

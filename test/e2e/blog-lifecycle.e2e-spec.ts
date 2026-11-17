@@ -14,6 +14,10 @@ import {
   UserRole,
 } from '../../src/mongo/models.js';
 import {
+  StorageService,
+  StorageTarget,
+} from '../../src/storage/storage.service.js';
+import {
   BORDERLINE_MARKER,
   createE2eApp,
   type E2eApp,
@@ -107,19 +111,25 @@ describe('Blog lifecycle: publish, edit, hide, delete (e2e)', () => {
       expect(await model(Post.name).countDocuments({})).toBe(0);
     });
 
-    it('accepts ten recipes, a 150 character title and an https cover', async () => {
+    it('accepts ten recipes, a 150 character title and a blog storage cover', async () => {
       const recipes: string[] = [];
       for (let index = 0; index < 10; index += 1) {
         recipes.push(
           (await createRecipe(e2e.mongo, { title: `Món ${index}` })).id,
         );
       }
+      const coverUrl = e2e.app
+        .get(StorageService)
+        .publicObjectUrl(StorageTarget.Blogs, `blogs/${author.id}/cover.jpg`);
       const response = await create({
         title: 'a'.repeat(150),
         recipeIds: recipes,
-        coverImageUrl: 'https://example.com/cover.jpg',
+        content: `![Bìa](${coverUrl})\n\nNấu đậu hũ.`,
       }).expect(201);
       expect((response.body as BlogDetailDto).blog.recipes).toHaveLength(10);
+      expect((response.body as BlogDetailDto).blog.coverImageUrl).toBe(
+        coverUrl,
+      );
     });
 
     it('keeps the order of the recipes it was given', async () => {

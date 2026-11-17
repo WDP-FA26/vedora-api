@@ -147,14 +147,15 @@ describe('Account management flows (e2e)', () => {
       expect(userSchema.parse(response.body).username).toBe('new.name');
     });
 
-    it('rejects taking another account email, ignoring case, with 409 CONFLICT', async () => {
+    it('rejects changing email through profile updates with 400 VALIDATION_FAILED', async () => {
       const other = await createUser(e2e.mongo, { username: 'flow.other' });
 
       const response = await patchUser(userToken, user.id, {
         email: other.email.toUpperCase(),
-      }).expect(409);
+      }).expect(400);
 
-      expect(errorSchema.parse(response.body).code).toBe('CONFLICT');
+      expect(errorSchema.parse(response.body).code).toBe('VALIDATION_FAILED');
+      expect(await stored(user.id)).toMatchObject({ email: user.email });
     });
 
     it('rejects a whitespace-only full name', async () => {

@@ -27,6 +27,7 @@ import { MongoService } from '../../../../src/mongo/mongo.service.js';
 import { QdrantService } from '../../../../src/qdrant/qdrant.service.js';
 import {
   chunkText,
+  meanVector,
   PostSearchIndexService,
 } from '../../../../src/posts/search/post-search-index.service.js';
 
@@ -251,6 +252,56 @@ describe('PostSearchIndexService', () => {
       wait: true,
       points: [post.id],
     });
+  });
+
+  it('removes a post cleanly and handles removeMany for empty and non-empty lists', async () => {
+    qdrant.delete.mockResolvedValue({} as never);
+
+    await service.remove(post.id);
+    await service.removeMany([]);
+    expect(qdrant.delete).toHaveBeenCalledTimes(1);
+
+    await service.removeMany(['p1', 'p2']);
+    expect(qdrant.delete).toHaveBeenCalledWith('test_posts', {
+      wait: true,
+      points: ['p1', 'p2'],
+    });
+  });
+
+  it('resets collectionReady when ensureCollection fails so future calls retry', async () => {
+    qdrant.collectionExists.mockRejectedValueOnce(new Error('qdrant down'));
+    await expect(service.ensureCollection()).rejects.toThrow('qdrant down');
+
+    qdrant.collectionExists.mockResolvedValueOnce({ exists: true });
+    await expect(service.ensureCollection()).resolves.toBeUndefined();
+  });
+
+  it('coalesces concurrent schedule() and catchUp() calls and logs drain errors', async () => {
+    const drainSpy = vi
+      .spyOn(service, 'drain')
+      .mockImplementationOnce(
+        () => new Promise((resolve) => setTimeout(resolve, 10)),
+      )
+      .mockRejectedValueOnce(new Error('second drain failed'));
+
+    service.schedule();
+    service.catchUp(); // hits drainAgain = true branch
+    await new Promise((resolve) => setTimeout(resolve, 40));
+
+    expect(drainSpy).toHaveBeenCalledTimes(2);
+    drainSpy.mockRestore();
+  });
+});
+
+describe('meanVector', () => {
+  it('returns single vector directly and falls back to norm 1 for zero vectors', () => {
+    expect(meanVector([[0.5, 0.5]])).toEqual([0.5, 0.5]);
+    expect(
+      meanVector([
+        [0, 0],
+        [0, 0],
+      ]),
+    ).toEqual([0, 0]);
   });
 });
 

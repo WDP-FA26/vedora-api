@@ -297,5 +297,124 @@ describe('CaptionService', () => {
         (await posts().findById(postId).exec())?.searchIndexedAt,
       ).toBeInstanceOf(Date);
     });
+
+    it('swallows network errors and handles media without postId', async () => {
+      const orphan = await addMedia({
+        postId: null,
+        captionStatus: CaptionStatus.READY,
+        captions: [{ ...track, languageCode: 'vi', name: 'Tiếng Việt' }],
+      });
+      fetchMock
+        .mockRejectedValueOnce(new Error('network'))
+        .mockResolvedValueOnce(
+          new Response('WEBVTT\n\n00:00:01.000 --> 00:00:02.000\nAlo\n'),
+        );
+
+      await service.backfillTranscripts();
+
+      expect((await reload(media.id))?.transcript).toBeNull();
+      expect((await reload(orphan.id))?.transcript).toBe('Alo');
+    });
+  });
+
+  describe('active, schedule, and edge branches', () => {
+    it('reflects CAPTIONS_ENABLED and cloudinary.configured in active', () => {
+      Object.defineProperty(cloudinary, 'configured', {
+        value: true,
+        configurable: true,
+      });
+      expect(service.active).toBe(true);
+
+      Object.defineProperty(cloudinary, 'configured', {
+        value: false,
+        configurable: true,
+      });
+      expect(service.active).toBe(false);
+      service.schedule();
+      expect(extract).not.toHaveBeenCalled();
+
+      const disabled = new CaptionService(
+        assets(),
+        posts(),
+        cloudinary,
+        transcription,
+        new ConfigService({ CAPTIONS_ENABLED: false }),
+      );
+      Object.defineProperty(cloudinary, 'configured', {
+        value: true,
+        configurable: true,
+      });
+      expect(disabled.active).toBe(false);
+    });
+
+    it('coalesces concurrent schedule() calls and recovers from drain() errors', async () => {
+      Object.defineProperty(cloudinary, 'configured', {
+        value: true,
+        configurable: true,
+      });
+      let releaseFirst!: () => void;
+      const firstGate = new Promise<void>((resolve) => {
+        releaseFirst = resolve;
+      });
+      const drainSpy = vi
+        .spyOn(service, 'drain')
+        .mockImplementationOnce(async () => {
+          await firstGate;
+          throw new Error('drain boom');
+        })
+        .mockResolvedValueOnce(undefined);
+
+      service.schedule();
+      service.schedule();
+      releaseFirst();
+
+      await vi.waitFor(() => {
+        expect(drainSpy).toHaveBeenCalledTimes(2);
+      });
+      drainSpy.mockRestore();
+    });
+
+    it('marks video NO_SPEECH when transcription returns zero cues and FAILED when extract throws', async () => {
+      const author = await createUser(db);
+      const post = await createPost(db, { authorId: author.id });
+      const silent = await addMedia({ postId: post.id, durationSec: null });
+      const broken = await addMedia({ postId: post.id });
+      const announced: string[] = [];
+      const sub = service.transcribed.subscribe((id) => announced.push(id));
+
+      transcription.transcribe.mockResolvedValueOnce({
+        language: 'vi',
+        cues: [],
+      });
+      await service.caption(silent);
+      expect(extract).toHaveBeenCalledWith(
+        'https://cdn/original',
+        Number.POSITIVE_INFINITY,
+      );
+      expect((await reload(silent.id))?.captionStatus).toBe(
+        CaptionStatus.NO_SPEECH,
+      );
+
+      extract.mockRejectedValueOnce(new Error('ffmpeg crash'));
+      await service.caption(broken);
+      expect((await reload(broken.id))?.captionStatus).toBe(
+        CaptionStatus.FAILED,
+      );
+      expect(announced).toEqual([post.id, post.id]);
+      sub.unsubscribe();
+    });
+
+    it('drains in batches of 10 across multiple iterations', async () => {
+      const author = await createUser(db);
+      const post = await createPost(db, { authorId: author.id });
+      for (let i = 0; i < 11; i++) {
+        await addMedia({ postId: post.id });
+      }
+      await addMedia({ postId: null });
+
+      await service.drain();
+
+      expect(extract).toHaveBeenCalledTimes(11);
+    });
   });
 });

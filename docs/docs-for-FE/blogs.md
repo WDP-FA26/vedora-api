@@ -24,7 +24,7 @@ cũng trả `401`, không tự chuyển sang guest. Người khác đọc/sửa/
 ```json
 {
   "title": "Đậu hũ sốt cà cho bữa tối",
-  "coverImageUrl": "https://example.com/dau-hu.jpg",
+  "coverImageUrl": "http://localhost:9000/vedora-blogs/blogs/user/dau-hu.jpg",
   "content": "## Chuẩn bị\nChọn đậu hũ và cà chua.\n\n## Cách làm\nNấu sốt rồi thêm đậu hũ.",
   "status": "DRAFT",
   "recipeIds": ["d1a2d3e4-0000-4000-8000-000000000001"]
@@ -32,9 +32,8 @@ cũng trả `401`, không tự chuyển sang guest. Người khác đọc/sửa/
 ```
 
 - `title`: bắt buộc khi tạo, trim, 1–150 ký tự.
-- `content`: Markdown, tối đa 50.000 ký tự; mặc định chuỗi rỗng cho nháp.
-- `coverImageUrl`: HTTPS, tối đa 2048 ký tự, có thể bỏ qua hoặc `null`.
-  Đây là link ảnh, backend không upload/tải ảnh hộ.
+- `content`: Markdown, tối đa 50.000 ký tự; mặc định chuỗi rỗng cho nháp. Ảnh chèn trong `content` phải là URL thuộc kho blog (`POST /blogs/images/uploads` hoặc ảnh do AI sinh), video phải là URL video blog trên Cloudinary (`POST /blogs/videos/uploads`); link media ngoài bị từ chối với `BLOG_MEDIA_NOT_ALLOWED`.
+- `coverImageUrl`: tối đa 2048 ký tự, có thể bỏ qua hoặc `null`. Chỉ chấp nhận ảnh nằm trong kho blog (`POST /blogs/images/uploads` hoặc ảnh do AI sinh); URL ngoài bị từ chối với `BLOG_COVER_NOT_ALLOWED`.
 - `status`: chỉ `DRAFT` hoặc `PUBLISHED`, mặc định `DRAFT`.
 - `recipeIds`: tối đa 10 UUID v4 khác nhau, phải có trong catalog; giữ thứ tự
   đầu vào. Bỏ qua khi tạo tương đương `[]`.
@@ -129,6 +128,8 @@ khi xuất bản lại. Xóa blog xóa cả comment/like/bookmark và liên kế
 | ---- | ----------------------------------------------------------------------- |
 | 400  | Body/query/UUID/cursor không hợp lệ                                     |
 | 400  | `BLOG_CONTENT_REQUIRED`: xuất bản với nội dung rỗng                     |
+| 400  | `BLOG_COVER_NOT_ALLOWED`: ảnh bìa không thuộc kho blog của hệ thống     |
+| 400  | `BLOG_MEDIA_NOT_ALLOWED`: ảnh/video trong `content` không thuộc kho media của hệ thống |
 | 400  | `BLOG_RECIPE_NOT_FOUND`: ID công thức không tồn tại; các ID lỗi trong `details.recipeIds` |
 | 401  | Thiếu token trên thao tác riêng hoặc token gửi lên không hợp lệ         |
 | 404  | Blog không tồn tại, là post thường hoặc không có quyền đọc/sửa/xóa      |

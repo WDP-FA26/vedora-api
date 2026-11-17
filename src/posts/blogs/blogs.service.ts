@@ -1,8 +1,9 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Optional } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { randomUUID } from 'node:crypto';
-import { isURL } from 'class-validator';
 import type { ClientSession, Model } from 'mongoose';
+import { CloudinaryService } from '../../cloudinary/cloudinary.service.js';
+import { extractMarkdownMediaUrls } from '../../common/text.js';
 import {
   afterCursor,
   createCursorPaginatedResponse,
@@ -36,12 +37,14 @@ export class BlogsService {
     private readonly postModeration: PostModerationService,
     @InjectModel(Post.name) private readonly postsModel: Model<Post>,
     @InjectModel(Recipe.name) private readonly recipesModel: Model<Recipe>,
+    @Optional() private readonly cloudinary?: CloudinaryService,
   ) {}
 
   async create(authorId: string, dto: CreateBlogDto): Promise<BlogDetailDto> {
     this.validateCover(dto.coverImageUrl);
-    const requested = this.requestedStatus(PostStatus.DRAFT, dto.status);
     const content = dto.content ?? '';
+    this.validateContentMedia(content);
+    const requested = this.requestedStatus(PostStatus.DRAFT, dto.status);
     this.validatePublication(requested, content);
     const status =
       requested === PostStatus.PUBLISHED ? PostStatus.PROCESSING : requested;
@@ -130,6 +133,7 @@ export class BlogsService {
         'Provide at least one blog field',
       );
     this.validateCover(dto.coverImageUrl);
+    if (dto.content !== undefined) this.validateContentMedia(dto.content);
     await this.validateRecipes(dto.recipeIds);
     let needsReview = false;
     await this.mongo.withTransaction(async (session) => {
@@ -226,23 +230,31 @@ export class BlogsService {
   }
 
   private isAllowedCover(url: string): boolean {
-    return (
-      isURL(url, { protocols: ['https'], require_protocol: true }) ||
-      this.storage.keyFromPublicUrl(StorageTarget.Blogs, url) !== null
-    );
+    return this.storage.keyFromPublicUrl(StorageTarget.Blogs, url) !== null;
   }
 
   /**
    * `coverImageUrl` is no longer stored as sent (the cover comes from the
-   * content), but a malformed one is still refused so old clients get the
-   * same error as before.
+   * content), but an external/malformed one is still refused so clients get
+   * the same error as before.
    */
   private validateCover(url: string | null | undefined) {
     if (!url || this.isAllowedCover(url)) return;
     throw new InvalidInputException(
       'BLOG_COVER_NOT_ALLOWED',
-      'A cover must be an https link or an image in blog storage',
+      'A cover must be an image in blog storage',
     );
+  }
+
+  private validateContentMedia(content: string) {
+    for (const url of extractMarkdownMediaUrls(content)) {
+      if (this.storage.keyFromPublicUrl(StorageTarget.Blogs, url)) continue;
+      if (this.cloudinary?.isBlogVideoUrl?.(url)) continue;
+      throw new InvalidInputException(
+        'BLOG_MEDIA_NOT_ALLOWED',
+        'Blog media must be uploaded through Vedora storage',
+      );
+    }
   }
 
   private async validateRecipes(ids?: string[]) {

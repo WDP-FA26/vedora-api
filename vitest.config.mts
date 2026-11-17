@@ -11,7 +11,11 @@ export default defineConfig({
     // Specs that touch data use a database of their own (test/mongo-test-db.ts).
     hookTimeout: 60_000,
     maxWorkers: 4,
-    coverage: { include: ['src/**/*.ts'], reportsDirectory: './coverage' },
+    coverage: {
+      include: ['src/**/*.ts'],
+      reportsDirectory: './coverage',
+      reportOnFailure: true,
+    },
   },
   plugins: [swc.vite({ module: { type: 'es6' } })],
 });

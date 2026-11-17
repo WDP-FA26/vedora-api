@@ -102,7 +102,6 @@ export class UsersService {
             $set: {
               ...(dto.username !== undefined && { username: dto.username }),
               ...(dto.fullName !== undefined && { fullName: dto.fullName }),
-              ...(dto.email !== undefined && { email: dto.email }),
             },
           },
           { returnDocument: 'after' },

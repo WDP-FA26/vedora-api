@@ -45,7 +45,7 @@ export class CreateBlogDto {
     format: 'uri',
     deprecated: true,
     description:
-      "Ignored: the cover is always the first image in `content`. Still validated (an https link, or an image in Vedora's blog storage) so older clients get the same errors.",
+      "Ignored: the cover is always the first image in `content`. Still validated (an image uploaded to Vedora's blog storage) so older clients get the same errors.",
   })
   @ValidateIf(
     (_object, value: unknown) => value !== undefined && value !== null,

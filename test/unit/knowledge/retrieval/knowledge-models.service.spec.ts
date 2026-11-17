@@ -1,7 +1,10 @@
 import { ConfigService } from '@nestjs/config';
 import { AiService } from '@nestjs/ai';
 import { mockDeep } from 'vitest-mock-extended';
-import { KnowledgeModelsService } from '../../../../src/knowledge/retrieval/knowledge-models.service.js';
+import {
+  documentText,
+  KnowledgeModelsService,
+} from '../../../../src/knowledge/retrieval/knowledge-models.service.js';
 import { AiCostTransportService } from '../../../../src/ai/telemetry/ai-cost-transport.service.js';
 
 const fetchMock = vi.fn<typeof fetch>();
@@ -247,5 +250,91 @@ describe('KnowledgeModelsService', () => {
         reason: 'OCR returned no parse (402): Insufficient credits',
       });
     });
+
+    it('falls back to "no annotations" when neither annotations nor error message exist', async () => {
+      fetchMock.mockResolvedValue(Response.json({}, { status: 200 }));
+
+      await expect(
+        createService().ocrPdf(new Uint8Array([1])),
+      ).rejects.toMatchObject({
+        message: 'openrouter request failed',
+        reason: 'OCR returned no parse (200): no annotations',
+      });
+    });
+  });
+
+  it('returns an empty list immediately when embedding no inputs', async () => {
+    await expect(createService().embed([])).resolves.toEqual([]);
+    expect(ai.embedMany).not.toHaveBeenCalled();
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('rejects stream responses from multimodal embeddings and rerank', async () => {
+    fetchMock.mockResolvedValueOnce(
+      new Response('data: {}\n\n', {
+        status: 200,
+        headers: { 'content-type': 'text/event-stream' },
+      }),
+    );
+    await expect(
+      createService().embed([{ image: new Uint8Array([1]) }]),
+    ).rejects.toMatchObject({
+      message: 'openrouter request failed',
+      reason: 'Embeddings returned a stream instead of vectors',
+    });
+
+    fetchMock.mockResolvedValueOnce(
+      new Response('data: {}\n\n', {
+        status: 200,
+        headers: { 'content-type': 'text/event-stream' },
+      }),
+    );
+    await expect(
+      createService({
+        OPENROUTER_RERANK_MODEL: 'cohere/rerank-v3.5',
+      }).rerank('q', ['a'], 1, new AbortController().signal),
+    ).rejects.toMatchObject({
+      message: 'openrouter request failed',
+      reason: 'Rerank returned a stream instead of results',
+    });
+  });
+
+  it('rejects base64 embeddings and falls back to position when index is missing', async () => {
+    fetchMock.mockResolvedValueOnce(
+      Response.json({
+        object: 'list',
+        model: 'google/gemini-embedding-2',
+        data: [{ object: 'embedding', index: 0, embedding: 'AAAA' }],
+      }),
+    );
+    await expect(
+      createService().embed([{ image: new Uint8Array([1]) }]),
+    ).rejects.toMatchObject({
+      message: 'openrouter request failed',
+      reason: 'Embeddings returned base64 although floats were requested',
+    });
+
+    fetchMock.mockResolvedValueOnce(
+      Response.json({
+        object: 'list',
+        model: 'google/gemini-embedding-2',
+        data: [
+          { object: 'embedding', embedding: [0.4] },
+          { object: 'embedding', embedding: [0.5] },
+        ],
+      }),
+    );
+    await expect(
+      createService().embed([
+        { image: new Uint8Array([1]) },
+        { image: new Uint8Array([2]) },
+      ]),
+    ).resolves.toEqual([[0.4], [0.5]]);
+  });
+
+  it('formats document text with title and body', () => {
+    expect(documentText('Đậu hũ', 'Giàu đạm thực vật')).toBe(
+      'title: Đậu hũ | text: Giàu đạm thực vật',
+    );
   });
 });

@@ -101,6 +101,18 @@ export class CloudinaryService {
     };
   }
 
+  isBlogVideoUrl(url: string): boolean {
+    if (!this.cloudName) return false;
+    const prefix = `https://res.cloudinary.com/${this.cloudName}/video/upload/`;
+    if (!url.startsWith(prefix)) return false;
+    const rest = url.slice(prefix.length).split(/[?#]/)[0];
+    return (
+      !rest.split('/').includes('..') &&
+      (rest.startsWith(`${this.folder}/blog-videos/`) ||
+        rest.includes(`/${this.folder}/blog-videos/`))
+    );
+  }
+
   signRecipeImageUpload(): { upload: SignedUpload; url: string } {
     const folder = `${this.folder}/recipe-images`;
     const publicId = `${folder}/${randomUUID()}`;

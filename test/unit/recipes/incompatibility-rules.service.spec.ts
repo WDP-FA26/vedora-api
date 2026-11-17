@@ -1,4 +1,5 @@
 import { InvalidInputException } from '../../../src/common/exceptions/invalid-input.exception.js';
+import { ResourceNotFoundException } from '../../../src/common/exceptions/resource-not-found.exception.js';
 import { StateConflictException } from '../../../src/common/exceptions/state-conflict.exception.js';
 import type { INestApplication } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
@@ -149,5 +150,81 @@ describe('IncompatibilityRulesService', () => {
 
   it('skips the database for fewer than two ingredients', async () => {
     await expect(service.findConflicts([tofu])).resolves.toEqual([]);
+  });
+
+  it('returns empty array when two or more ingredients have no conflicts', async () => {
+    await expect(service.findConflicts([tofu, spinach])).resolves.toEqual([]);
+  });
+
+  it('lists rules newest first, updates rules, and removes rules', async () => {
+    const first = await service.create({
+      a: { kind: 'INGREDIENT', id: tofu },
+      b: { kind: 'INGREDIENT', id: spinach },
+      reason: 'Lý do 1',
+      source: 'Sách dinh dưỡng',
+    });
+    const second = await service.create({
+      a: { kind: 'GROUP', id: greens },
+      b: { kind: 'GROUP', id: greens },
+      reason: 'Lý do 2',
+    });
+
+    const page = await service.findAll({ page: 1, limit: 10 });
+    expect(page.meta.totalItems).toBe(2);
+    expect(page.items.map((r) => r.id)).toEqual([second.id, first.id]);
+    expect(page.items[1].source).toBe('Sách dinh dưỡng');
+
+    // Updating a rule keeping the same pair is allowed and clears optional source
+    const updated = await service.update(first.id, {
+      a: { kind: 'INGREDIENT', id: spinach },
+      b: { kind: 'INGREDIENT', id: tofu },
+      reason: 'Lý do mới',
+    });
+    expect(updated.reason).toBe('Lý do mới');
+    expect(updated.source).toBeNull();
+
+    // Updating a rule to collide with another existing rule fails
+    await expect(
+      service.update(first.id, {
+        a: { kind: 'GROUP', id: greens },
+        b: { kind: 'GROUP', id: greens },
+        reason: 'Trùng',
+      }),
+    ).rejects.toBeInstanceOf(StateConflictException);
+
+    // Updating missing rule throws 404
+    const missingRuleId = 'c1a2d3e4-0000-4000-8000-000000000099';
+    await expect(
+      service.update(missingRuleId, {
+        a: { kind: 'INGREDIENT', id: tofu },
+        b: { kind: 'GROUP', id: greens },
+        reason: 'x',
+      }),
+    ).rejects.toBeInstanceOf(ResourceNotFoundException);
+
+    await service.remove(first.id);
+    expect(await rules().countDocuments()).toBe(1);
+
+    await expect(service.remove(first.id)).rejects.toBeInstanceOf(
+      ResourceNotFoundException,
+    );
+  });
+
+  it('ignores group members not present in the queried ingredient set', async () => {
+    const extra = 'a1a2d3e4-0000-4000-8000-000000000003';
+    await createIngredient(mongo, { id: extra, name: 'Cải xoăn' });
+    await groups().updateOne(
+      { _id: greens },
+      { $addToSet: { ingredientIds: { $each: [spinach, extra] } } },
+    );
+    await service.create({
+      a: { kind: 'INGREDIENT', id: tofu },
+      b: { kind: 'GROUP', id: greens },
+      reason: REASON,
+    });
+
+    const conflicts = await service.findConflicts([tofu, spinach]);
+    expect(conflicts).toHaveLength(1);
+    expect(conflicts[0].b.id).toBe(spinach);
   });
 });

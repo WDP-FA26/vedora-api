@@ -8,6 +8,10 @@ import {
   UserRole,
 } from '../../src/mongo/models.js';
 import {
+  StorageService,
+  StorageTarget,
+} from '../../src/storage/storage.service.js';
+import {
   BORDERLINE_MARKER,
   createE2eApp,
   type E2eApp,
@@ -84,12 +88,37 @@ describe('Blog flows (e2e)', () => {
       await patch(blog.id, payload).expect(400);
     });
 
-    it('refuses a plain http cover with BLOG_COVER_NOT_ALLOWED', async () => {
-      const response = await create({
+    it('refuses external covers and external markdown image URLs, while accepting blog storage media', async () => {
+      const httpCover = await create({
         coverImageUrl: 'http://example.com/a.jpg',
       }).expect(400);
+      expect((httpCover.body as ErrorBody).code).toBe('BLOG_COVER_NOT_ALLOWED');
 
-      expect((response.body as ErrorBody).code).toBe('BLOG_COVER_NOT_ALLOWED');
+      const httpsCover = await create({
+        coverImageUrl: 'https://example.com/a.jpg',
+      }).expect(400);
+      expect((httpsCover.body as ErrorBody).code).toBe(
+        'BLOG_COVER_NOT_ALLOWED',
+      );
+
+      const inlineExt = await create({
+        content: '![ext](https://example.com/a.jpg)',
+      }).expect(400);
+      expect((inlineExt.body as ErrorBody).code).toBe('BLOG_MEDIA_NOT_ALLOWED');
+
+      const refExt = await create({
+        content: '![ext][pic]\n\n[pic]: https://example.com/a.jpg',
+      }).expect(400);
+      expect((refExt.body as ErrorBody).code).toBe('BLOG_MEDIA_NOT_ALLOWED');
+
+      const storageUrl = e2e.app
+        .get(StorageService)
+        .publicObjectUrl(StorageTarget.Blogs, `blogs/${author.id}/img.jpg`);
+      const ok = await create({
+        coverImageUrl: storageUrl,
+        content: `![hình](${storageUrl})\n\n[nguồn](https://example.com)`,
+      }).expect(201);
+      expect((ok.body as BlogBody).blog.coverImageUrl).toBe(storageUrl);
     });
 
     it('accepts exactly 50000 characters of content', async () => {

@@ -2,6 +2,10 @@ import { createHash, randomUUID } from 'node:crypto';
 import request from 'supertest';
 import { MediaService } from '../../src/media/media.service.js';
 import {
+  StorageService,
+  StorageTarget,
+} from '../../src/storage/storage.service.js';
+import {
   MAX_BLOG_CONTENT,
   BlogDetailDto,
 } from '../../src/posts/dto/blog.dto.js';
@@ -239,12 +243,21 @@ describe('Blogs (HTTP)', () => {
   });
 
   it('supports partial edit, a cover that follows the content and replacing recipe links', async () => {
+    const storage = e2e.app.get(StorageService);
+    const coverUrl = storage.publicObjectUrl(
+      StorageTarget.Blogs,
+      `blogs/${author.id}/a.jpg`,
+    );
+    const ignoredUrl = storage.publicObjectUrl(
+      StorageTarget.Blogs,
+      `blogs/${author.id}/ignored.jpg`,
+    );
     const blog = await createBlog({
-      content: '![Bìa](https://example.com/a.jpg)\n\nNấu đậu hũ với cà chua.',
-      coverImageUrl: 'https://example.com/ignored.jpg',
+      content: `![Bìa](${coverUrl})\n\nNấu đậu hũ với cà chua.`,
+      coverImageUrl: ignoredUrl,
     });
     expect(blog.blog?.recipes).toHaveLength(1);
-    expect(blog.blog?.coverImageUrl).toBe('https://example.com/a.jpg');
+    expect(blog.blog?.coverImageUrl).toBe(coverUrl);
     const recipesOnly = await asAuthor(
       request(server()).patch(`/api/v1/blogs/${blog.id}`),
     )
@@ -253,7 +266,7 @@ describe('Blogs (HTTP)', () => {
     expect(recipesOnly.body).toMatchObject({
       status: 'DRAFT',
       content: blog.content,
-      blog: { coverImageUrl: 'https://example.com/a.jpg', recipes: [] },
+      blog: { coverImageUrl: coverUrl, recipes: [] },
     });
     const edited = await asAuthor(
       request(server()).patch(`/api/v1/blogs/${blog.id}`),
