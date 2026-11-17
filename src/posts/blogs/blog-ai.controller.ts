@@ -72,7 +72,7 @@ export class BlogAiController {
       "- `insertImage { url, alt, position: 'cursor' | 'end' | 'after', after? }`",
       "- output: `{ applied: boolean, error?: 'NO_SELECTION' | 'NOT_FOUND' | 'AMBIGUOUS' | 'STALE', reason? }`",
       '',
-      "Server tools: `generateImage { prompt, aspectRatio: '1:1' | '4:3' | '3:4' | '16:9' }` and `editImage { imageUrl, instruction }` output `{ url }` or `{ error: 'IMAGE_QUOTA_EXCEEDED' | 'IMAGE_PROMPT_REFUSED' | 'IMAGE_NOT_OWNED' | 'IMAGE_FAILED' }`; `searchKnowledge { query }` outputs passages.",
+      "Server tools: `generateImage { prompt, aspectRatio: '1:1' | '4:3' | '3:4' | '16:9' }` and `editImage { imageUrl, instruction }` output `{ url }` or `{ error: 'IMAGE_QUOTA_EXCEEDED' | 'IMAGE_PROMPT_REFUSED' | 'IMAGE_NOT_OWNED' | 'IMAGE_FAILED' }`; `searchKnowledge { query }` outputs `{ status: "ok", hits: [{ title, page, text }] }`, or `{ status: "unavailable" }` when the search failed.",
     ].join('\n'),
   })
   @ApiBadRequestResponse({

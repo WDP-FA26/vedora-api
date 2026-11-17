@@ -107,7 +107,7 @@ Một lượt có thể có nhiều editor tool liên tiếp: mỗi lần FE tr�
 
 | Tool | Input | Output |
 | --- | --- | --- |
-| `searchKnowledge` | `{ query }` | Đoạn tài liệu dinh dưỡng; chỉ cần hiện "Đang tra tài liệu…" |
+| `searchKnowledge` | `{ query }` | `{ status: "ok", hits: [{ title, page, text }] }` hoặc `{ status: "unavailable" }` khi tra cứu lỗi (không phải "không có dữ liệu"). Hiện "Đang tra tài liệu…", rồi số đoạn tìm được; `unavailable` hiện như lỗi |
 | `generateImage` | `{ prompt, aspectRatio: "1:1" \| "4:3" \| "3:4" \| "16:9" }` | `{ url }` hoặc `{ error }` |
 | `editImage` | `{ imageUrl, instruction }` | `{ url }` hoặc `{ error }` |
 
