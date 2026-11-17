@@ -139,22 +139,24 @@ describe('Blog lifecycle with MongoDB', () => {
     expect(feed.items[0].blog).not.toHaveProperty('content');
   });
 
-  it('preserves omitted fields, replaces links in input order and clears the cover', async () => {
+  it('preserves omitted fields, replaces links in input order and takes the cover from the content', async () => {
+    const withImage = '![Bìa](https://example.com/cover.jpg)\n\nNội dung';
     const article = await blogs.create(authorId, {
       title: 'Nấu chay',
-      content: 'Nội dung',
-      coverImageUrl: 'https://example.com/cover.jpg',
+      content: withImage,
+      coverImageUrl: 'https://example.com/ignored.jpg',
       recipeIds,
     });
+    expect(article.blog?.coverImageUrl).toBe('https://example.com/cover.jpg');
     const edited = await blogs.update(article.id, authorId, {
       title: 'Nấu chay mỗi ngày',
     });
-    expect(edited.content).toBe('Nội dung');
+    expect(edited.content).toBe(withImage);
     expect(edited.blog?.coverImageUrl).toBe('https://example.com/cover.jpg');
     expect(edited.blog?.recipes.map(({ id }) => id)).toEqual(recipeIds);
     const linked = await blogs.update(article.id, authorId, {
       recipeIds: [...recipeIds].reverse(),
-      coverImageUrl: null,
+      content: 'Nội dung không còn ảnh',
     });
     expect(linked.blog?.recipes.map(({ id }) => id)).toEqual(
       [...recipeIds].reverse(),

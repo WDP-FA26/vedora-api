@@ -25,6 +25,7 @@ import { PostsQueryService } from '../posts-query.service.js';
 import { PostModerationService } from '../../media/post-moderation.service.js';
 import { InvalidInputException } from '../../common/exceptions/invalid-input.exception.js';
 import { ResourceNotFoundException } from '../../common/exceptions/resource-not-found.exception.js';
+import { coverFromContent } from './blog-cover.js';
 
 @Injectable()
 export class BlogsService {
@@ -56,7 +57,7 @@ export class BlogsService {
         title: dto.title,
         content,
         excerpt: this.excerpt(content),
-        coverImageUrl: dto.coverImageUrl ?? null,
+        coverImageUrl: this.coverOf(content),
         recipeIds: dto.recipeIds ?? [],
       },
       searchIndexedAt: null,
@@ -140,9 +141,7 @@ export class BlogsService {
       const content = dto.content ?? blog.content;
       this.validatePublication(requested, content);
       const changesReviewedContent =
-        dto.title !== undefined ||
-        dto.content !== undefined ||
-        dto.coverImageUrl !== undefined;
+        dto.title !== undefined || dto.content !== undefined;
       needsReview =
         requested === PostStatus.PUBLISHED &&
         (current.status !== PostStatus.PUBLISHED || changesReviewedContent);
@@ -161,10 +160,7 @@ export class BlogsService {
                 dto.content !== undefined
                   ? this.excerpt(dto.content)
                   : blog.excerpt,
-              'blog.coverImageUrl':
-                dto.coverImageUrl !== undefined
-                  ? dto.coverImageUrl
-                  : blog.coverImageUrl,
+              'blog.coverImageUrl': this.coverOf(content),
               'blog.recipeIds': dto.recipeIds ?? blog.recipeIds,
               updatedAt: now,
             },
@@ -224,10 +220,25 @@ export class BlogsService {
     }
   }
 
+  /** The cover the feed shows: the first allowed image in the content. */
+  private coverOf(content: string): string | null {
+    return coverFromContent(content, (url) => this.isAllowedCover(url));
+  }
+
+  private isAllowedCover(url: string): boolean {
+    return (
+      isURL(url, { protocols: ['https'], require_protocol: true }) ||
+      this.storage.keyFromPublicUrl(StorageTarget.Blogs, url) !== null
+    );
+  }
+
+  /**
+   * `coverImageUrl` is no longer stored as sent (the cover comes from the
+   * content), but a malformed one is still refused so old clients get the
+   * same error as before.
+   */
   private validateCover(url: string | null | undefined) {
-    if (!url) return;
-    if (isURL(url, { protocols: ['https'], require_protocol: true })) return;
-    if (this.storage.keyFromPublicUrl(StorageTarget.Blogs, url)) return;
+    if (!url || this.isAllowedCover(url)) return;
     throw new InvalidInputException(
       'BLOG_COVER_NOT_ALLOWED',
       'A cover must be an https link or an image in blog storage',
