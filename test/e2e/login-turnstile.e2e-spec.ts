@@ -46,6 +46,7 @@ describe('Password login requires Turnstile (HTTP)', () => {
         username: credentials.username,
         fullName: 'Vedora User',
         email: 'user@example.test',
+        avatarUrl: null,
         role: UserRole.USER,
         status: AccountStatus.ACTIVE,
         accountVersion: 0,
