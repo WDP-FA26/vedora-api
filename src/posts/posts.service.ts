@@ -20,6 +20,7 @@ const EDITABLE_STATUSES: PostStatus[] = [
   PostStatus.PUBLISHED,
   PostStatus.PENDING_REVIEW,
   PostStatus.REJECTED,
+  PostStatus.FAILED,
 ];
 
 @Injectable()
@@ -69,17 +70,24 @@ export class PostsService {
   }
 
   /**
-   * Edits the text of a short post. Changed text is moderated again like a
-   * new post: the post is PROCESSING until the verdict, so a rejected or held
-   * post can be fixed and resubmitted. Videos cannot be swapped.
+   * Edits a short post's text and/or its videos. Changed content is moderated
+   * again like a new post: the post is PROCESSING until every new video is
+   * ready and the verdict is in, so a rejected, held or failed post can be
+   * fixed and resubmitted.
    */
   async update(
     id: string,
     authorId: string,
     dto: UpdatePostDto,
   ): Promise<PostResponseDto> {
-    const body = dto.body || null;
+    if (dto.body === undefined && dto.mediaIds === undefined) {
+      throw new InvalidInputException(
+        'BAD_REQUEST',
+        'Provide body or mediaIds',
+      );
+    }
     let changed = false;
+    let detachedIds: string[] = [];
     await this.mongo.withTransaction(async (session) => {
       await lockDocument(this.mongo, session, 'post', id);
       const current = await this.posts
@@ -101,20 +109,37 @@ export class PostsService {
           'This post is still being processed and cannot be edited yet',
         );
       }
-      if (body === current.body) return;
-      if (!body) {
-        const videos = await this.media
-          .countDocuments({ postId: id, discardedAt: null })
-          .session(session)
-          .exec();
-        if (videos === 0) {
-          throw new InvalidInputException(
-            'EMPTY_POST',
-            'A post needs text or a video',
-          );
-        }
+
+      const body = dto.body === undefined ? current.body : dto.body || null;
+      const mediaCount =
+        dto.mediaIds === undefined
+          ? await this.media
+              .countDocuments({ postId: id, discardedAt: null })
+              .session(session)
+              .exec()
+          : dto.mediaIds.length;
+      if (!body && mediaCount === 0) {
+        throw new InvalidInputException(
+          'EMPTY_POST',
+          'A post needs text or a video',
+        );
       }
-      changed = true;
+
+      const bodyChanged = body !== current.body;
+      let mediaChanged = false;
+      if (dto.mediaIds !== undefined) {
+        const replaced = await this.mediaService.replacePostMedia(
+          session,
+          authorId,
+          id,
+          dto.mediaIds,
+        );
+        mediaChanged = replaced.changed;
+        detachedIds = replaced.detachedIds;
+      }
+      changed = bodyChanged || mediaChanged;
+      if (!changed) return;
+
       await this.posts
         .updateOne(
           { _id: id },
@@ -134,6 +159,9 @@ export class PostsService {
     if (changed) {
       await this.mediaService.settlePosts([id]);
       this.searchIndex.schedule();
+    }
+    if (detachedIds.length > 0) {
+      await this.mediaService.discard({ _id: { $in: detachedIds } });
     }
     return this.postsQuery.load(id, authorId);
   }

@@ -179,9 +179,9 @@ export class PostsController {
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @ApiOperation({
-    summary: 'Edit the text of your post',
+    summary: 'Edit the text and videos of your post',
     description:
-      'Changed text is moderated again: the response is PROCESSING until the verdict, then PUBLISHED, PENDING_REVIEW or REJECTED. Unchanged text returns the post as it is. 409 POST_NOT_EDITABLE while the post is PROCESSING or FAILED.',
+      'Changed text is moderated again: the response is PROCESSING until the verdict, then PUBLISHED, PENDING_REVIEW or REJECTED. `mediaIds` is the final ordered list of videos. Nothing changed returns the post as it is. 409 POST_NOT_EDITABLE while the post is PROCESSING; a FAILED post can be fixed by editing it.',
   })
   @ApiOkResponse({ type: PostResponseDto })
   update(
