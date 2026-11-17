@@ -1,4 +1,7 @@
-import { KnowledgeDocumentFailureReason } from '../../../../src/mongo/models.js';
+import {
+  KnowledgeDocumentFailureReason,
+  KnowledgePageFlag,
+} from '../../../../src/mongo/models.js';
 import { type DeepMockProxy, mockDeep } from 'vitest-mock-extended';
 import { KnowledgeModelsService } from '../../../../src/knowledge/retrieval/knowledge-models.service.js';
 import { DocumentExtractionError } from '../../../../src/knowledge/extractors/document-extractor.js';
@@ -67,8 +70,8 @@ describe('PdfExtractor', () => {
     );
 
     expect(sections).toEqual([
-      { text: '# Trang 1', images: [expect.any(Uint8Array)] },
-      { text: '| Dau phu | 8g |', images: [] },
+      { text: '# Trang 1', images: [expect.any(Uint8Array)], flags: [] },
+      { text: '| Dau phu | 8g |', images: [], flags: [] },
     ]);
     expect([...sections[0].images[0].slice(0, 2)]).toEqual([0xff, 0xd8]);
   });
@@ -101,6 +104,29 @@ describe('PdfExtractor', () => {
     );
 
     expect(section.text).toBe('| ASV61 |\n\nASV61 13.01 0.80 Firmicutes');
+    expect(section.flags).toEqual([KnowledgePageFlag.TEXT_LAYER_ADDED]);
+  });
+
+  it('flags every page when OCR returns a different page count', async () => {
+    models.ocrPdf.mockResolvedValue(['a', 'b', 'c']);
+
+    const sections = await extractor.extract(
+      pdfWithPages({ text: 'a' }, { text: 'b' }),
+    );
+
+    expect(sections.map(({ flags }) => flags)).toEqual([
+      [KnowledgePageFlag.PAGE_COUNT_MISMATCH],
+      [KnowledgePageFlag.PAGE_COUNT_MISMATCH],
+    ]);
+  });
+
+  it('takes the page images without calling OCR', async () => {
+    const images = await extractor.extractImages(
+      pdfWithPages({ image: true }, { text: 'Dau phu 8g' }),
+    );
+
+    expect(images).toEqual([[expect.any(Uint8Array)], []]);
+    expect(models.ocrPdf).not.toHaveBeenCalled();
   });
 
   it('rejects files that are not PDFs', async () => {

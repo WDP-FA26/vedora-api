@@ -54,6 +54,28 @@ export class KnowledgeMaintenanceService {
         },
       )
       .exec();
+    const stuckIndexing = await this.documents
+      .updateMany(
+        {
+          status: KnowledgeDocumentStatus.INDEXING,
+          updatedAt: { $lt: new Date(now - STALE_PROCESSING_MS) },
+        },
+        {
+          $set: {
+            status: KnowledgeDocumentStatus.AWAITING_REVIEW,
+            failureReason: KnowledgeDocumentFailureReason.INDEXING_FAILED,
+            reviewedById: null,
+            reviewedAt: null,
+            reviewNote: null,
+          },
+        },
+      )
+      .exec();
+    if (stuckIndexing.modifiedCount > 0) {
+      this.logger.log(
+        `Returned ${stuckIndexing.modifiedCount} interrupted indexing runs to review`,
+      );
+    }
     if (expired.modifiedCount + stale.modifiedCount > 0) {
       this.logger.log(
         `Failed ${expired.modifiedCount} uploads without an upload event and ${stale.modifiedCount} interrupted extractions`,

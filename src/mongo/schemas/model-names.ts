@@ -24,6 +24,7 @@ export const MODEL_NAMES = [
   'PostReport',
   'MediaAsset',
   'KnowledgeDocument',
+  'KnowledgePage',
   'VerificationRequest',
   'VerificationProof',
   'Ingredient',

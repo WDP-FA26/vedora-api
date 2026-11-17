@@ -1,5 +1,9 @@
 import { createHash } from 'node:crypto';
-import { MediaStatus, type MediaAsset } from '../../src/mongo/models.js';
+import {
+  MediaStatus,
+  UserRole,
+  type MediaAsset,
+} from '../../src/mongo/models.js';
 import request from 'supertest';
 import type { MockInstance } from 'vitest';
 import { GuestSessionService } from '../../src/nutrition-chat/guest/guest-session.service.js';
@@ -21,6 +25,7 @@ function signWebhook(payload: string, key = CLOUDINARY_SECRET) {
 describe('Vedora API (e2e)', () => {
   let e2e: E2eApp;
   let token: string;
+  let adminToken: string;
   const app = {
     getHttpServer: () => e2e.app.getHttpServer(),
     get: <T>(type: new (...args: never[]) => T): T => e2e.app.get(type),
@@ -30,6 +35,12 @@ describe('Vedora API (e2e)', () => {
     e2e = await createE2eApp('app_e2e');
     token = await e2e.sign(
       await createUser(e2e.mongo, { username: 'vedora.user' }),
+    );
+    adminToken = await e2e.sign(
+      await createUser(e2e.mongo, {
+        username: 'vedora.knowledge',
+        role: UserRole.ADMIN,
+      }),
     );
   });
 
@@ -216,10 +227,22 @@ describe('Vedora API (e2e)', () => {
         .expect(401);
     });
 
-    it('refuses file types no extractor handles', async () => {
+    it('is for admins only', async () => {
       await request(app.getHttpServer())
         .post('/api/v1/knowledge/documents')
         .set('authorization', `Bearer ${token}`)
+        .send({ filename: 'dinh-duong.pdf', sizeBytes: 1234 })
+        .expect(403);
+      await request(app.getHttpServer())
+        .get('/api/v1/knowledge/documents')
+        .set('authorization', `Bearer ${token}`)
+        .expect(403);
+    });
+
+    it('refuses file types no extractor handles', async () => {
+      await request(app.getHttpServer())
+        .post('/api/v1/knowledge/documents')
+        .set('authorization', `Bearer ${adminToken}`)
         .send({ filename: 'anh-mon-an.jpg', sizeBytes: 1234 })
         .expect(415);
     });

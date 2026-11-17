@@ -4,6 +4,8 @@ import { ConfigService } from '@nestjs/config';
 import { chunkdown } from 'chunkdown';
 import { QdrantService } from '../../qdrant/qdrant.service.js';
 import type { ExtractedSection } from '../extractors/document-extractor.js';
+
+type IndexedSection = Pick<ExtractedSection, 'text' | 'images'>;
 import {
   BM25_FOLDED_VECTOR,
   BM25_VECTOR,
@@ -47,7 +49,7 @@ export class KnowledgeIndexService {
 
   async index(
     document: IndexedDocument,
-    sections: ExtractedSection[],
+    sections: IndexedSection[],
   ): Promise<number> {
     await this.ensureCollection();
     const chunks = sections.flatMap(({ text }, index) =>

@@ -8,12 +8,15 @@ import {
   KnowledgeDocument,
   KnowledgeDocumentFailureReason,
   KnowledgeDocumentStatus,
+  KnowledgePage,
 } from '../mongo/models.js';
 import { NoSuchKey } from '@aws-sdk/client-s3';
 import { StorageService, StorageTarget } from '../storage/storage.service.js';
 import {
   CreateKnowledgeUploadResponseDto,
   KnowledgeDocumentResponseDto,
+  KnowledgeFileUrlResponseDto,
+  KnowledgePageResponseDto,
 } from './dto/knowledge-document-response.dto.js';
 import {
   DocumentExtractionError,
@@ -22,7 +25,10 @@ import {
 import { PDF_CONTENT_TYPE, PdfExtractor } from './extractors/pdf-extractor.js';
 import { KnowledgeIndexService } from './retrieval/knowledge-index.service.js';
 import { ResourceNotFoundException } from '../common/exceptions/resource-not-found.exception.js';
+import { StateConflictException } from '../common/exceptions/state-conflict.exception.js';
 import { UnsupportedFileTypeException } from '../common/exceptions/unsupported-file-type.exception.js';
+
+const FILE_URL_TTL_SECONDS = 15 * 60;
 
 @Injectable()
 export class KnowledgeService {
@@ -32,6 +38,8 @@ export class KnowledgeService {
   constructor(
     @InjectModel(KnowledgeDocument.name)
     private readonly documents: Model<KnowledgeDocument>,
+    @InjectModel(KnowledgePage.name)
+    private readonly pages: Model<KnowledgePage>,
     private readonly storage: StorageService,
     private readonly pdf: PdfExtractor,
     private readonly index: KnowledgeIndexService,
@@ -93,6 +101,7 @@ export class KnowledgeService {
     else this.logger.warn(`No waiting document for ${key}`);
   }
 
+  /** OCRs the file and parks the text for an admin to review. Nothing is indexed yet. */
   async ingest(document: KnowledgeDocument): Promise<void> {
     let file: Uint8Array;
     let sections: ExtractedSection[];
@@ -107,15 +116,24 @@ export class KnowledgeService {
       return;
     }
 
-    let imageCount: number;
     try {
-      imageCount = await this.index.index(document, sections);
+      await this.pages.deleteMany({ documentId: document.id }).exec();
+      await this.pages.insertMany(
+        sections.map(({ text, flags }, index) => ({
+          documentId: document.id,
+          page: index + 1,
+          text,
+          flags,
+        })),
+      );
     } catch (error) {
       await this.fail(
         document.id,
-        KnowledgeDocumentFailureReason.INDEXING_FAILED,
+        KnowledgeDocumentFailureReason.EXTRACTION_FAILED,
       );
-      this.logger.error(`Indexing ${document.id} failed: ${String(error)}`);
+      this.logger.error(
+        `Saving pages of ${document.id} failed: ${String(error)}`,
+      );
       return;
     }
 
@@ -123,16 +141,203 @@ export class KnowledgeService {
       { _id: document.id },
       {
         $set: {
-          status: KnowledgeDocumentStatus.READY,
+          status: KnowledgeDocumentStatus.AWAITING_REVIEW,
           failureReason: null,
           sectionCount: sections.length,
-          imageCount,
           sizeBytes: file.byteLength,
         },
       },
     );
     this.logger.log(
-      `Ingested ${document.id} (${sections.length} sections, ${imageCount} images)`,
+      `Extracted ${document.id} (${sections.length} pages), awaiting review`,
+    );
+  }
+
+  async listPages(id: string): Promise<KnowledgePageResponseDto[]> {
+    await this.findDocument(id);
+    const pages = await this.pages
+      .find({ documentId: id })
+      .sort({ page: 1 })
+      .exec();
+    return pages.map(toPageResponse);
+  }
+
+  async updatePage(
+    id: string,
+    page: number,
+    text: string,
+  ): Promise<KnowledgePageResponseDto> {
+    const document = await this.findDocument(id);
+    this.requireStatus(document, KnowledgeDocumentStatus.AWAITING_REVIEW);
+    const updated = await this.pages
+      .findOneAndUpdate(
+        { documentId: id, page },
+        { $set: { text, edited: true } },
+        { returnDocument: 'after' },
+      )
+      .exec();
+    if (!updated) {
+      throw new ResourceNotFoundException('NOT_FOUND', 'Page not found');
+    }
+    return toPageResponse(updated);
+  }
+
+  /** Starts indexing the reviewed text; a second call while indexing gets a 409. */
+  async approve(
+    adminId: string,
+    id: string,
+    note: string | null,
+  ): Promise<KnowledgeDocumentResponseDto> {
+    const document = await this.documents
+      .findOneAndUpdate(
+        { _id: id, status: KnowledgeDocumentStatus.AWAITING_REVIEW },
+        {
+          $set: {
+            status: KnowledgeDocumentStatus.INDEXING,
+            failureReason: null,
+            reviewedById: adminId,
+            reviewedAt: new Date(),
+            reviewNote: note,
+          },
+        },
+        { returnDocument: 'after' },
+      )
+      .exec();
+    if (!document) throw await this.notReviewable(id);
+    void this.indexApproved(document);
+    return toResponse(document);
+  }
+
+  async indexApproved(document: KnowledgeDocument): Promise<void> {
+    try {
+      const file = await this.storage.getBytes(
+        StorageTarget.Knowledge,
+        document.storageKey,
+      );
+      const imagesByPage = await this.pdf.extractImages(file);
+      const pages = await this.pages
+        .find({ documentId: document.id })
+        .sort({ page: 1 })
+        .exec();
+      const sections = pages.map(({ page, text }) => ({
+        text,
+        images: imagesByPage[page - 1] ?? [],
+      }));
+      const imageCount = await this.index.index(document, sections);
+      await this.documents.updateOne(
+        { _id: document.id },
+        {
+          $set: {
+            status: KnowledgeDocumentStatus.READY,
+            failureReason: null,
+            imageCount,
+          },
+        },
+      );
+      this.logger.log(
+        `Indexed ${document.id} (${sections.length} pages, ${imageCount} images)`,
+      );
+    } catch (error) {
+      await this.returnToReview(
+        document.id,
+        KnowledgeDocumentFailureReason.INDEXING_FAILED,
+      );
+      this.logger.error(`Indexing ${document.id} failed: ${String(error)}`);
+    }
+  }
+
+  /** The reviewed pages are kept, so the admin can approve again. */
+  async returnToReview(
+    id: string,
+    reason: KnowledgeDocumentFailureReason,
+  ): Promise<void> {
+    await this.documents.updateOne(
+      { _id: id },
+      {
+        $set: {
+          status: KnowledgeDocumentStatus.AWAITING_REVIEW,
+          failureReason: reason,
+          reviewedById: null,
+          reviewedAt: null,
+          reviewNote: null,
+        },
+      },
+    );
+  }
+
+  /** Declines the document but keeps its file and pages. `remove` deletes. */
+  async reject(
+    adminId: string,
+    id: string,
+    note: string | null,
+  ): Promise<KnowledgeDocumentResponseDto> {
+    const document = await this.documents
+      .findOneAndUpdate(
+        { _id: id, status: KnowledgeDocumentStatus.AWAITING_REVIEW },
+        {
+          $set: {
+            status: KnowledgeDocumentStatus.REJECTED,
+            failureReason: null,
+            reviewedById: adminId,
+            reviewedAt: new Date(),
+            reviewNote: note,
+          },
+        },
+        { returnDocument: 'after' },
+      )
+      .exec();
+    if (!document) throw await this.notReviewable(id);
+    return toResponse(document);
+  }
+
+  async reopen(id: string): Promise<KnowledgeDocumentResponseDto> {
+    const document = await this.documents
+      .findOneAndUpdate(
+        { _id: id, status: KnowledgeDocumentStatus.REJECTED },
+        {
+          $set: {
+            status: KnowledgeDocumentStatus.AWAITING_REVIEW,
+            reviewedById: null,
+            reviewedAt: null,
+            reviewNote: null,
+          },
+        },
+        { returnDocument: 'after' },
+      )
+      .exec();
+    if (!document) throw await this.notReviewable(id);
+    return toResponse(document);
+  }
+
+  async fileUrl(id: string): Promise<KnowledgeFileUrlResponseDto> {
+    const document = await this.findDocument(id);
+    const url = await this.storage.presignDownload(
+      StorageTarget.Knowledge,
+      document.storageKey,
+      FILE_URL_TTL_SECONDS,
+    );
+    return {
+      url,
+      expiresAt: new Date(Date.now() + FILE_URL_TTL_SECONDS * 1000),
+    };
+  }
+
+  private requireStatus(
+    document: KnowledgeDocument,
+    status: KnowledgeDocumentStatus,
+  ): void {
+    if (document.status === status) return;
+    throw new StateConflictException(
+      'DOCUMENT_NOT_REVIEWABLE',
+      `The document is ${document.status}, not ${status}`,
+    );
+  }
+
+  private async notReviewable(id: string): Promise<Error> {
+    const document = await this.findDocument(id);
+    return new StateConflictException(
+      'DOCUMENT_NOT_REVIEWABLE',
+      `The document is ${document.status}`,
     );
   }
 
@@ -200,6 +405,18 @@ function toResponse(document: KnowledgeDocument): KnowledgeDocumentResponseDto {
     sectionCount: document.sectionCount,
     imageCount: document.imageCount,
     sizeBytes: document.sizeBytes,
+    reviewedById: document.reviewedById,
+    reviewedAt: document.reviewedAt,
+    reviewNote: document.reviewNote,
     createdAt: document.createdAt,
+  };
+}
+
+function toPageResponse(page: KnowledgePage): KnowledgePageResponseDto {
+  return {
+    page: page.page,
+    text: page.text,
+    flags: page.flags,
+    edited: page.edited,
   };
 }

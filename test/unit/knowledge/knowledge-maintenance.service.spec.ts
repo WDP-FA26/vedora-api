@@ -99,4 +99,39 @@ describe('KnowledgeMaintenanceService', () => {
       KnowledgeDocumentStatus.PROCESSING,
     );
   });
+
+  it('sends interrupted indexing back to review, keeping the pages', async () => {
+    const stuck = await add(KnowledgeDocumentStatus.INDEXING, minutesAgo(16));
+    const running = await add(KnowledgeDocumentStatus.INDEXING, minutesAgo(14));
+
+    await service.failIncomplete();
+
+    expect(await reload(stuck.id)).toMatchObject({
+      status: KnowledgeDocumentStatus.AWAITING_REVIEW,
+      failureReason: KnowledgeDocumentFailureReason.INDEXING_FAILED,
+    });
+    expect((await reload(running.id))?.status).toBe(
+      KnowledgeDocumentStatus.INDEXING,
+    );
+  });
+
+  it('leaves documents waiting for review or rejected alone, however old', async () => {
+    const waiting = await add(
+      KnowledgeDocumentStatus.AWAITING_REVIEW,
+      minutesAgo(60 * 24 * 10),
+    );
+    const rejected = await add(
+      KnowledgeDocumentStatus.REJECTED,
+      minutesAgo(60 * 24 * 10),
+    );
+
+    await service.failIncomplete();
+
+    expect((await reload(waiting.id))?.status).toBe(
+      KnowledgeDocumentStatus.AWAITING_REVIEW,
+    );
+    expect((await reload(rejected.id))?.status).toBe(
+      KnowledgeDocumentStatus.REJECTED,
+    );
+  });
 });

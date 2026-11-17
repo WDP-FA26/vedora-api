@@ -118,8 +118,16 @@ export enum CaptionStatus {
 export enum KnowledgeDocumentStatus {
   WAITING_UPLOAD = 'WAITING_UPLOAD',
   PROCESSING = 'PROCESSING',
+  AWAITING_REVIEW = 'AWAITING_REVIEW',
+  INDEXING = 'INDEXING',
   READY = 'READY',
+  REJECTED = 'REJECTED',
   FAILED = 'FAILED',
+}
+
+export enum KnowledgePageFlag {
+  TEXT_LAYER_ADDED = 'TEXT_LAYER_ADDED',
+  PAGE_COUNT_MISMATCH = 'PAGE_COUNT_MISMATCH',
 }
 
 export enum KnowledgeDocumentFailureReason {
