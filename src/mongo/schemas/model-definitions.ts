@@ -39,7 +39,10 @@ import {
   RecipeRatingSchema,
   RecipeSchema,
 } from './recipe.schema.js';
-import { KnowledgeDocumentSchema } from './knowledge.schema.js';
+import {
+  KnowledgeDocumentSchema,
+  KnowledgePageSchema,
+} from './knowledge.schema.js';
 import { MediaAssetSchema } from './media.schema.js';
 import { ModerationSettingsSchema } from './moderation.schema.js';
 import {
@@ -76,6 +79,7 @@ export const MODEL_DEFINITIONS = [
   { name: 'PostReport', schema: PostReportSchema },
   { name: 'MediaAsset', schema: MediaAssetSchema },
   { name: 'KnowledgeDocument', schema: KnowledgeDocumentSchema },
+  { name: 'KnowledgePage', schema: KnowledgePageSchema },
   { name: 'VerificationRequest', schema: VerificationRequestSchema },
   { name: 'VerificationProof', schema: VerificationProofSchema },
   { name: 'Ingredient', schema: IngredientSchema },

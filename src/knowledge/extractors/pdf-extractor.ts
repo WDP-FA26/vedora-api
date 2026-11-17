@@ -1,6 +1,9 @@
 import { createHash } from 'node:crypto';
 import { Injectable, Logger } from '@nestjs/common';
-import { KnowledgeDocumentFailureReason } from '../../mongo/models.js';
+import {
+  KnowledgeDocumentFailureReason,
+  KnowledgePageFlag,
+} from '../../mongo/models.js';
 import { KnowledgeModelsService } from '../retrieval/knowledge-models.service.js';
 import {
   DocumentExtractionError,
@@ -26,9 +29,65 @@ export class PdfExtractor {
 
   constructor(private readonly models: KnowledgeModelsService) {}
 
+  /** OCRs the file. The result is reviewed before it is indexed. */
   async extract(file: Uint8Array): Promise<ExtractedSection[]> {
     const mupdf = await import('mupdf');
+    return this.withDocument(mupdf, file, async (document, pdf) => {
+      const pages = readPages(mupdf, document);
+      blankImages(pdf);
+      const texts = await this.models.ocrPdf(
+        pdf.saveToBuffer('garbage,compress').asUint8Array(),
+      );
+      const pageCountMismatch = texts.length !== pages.length;
+      if (pageCountMismatch) {
+        this.logger.warn(
+          `OCR returned ${texts.length} pages for a ${pages.length}-page PDF`,
+        );
+      }
 
+      const sections = pages.map(({ images, layerText }, index) => {
+        const flags: KnowledgePageFlag[] = [];
+        if (pageCountMismatch)
+          flags.push(KnowledgePageFlag.PAGE_COUNT_MISMATCH);
+        const text =
+          index === pages.length - 1
+            ? texts.slice(index).join('\n\n')
+            : (texts[index] ?? '');
+        if (coverage(layerText, text) >= MIN_OCR_COVERAGE) {
+          return { text, images, flags };
+        }
+        this.logger.warn(
+          `OCR missed text on page ${index + 1}; adding the text layer`,
+        );
+        flags.push(KnowledgePageFlag.TEXT_LAYER_ADDED);
+        return { text: `${text}\n\n${layerText}`.trim(), images, flags };
+      });
+      if (sections.every(({ text, images }) => !text && !images.length)) {
+        throw new DocumentExtractionError(
+          KnowledgeDocumentFailureReason.NO_TEXT,
+          'No page has text or images',
+        );
+      }
+      return sections;
+    });
+  }
+
+  /** The images of each page, without calling OCR. Same pages as `extract`. */
+  async extractImages(file: Uint8Array): Promise<Uint8Array[][]> {
+    const mupdf = await import('mupdf');
+    return this.withDocument(mupdf, file, (document) =>
+      Promise.resolve(readPages(mupdf, document).map(({ images }) => images)),
+    );
+  }
+
+  private async withDocument<T>(
+    mupdf: MuPdf,
+    file: Uint8Array,
+    use: (
+      document: MuPdfDocument,
+      pdf: InstanceType<MuPdf['PDFDocument']>,
+    ) => Promise<T>,
+  ): Promise<T> {
     let document: MuPdfDocument;
     try {
       document = mupdf.Document.openDocument(file, PDF_CONTENT_TYPE);
@@ -53,37 +112,7 @@ export class PdfExtractor {
           'The file is password-protected',
         );
       }
-      const pages = readPages(mupdf, document);
-      blankImages(pdf);
-      const texts = await this.models.ocrPdf(
-        pdf.saveToBuffer('garbage,compress').asUint8Array(),
-      );
-      if (texts.length !== pages.length) {
-        this.logger.warn(
-          `OCR returned ${texts.length} pages for a ${pages.length}-page PDF`,
-        );
-      }
-
-      const sections = pages.map(({ images, layerText }, index) => {
-        const text =
-          index === pages.length - 1
-            ? texts.slice(index).join('\n\n')
-            : (texts[index] ?? '');
-        if (coverage(layerText, text) >= MIN_OCR_COVERAGE) {
-          return { text, images };
-        }
-        this.logger.warn(
-          `OCR missed text on page ${index + 1}; adding the text layer`,
-        );
-        return { text: `${text}\n\n${layerText}`.trim(), images };
-      });
-      if (sections.every(({ text, images }) => !text && !images.length)) {
-        throw new DocumentExtractionError(
-          KnowledgeDocumentFailureReason.NO_TEXT,
-          'No page has text or images',
-        );
-      }
-      return sections;
+      return await use(document, pdf);
     } finally {
       document.destroy();
     }

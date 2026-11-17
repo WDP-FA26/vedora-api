@@ -4,6 +4,8 @@ import { ConfigService } from '@nestjs/config';
 import { chunkdown } from 'chunkdown';
 import { QdrantService } from '../../qdrant/qdrant.service.js';
 import type { ExtractedSection } from '../extractors/document-extractor.js';
+
+type IndexedSection = Pick<ExtractedSection, 'text' | 'images'>;
 import {
   BM25_FOLDED_VECTOR,
   BM25_VECTOR,
@@ -47,15 +49,30 @@ export class KnowledgeIndexService {
 
   async index(
     document: IndexedDocument,
-    sections: ExtractedSection[],
+    sections: IndexedSection[],
   ): Promise<number> {
     await this.ensureCollection();
-    const chunks = sections.flatMap(({ text }, index) =>
-      this.splitter.split(text).chunks.map(({ text, breadcrumbs }) => ({
-        page: index + 1,
-        text: [...breadcrumbs.map((heading) => heading.text), text].join('\n'),
-      })),
-    );
+    const chunks: { page: number; text: string }[] = [];
+    let previousHeading: string | null = null;
+    sections.forEach(({ text }, index) => {
+      const pageHeadings = headingsOf(text);
+      for (const chunk of this.splitter.split(text).chunks) {
+        const context = chunk.breadcrumbs.map((heading) => heading.text);
+        if (context.length === 0 && !hasHeading(chunk.text)) {
+          const fallback = fallbackHeading(
+            chunk.text,
+            pageHeadings,
+            previousHeading,
+          );
+          if (fallback) context.push(fallback);
+        }
+        chunks.push({
+          page: index + 1,
+          text: [...context, chunk.text].join('\n'),
+        });
+      }
+      previousHeading = pageHeadings.at(-1) ?? previousHeading;
+    });
     const images = sections.flatMap(({ text, images }, index) =>
       images.map((jpeg) => ({ page: index + 1, jpeg, text })),
     );
@@ -139,6 +156,35 @@ export class KnowledgeIndexService {
     });
     this.logger.log(`Created Qdrant collection ${this.collection}`);
   }
+}
+
+const HEADING_LINE = /^#{1,6}[ \t]+(.+?)[ \t]*#*[ \t]*$/gm;
+
+function headingsOf(markdown: string): string[] {
+  const headings: string[] = [];
+  for (const match of markdown.matchAll(HEADING_LINE)) {
+    headings.push(match[1]);
+  }
+  return headings;
+}
+
+function hasHeading(markdown: string): boolean {
+  return headingsOf(markdown).length > 0;
+}
+
+/**
+ * The heading an orphan chunk (no heading above it on its page) belongs to.
+ * OCR often lifts a table above the text of its page, so a table takes the
+ * page's first heading; other chunks continue the previous page's last one.
+ */
+function fallbackHeading(
+  chunk: string,
+  pageHeadings: string[],
+  previousHeading: string | null,
+): string | null {
+  const isTable = chunk.trimStart().startsWith('|');
+  if (isTable) return pageHeadings[0] ?? previousHeading;
+  return previousHeading;
 }
 
 function payload(

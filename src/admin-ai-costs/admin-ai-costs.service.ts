@@ -8,6 +8,8 @@ import { ResourceNotFoundException } from '../common/exceptions/resource-not-fou
 import { InvalidInputException } from '../common/exceptions/invalid-input.exception.js';
 import { FeatureUnavailableException } from '../common/exceptions/feature-unavailable.exception.js';
 import { StateConflictException } from '../common/exceptions/state-conflict.exception.js';
+import type { GenerationResponseData } from '@openrouter/sdk/models';
+import { createOpenRouterClient } from '../ai/openrouter-client.js';
 import { AiCostTransportService } from '../ai/telemetry/ai-cost-transport.service.js';
 import { CostObservation } from '../ai/telemetry/cost-observation.js';
 import type {
@@ -385,21 +387,16 @@ export class AdminAiCostsService {
         'CONFLICT',
         'This attempt may still be running',
       );
-    const apiKey = this.config.getOrThrow<string>('OPENROUTER_API_KEY');
-    let data: Record<string, unknown>;
+    // No cost fetch here: the lookup itself must not create a cost row.
+    const openrouter = createOpenRouterClient(
+      this.config.getOrThrow<string>('OPENROUTER_API_KEY'),
+    );
+    let data: GenerationResponseData;
     try {
-      const response = await fetch(
-        `https://openrouter.ai/api/v1/generation?id=${encodeURIComponent(row.generationId)}`,
-        {
-          headers: { Authorization: `Bearer ${apiKey}` },
-          signal: AbortSignal.timeout(10000),
-        },
-      );
-      if (!response.ok) throw new Error('Provider lookup unavailable');
-      const json = (await response.json()) as {
-        data?: Record<string, unknown>;
-      };
-      data = json.data ?? {};
+      ({ data } = await openrouter.generations.getGeneration(
+        { id: row.generationId },
+        { signal: AbortSignal.timeout(10000) },
+      ));
     } catch {
       throw new FeatureUnavailableException(
         'SERVICE_UNAVAILABLE',
@@ -415,15 +412,15 @@ export class AdminAiCostsService {
     observation.accept({
       id: row.generationId,
       model: data.model ?? row.resolvedModel,
-      provider: data.provider_name ?? row.provider,
+      provider: data.providerName ?? row.provider,
       usage: {
-        cost: data.total_cost,
-        prompt_tokens: data.native_tokens_prompt,
-        completion_tokens: data.native_tokens_completion,
+        cost: data.totalCost,
+        prompt_tokens: data.nativeTokensPrompt,
+        completion_tokens: data.nativeTokensCompletion,
         completion_tokens_details: {
-          reasoning_tokens: data.native_tokens_reasoning,
+          reasoning_tokens: data.nativeTokensReasoning,
         },
-        prompt_tokens_details: { cached_tokens: data.native_tokens_cached },
+        prompt_tokens_details: { cached_tokens: data.nativeTokensCached },
       },
     });
     if (observation.costUsd === null)

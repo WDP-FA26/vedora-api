@@ -2,15 +2,14 @@ import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { AiService } from '@nestjs/ai';
 import { AiCostTransportService } from '../../ai/telemetry/ai-cost-transport.service.js';
-import type { ClassConstructor } from 'class-transformer';
-import { parsePayload, validatePayload } from '../../common/validation.js';
-import { ExternalServiceException } from '../../common/exceptions/external-service.exception.js';
+import type { OpenRouter } from '@openrouter/sdk';
 import {
-  EmbeddingsResponse,
-  OcrResponse,
-  OpenRouterErrorBody,
-  RerankResponse,
-} from './openrouter.dto.js';
+  createOpenRouterClient,
+  openRouterFailure,
+} from '../../ai/openrouter-client.js';
+import { parsePayload } from '../../common/validation.js';
+import { ExternalServiceException } from '../../common/exceptions/external-service.exception.js';
+import { OcrResponse } from './openrouter.dto.js';
 
 type EmbeddingInput = string | { image: Uint8Array };
 
@@ -28,6 +27,7 @@ const OCR_CARRIER_MODEL = 'google/gemini-3.1-flash-lite';
 @Injectable()
 export class KnowledgeModelsService {
   private readonly apiKey: string;
+  private readonly openrouter: OpenRouter;
   private readonly embeddingModel: string;
   private readonly rerankModel: string;
   readonly dimensions: number;
@@ -38,6 +38,7 @@ export class KnowledgeModelsService {
     private readonly costs: AiCostTransportService,
   ) {
     this.apiKey = configService.getOrThrow<string>('OPENROUTER_API_KEY');
+    this.openrouter = createOpenRouterClient(this.apiKey, costs.fetch);
     this.embeddingModel = configService.get<string>(
       'OPENROUTER_EMBEDDING_MODEL',
       'google/gemini-embedding-2',
@@ -86,15 +87,30 @@ export class KnowledgeModelsService {
     signal: AbortSignal,
   ): Promise<RerankResult[] | null> {
     if (!this.rerankModel || !documents.length) return null;
-    const { results } = await this.post(
-      '/rerank',
-      { model: this.rerankModel, query, documents, top_n: topN },
-      RerankResponse,
-      signal,
-    );
-    return results.map(({ index, relevance_score }) => ({
+    const response = await this.openrouter.rerank
+      .rerank(
+        {
+          requestBody: {
+            model: this.rerankModel,
+            query,
+            documents,
+            topN,
+          },
+        },
+        { signal },
+      )
+      .catch((error: unknown) => {
+        throw openRouterFailure('Rerank', error);
+      });
+    if (typeof response === 'string') {
+      throw new ExternalServiceException(
+        'openrouter',
+        'Rerank returned a stream instead of results',
+      );
+    }
+    return response.results.map(({ index, relevanceScore }) => ({
       index,
-      relevanceScore: relevance_score,
+      relevanceScore,
     }));
   }
 
@@ -145,56 +161,56 @@ export class KnowledgeModelsService {
     inputs: EmbeddingInput[],
     signal: AbortSignal,
   ): Promise<number[][]> {
-    const { data } = await this.post(
-      '/embeddings',
-      {
-        model: this.embeddingModel,
-        dimensions: this.dimensions,
-        encoding_format: 'float',
-        input: inputs.map((input) => ({
-          content: [
-            typeof input === 'string'
-              ? { type: 'text', text: input }
-              : {
-                  type: 'image_url',
-                  image_url: {
-                    url: `data:image/jpeg;base64,${Buffer.from(input.image).toString('base64')}`,
-                  },
-                },
-          ],
-        })),
-      },
-      EmbeddingsResponse,
-      signal,
-    );
-    return data
-      .map((item, position) => ({
-        embedding: item.embedding,
-        index: item.index ?? position,
-      }))
-      .sort((a, b) => a.index - b.index)
-      .map(({ embedding }) => embedding);
-  }
-
-  private async post<T extends object>(
-    path: string,
-    body: object,
-    responseClass: ClassConstructor<T>,
-    signal: AbortSignal,
-  ): Promise<T> {
-    const response = await this.fetch(path, body, signal);
-    const json: unknown = await response.json();
-    if (!response.ok) {
-      const message = validatePayload(OpenRouterErrorBody, json).value?.error
-        ?.message;
+    const response = await this.openrouter.embeddings
+      .generate(
+        {
+          requestBody: {
+            model: this.embeddingModel,
+            dimensions: this.dimensions,
+            encodingFormat: 'float',
+            input: inputs.map((input) => ({
+              content: [
+                typeof input === 'string'
+                  ? { type: 'text' as const, text: input }
+                  : {
+                      type: 'image_url' as const,
+                      imageUrl: {
+                        url: `data:image/jpeg;base64,${Buffer.from(input.image).toString('base64')}`,
+                      },
+                    },
+              ],
+            })),
+          },
+        },
+        { signal },
+      )
+      .catch((error: unknown) => {
+        throw openRouterFailure('Embeddings', error);
+      });
+    if (typeof response === 'string') {
       throw new ExternalServiceException(
         'openrouter',
-        `OpenRouter ${path} failed (${response.status}): ${message ?? 'no message'}`,
+        'Embeddings returned a stream instead of vectors',
       );
     }
-    return parsePayload('openrouter', responseClass, json);
+    const vectors: { embedding: number[]; index: number }[] = [];
+    response.data.forEach(({ embedding, index }, position) => {
+      if (typeof embedding === 'string') {
+        throw new ExternalServiceException(
+          'openrouter',
+          'Embeddings returned base64 although floats were requested',
+        );
+      }
+      vectors.push({ embedding, index: index ?? position });
+    });
+    vectors.sort((a, b) => a.index - b.index);
+    return vectors.map(({ embedding }) => embedding);
   }
 
+  /**
+   * OCR stays on a raw fetch: the SDK's chat schema drops the file-parser
+   * `annotations` that carry the pages.
+   */
   private fetch(
     path: string,
     body: object,

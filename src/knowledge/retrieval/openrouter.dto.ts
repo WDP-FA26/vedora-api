@@ -2,57 +2,11 @@ import { Type } from 'class-transformer';
 import {
   IsArray,
   IsIn,
-  IsInt,
-  IsNumber,
   IsOptional,
   IsString,
   ValidateIf,
   ValidateNested,
 } from 'class-validator';
-
-export class OpenRouterError {
-  @IsString()
-  message!: string;
-}
-
-export class OpenRouterErrorBody {
-  @IsOptional()
-  @ValidateNested()
-  @Type(() => OpenRouterError)
-  error?: OpenRouterError;
-}
-
-export class EmbeddingItem {
-  @IsOptional()
-  @IsInt()
-  index?: number;
-
-  @IsArray()
-  @IsNumber({}, { each: true })
-  embedding!: number[];
-}
-
-export class EmbeddingsResponse {
-  @IsArray()
-  @ValidateNested({ each: true })
-  @Type(() => EmbeddingItem)
-  data!: EmbeddingItem[];
-}
-
-export class RerankItem {
-  @IsInt()
-  index!: number;
-
-  @IsNumber()
-  relevance_score!: number;
-}
-
-export class RerankResponse {
-  @IsArray()
-  @ValidateNested({ each: true })
-  @Type(() => RerankItem)
-  results!: RerankItem[];
-}
 
 export class OcrFileContentPart {
   @IsIn(['text', 'image_url'])

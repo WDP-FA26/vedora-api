@@ -38,7 +38,13 @@ Blog: tiêu đề, nội dung, ảnh bìa và tối đa 5 ảnh trong nội dung
 
 Sửa nội dung vẫn phải qua kiểm duyệt như bài mới, nên bài chuyển `PROCESSING` cho đến khi có kết quả.
 
-- **Bài ngắn và video:** `PATCH /posts/:id` với `{ "body": "..." }`. Chỉ tác giả sửa được (người khác 403, chưa đăng nhập 401) và chỉ sửa chữ; video đính kèm giữ nguyên. Chữ không đổi thì trả bài như cũ, không kiểm duyệt lại. `body` rỗng chỉ hợp lệ khi bài có video, nếu không trả 400 `EMPTY_POST`. Bài đang `PROCESSING` hoặc `FAILED` trả 409 `POST_NOT_EDITABLE`. Bài `PUBLISHED`, `PENDING_REVIEW` và `REJECTED` đều sửa được, nên bài bị từ chối có thể sửa rồi gửi lại. Response là bài với trạng thái mới (`PROCESSING`, hoặc đã có kết quả ngay): FE poll `GET /posts/:id` như khi đăng bài. `publishedAt` giữ nguyên.
+- **Bài ngắn và video:** `PATCH /posts/:id` với `{ "body"?: string, "mediaIds"?: string[] }`, phải có ít nhất một trường (không thì 400). Chỉ tác giả sửa được (người khác 403, chưa đăng nhập 401).
+  - `body`: chữ mới. Chuỗi rỗng xóa chữ.
+  - `mediaIds`: **danh sách video cuối cùng theo thứ tự hiển thị**, tối đa 4. Gồm id video đang có trên bài (giữ lại) và id mới từ `POST /media/uploads` (thêm). Video không có trong danh sách bị gỡ khỏi bài và xóa. Đổi thứ tự cũng tính là thay đổi. Bỏ trường này thì video giữ nguyên. Video của người khác, đã gắn vào bài khác hoặc đã lỗi trả 400 `MEDIA_UNAVAILABLE`.
+  - Bài không còn chữ lẫn video trả 400 `EMPTY_POST`. Không có gì thay đổi thì trả bài như cũ, không kiểm duyệt lại.
+  - Bài `PUBLISHED`, `PENDING_REVIEW`, `REJECTED` và `FAILED` đều sửa được, nên bài bị từ chối hoặc video lỗi có thể sửa rồi gửi lại. Bài đang `PROCESSING` trả 409 `POST_NOT_EDITABLE`.
+  - Response là bài với trạng thái mới. Bài ở `PROCESSING` cho đến khi mọi video mới xử lý xong (HLS và transcript, có thể vài phút) và kiểm duyệt có kết quả; trong lúc đó chỉ tác giả thấy. FE poll `GET /posts/:id` như khi đăng bài. `publishedAt` giữ nguyên.
+  - Video tải lên cho lần sửa mà người dùng huỷ thì FE gọi `DELETE /media/:id` như khi huỷ lúc đăng.
 - **Blog:** `PATCH /blogs/:id` (xem [blogs.md](blogs.md)). Sửa tiêu đề, nội dung hoặc ảnh bìa của blog đã đăng đưa nó về `PROCESSING`, và blog biến khỏi feed cho đến khi có kết quả. Vì vậy FE không nên tự lưu liên tục một blog đã đăng; chỉ gửi khi tác giả bấm lưu.
 
 ## Thông báo cho tác giả

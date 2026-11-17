@@ -105,4 +105,30 @@ describe('KnowledgeIndexService', () => {
     expect(texts.length).toBeGreaterThan(1);
     expect(texts.at(-1)).toMatch(/^title: dinh-duong\.pdf \| text: Canxi\n/);
   });
+
+  it('gives a table that OCR lifted above its page the heading of that page', async () => {
+    await service.index(document, [
+      {
+        text: '| Chất | Hàm lượng |\n| --- | --- |\n| Canxi | 350 mg |\n\n# Khoáng chất\n\nĐậu phụ giàu canxi.',
+        images: [],
+      },
+    ]);
+
+    const [texts] = models.embed.mock.calls[0] as [string[]];
+    expect(texts[0]).toBe(
+      'title: dinh-duong.pdf | text: Khoáng chất\n| Chất | Hàm lượng |\n| - | - |\n| Canxi | 350 mg |',
+    );
+  });
+
+  it('continues the previous page heading for text that opens a page', async () => {
+    await service.index(document, [
+      { text: '# Sắt\n\nĐậu lăng.', images: [] },
+      { text: 'Rau bina cũng giàu sắt.', images: [] },
+    ]);
+
+    const [texts] = models.embed.mock.calls[0] as [string[]];
+    expect(texts[1]).toBe(
+      'title: dinh-duong.pdf | text: Sắt\nRau bina cũng giàu sắt.',
+    );
+  });
 });

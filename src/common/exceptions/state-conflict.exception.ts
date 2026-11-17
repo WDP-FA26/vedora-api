@@ -27,6 +27,7 @@ export const STATE_CONFLICT_CODES = [
   'MESSAGE_ID_CONFLICT',
   'POST_NOT_REVIEWABLE',
   'POST_NOT_EDITABLE',
+  'DOCUMENT_NOT_REVIEWABLE',
 ] as const;
 
 export type StateConflictCode = (typeof STATE_CONFLICT_CODES)[number];

@@ -185,31 +185,95 @@ export class MediaService {
     mediaIds: string[],
   ): Promise<void> {
     for (const [position, id] of mediaIds.entries()) {
-      const claimed = await this.mediaAssets
-        .updateOne(
-          {
-            _id: id,
-            ownerId,
-            postId: null,
-            discardedAt: null,
-            status: { $ne: MediaStatus.FAILED },
-          },
-          { $set: { postId, position } },
+      await this.claimOne(session, ownerId, postId, id, position);
+    }
+  }
+
+  /**
+   * Makes `mediaIds` the post's media, in that order: keeps what is already
+   * attached, claims the new ones and detaches the rest. Detached media are
+   * returned so the caller can discard them once the transaction commits.
+   */
+  async replacePostMedia(
+    session: ClientSession,
+    ownerId: string,
+    postId: string,
+    mediaIds: string[],
+  ): Promise<{ changed: boolean; detachedIds: string[] }> {
+    const attached = await this.mediaAssets
+      .find({ postId, ...LIVE })
+      .sort({ position: 1 })
+      .session(session)
+      .exec();
+    const attachedIds = attached.map(({ id }) => id);
+    const failed = attached.find(
+      ({ id, status }) =>
+        status === MediaStatus.FAILED && mediaIds.includes(id),
+    );
+    if (failed) {
+      throw new InvalidInputException(
+        'MEDIA_UNAVAILABLE',
+        `Media ${failed.id} failed to process; remove it from the post`,
+      );
+    }
+    const unchanged =
+      attachedIds.length === mediaIds.length &&
+      attachedIds.every((id, index) => id === mediaIds[index]);
+    if (unchanged) return { changed: false, detachedIds: [] };
+
+    const detachedIds = attachedIds.filter((id) => !mediaIds.includes(id));
+    if (detachedIds.length > 0) {
+      await this.mediaAssets
+        .updateMany(
+          { _id: { $in: detachedIds }, postId },
+          { $set: { postId: null } },
           { session },
         )
         .exec();
-      if (claimed.modifiedCount !== 1) {
-        throw new InvalidInputException(
-          'MEDIA_UNAVAILABLE',
-          `Media ${id} can't be attached: it doesn't exist, is used by another post, or failed to process`,
-        );
+    }
+    for (const [position, id] of mediaIds.entries()) {
+      if (attachedIds.includes(id)) {
+        await this.mediaAssets
+          .updateOne({ _id: id, postId }, { $set: { position } }, { session })
+          .exec();
+      } else {
+        await this.claimOne(session, ownerId, postId, id, position);
       }
+    }
+    return { changed: true, detachedIds };
+  }
+
+  private async claimOne(
+    session: ClientSession,
+    ownerId: string,
+    postId: string,
+    id: string,
+    position: number,
+  ): Promise<void> {
+    const claimed = await this.mediaAssets
+      .updateOne(
+        {
+          _id: id,
+          ownerId,
+          postId: null,
+          discardedAt: null,
+          status: { $ne: MediaStatus.FAILED },
+        },
+        { $set: { postId, position } },
+        { session },
+      )
+      .exec();
+    if (claimed.modifiedCount !== 1) {
+      throw new InvalidInputException(
+        'MEDIA_UNAVAILABLE',
+        `Media ${id} can't be attached: it doesn't exist, is used by another post, or failed to process`,
+      );
     }
   }
 
   async settlePosts(postIds: string[]): Promise<void> {
     const media = await this.mediaAssets
-      .find({ postId: { $in: postIds } })
+      .find({ postId: { $in: postIds }, ...LIVE })
       .select('postId status')
       .exec();
     const failed = new Set(
