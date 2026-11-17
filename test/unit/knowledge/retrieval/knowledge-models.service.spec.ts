@@ -15,11 +15,20 @@ function createService(config: Record<string, unknown> = {}) {
   );
 }
 
-function requestBody(call = 0) {
-  const [, init] = fetchMock.mock.calls[call];
-  const body = init?.body;
-  if (typeof body !== 'string') throw new Error('Expected a JSON string body');
-  return JSON.parse(body) as Record<string, unknown>;
+/** The JSON the call put on the wire, from a raw fetch or an SDK `Request`. */
+async function requestBody(call = 0): Promise<Record<string, unknown>> {
+  const [input, init] = fetchMock.mock.calls[call];
+  if (typeof init?.body === 'string') {
+    return JSON.parse(init.body) as Record<string, unknown>;
+  }
+  if (!(input instanceof Request)) throw new Error('Expected a JSON body');
+  return (await input.clone().json()) as Record<string, unknown>;
+}
+
+function requestUrl(call = 0): string {
+  const [input] = fetchMock.mock.calls[call];
+  if (typeof input === 'string') return input;
+  return input instanceof Request ? input.url : input.toString();
 }
 
 describe('KnowledgeModelsService', () => {
@@ -57,6 +66,8 @@ describe('KnowledgeModelsService', () => {
   it('embeds multimodal inputs at the configured size, in input order', async () => {
     fetchMock.mockResolvedValue(
       Response.json({
+        object: 'list',
+        model: 'google/gemini-embedding-2',
         data: [
           { object: 'embedding', index: 1, embedding: [2] },
           { object: 'embedding', index: 0, embedding: [1] },
@@ -69,10 +80,8 @@ describe('KnowledgeModelsService', () => {
     }).embed(['đậu phụ', { image: new Uint8Array([0xff, 0xd8]) }]);
 
     expect(vectors).toEqual([[1], [2]]);
-    expect(fetchMock.mock.calls[0][0]).toBe(
-      'https://openrouter.ai/api/v1/embeddings',
-    );
-    expect(requestBody()).toEqual({
+    expect(requestUrl()).toBe('https://openrouter.ai/api/v1/embeddings');
+    expect(await requestBody()).toEqual({
       model: 'google/gemini-embedding-2',
       dimensions: 768,
       encoding_format: 'float',
@@ -93,7 +102,7 @@ describe('KnowledgeModelsService', () => {
   it('keeps OpenRouter error details out of the public message', async () => {
     fetchMock.mockResolvedValue(
       Response.json(
-        { error: { message: 'Insufficient credits' } },
+        { error: { code: 402, message: 'Insufficient credits' } },
         { status: 402 },
       ),
     );
@@ -102,13 +111,14 @@ describe('KnowledgeModelsService', () => {
       createService().embed([{ image: new Uint8Array([0xff, 0xd8]) }]),
     ).rejects.toMatchObject({
       message: 'openrouter request failed',
-      reason: 'OpenRouter /embeddings failed (402): Insufficient credits',
+      reason: 'Embeddings failed (402): Insufficient credits',
     });
   });
 
   it('reranks best first', async () => {
     fetchMock.mockResolvedValue(
       Response.json({
+        model: 'cohere/rerank-v3.5',
         results: [
           { index: 1, relevance_score: 0.9, document: { text: 'b' } },
           { index: 0, relevance_score: 0.1, document: { text: 'a' } },
@@ -124,7 +134,7 @@ describe('KnowledgeModelsService', () => {
       { index: 1, relevanceScore: 0.9 },
       { index: 0, relevanceScore: 0.1 },
     ]);
-    expect(requestBody()).toEqual({
+    expect(await requestBody()).toEqual({
       model: 'cohere/rerank-v3.5',
       query: 'q',
       documents: ['a', 'b'],
@@ -134,9 +144,11 @@ describe('KnowledgeModelsService', () => {
 
   it('gives up when its signal aborts', async () => {
     fetchMock.mockImplementation(
-      (_url, init) =>
+      (_input, init) =>
         new Promise((_, reject) => {
           const signal = init?.signal;
+          // The SDK reaches fetch asynchronously, so the signal may already be aborted.
+          if (signal?.aborted) reject(new Error('aborted'));
           signal?.addEventListener('abort', () => reject(new Error('aborted')));
         }),
     );
@@ -147,7 +159,9 @@ describe('KnowledgeModelsService', () => {
     }).rerank('q', ['a'], 6, controller.signal);
     controller.abort();
 
-    await expect(reranking).rejects.toThrow('aborted');
+    await expect(reranking).rejects.toMatchObject({
+      reason: expect.stringContaining('aborted') as string,
+    });
   });
 
   it('skips reranking without a rerank model', async () => {
@@ -193,7 +207,7 @@ describe('KnowledgeModelsService', () => {
       const pages = await createService().ocrPdf(new Uint8Array([1]));
 
       expect(pages).toEqual(['# Trang 1\n\n\n\nĐạm', '| Đậu | 8 |']);
-      expect(requestBody()).toMatchObject({
+      expect(await requestBody()).toMatchObject({
         plugins: [{ id: 'file-parser', pdf: { engine: 'mistral-ocr' } }],
       });
     });
@@ -221,7 +235,7 @@ describe('KnowledgeModelsService', () => {
     it('throws when OpenRouter returns no parse', async () => {
       fetchMock.mockResolvedValue(
         Response.json(
-          { error: { message: 'Insufficient credits' } },
+          { error: { code: 402, message: 'Insufficient credits' } },
           { status: 402 },
         ),
       );

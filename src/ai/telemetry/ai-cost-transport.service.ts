@@ -11,6 +11,15 @@ import {
   metadataText,
 } from './cost-observation.js';
 
+async function requestBodyText(
+  input: Parameters<typeof fetch>[0],
+  init: Parameters<typeof fetch>[1],
+): Promise<string | null> {
+  if (typeof init?.body === 'string') return init.body;
+  if (init?.body !== undefined || !(input instanceof Request)) return null;
+  return input.clone().text();
+}
+
 @Injectable()
 export class AiCostTransportService {
   private readonly logger = new Logger(AiCostTransportService.name);
@@ -53,10 +62,14 @@ export class AiCostTransportService {
               ? 'TRANSCRIPTION'
               : 'CHAT';
     const scope = aiCostContext.getStore();
+    // The OpenRouter SDK passes a Request with no init; fetch callers pass both.
+    const signal =
+      init?.signal ?? (input instanceof Request ? input.signal : null);
+    const requestText = await requestBodyText(input, init);
     const bodyModel =
-      typeof init?.body === 'string'
-        ? /"model"\s*:\s*"([^"\\]{1,200})"/.exec(init.body)?.[1]
-        : null;
+      requestText === null
+        ? null
+        : /"model"\s*:\s*"([^"\\]{1,200})"/.exec(requestText)?.[1];
     const id = randomUUID();
     const startedAt = new Date();
     const entry = {
@@ -87,7 +100,7 @@ export class AiCostTransportService {
         id,
         recorded,
         new CostObservation(),
-        init?.signal?.aborted ? 'ABORTED' : 'FAILED',
+        signal?.aborted ? 'ABORTED' : 'FAILED',
         null,
       );
       throw error;
@@ -126,7 +139,7 @@ export class AiCostTransportService {
             controller.enqueue(item.value);
           }
         } catch (error) {
-          await settle(init?.signal?.aborted ? 'ABORTED' : 'FAILED');
+          await settle(signal?.aborted ? 'ABORTED' : 'FAILED');
           controller.error(error);
         }
       },

@@ -42,6 +42,51 @@ describe('AI cost telemetry and Admin reports with MongoDB', () => {
   });
   const jsonResponse = (data: object, status = 200) =>
     Response.json(data, { status, headers: { 'x-provider': 'fixture' } });
+  /** A generation lookup in the shape the OpenRouter SDK validates. */
+  const generation = (fields: Record<string, unknown>) => ({
+    data: {
+      api_type: null,
+      app_id: null,
+      cache_discount: null,
+      cancelled: null,
+      created_at: '2026-11-17T00:00:00Z',
+      data_region: 'global',
+      external_user: null,
+      finish_reason: null,
+      generation_time: null,
+      http_referer: null,
+      is_byok: false,
+      latency: null,
+      moderation_latency: null,
+      native_finish_reason: null,
+      native_tokens_cached: null,
+      native_tokens_completion: null,
+      native_tokens_completion_images: null,
+      native_tokens_prompt: null,
+      native_tokens_reasoning: null,
+      num_fetches: null,
+      num_input_audio_prompt: null,
+      num_media_completion: null,
+      num_media_prompt: null,
+      num_search_results: null,
+      origin: '',
+      preset_id: null,
+      provider_name: null,
+      provider_responses: null,
+      router: null,
+      service_tier: null,
+      streamed: null,
+      tokens_completion: null,
+      tokens_prompt: null,
+      upstream_id: null,
+      upstream_inference_cost: null,
+      usage: 0,
+      user_agent: null,
+      web_search_engine: null,
+      workspace_id: null,
+      ...fields,
+    },
+  });
   async function call(data: object, status = 200, url = endpoint) {
     const response = await transport.observe(
       url,
@@ -187,16 +232,14 @@ describe('AI cost telemetry and Admin reports with MongoDB', () => {
     });
   });
   it('observes the actual SDK Decisions alpha endpoint', async () => {
-    const underlying = vi
-      .fn<typeof fetch>()
-      .mockResolvedValue(
-        jsonResponse({
-          id: 'gen-alpha',
-          model: 'typesafe/jev-1.14',
-          answers: { verdict: { type: 'choice', choice: 'allow' } },
-          usage: { input_tokens: 100, output_tokens: 0, cost: 0.00001 },
-        }),
-      );
+    const underlying = vi.fn<typeof fetch>().mockResolvedValue(
+      jsonResponse({
+        id: 'gen-alpha',
+        model: 'typesafe/jev-1.14',
+        answers: { verdict: { type: 'choice', choice: 'allow' } },
+        usage: { input_tokens: 100, output_tokens: 0, cost: 0.00001 },
+      }),
+    );
     const model = evaluationModel({
       apiKey: 'fixture',
       modelId: 'typesafe/jev-1.14',
@@ -223,6 +266,34 @@ describe('AI cost telemetry and Admin reports with MongoDB', () => {
       .exec();
     expect(row?.operation).toBe('MODERATION');
     expect(row?.costUsd?.toString()).toBe('0.00001');
+  });
+  it('reads the model and abort state from the Request the OpenRouter SDK passes', async () => {
+    const controller = new AbortController();
+    const request = new Request('https://openrouter.ai/api/v1/embeddings', {
+      method: 'POST',
+      body: JSON.stringify({ model: 'sdk/embedding-model', input: 'x' }),
+    });
+    const underlying = vi.fn<typeof fetch>().mockImplementation(() => {
+      controller.abort();
+      return Promise.reject(new Error('aborted'));
+    });
+
+    await expect(
+      transport.observe(request, { signal: controller.signal }, underlying),
+    ).rejects.toThrow('aborted');
+
+    const [sent] = underlying.mock.calls[0];
+    expect(sent).toBe(request);
+    const row = await db.connection
+      .model<AiCostCall>(AiCostCall.name)
+      .findOne()
+      .sort({ startedAt: -1 })
+      .exec();
+    expect(row).toMatchObject({
+      operation: 'EMBEDDING',
+      requestedModel: 'sdk/embedding-model',
+      status: 'ABORTED',
+    });
   });
   it('parses terminal SSE billing without altering the streamed bytes', async () => {
     const content =
@@ -381,15 +452,15 @@ describe('AI cost telemetry and Admin reports with MongoDB', () => {
       costUsd: null,
     });
     const provider = vi.fn<typeof fetch>().mockResolvedValue(
-      jsonResponse({
-        data: {
+      jsonResponse(
+        generation({
           id: 'gen-abort',
           model: 'resolved/model',
           total_cost: 0.017,
           native_tokens_prompt: 100,
           native_tokens_completion: 20,
-        },
-      }),
+        }),
+      ),
     );
     vi.stubGlobal('fetch', provider);
     const result = await admin.reconcile(row.id);
@@ -398,7 +469,8 @@ describe('AI cost telemetry and Admin reports with MongoDB', () => {
       costSource: 'GENERATION',
       status: 'ABORTED',
     });
-    expect(provider.mock.calls[0][0]).toBe(
+    const [lookup] = provider.mock.calls[0];
+    expect(lookup instanceof Request ? lookup.url : lookup).toBe(
       'https://openrouter.ai/api/v1/generation?id=gen-abort',
     );
     await admin.reconcile(row.id);
@@ -422,9 +494,13 @@ describe('AI cost telemetry and Admin reports with MongoDB', () => {
     const provider = vi
       .fn<typeof fetch>()
       .mockResolvedValueOnce(
-        jsonResponse({ data: { id: 'gen-other', total_cost: 99 } }),
+        jsonResponse(
+          generation({ id: 'gen-other', model: 'm', total_cost: 99 }),
+        ),
       )
-      .mockResolvedValueOnce(jsonResponse({ data: { id: 'gen-original' } }));
+      .mockResolvedValueOnce(
+        jsonResponse(generation({ id: 'gen-original', model: 'm' })),
+      );
     vi.stubGlobal('fetch', provider);
     await expect(admin.reconcile(row.id)).rejects.toMatchObject({
       statusCode: 503,
