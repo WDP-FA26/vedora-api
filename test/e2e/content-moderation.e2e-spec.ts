@@ -89,6 +89,66 @@ describe('Content moderation review queue (e2e)', () => {
     expect(created.status).toBe(PostStatus.PUBLISHED);
   });
 
+  const edit = (id: string, body: string) =>
+    request(server())
+      .patch(`/api/v1/posts/${id}`)
+      .auth(authorToken, { type: 'bearer' })
+      .send({ body });
+
+  it('moderates an edited post again and lets a rejected one be fixed', async () => {
+    const created = await publish('Đậu hũ sốt cà');
+
+    const unchanged = await edit(created.id, 'Đậu hũ sốt cà').expect(200);
+    expect(unchanged.body).toMatchObject({ status: PostStatus.PUBLISHED });
+
+    const blocked = await edit(created.id, `${VIOLATION_MARKER} text`).expect(
+      200,
+    );
+    expect(blocked.body).toMatchObject({
+      status: PostStatus.REJECTED,
+      moderationVerdict: 'violence',
+    });
+    await request(server()).get(`/api/v1/posts/${created.id}`).expect(404);
+
+    const fixed = await edit(created.id, 'Đậu hũ sốt cà, bản sửa').expect(200);
+    expect(fixed.body).toMatchObject({
+      status: PostStatus.PUBLISHED,
+      body: 'Đậu hũ sốt cà, bản sửa',
+    });
+    await request(server()).get(`/api/v1/posts/${created.id}`).expect(200);
+  });
+
+  it('holds an edit that is doubtful until an admin decides', async () => {
+    const created = await publish('Đậu hũ sốt cà');
+    const held = await edit(created.id, `${BORDERLINE_MARKER} text`).expect(
+      200,
+    );
+    expect(held.body).toMatchObject({ status: PostStatus.PENDING_REVIEW });
+    await request(server()).get(`/api/v1/posts/${created.id}`).expect(404);
+  });
+
+  it('keeps editing to the author, to text posts that are settled, and to non-empty text', async () => {
+    const created = await publish('Đậu hũ sốt cà');
+    await edit(created.id, '').expect(400);
+
+    const stranger = await createUser(e2e.mongo, { username: 'vedora.other' });
+    await request(server())
+      .patch(`/api/v1/posts/${created.id}`)
+      .auth(await e2e.sign(stranger), { type: 'bearer' })
+      .send({ body: 'Không phải bài của tôi' })
+      .expect(403);
+    await request(server())
+      .patch(`/api/v1/posts/${created.id}`)
+      .send({ body: 'Chưa đăng nhập' })
+      .expect(401);
+
+    await posts().updateOne(
+      { _id: created.id },
+      { $set: { status: PostStatus.PROCESSING } },
+    );
+    await edit(created.id, 'Đang kiểm duyệt').expect(409);
+  });
+
   it('rejects a confident violation and shows the author why', async () => {
     const created = await publish(`${VIOLATION_MARKER} text`);
     expect(created).toMatchObject({

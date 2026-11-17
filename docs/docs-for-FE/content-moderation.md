@@ -34,6 +34,13 @@ Bài mới và blog xuất bản (hoặc sửa tiêu đề, nội dung, ảnh b�
 Video: chữ của bài, 4 khung hình lấy từ Cloudinary và transcript lời thoại được chấm cùng lúc trước khi xuất bản. Bài ở `PROCESSING` cho đến khi có transcript (thường vài giây đến vài chục giây sau khi video xử lý xong). Video không có lời thoại hoặc ghi lời lỗi thì chỉ chấm chữ và khung hình.
 Blog: tiêu đề, nội dung, ảnh bìa và tối đa 5 ảnh trong nội dung Markdown.
 
+## Sửa bài đã đăng
+
+Sửa nội dung vẫn phải qua kiểm duyệt như bài mới, nên bài chuyển `PROCESSING` cho đến khi có kết quả.
+
+- **Bài ngắn và video:** `PATCH /posts/:id` với `{ "body": "..." }`. Chỉ tác giả sửa được (người khác 403, chưa đăng nhập 401) và chỉ sửa chữ; video đính kèm giữ nguyên. Chữ không đổi thì trả bài như cũ, không kiểm duyệt lại. `body` rỗng chỉ hợp lệ khi bài có video, nếu không trả 400 `EMPTY_POST`. Bài đang `PROCESSING` hoặc `FAILED` trả 409 `POST_NOT_EDITABLE`. Bài `PUBLISHED`, `PENDING_REVIEW` và `REJECTED` đều sửa được, nên bài bị từ chối có thể sửa rồi gửi lại. Response là bài với trạng thái mới (`PROCESSING`, hoặc đã có kết quả ngay): FE poll `GET /posts/:id` như khi đăng bài. `publishedAt` giữ nguyên.
+- **Blog:** `PATCH /blogs/:id` (xem [blogs.md](blogs.md)). Sửa tiêu đề, nội dung hoặc ảnh bìa của blog đã đăng đưa nó về `PROCESSING`, và blog biến khỏi feed cho đến khi có kết quả. Vì vậy FE không nên tự lưu liên tục một blog đã đăng; chỉ gửi khi tác giả bấm lưu.
+
 ## Thông báo cho tác giả
 
 Mỗi lần trạng thái bài thay đổi do kiểm duyệt, tác giả nhận một thông báo từ hệ thống (`GET /notifications`, SSE `/notifications/sse`):

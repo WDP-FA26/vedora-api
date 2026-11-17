@@ -22,7 +22,7 @@ export function countWords(text: string): number {
   return text.split(/\s+/).filter(Boolean).length;
 }
 
-function MaxWords(max: number, options?: ValidationOptions) {
+export function MaxWords(max: number, options?: ValidationOptions) {
   return ValidateBy(
     {
       name: 'maxWords',

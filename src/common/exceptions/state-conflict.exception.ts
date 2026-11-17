@@ -26,6 +26,7 @@ export const STATE_CONFLICT_CODES = [
   'MEAL_PLAN_CONFLICT',
   'MESSAGE_ID_CONFLICT',
   'POST_NOT_REVIEWABLE',
+  'POST_NOT_EDITABLE',
 ] as const;
 
 export type StateConflictCode = (typeof STATE_CONFLICT_CODES)[number];

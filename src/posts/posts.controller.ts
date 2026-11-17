@@ -6,6 +6,7 @@ import {
   HttpCode,
   HttpStatus,
   Param,
+  Patch,
   ParseUUIDPipe,
   Post,
   Query,
@@ -28,6 +29,7 @@ import { JwtAuthGuard } from '../auth-core/jwt-auth.guard.js';
 import { OptionalJwtAuthGuard } from '../auth-core/optional-jwt-auth.guard.js';
 import { CursorPaginationQueryDto } from '../common/pagination/index.js';
 import { CreatePostDto } from './dto/create-post.dto.js';
+import { UpdatePostDto } from './dto/update-post.dto.js';
 import { FeedQueryDto } from './dto/feed-query.dto.js';
 import { RecordViewsDto } from './dto/post-interaction.dto.js';
 import { ListPostsQueryDto } from './dto/list-posts-query.dto.js';
@@ -171,6 +173,23 @@ export class PostsController {
   ): Promise<PostResponseDto> {
     if (request.user) response.setHeader('Cache-Control', 'private, no-store');
     return this.postsQuery.findOne(id, request.user?.sub);
+  }
+
+  @Patch(':id')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'Edit the text of your post',
+    description:
+      'Changed text is moderated again: the response is PROCESSING until the verdict, then PUBLISHED, PENDING_REVIEW or REJECTED. Unchanged text returns the post as it is. 409 POST_NOT_EDITABLE while the post is PROCESSING or FAILED.',
+  })
+  @ApiOkResponse({ type: PostResponseDto })
+  update(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Req() request: AuthenticatedRequest,
+    @Body() dto: UpdatePostDto,
+  ): Promise<PostResponseDto> {
+    return this.postsService.update(id, request.user.sub, dto);
   }
 
   @Delete(':id')

@@ -4,7 +4,7 @@ import { InjectModel } from '@nestjs/mongoose';
 import type { Model } from 'mongoose';
 import { randomUUID } from 'node:crypto';
 import { MediaService } from '../media/media.service.js';
-import { MediaAsset, Post, PostStatus } from '../mongo/models.js';
+import { MediaAsset, Post, PostStatus, PostType } from '../mongo/models.js';
 import { MongoService } from '../mongo/mongo.service.js';
 import { PostSearchIndexService } from './search/post-search-index.service.js';
 import { CreatePostDto } from './dto/create-post.dto.js';
@@ -12,6 +12,15 @@ import { PostResponseDto } from './dto/post-response.dto.js';
 import { AccessDeniedException } from '../common/exceptions/access-denied.exception.js';
 import { ResourceNotFoundException } from '../common/exceptions/resource-not-found.exception.js';
 import { PostsQueryService } from './posts-query.service.js';
+import { UpdatePostDto } from './dto/update-post.dto.js';
+import { lockDocument } from '../mongo/document-lock.js';
+import { StateConflictException } from '../common/exceptions/state-conflict.exception.js';
+
+const EDITABLE_STATUSES: PostStatus[] = [
+  PostStatus.PUBLISHED,
+  PostStatus.PENDING_REVIEW,
+  PostStatus.REJECTED,
+];
 
 @Injectable()
 export class PostsService {
@@ -56,6 +65,76 @@ export class PostsService {
     await this.mediaService.settlePosts([id]);
     this.searchIndex.schedule();
 
+    return this.postsQuery.load(id, authorId);
+  }
+
+  /**
+   * Edits the text of a short post. Changed text is moderated again like a
+   * new post: the post is PROCESSING until the verdict, so a rejected or held
+   * post can be fixed and resubmitted. Videos cannot be swapped.
+   */
+  async update(
+    id: string,
+    authorId: string,
+    dto: UpdatePostDto,
+  ): Promise<PostResponseDto> {
+    const body = dto.body || null;
+    let changed = false;
+    await this.mongo.withTransaction(async (session) => {
+      await lockDocument(this.mongo, session, 'post', id);
+      const current = await this.posts
+        .findOne({ _id: id, type: PostType.POST })
+        .session(session)
+        .exec();
+      if (!current) {
+        throw new ResourceNotFoundException('NOT_FOUND', 'Post not found');
+      }
+      if (current.authorId !== authorId) {
+        throw new AccessDeniedException(
+          'FORBIDDEN',
+          'Only the author can edit this post',
+        );
+      }
+      if (!EDITABLE_STATUSES.includes(current.status)) {
+        throw new StateConflictException(
+          'POST_NOT_EDITABLE',
+          'This post is still being processed and cannot be edited yet',
+        );
+      }
+      if (body === current.body) return;
+      if (!body) {
+        const videos = await this.media
+          .countDocuments({ postId: id, discardedAt: null })
+          .session(session)
+          .exec();
+        if (videos === 0) {
+          throw new InvalidInputException(
+            'EMPTY_POST',
+            'A post needs text or a video',
+          );
+        }
+      }
+      changed = true;
+      await this.posts
+        .updateOne(
+          { _id: id },
+          {
+            $set: {
+              body,
+              status: PostStatus.PROCESSING,
+              moderation: null,
+              searchIndexedAt: null,
+              updatedAt: new Date(),
+            },
+          },
+          { session },
+        )
+        .exec();
+    });
+    if (changed) {
+      await this.mediaService.settlePosts([id]);
+      this.searchIndex.schedule();
+    }
     return this.postsQuery.load(id, authorId);
   }
 
