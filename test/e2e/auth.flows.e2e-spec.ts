@@ -27,6 +27,7 @@ import { createUser } from '../support/fixtures.js';
 
 const PUBLIC_USER_KEYS = [
   'accountVersion',
+  'avatarUrl',
   'createdAt',
   'email',
   'fullName',
