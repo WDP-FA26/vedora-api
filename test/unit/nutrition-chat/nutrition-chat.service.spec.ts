@@ -191,7 +191,7 @@ describe('NutritionChatService', () => {
   it('moderates the latest message', async () => {
     await ask('Ăn chay lấy đạm từ đâu?', 'Từ các loại đậu.', 'Còn gì nữa?');
 
-    expect(evaluationModel).toHaveBeenCalledWith('typesafe/jev-1.14');
+    expect(evaluationModel).toHaveBeenCalledWith('google/gemini-decision-1');
     expect(moderator.doEvaluate).toHaveBeenCalledWith(
       expect.objectContaining({
         state: 'Còn gì nữa?',

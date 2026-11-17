@@ -1,5 +1,5 @@
 import type { ModerationSettingsService } from '../../../src/moderation/moderation-settings.service.js';
-import type { Experimental_EvaluationModel } from 'ai';
+import { APICallError, type Experimental_EvaluationModel } from 'ai';
 import { vi } from 'vitest';
 import { FeatureUnavailableException } from '../../../src/common/exceptions/feature-unavailable.exception.js';
 import { UnprocessableContentException } from '../../../src/common/exceptions/unprocessable-content.exception.js';
@@ -109,6 +109,60 @@ describe('ContentModerationService', () => {
     doEvaluate.mockRejectedValue(new Error('boom'));
     await expect(service.requireAllowed(text('hi'))).rejects.toBeInstanceOf(
       FeatureUnavailableException,
+    );
+  });
+});
+
+function providerError(statusCode: number, body: string): APICallError {
+  return new APICallError({
+    message: `HTTP ${statusCode}: ${body}`,
+    url: 'https://openrouter.ai/api/v1/evaluate',
+    requestBodyValues: {},
+    statusCode,
+    responseBody: body,
+  });
+}
+
+const PROHIBITED_BODY =
+  '{"error":{"message":"Input blocked","code":"prohibited_content"}}';
+
+describe('ContentModerationService when the provider refuses the content', () => {
+  it('holds the content for an admin instead of failing', async () => {
+    const { service, doEvaluate } = modelAnswering('allow');
+    doEvaluate.mockRejectedValue(providerError(400, PROHIBITED_BODY));
+    expect(await service.review(text('nội dung bị chặn'))).toEqual({
+      decision: 'review',
+      category: 'provider_blocked',
+      violationScore: 1,
+      scores: { provider_blocked: 1 },
+    });
+  });
+
+  it('turns a comment away, since comments have no review queue', async () => {
+    const { service, doEvaluate } = modelAnswering('allow');
+    doEvaluate.mockRejectedValue(providerError(400, PROHIBITED_BODY));
+    await expect(
+      service.requireAllowed(text('nội dung bị chặn')),
+    ).rejects.toMatchObject({
+      constructor: UnprocessableContentException,
+      code: 'CONTENT_REJECTED',
+      details: { category: 'provider_blocked' },
+    });
+  });
+
+  it('still fails on other provider errors', async () => {
+    const { service, doEvaluate } = modelAnswering('allow');
+    doEvaluate.mockRejectedValue(
+      providerError(400, '{"error":{"code":"invalid_request"}}'),
+    );
+    await expect(service.review(text('hi'))).rejects.toBeInstanceOf(
+      APICallError,
+    );
+    doEvaluate.mockRejectedValue(
+      providerError(401, PROHIBITED_BODY),
+    );
+    await expect(service.review(text('hi'))).rejects.toBeInstanceOf(
+      APICallError,
     );
   });
 });

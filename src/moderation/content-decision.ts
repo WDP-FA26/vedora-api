@@ -7,11 +7,33 @@ export interface ContentThresholds {
   reviewThreshold: number;
 }
 
+/**
+ * Category of an assessment the model could not score because its provider
+ * refused to read the content (Google blocks the worst hate speech and sexual
+ * content before the model sees it). It is not a policy choice, so it never
+ * appears among the scores a model returns.
+ */
+export const PROVIDER_BLOCKED_KEY = 'provider_blocked';
+
 export interface ContentAssessment {
   decision: ContentDecision;
   category: string | null;
   violationScore: number;
   scores: Record<string, number>;
+}
+
+/** Content the provider refused: held for an admin instead of being scored. */
+export function providerBlockedAssessment(): ContentAssessment {
+  return {
+    decision: 'review',
+    category: PROVIDER_BLOCKED_KEY,
+    violationScore: 1,
+    scores: { [PROVIDER_BLOCKED_KEY]: 1 },
+  };
+}
+
+export function isProviderBlocked(assessment: ContentAssessment): boolean {
+  return assessment.category === PROVIDER_BLOCKED_KEY;
 }
 
 export function assessContent(

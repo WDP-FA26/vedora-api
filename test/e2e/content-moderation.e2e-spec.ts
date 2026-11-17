@@ -9,6 +9,7 @@ import {
   BORDERLINE_MARKER,
   createE2eApp,
   type E2eApp,
+  PROVIDER_BLOCKED_MARKER,
   VIOLATION_MARKER,
 } from '../support/e2e-app.js';
 import { createUser } from '../support/fixtures.js';
@@ -125,6 +126,25 @@ describe('Content moderation review queue (e2e)', () => {
       moderation: { reviewedById: admin.id, reviewNote: 'Just a recipe' },
     });
     await request(server()).get(`/api/v1/posts/${created.id}`).expect(200);
+  });
+
+  it('holds a post the model provider refuses to read, flagged for an admin', async () => {
+    const created = await publish(`${PROVIDER_BLOCKED_MARKER} text`);
+    expect(created).toMatchObject({
+      status: PostStatus.PENDING_REVIEW,
+      moderationVerdict: null,
+    });
+    await request(server()).get(`/api/v1/posts/${created.id}`).expect(404);
+    expect((await adminView(created.id)).moderation).toMatchObject({
+      verdict: 'provider_blocked',
+      violationScore: 1,
+    });
+    const queue = await request(server())
+      .get('/api/v1/admin/posts?status=PENDING_REVIEW')
+      .auth(adminToken, { type: 'bearer' })
+      .expect(200);
+    const ids = (queue.body as { items: PostBody[] }).items.map(({ id }) => id);
+    expect(ids).toEqual([created.id]);
   });
 
   it('lets an admin confirm a hold or overturn a rejection', async () => {

@@ -1,6 +1,6 @@
 # Kiểm duyệt nội dung
 
-Mọi nội dung người dùng đăng (bài viết, video, blog, bình luận) được model quyết định (mặc định `openai/gpt-6-luna-decisions` qua OpenRouter, xem `OPENROUTER_CONTENT_MODERATION_MODEL`) kiểm tra theo chính sách an toàn trước khi hiển thị. Chính sách chỉ xét an toàn, không xét chủ đề hay chế độ ăn.
+Mọi nội dung người dùng đăng (bài viết, video, blog, bình luận) được model quyết định (mặc định `google/gemini-decision-1` qua OpenRouter, xem `OPENROUTER_CONTENT_MODERATION_MODEL`) kiểm tra theo chính sách an toàn trước khi hiển thị. Chính sách chỉ xét an toàn, không xét chủ đề hay chế độ ăn.
 
 ## Bình luận
 
@@ -16,6 +16,15 @@ Jev trả về xác suất cho từng nhóm. Điểm vi phạm = `1 - P(allow)`:
 - Thấp hơn: `PUBLISHED`.
 
 Bình luận không có hàng chờ nên chỉ bị chặn khi điểm `>= MODERATION_REJECT_THRESHOLD`.
+
+### Nội dung bị nhà cung cấp model từ chối đọc
+
+Model mặc định (`google/gemini-decision-1`) có bộ lọc riêng của Google: nội dung thù ghét hoặc tình dục nặng bị trả HTTP 400 `prohibited_content` trước khi model kịp chấm điểm. Backend không coi đó là lỗi:
+- Bài viết, video, blog: chuyển `PENDING_REVIEW` để admin tự duyệt. `moderation.verdict = "provider_blocked"`, `violationScore = 1`, `scores = { provider_blocked: 1 }`. `moderationVerdict` cho tác giả vẫn là `null`; thông báo `POST_PENDING_REVIEW` có `reason = "provider_blocked"`.
+- Bình luận: HTTP 422 `CONTENT_REJECTED`, `details.category = "provider_blocked"`, vì bình luận không có hàng chờ.
+- `POST /admin/moderation/settings/test` trả `decision: "review"`, `category: "provider_blocked"`.
+
+FE admin nên hiển thị `provider_blocked` là "Model từ chối đọc nội dung" (không nằm trong chính sách nên không có nhãn từ `GET /admin/moderation/settings`).
 
 Bài mới và blog xuất bản (hoặc sửa tiêu đề, nội dung, ảnh bìa của blog đã xuất bản) chuyển sang `PROCESSING` cho đến khi kiểm duyệt xong:
 - Đạt: `PUBLISHED`.

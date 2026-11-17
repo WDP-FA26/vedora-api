@@ -1,4 +1,5 @@
 import type { INestApplication } from '@nestjs/common';
+import { APICallError } from 'ai';
 import { JwtService } from '@nestjs/jwt';
 import { Test, type TestingModuleBuilder } from '@nestjs/testing';
 import type { Connection } from 'mongoose';
@@ -23,6 +24,8 @@ export interface E2eApp {
 
 export const VIOLATION_MARKER = 'VIOLATION';
 export const BORDERLINE_MARKER = 'BORDERLINE';
+/** The provider refuses to read the content (HTTP 400 `prohibited_content`). */
+export const PROVIDER_BLOCKED_MARKER = 'PROVIDERBLOCKED';
 
 const CHOICE_MARKER = /CHOICE:([a-z_0-9]+)/;
 
@@ -51,6 +54,17 @@ const fakeJev = {
     questions: Record<string, { criteria: Record<string, unknown> }>;
   }) => {
     const text = JSON.stringify(state);
+    if (text.includes(PROVIDER_BLOCKED_MARKER)) {
+      return Promise.reject(
+        new APICallError({
+          message: 'Input blocked',
+          url: 'https://openrouter.ai/api/v1/evaluate',
+          requestBodyValues: {},
+          statusCode: 400,
+          responseBody: '{"error":{"code":"prohibited_content"}}',
+        }),
+      );
+    }
     const keys = Object.keys(questions.verdict?.criteria ?? {});
     let choice = 'allow';
     let probabilities = distribution(keys, 'violence', 0.01);
