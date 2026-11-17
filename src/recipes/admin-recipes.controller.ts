@@ -15,6 +15,7 @@ import {
 } from '@nestjs/common';
 import {
   ApiBearerAuth,
+  ApiCreatedResponse,
   ApiForbiddenResponse,
   ApiNoContentResponse,
   ApiOkResponse,
@@ -32,11 +33,13 @@ import {
   PaginatedResponseDto,
   PaginationQueryDto,
 } from '../common/pagination/index.js';
+import { CloudinaryService } from '../cloudinary/cloudinary.service.js';
 import {
   CheckConflictsDto,
   RecipeConflictDto,
   RecipeDetailDto,
   RecipeDto,
+  RecipeImageUploadDto,
   SaveRecipeDto,
 } from './dto/recipe.dto.js';
 import { IncompatibilityRulesService } from './incompatibility-rules.service.js';
@@ -60,7 +63,19 @@ export class AdminRecipesController {
   constructor(
     private readonly recipes: RecipesService,
     private readonly rules: IncompatibilityRulesService,
+    private readonly cloudinary: CloudinaryService,
   ) {}
+
+  @Post('image-uploads')
+  @ApiOperation({
+    summary: 'Get a signed Cloudinary upload for a recipe photo',
+    description:
+      'Upload the file to `upload.url` with `upload.fields`, then send `url` as `imageUrl` when saving the recipe.',
+  })
+  @ApiCreatedResponse({ type: RecipeImageUploadDto })
+  createImageUpload() {
+    return this.cloudinary.signRecipeImageUpload();
+  }
 
   @Get()
   @ApiOperation({ summary: 'List recipes, most recently edited first' })

@@ -8,6 +8,7 @@ import { FeatureUnavailableException } from '../common/exceptions/feature-unavai
 export const STREAM_TRANSFORMATION = 'sp_auto/m3u8';
 export const UPLOAD_SIGNATURE_TTL_SECONDS = 3600;
 export const UPLOAD_CHUNK_BYTES = 20 * 1024 * 1024;
+export const IMAGE_FORMATS = 'jpg,jpeg,png,webp';
 
 export interface SignedUpload {
   url: string;
@@ -100,7 +101,26 @@ export class CloudinaryService {
     };
   }
 
-  private signUpload(params: Record<string, string>): SignedUpload {
+  signRecipeImageUpload(): { upload: SignedUpload; url: string } {
+    const folder = `${this.folder}/recipe-images`;
+    const publicId = `${folder}/${randomUUID()}`;
+    return {
+      upload: this.signUpload(
+        {
+          public_id: publicId,
+          asset_folder: folder,
+          allowed_formats: IMAGE_FORMATS,
+        },
+        'image',
+      ),
+      url: `https://res.cloudinary.com/${this.cloudName}/image/upload/f_auto,q_auto/${publicId}`,
+    };
+  }
+
+  private signUpload(
+    params: Record<string, string>,
+    resourceType: 'video' | 'image' = 'video',
+  ): SignedUpload {
     this.require();
     const signed = {
       ...params,
@@ -109,7 +129,7 @@ export class CloudinaryService {
     };
     const signature = cloudinary.utils.api_sign_request(signed, this.apiSecret);
     return {
-      url: `https://api.cloudinary.com/v1_1/${this.cloudName}/video/upload`,
+      url: `https://api.cloudinary.com/v1_1/${this.cloudName}/${resourceType}/upload`,
       fields: { ...signed, api_key: this.apiKey, signature },
       chunkSize: UPLOAD_CHUNK_BYTES,
     };

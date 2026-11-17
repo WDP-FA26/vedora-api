@@ -85,6 +85,20 @@ Kho công thức vẫn hiển thị món có xung đột để người dùng xe
 `suitableForMe=true` mới loại chúng khỏi danh sách. Công thức hiện không có số
 liệu calo/chất dinh dưỡng.
 
+### Ảnh món
+
+Admin tải ảnh lên Cloudinary rồi gửi URL nhận được làm `imageUrl`:
+
+1. `POST /admin/recipes/image-uploads` (không cần body) trả `{ upload, url }`.
+   `upload` có `{ url, fields, chunkSize }` giống `POST /blogs/videos/uploads`
+   nhưng trỏ tới endpoint `image/upload`, chỉ nhận jpg, jpeg, png, webp.
+2. Gửi `multipart/form-data` tới `upload.url` với mọi `upload.fields` và trường `file`.
+   Chữ ký không giới hạn được dung lượng (Cloudinary chỉ chặn theo hạn mức của tài khoản, gói miễn phí 10 MB/ảnh), nên FE tự chặn quá 10 MB.
+3. Gửi `url` làm `imageUrl` khi `POST`/`PUT /admin/recipes`.
+
+Công thức cũ đang dùng link HTTPS ngoài vẫn hợp lệ và hiển thị bình thường; API
+vẫn nhận mọi `imageUrl` HTTPS. Cloudinary chưa được cấu hình thì endpoint trả `503`.
+
 ## Chọn món, xem trước và lưu
 
 1. Đọc `/meal-plan` để lấy toàn bộ nội dung đang lưu.

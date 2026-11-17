@@ -1,3 +1,4 @@
+import { SignedUploadDto } from '../../media/dto/media-response.dto.js';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Transform, Type } from 'class-transformer';
 import {
@@ -205,4 +206,15 @@ export function toRecipeCard({
   ...card
 }: RecipeDetailDto): RecipeDto {
   return card;
+}
+
+export class RecipeImageUploadDto {
+  @ApiProperty({ type: SignedUploadDto })
+  upload!: SignedUploadDto;
+
+  @ApiProperty({
+    format: 'uri',
+    description: 'Public image URL once uploaded; send it as `imageUrl`',
+  })
+  url!: string;
 }
