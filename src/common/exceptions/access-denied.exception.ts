@@ -6,6 +6,7 @@ export const ACCESS_DENIED_CODES = [
   'CAPTCHA_FAILED',
   'SELF_RATING_NOT_ALLOWED',
   'MESSAGE_FOLLOW_REQUIRED',
+  'MESSAGE_REQUEST_RECEIVER_REQUIRED',
 ] as const;
 
 export type AccessDeniedCode = (typeof ACCESS_DENIED_CODES)[number];
