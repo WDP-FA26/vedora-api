@@ -1,3 +1,4 @@
+import { runtimeConfig } from '../../config/runtime-config.js';
 import { SignedUploadDto } from '../../media/dto/media-response.dto.js';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Transform, Type } from 'class-transformer';
@@ -20,11 +21,11 @@ import {
 } from 'class-validator';
 import { NamedRefDto } from './ingredient.dto.js';
 
-export const MAX_RECIPE_INGREDIENTS = 50;
-export const MAX_RECIPE_STEPS = 50;
-export const MAX_STEP_LENGTH = 1000;
-const MAX_MINUTES = 24 * 60;
-export const MAX_IMAGE_URL_LENGTH = 2048;
+export const MAX_RECIPE_INGREDIENTS = runtimeConfig.RECIPE_MAX_INGREDIENTS;
+export const MAX_RECIPE_STEPS = runtimeConfig.RECIPE_MAX_STEPS;
+export const MAX_STEP_LENGTH = runtimeConfig.RECIPE_STEP_MAX_LENGTH;
+const MAX_MINUTES = runtimeConfig.RECIPE_MAX_MINUTES;
+export const MAX_IMAGE_URL_LENGTH = runtimeConfig.RECIPE_IMAGE_URL_MAX_LENGTH;
 
 const trim = ({ value }: { value: unknown }): unknown =>
   typeof value === 'string' ? value.trim() : value;
@@ -45,37 +46,45 @@ export class RecipeIngredientInputDto {
   @IsOptional()
   @IsNumber({ maxDecimalPlaces: 2 })
   @Min(0.01)
-  @Max(999999.99)
+  @Max(runtimeConfig.RECIPE_INGREDIENT_MAX_QUANTITY)
   quantity?: number;
 
-  @ApiPropertyOptional({ maxLength: 30, example: 'g' })
+  @ApiPropertyOptional({
+    maxLength: runtimeConfig.RECIPE_UNIT_MAX_LENGTH,
+    example: 'g',
+  })
   @IsOptional()
   @Transform(trim)
   @IsString()
-  @MaxLength(30)
+  @MaxLength(runtimeConfig.RECIPE_UNIT_MAX_LENGTH)
   unit?: string;
 
-  @ApiPropertyOptional({ maxLength: 200, example: 'cắt hạt lựu' })
+  @ApiPropertyOptional({
+    maxLength: runtimeConfig.RECIPE_NOTE_MAX_LENGTH,
+    example: 'cắt hạt lựu',
+  })
   @IsOptional()
   @Transform(trim)
   @IsString()
-  @MaxLength(200)
+  @MaxLength(runtimeConfig.RECIPE_NOTE_MAX_LENGTH)
   note?: string;
 }
 
 export class SaveRecipeDto {
-  @ApiProperty({ maxLength: 150 })
+  @ApiProperty({ maxLength: runtimeConfig.RECIPE_TITLE_MAX_LENGTH })
   @Transform(trim)
   @IsString()
   @MinLength(1)
-  @MaxLength(150)
+  @MaxLength(runtimeConfig.RECIPE_TITLE_MAX_LENGTH)
   title!: string;
 
-  @ApiPropertyOptional({ maxLength: 1000 })
+  @ApiPropertyOptional({
+    maxLength: runtimeConfig.RECIPE_DESCRIPTION_MAX_LENGTH,
+  })
   @IsOptional()
   @Transform(trim)
   @IsString()
-  @MaxLength(1000)
+  @MaxLength(runtimeConfig.RECIPE_DESCRIPTION_MAX_LENGTH)
   description?: string;
 
   @ApiPropertyOptional({
@@ -89,10 +98,10 @@ export class SaveRecipeDto {
   @MaxLength(MAX_IMAGE_URL_LENGTH)
   imageUrl?: string;
 
-  @ApiProperty({ minimum: 1, maximum: 100 })
+  @ApiProperty({ minimum: 1, maximum: runtimeConfig.RECIPE_MAX_SERVINGS })
   @IsInt()
   @Min(1)
-  @Max(100)
+  @Max(runtimeConfig.RECIPE_MAX_SERVINGS)
   servings!: number;
 
   @ApiPropertyOptional({ minimum: 0 })

@@ -1,10 +1,13 @@
+import { runtimeConfig } from '../../config/runtime-config.js';
 import { ApiProperty } from '@nestjs/swagger';
 import { ArrayMaxSize, ArrayUnique, IsArray, IsUUID } from 'class-validator';
 import { NamedRefDto } from './ingredient.dto.js';
 
-export const MAX_AVOIDED_INGREDIENTS = 200;
-export const MAX_AVOIDED_GROUPS = 50;
-export const MAX_LIKED_INGREDIENTS = 100;
+export const MAX_AVOIDED_INGREDIENTS =
+  runtimeConfig.DIETARY_MAX_AVOIDED_INGREDIENTS;
+export const MAX_AVOIDED_GROUPS = runtimeConfig.DIETARY_MAX_AVOIDED_GROUPS;
+export const MAX_LIKED_INGREDIENTS =
+  runtimeConfig.DIETARY_MAX_LIKED_INGREDIENTS;
 
 export class DietaryIngredientOptionDto extends NamedRefDto {
   @ApiProperty({ type: [String] }) aliases!: string[];
