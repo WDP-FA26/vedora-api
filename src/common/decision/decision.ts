@@ -13,6 +13,7 @@ export interface DecisionPolicy<V extends string> {
 
 type DecisionState = Parameters<typeof evaluate>[0]['state'];
 
+// One budget for the whole call, retries included.
 const DEFAULT_TIMEOUT_MS = runtimeConfig.AI_DECISION_TIMEOUT_MS;
 const MAX_RETRIES = runtimeConfig.AI_DECISION_MAX_RETRIES;
 

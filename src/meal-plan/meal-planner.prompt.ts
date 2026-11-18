@@ -2,6 +2,7 @@ import { runtimeConfig } from '../config/runtime-config.js';
 import { loadTextConfig } from '../config/config-files.js';
 import type { DietaryRestrictionsDto } from '../recipes/dto/dietary.dto.js';
 import type { MealPlanDto } from './dto/meal-plan.dto.js';
+import type { DraftProposal } from './meal-plan.service.js';
 
 export const DAY_NAMES = {
   MON: 'Thứ Hai',
@@ -22,9 +23,34 @@ export const SECTION_NAMES = {
 
 const RULES = loadTextConfig(runtimeConfig.PLANNER_SYSTEM_PROMPT_FILE);
 
+function draftSummary(draft: DraftProposal | undefined): string {
+  if (!draft || draft.days.length === 0) return '';
+  const lines: string[] = [];
+  for (const { day, sections } of draft.days) {
+    const parts: string[] = [];
+    for (const { section, recipes, previous } of sections) {
+      const same =
+        recipes.map(({ id }) => id).join() ===
+        previous.map(({ id }) => id).join();
+      if (same) continue;
+      const now =
+        recipes.length > 0
+          ? recipes.map(({ title, id }) => `${title} (id ${id})`).join(', ')
+          : '(trống)';
+      parts.push(`${SECTION_NAMES[section]}: ${now}`);
+    }
+    if (parts.length > 0) {
+      lines.push(`- ${DAY_NAMES[day]}: ${parts.join('; ')}`);
+    }
+  }
+  if (lines.length === 0) return '';
+  return `\n\nBản nháp đang đề xuất (chưa lưu):\n${lines.join('\n')}`;
+}
+
 export function plannerInstructions(
   restrictions: DietaryRestrictionsDto,
   plan: MealPlanDto,
+  draft?: DraftProposal,
 ): string {
   const avoided = [
     ...restrictions.groups.map(({ name }) => `nhóm ${name}`),
@@ -53,5 +79,5 @@ Nguyên liệu người dùng thích: ${
   }.
 
 Thực đơn đang lưu:
-${days.join('\n')}`;
+${days.join('\n')}${draftSummary(draft)}`;
 }

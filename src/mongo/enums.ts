@@ -162,6 +162,19 @@ export enum MealSection {
   OTHER = 'OTHER',
 }
 
+/** What kind of dish a recipe is; the meal planner shows one icon per tag. */
+export enum RecipeTag {
+  SOUP = 'SOUP',
+  SALAD = 'SALAD',
+  RICE = 'RICE',
+  NOODLES = 'NOODLES',
+  STIR_FRY = 'STIR_FRY',
+  BREAD = 'BREAD',
+  DESSERT = 'DESSERT',
+  DRINK = 'DRINK',
+  SNACK = 'SNACK',
+}
+
 export enum AiFeature {
   MEAL_PLAN_CHAT = 'MEAL_PLAN_CHAT',
   BLOG_CHAT = 'BLOG_CHAT',

@@ -73,7 +73,7 @@ Nhắn tin có thêm `MESSAGE_ID_CONFLICT`: `clientMessageId` đã được dùn
 | `code` | Ý nghĩa | `details` |
 | --- | --- | --- |
 | `CONFLICT` | Xung đột chung (ví dụ trùng tên, trùng dữ liệu duy nhất) | — |
-| `MEAL_PLAN_INVALID` | Thực đơn vi phạm chế độ ăn hoặc quy tắc xung đột khi lưu | `problems: MealPlanProblem[]` — xem [recipe-catalog-meal-plan.md](recipe-catalog-meal-plan.md) |
+| `MEAL_PLAN_INVALID` | Thực đơn có món chứa nguyên liệu người dùng tránh, hoặc món không tồn tại, khi lưu (xung đột nguyên liệu cùng bữa chỉ là cảnh báo, không gây lỗi này) | `problems: MealPlanProblem[]` — xem [recipe-catalog-meal-plan.md](recipe-catalog-meal-plan.md) |
 | `ALREADY_VERIFIED` | Tài khoản đã được xác minh | — |
 | `PROOF_NOT_UPLOADED` | Ảnh minh chứng chưa tải lên xong | — |
 | `REQUEST_PENDING` | Đã có yêu cầu xác minh đang chờ duyệt | — |

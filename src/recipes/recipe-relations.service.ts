@@ -57,6 +57,7 @@ export class RecipeRelationsService {
         id: row.id,
         title: row.title,
         imageUrl: row.imageUrl,
+        tag: row.tag,
         servings: row.servings,
         prepMinutes: row.prepMinutes,
         cookMinutes: row.cookMinutes,

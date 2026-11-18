@@ -19,6 +19,7 @@ import {
   type IngredientGroup,
   type MealPlanEntry,
   MealSection,
+  RecipeTag,
   Weekday,
 } from '../../../src/mongo/models.js';
 import { MongoService } from '../../../src/mongo/mongo.service.js';
@@ -76,6 +77,7 @@ describe('MealPlanService', () => {
   });
   beforeEach(async () => {
     for (const collection of [
+      'meal_plan_draft_slots',
       'meal_plan_entries',
       'recipes',
       'ingredients',
@@ -134,14 +136,28 @@ describe('MealPlanService', () => {
     await app.close();
   });
 
-  it('rejects incompatible ingredients in two sections of one day', async () => {
+  it('does not mix up two meals of one day', async () => {
     const { problems } = await service.preview(USER_ID, [
       {
         day: Weekday.MON,
         breakfast: [],
         lunch: [TOFU_RECIPE],
+        dinner: [SPINACH_RECIPE],
+        others: [],
+      },
+    ]);
+
+    expect(problems).toEqual([]);
+  });
+
+  it('flags incompatible ingredients in one meal', async () => {
+    const { problems } = await service.preview(USER_ID, [
+      {
+        day: Weekday.MON,
+        breakfast: [],
+        lunch: [TOFU_RECIPE, SPINACH_RECIPE],
         dinner: [],
-        others: [SPINACH_RECIPE],
+        others: [],
       },
     ]);
 
@@ -250,7 +266,24 @@ describe('MealPlanService', () => {
     ]);
   });
 
-  it('saves nothing when a day is invalid', async () => {
+  it('saves a day with incompatible dishes and reports the clash as a warning', async () => {
+    const plan = await service.apply(USER_ID, [
+      {
+        day: Weekday.MON,
+        breakfast: [],
+        lunch: [TOFU_RECIPE, SPINACH_RECIPE],
+        dinner: [],
+        others: [],
+      },
+    ]);
+
+    expect(await entries().countDocuments()).toBe(2);
+    expect(plan.problems).toEqual([
+      expect.objectContaining({ code: 'DAY_CONFLICT', day: Weekday.MON }),
+    ]);
+  });
+
+  it('saves nothing when a day has a dish that does not exist', async () => {
     await expect(
       service.apply(USER_ID, [
         {
@@ -258,7 +291,7 @@ describe('MealPlanService', () => {
           breakfast: [],
           lunch: [TOFU_RECIPE],
           dinner: [],
-          others: [SPINACH_RECIPE],
+          others: [randomUUID()],
         },
       ]),
     ).rejects.toBeInstanceOf(StateConflictException);
@@ -309,7 +342,7 @@ describe('MealPlanService', () => {
 
   it('returns all 7 days in find() and reports problems on the saved timetable', async () => {
     await saved(Weekday.MON, MealSection.LUNCH, TOFU_RECIPE);
-    await saved(Weekday.MON, MealSection.DINNER, SPINACH_RECIPE);
+    await saved(Weekday.MON, MealSection.LUNCH, SPINACH_RECIPE);
     // Orphan entry pointing to non-existent recipe should be skipped
     await saved(
       Weekday.TUE,
@@ -427,5 +460,197 @@ describe('MealPlanService', () => {
       expect.arrayContaining([SPINACH_RECIPE, noTimeRecipeId]),
     );
     expect(byIngredient).toHaveLength(2);
+  });
+
+  describe('draft operations (fillDraft, editDraft, getDraft, discardDraft)', () => {
+    it('fillDraft pins specific recipeIds in a slot and fills the remaining slots', async () => {
+      const phoId = 'd1a2d3e4-0000-4000-8000-000000000010';
+      await createRecipe(
+        mongo,
+        {
+          id: phoId,
+          title: 'Phở chay',
+          prepMinutes: 10,
+          cookMinutes: 15,
+        },
+        [TOFU_ID],
+      );
+
+      const result = await service.fillDraft(USER_ID, {
+        days: [Weekday.WED],
+        sections: [MealSection.BREAKFAST, MealSection.LUNCH, MealSection.DINNER],
+        onlyEmpty: false,
+        pinned: [
+          {
+            day: Weekday.WED,
+            section: MealSection.LUNCH,
+            recipeIds: [phoId],
+          },
+        ],
+      });
+
+      expect(result.ok).toBe(true);
+      expect(result.problems).toEqual([]);
+      const wed = result.days.find((d) => d.day === Weekday.WED);
+      const sectionIds = (section: MealSection) =>
+        wed?.sections
+          .find((s) => s.section === section)
+          ?.recipes.map((r) => r.id);
+      expect(sectionIds(MealSection.LUNCH)).toEqual([phoId]);
+
+      const draft = await service.getDraft(USER_ID);
+      expect(draft.days).toHaveLength(1);
+      await service.discardDraft(USER_ID);
+      expect(await service.getDraft(USER_ID)).toEqual({
+        days: [],
+        problems: [],
+        ok: false,
+      });
+    });
+
+    it('editDraft keeps DAY_CONFLICT in draft for the agent to resolve without mutating other slots', async () => {
+      await service.editDraft(USER_ID, [
+        {
+          op: 'set',
+          day: Weekday.WED,
+          section: MealSection.DINNER,
+          recipeIds: [SPINACH_RECIPE],
+        },
+      ]);
+
+      const clash = await service.editDraft(USER_ID, [
+        {
+          op: 'set',
+          day: Weekday.WED,
+          section: MealSection.DINNER,
+          recipeIds: [SPINACH_RECIPE, TOFU_RECIPE],
+        },
+      ]);
+
+      expect(clash.ok).toBe(false);
+      expect(clash.problems[0]?.code).toBe('DAY_CONFLICT');
+      const draft = await service.getDraft(USER_ID);
+      expect(draft.days).toHaveLength(1);
+
+      const resolved = await service.editDraft(USER_ID, [
+        {
+          op: 'set',
+          day: Weekday.WED,
+          section: MealSection.DINNER,
+          recipeIds: [SPINACH_RECIPE, RICE_RECIPE],
+        },
+      ]);
+      expect(resolved.ok).toBe(true);
+      expect(resolved.problems).toEqual([]);
+      const wed = resolved.days.find((d) => d.day === Weekday.WED);
+      const dinner = wed?.sections.find(
+        (s) => s.section === MealSection.DINNER,
+      );
+      expect(dinner?.recipes.map((r) => r.id)).toEqual([
+        SPINACH_RECIPE,
+        RICE_RECIPE,
+      ]);
+    });
+
+    it('persists draft on a DAY_CONFLICT inside one meal, but keeps nothing on fatal problems', async () => {
+      const clash = await service.editDraft(USER_ID, [
+        {
+          op: 'set',
+          day: Weekday.MON,
+          section: MealSection.LUNCH,
+          recipeIds: [TOFU_RECIPE, SPINACH_RECIPE],
+        },
+        {
+          op: 'set',
+          day: Weekday.MON,
+          section: MealSection.DINNER,
+          recipeIds: [RICE_RECIPE],
+        },
+      ]);
+
+      expect(clash.ok).toBe(false);
+      expect(clash.problems[0]?.code).toBe('DAY_CONFLICT');
+      // Still persisted so fixing one slot keeps the other
+      const fixed = await service.editDraft(USER_ID, [
+        {
+          op: 'set',
+          day: Weekday.MON,
+          section: MealSection.LUNCH,
+          recipeIds: [TOFU_RECIPE],
+        },
+      ]);
+      expect(fixed.ok).toBe(true);
+      expect(fixed.problems).toEqual([]);
+
+      await service.discardDraft(USER_ID);
+      const unknown = await service.editDraft(USER_ID, [
+        {
+          op: 'set',
+          day: Weekday.TUE,
+          section: MealSection.LUNCH,
+          recipeIds: ['d1a2d3e4-0000-4000-8000-000000000099'],
+        },
+      ]);
+      expect(unknown.ok).toBe(false);
+      expect(unknown.problems[0]?.code).toBe('UNKNOWN_RECIPE');
+      expect((await service.getDraft(USER_ID)).days).toEqual([]);
+    });
+
+    it('returns ok=true with empty days when editDraft clears draft back to saved plan', async () => {
+      await service.editDraft(USER_ID, [
+        {
+          op: 'set',
+          day: Weekday.FRI,
+          section: MealSection.DINNER,
+          recipeIds: [RICE_RECIPE],
+        },
+      ]);
+
+      const cleared = await service.editDraft(USER_ID, [
+        {
+          op: 'clear',
+          day: Weekday.FRI,
+          section: MealSection.DINNER,
+        },
+      ]);
+
+      expect(cleared).toEqual({
+        days: [],
+        problems: [],
+        ok: true,
+        errors: [],
+      });
+    });
+
+    it('filters suggestions by multiple tags and exclude words', async () => {
+      const noodleId = 'd1a2d3e4-0000-4000-8000-000000000020';
+      const soupId = 'd1a2d3e4-0000-4000-8000-000000000021';
+      const friedId = 'd1a2d3e4-0000-4000-8000-000000000022';
+      await createRecipe(
+        mongo,
+        { id: noodleId, title: 'Phở chay', tag: RecipeTag.NOODLES },
+        [RICE_ID],
+      );
+      await createRecipe(
+        mongo,
+        { id: soupId, title: 'Canh bí đỏ', tag: RecipeTag.SOUP },
+        [RICE_ID],
+      );
+      await createRecipe(
+        mongo,
+        { id: friedId, title: 'Bánh chiên giòn', tag: RecipeTag.SNACK },
+        [RICE_ID],
+      );
+
+      const multiTag = await service.suggestions(USER_ID, undefined, {
+        tags: [RecipeTag.NOODLES, RecipeTag.SOUP],
+      });
+      expect(multiTag.map((r) => r.id)).toEqual([soupId, noodleId]);
+
+      const withoutFried = await service.suggestions(USER_ID, undefined, {
+        exclude: ['chiên'],
+      });
+      expect(withoutFried.map((r) => r.id)).not.toContain(friedId);
+    });
   });
 });

@@ -11,6 +11,9 @@ Không cần migration mới. Swagger mô tả đầy đủ request/response t�
 | GET    | `/recipes/:id`       | Không                                    | Chi tiết công thức                            |
 | GET    | `/meal-plan`         | Có                                       | Thực đơn đang lưu, đủ 7 ngày và 4 phần/ngày   |
 | POST   | `/meal-plan/preview` | Có                                       | Đề xuất, nội dung cũ và các vấn đề; không lưu |
+| POST   | `/meal-plan/generate` | Có                                      | Thuật toán (không AI) chọn món cho các ô được chọn; trả preview, không lưu |
+| GET    | `/meal-plan/draft`   | Có                                       | Bản nháp chưa lưu do trợ lý tạo, cùng dạng preview kèm `ok` (hết hạn sau 6 giờ) |
+| DELETE | `/meal-plan/draft`   | Có                                       | Xóa bản nháp chưa lưu (204)                   |
 | PUT    | `/meal-plan/days`    | Có                                       | Lưu các ngày được gửi và trả thực đơn mới     |
 
 Gửi `Authorization: Bearer <accessToken>` khi cần đăng nhập. Trên API đọc công
@@ -46,11 +49,11 @@ theo `updatedAt DESC`, rồi `id DESC`. Bộ lọc được áp dụng **trướ
 `suitableForMe=true` loại các món có nguyên liệu người dùng tránh, trực tiếp hoặc
 qua nhóm, và món có cặp nguyên liệu vi phạm quy tắc kỵ nhau trong database. Đây
 chỉ là kiểm tra từng công thức: một món có thể xung đột với món khác đã chọn trong
-cùng ngày. Luôn xem trước và kiểm tra lại khi lưu. Nguyên liệu yêu thích không
+cùng bữa. Luôn xem trước và kiểm tra lại khi lưu. Nguyên liệu yêu thích không
 phải điều kiện bắt buộc. Kết quả cá nhân có `Cache-Control: private, no-store`;
 FE cần cache theo tài khoản và xóa cache khi đổi tài khoản/hồ sơ ăn uống.
 
-Các item gồm `id`, `title`, `imageUrl`, `servings`, `prepMinutes`, `cookMinutes`,
+Các item gồm `id`, `title`, `imageUrl`, `tag`, `servings`, `prepMinutes`, `cookMinutes`,
 `totalMinutes`, `ingredientCount`, `conflictCount`, `conflicts`, `post`, `updatedAt`.
 `meta` dùng [hợp đồng phân trang chung](pagination.md).
 
@@ -76,7 +79,51 @@ type RecipeDetails = {
 };
 ```
 
-Nguyên liệu và bước nấu giữ thứ tự do admin nhập. `imageUrl` là link HTTPS có
+`tag` (tùy chọn khi `POST`/`PUT /admin/recipes`) phân loại món để lịch thực đơn
+chọn biểu tượng: `SOUP`, `SALAD`, `RICE`, `NOODLES`, `STIR_FRY`, `BREAD`,
+`DESSERT`, `DRINK`, `SNACK`. Bỏ qua hoặc gửi `null` là món chưa phân loại; response
+trả `tag: null` và FE tự dùng biểu tượng mặc định. `PUT` thay toàn bộ, nên không
+gửi `tag` sẽ xóa tag cũ. Giá trị ngoài danh sách trả `400`. `tag` cũng có trong
+mỗi món của `GET /meal-plan`, và trong `recipes`/`previous` của bản xem trước.
+
+Nguyên liệu và bước nấu giữ thứ tự do admin nhập.
+
+## Chọn món bằng thuật toán
+
+`POST /meal-plan/generate` chọn mỗi ô một món, không gọi AI nên trả lời nhanh và
+cho kết quả tuân theo ràng buộc. Body:
+
+| Trường | Bắt buộc | Ý nghĩa |
+| --- | --- | --- |
+| `days` | Có | Các thứ cần điền, ví dụ `["MON","TUE"]` |
+| `sections` | Có | Các bữa cần điền: `BREAKFAST`, `LUNCH`, `DINNER`, `OTHER` |
+| `onlyEmpty` | Có | `true` giữ nguyên ô đã có món; `false` thay món ở các ô được chọn |
+| `maxMinutes` | Không | 1–240; tổng sơ chế + nấu tối đa. Món chưa có thời gian bị loại khi có trường này |
+| `query` | Không | Tối đa 100 ký tự; tên món hoặc nguyên liệu muốn ưu tiên, chỉ cộng điểm, không bắt buộc |
+| `exclude` | Không | Tối đa 10 từ (mỗi từ ≤ 100 ký tự) mà tên món hoặc nguyên liệu không được chứa, ví dụ `["chiên"]`; bắt buộc, khác `query` |
+| `tags` | Không | Chỉ chọn món có một trong các `tag` này; món chưa có `tag` bị loại, và khi đặt trường này thì không xét `tag` hợp bữa |
+| `perSection` | Không | 1–6, mặc định 1; số món cho mỗi ô được điền |
+| `candidateIds` | Không | Tối đa 200 UUID; giới hạn thuật toán chỉ chọn trong danh sách công thức này |
+| `avoidIds` | Không | Tối đa 200 UUID; không bao giờ chọn các công thức này |
+| `pinned` | Không | Danh sách `{ day, section, recipeIds? }` giữ nguyên ô đó (hoặc gán `recipeIds` trước khi điền các ô còn lại) |
+
+Món được xếp hạng theo: `tag` hợp với bữa (ví dụ `BREAD` cho bữa sáng, `DRINK` chỉ
+hợp phần Khác), nguyên liệu người dùng thích, khớp `query`; món không lặp trong cùng một
+bữa (ví dụ các bữa sáng của cả tuần) trừ khi hết món khác; giữa các bữa khác nhau,
+kể cả cùng một ngày, một món vẫn được dùng lại (chỉ bị trừ điểm nhẹ). Món chứa nguyên liệu người dùng không ăn, món tự xung đột và
+món gây xung đột nguyên liệu với các món khác cùng bữa đều bị loại. Món chưa có
+`tag` không được cộng hay trừ điểm theo bữa.
+
+Response giống `POST /meal-plan/preview`: chỉ gồm các ngày có thay đổi, mỗi ngày đủ
+bốn phần kèm `previous`. `days` rỗng khi không có món nào phù hợp. Kết quả dùng
+`PUT /meal-plan/days` để lưu. Mỗi lần gọi có thể ra kết quả khác nhau.
+
+Trợ lý chat dùng cùng thuật toán qua công cụ `fillSlots` (ghi vào bản nháp chưa lưu),
+đọc thực đơn và bản nháp hiện tại bằng `getPlan`, và chỉnh từng ô bằng `editDraft`
+(`set`, `add`, `remove`, `clear`, `move`). Output của `fillSlots` và `editDraft`
+có cùng dạng đề xuất (`part.type` là `tool-fillSlots` hoặc `tool-editDraft`,
+gồm `output.ok`, `output.days`, `output.problems`), nên FE hiển thị chúng như nhau.
+ `imageUrl` là link HTTPS có
 thể bằng `null`. `post` chỉ có `{ id, author: { username, fullName } }` khi bài
 nguồn đã `PUBLISHED`; nếu bài đang xử lý, thất bại hoặc đã bị xóa thì `post=null`.
 Response không trả dữ liệu đăng nhập, người tạo admin hay hồ sơ ăn uống.
@@ -111,7 +158,7 @@ vẫn nhận mọi `imageUrl` HTTPS. Cloudinary chưa được cấu hình thì 
 
 Hai API nhận cùng body. Mỗi ngày được gửi **thay thế toàn bộ ngày đó**, nên phải
 gửi đủ bốn phần, bao gồm món muốn giữ. Ngày không gửi giữ nguyên. Mảng rỗng xóa
-phần đó; mỗi phần tối đa 6 món, không lặp ID trong một phần.
+phần đó; mỗi phần tối đa 5 món, không lặp ID trong một phần.
 
 ```json
 {
@@ -155,11 +202,17 @@ type Preview = {
 
 Các vấn đề được trả về để hiển thị, không biến xem trước thành một thao tác lưu.
 `PUT /meal-plan/days` trả `409` với `code: "MEAL_PLAN_INVALID"` và cùng cấu trúc
-`problems` nếu đề xuất không hợp lệ; không ngày nào được ghi một phần.
+`problems` khi có `AVOIDED_INGREDIENT` hoặc `UNKNOWN_RECIPE`; không ngày nào được
+ghi một phần. `DAY_CONFLICT` chỉ là **cảnh báo**: thực đơn vẫn được lưu (`200`) và
+xung đột nằm trong `problems` của response. FE hiển thị cảnh báo, không chặn người dùng.
 
-Quy tắc hiện có: ngày được thêm món phải kiểm tra nguyên liệu tránh và xung đột
-trên **cả ngày**, kể cả hai món thuộc hai bữa khác nhau. Chỉ xóa/di chuyển món đã
-có trong cùng ngày vẫn được phép để người dùng chỉnh thực đơn cũ đang có vấn đề.
+Quy tắc hiện có: ngày được thêm món phải kiểm tra nguyên liệu tránh (chặn) trên cả
+ngày. Xung đột nguyên liệu (`DAY_CONFLICT`, chỉ cảnh báo) chỉ xét **trong cùng một
+bữa**: hai món ở hai bữa khác nhau, kể cả cùng ngày, không xung đột. Bữa nào được
+thêm món (kể cả món chuyển từ bữa khác) thì được kiểm tra lại, và một công thức tự
+chứa hai nguyên liệu xung đột vẫn bị cảnh báo. Tên mã `DAY_CONFLICT` được giữ để không
+đổi contract; ý nghĩa hiện là "xung đột trong cùng bữa" và `day` là ngày của bữa đó.
+Chỉ xóa món vẫn được phép để người dùng chỉnh thực đơn cũ đang có vấn đề.
 ID công thức không tồn tại luôn được báo lỗi. Xem trước không giữ chỗ hay khóa
 dữ liệu; API lưu là nơi kiểm tra cuối cùng.
 
@@ -195,7 +248,7 @@ Xác nhận hành vi FE hỏi ngày 19/10/2026:
 - Có header `Authorization` thì token luôn được kiểm, kể cả header rỗng hoặc
   `Bearer undefined`; sai trả `401` trên API công thức công khai.
 - `q` chỉ có khoảng trắng trở thành chuỗi rỗng sau trim và trả `400`.
-- Thêm món phải kiểm tra lại **cả ngày**, bao gồm món cũ vi phạm sau đổi hồ sơ.
+- Thêm món phải kiểm tra lại nguyên liệu tránh trên **cả ngày** và xung đột trong **bữa** nhận món, bao gồm món cũ vi phạm sau đổi hồ sơ.
 - Preview chỉ trả `{ id, title }` cho món; FE lấy ảnh/thời gian từ catalog/detail.
 
 ## Kiểm tra backend

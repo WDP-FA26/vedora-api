@@ -19,7 +19,7 @@ describe('external prompt and policy files', () => {
         ),
         'utf8',
       ),
-    ) as { file: string; sha256: string }[];
+    ) as { file: string; sha256: string; upstreamSha256?: string }[];
     expect(entries).toHaveLength(6);
     for (const entry of entries) {
       const source = readFileSync(entry.file, 'utf8');
@@ -27,7 +27,7 @@ describe('external prompt and policy files', () => {
         ? JSON.stringify(JSON.parse(source))
         : source;
       expect(createHash('sha256').update(value).digest('hex')).toBe(
-        entry.sha256,
+        entry.upstreamSha256 ?? entry.sha256,
       );
     }
   });

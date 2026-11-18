@@ -404,14 +404,13 @@ describe('Recipe catalog with MongoDB', () => {
     expect(await entriesModel().countDocuments()).toBe(0);
     const saved = await plan.apply(userId, [day]);
     expect(saved.days[0].sections[1].recipes[0].id).toBe(tofuRecipeId);
-    const invalid = { ...day, dinner: [spinachRecipeId] };
+    const invalid = { ...day, lunch: [tofuRecipeId, spinachRecipeId] };
     expect((await plan.preview(userId, [invalid])).problems).toMatchObject([
       { code: 'DAY_CONFLICT' },
     ]);
-    await expect(plan.apply(userId, [invalid])).rejects.toMatchObject({
-      response: { code: 'MEAL_PLAN_INVALID' },
-    });
-    expect(await entriesModel().countDocuments()).toBe(1);
+    const warned = await plan.apply(userId, [invalid]);
+    expect(warned.problems).toMatchObject([{ code: 'DAY_CONFLICT' }]);
+    expect(await entriesModel().countDocuments()).toBe(2);
   });
 
   const dayInput = (

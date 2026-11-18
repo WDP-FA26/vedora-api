@@ -196,7 +196,7 @@ describe('NutritionChatService', () => {
   it('moderates the full conversation context across turns', async () => {
     await ask('Ăn chay lấy đạm từ đâu?', 'Từ các loại đậu.', 'Còn gì nữa?');
 
-    expect(evaluationModel).toHaveBeenCalledWith('google/gemini-decision-1');
+    expect(evaluationModel).toHaveBeenCalledWith('openai/gpt-6-luna-decisions');
     expect(moderator.doEvaluate).toHaveBeenCalledWith(
       expect.objectContaining({
         state: [

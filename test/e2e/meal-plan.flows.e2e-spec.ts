@@ -12,6 +12,7 @@ import {
   type MealPlanEntry,
   MealSection,
   type Recipe,
+  RecipeTag,
   type User,
   Weekday,
 } from '../../src/mongo/models.js';
@@ -228,17 +229,20 @@ describe('Meal plan and shopping list flows (e2e)', () => {
       ).toBe(0);
     });
 
-    it('refuses a new dish that clashes with a dish already saved in another section of that day', async () => {
+    it('saves a new dish that clashes with a dish already saved in the same meal and warns', async () => {
       const { token } = await signedUser();
       await putDays(token, [dayBody('SAT', { lunch: [tofuDish.id] })]).expect(
         200,
       );
       const response = await putDays(token, [
-        dayBody('SAT', { lunch: [tofuDish.id], dinner: [honeyDish.id] }),
-      ]).expect(409);
-      const body = response.body as ErrorBody;
-      expect(body.code).toBe('MEAL_PLAN_INVALID');
-      expect(body.details?.problems).toEqual([
+        dayBody('SAT', { lunch: [tofuDish.id, honeyDish.id] }),
+      ]).expect(200);
+      const plan = response.body as MealPlanDto;
+      expect(sectionIds(plan, 'SAT', 'LUNCH')).toEqual([
+        tofuDish.id,
+        honeyDish.id,
+      ]);
+      expect(plan.problems).toEqual([
         expect.objectContaining({
           code: 'DAY_CONFLICT',
           day: 'SAT',
@@ -250,7 +254,15 @@ describe('Meal plan and shopping list flows (e2e)', () => {
       ]);
     });
 
-    it('allows moving dishes between sections of a day that already clashes', async () => {
+    it('does not report a clash between dishes of two meals on one day', async () => {
+      const { token } = await signedUser();
+      const response = await putDays(token, [
+        dayBody('SAT', { lunch: [tofuDish.id], dinner: [honeyDish.id] }),
+      ]).expect(200);
+      expect((response.body as MealPlanDto).problems).toEqual([]);
+    });
+
+    it('lets the user fix a clashing meal by moving a dish to another meal', async () => {
       const { user, token } = await signedUser();
       await model<MealPlanEntry>('MealPlanEntry').insertMany([
         {
@@ -265,17 +277,17 @@ describe('Meal plan and shopping list flows (e2e)', () => {
           _id: randomUUID(),
           userId: user.id,
           day: 'SUN',
-          section: 'DINNER',
+          section: 'LUNCH',
           recipeId: honeyDish.id,
-          position: 0,
+          position: 1,
         },
       ]);
       const response = await putDays(token, [
-        dayBody('SUN', { breakfast: [honeyDish.id], dinner: [tofuDish.id] }),
+        dayBody('SUN', { breakfast: [honeyDish.id], lunch: [tofuDish.id] }),
       ]).expect(200);
       const plan = response.body as MealPlanDto;
       expect(sectionIds(plan, 'SUN', 'BREAKFAST')).toEqual([honeyDish.id]);
-      expect(plan.problems.map(({ code }) => code)).toEqual(['DAY_CONFLICT']);
+      expect(plan.problems).toEqual([]);
     });
 
     it('refuses a dish with an ingredient avoided through a group', async () => {
@@ -491,6 +503,241 @@ describe('Meal plan and shopping list flows (e2e)', () => {
       const { token } = await signedUser();
       const response = await shopping(token).expect(200);
       expect((response.body as ShoppingListDto).items).toEqual([]);
+    });
+  });
+  describe('generating dishes with the algorithm', () => {
+    const generate = (token: string, body: Record<string, unknown>) =>
+      request(server())
+        .post('/api/v1/meal-plan/generate')
+        .set('Authorization', `Bearer ${token}`)
+        .send(body);
+
+    const allDays = Object.values(Weekday);
+    const meals = ['BREAKFAST', 'LUNCH', 'DINNER'];
+
+    const dishesOf = (preview: MealPlanPreviewDto) =>
+      preview.days.flatMap(({ sections }) =>
+        sections.flatMap(({ recipes }) => recipes.map(({ id }) => id)),
+      );
+
+    let quick: Recipe;
+    let slow: Recipe;
+    let soup: Recipe;
+
+    beforeAll(async () => {
+      const rice = await createIngredient(e2e.mongo, { name: 'Gạo lứt' });
+      quick = await createRecipe(
+        e2e.mongo,
+        { title: 'Cơm gạo lứt', prepMinutes: 5, cookMinutes: 10 },
+        [rice.id],
+      );
+      soup = await createRecipe(
+        e2e.mongo,
+        {
+          title: 'Canh bí',
+          tag: RecipeTag.SOUP,
+          prepMinutes: 5,
+          cookMinutes: 20,
+        },
+        [rice.id],
+      );
+      slow = await createRecipe(
+        e2e.mongo,
+        { title: 'Cơm hầm lâu', prepMinutes: 30, cookMinutes: 120 },
+        [rice.id],
+      );
+    });
+
+    it('fills only the empty slots and keeps what is saved', async () => {
+      const { token } = await signedUser();
+      await putDays(token, [dayBody('MON', { lunch: [tofuDish.id] })]).expect(
+        200,
+      );
+      const response = await generate(token, {
+        days: ['MON'],
+        sections: ['LUNCH', 'DINNER'],
+        onlyEmpty: true,
+      }).expect(200);
+      const preview = response.body as MealPlanPreviewDto;
+      const monday = preview.days.find(({ day }) => String(day) === 'MON');
+      const section = (name: string) =>
+        monday?.sections.find((entry) => String(entry.section) === name)
+          ?.recipes;
+      expect(section('LUNCH')?.map(({ id }) => id)).toEqual([tofuDish.id]);
+      expect(section('DINNER')).toHaveLength(1);
+      expect(section('DINNER')?.[0].id).not.toBe(honeyDish.id);
+      expect(preview.problems).toEqual([]);
+    });
+
+    it('returns whole days with the four sections and saves nothing', async () => {
+      const { token } = await signedUser();
+      const response = await generate(token, {
+        days: allDays,
+        sections: meals,
+        onlyEmpty: false,
+      }).expect(200);
+      const preview = response.body as MealPlanPreviewDto;
+      expect(preview.days).toHaveLength(7);
+      for (const day of preview.days) {
+        expect(day.sections.map(({ section }) => section)).toEqual(
+          Object.values(MealSection),
+        );
+      }
+      expect(preview.problems).toEqual([]);
+      const plan = await getPlan(token);
+      expect(plan.days.flatMap(({ sections }) => sections)).toSatisfy(
+        (sections: { recipes: unknown[] }[]) =>
+          sections.every(({ recipes }) => recipes.length === 0),
+      );
+    });
+
+    it('never picks a dish with an ingredient the user avoids', async () => {
+      const { token } = await signedUser({
+        avoidedIngredientIds: [tofu.id],
+      });
+      const response = await generate(token, {
+        days: allDays,
+        sections: meals,
+        onlyEmpty: false,
+      }).expect(200);
+      expect(dishesOf(response.body as MealPlanPreviewDto)).not.toContain(
+        tofuDish.id,
+      );
+    });
+
+    it('never puts clashing ingredients on one day', async () => {
+      const { token } = await signedUser();
+      for (let attempt = 0; attempt < 5; attempt += 1) {
+        const response = await generate(token, {
+          days: allDays,
+          sections: [...meals, 'OTHER'],
+          onlyEmpty: false,
+        }).expect(200);
+        expect((response.body as MealPlanPreviewDto).problems).toEqual([]);
+      }
+    });
+
+    it('leaves out dishes longer than maxMinutes and dishes without a time', async () => {
+      const { token } = await signedUser();
+      const response = await generate(token, {
+        days: allDays,
+        sections: meals,
+        onlyEmpty: false,
+        maxMinutes: 20,
+      }).expect(200);
+      const picked = new Set(dishesOf(response.body as MealPlanPreviewDto));
+      expect(picked).toEqual(new Set([quick.id]));
+      expect(picked.has(slow.id)).toBe(false);
+    });
+
+    it('never picks a dish whose title or ingredients contain an excluded word', async () => {
+      const { token } = await signedUser();
+      const response = await generate(token, {
+        days: allDays,
+        sections: meals,
+        onlyEmpty: false,
+        exclude: ['đậu hũ'],
+      }).expect(200);
+      expect(dishesOf(response.body as MealPlanPreviewDto)).not.toContain(
+        tofuDish.id,
+      );
+    });
+
+    it('only picks dishes of the requested tags', async () => {
+      const { token } = await signedUser();
+      const response = await generate(token, {
+        days: allDays,
+        sections: ['LUNCH'],
+        onlyEmpty: false,
+        tags: ['SOUP'],
+      }).expect(200);
+      const picked = new Set(dishesOf(response.body as MealPlanPreviewDto));
+      expect(picked).toEqual(new Set([soup.id]));
+    });
+
+    it('fills several dishes per slot without repeating one in a day', async () => {
+      const { token } = await signedUser();
+      const response = await generate(token, {
+        days: ['WED'],
+        sections: ['DINNER'],
+        onlyEmpty: false,
+        perSection: 2,
+        exclude: ['đậu hũ', 'mật ong'],
+      }).expect(200);
+      const ids = dishesOf(response.body as MealPlanPreviewDto);
+      expect(ids).toHaveLength(2);
+      expect(new Set(ids).size).toBe(2);
+    });
+
+    it('never repeats a dish within one meal across the week', async () => {
+      const grain = await createIngredient(e2e.mongo, { name: 'Bột mì' });
+      for (let index = 1; index <= 8; index += 1) {
+        await createRecipe(e2e.mongo, { title: `Bánh số ${index}` }, [
+          grain.id,
+        ]);
+      }
+      const { token } = await signedUser();
+      for (const section of ['BREAKFAST', 'LUNCH', 'DINNER']) {
+        const response = await generate(token, {
+          days: allDays,
+          sections: [section],
+          onlyEmpty: false,
+        }).expect(200);
+        const ids = dishesOf(response.body as MealPlanPreviewDto);
+        expect(ids).toHaveLength(7);
+        expect(new Set(ids).size).toBe(7);
+      }
+    });
+
+    it('may reuse a dish in a different meal of the same day', async () => {
+      const { token } = await signedUser();
+      const response = await generate(token, {
+        days: ['SUN'],
+        sections: ['LUNCH', 'DINNER'],
+        onlyEmpty: false,
+        tags: ['SOUP'],
+      }).expect(200);
+      const ids = dishesOf(response.body as MealPlanPreviewDto);
+      expect(ids).toEqual([soup.id, soup.id]);
+    });
+
+    it('returns no days when no dish fits', async () => {
+      const { token } = await signedUser();
+      const response = await generate(token, {
+        days: ['TUE'],
+        sections: ['LUNCH'],
+        onlyEmpty: true,
+        maxMinutes: 1,
+      }).expect(200);
+      expect(response.body).toEqual({ days: [], problems: [] });
+    });
+
+    it('rejects an empty selection and unknown fields with 400', async () => {
+      const { token } = await signedUser();
+      await generate(token, {
+        days: [],
+        sections: meals,
+        onlyEmpty: true,
+      }).expect(400);
+      await generate(token, {
+        days: ['MON'],
+        sections: meals,
+        onlyEmpty: true,
+        maxMinutes: 0,
+      }).expect(400);
+      await generate(token, {
+        days: ['MON'],
+        sections: meals,
+        onlyEmpty: true,
+        pantry: ['rice'],
+      }).expect(400);
+    });
+
+    it('rejects a guest with 401', async () => {
+      await request(server())
+        .post('/api/v1/meal-plan/generate')
+        .send({ days: ['MON'], sections: meals, onlyEmpty: true })
+        .expect(401);
     });
   });
 });

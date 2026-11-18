@@ -12,7 +12,7 @@ import {
 } from '../../../src/config/time-zone.js';
 
 describe('backend operational environment settings', () => {
-  it('preserves all 156 scalar constants captured from the pre-refactor source, including units', () => {
+  it('preserves captured defaults and explicit changes from main, including units', () => {
     const audit = JSON.parse(
       readFileSync(
         new URL(
@@ -25,6 +25,7 @@ describe('backend operational environment settings', () => {
       file: string;
       env: keyof typeof numericDefaults | keyof typeof stringDefaults;
       original: string | number;
+      upstreamOriginal?: string | number;
       multiplier: number;
     }[];
     const defaults = parseRuntimeSettings({});
@@ -34,7 +35,7 @@ describe('backend operational environment settings', () => {
       expect(
         typeof value === 'number' ? value * entry.multiplier : value,
         `${entry.file}: ${entry.env}`,
-      ).toBe(entry.original);
+      ).toBe(entry.upstreamOriginal ?? entry.original);
     }
   });
 

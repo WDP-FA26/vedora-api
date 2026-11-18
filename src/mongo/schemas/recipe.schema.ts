@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
-import { MealSection, Weekday } from '../enums.js';
+import { MealSection, RecipeTag, Weekday } from '../enums.js';
 import { cascadeOnDelete, collectionSchema } from './common.js';
 import { Identified } from './identified.js';
 
@@ -147,6 +147,9 @@ export class Recipe extends Identified {
   @Prop({ type: String, default: null })
   imageUrl!: string | null;
 
+  @Prop({ type: String, enum: Object.values(RecipeTag), default: null })
+  tag!: RecipeTag | null;
+
   @Prop({ type: Number, required: true })
   servings!: number;
 
@@ -252,3 +255,40 @@ MealPlanEntrySchema.index(
   { unique: true },
 );
 MealPlanEntrySchema.index({ recipeId: 1 });
+
+/**
+ * An unsaved change to one slot of a user's weekly plan, written by the
+ * assistant. Only slots that differ from the saved plan are kept, and the
+ * whole draft expires on its own if the user walks away.
+ */
+@Schema(collectionSchema('meal_plan_draft_slots', 'none'))
+export class MealPlanDraftSlot extends Identified {
+  @Prop({ type: String, default: () => randomUUID() })
+  _id!: string;
+
+  @Prop({ type: String, required: true })
+  userId!: string;
+
+  @Prop({ type: String, enum: Object.values(Weekday), required: true })
+  day!: Weekday;
+
+  @Prop({ type: String, enum: Object.values(MealSection), required: true })
+  section!: MealSection;
+
+  @Prop({ type: [String], default: [] })
+  recipeIds!: string[];
+
+  @Prop({ type: Date, required: true })
+  updatedAt!: Date;
+}
+
+export const MealPlanDraftSlotSchema =
+  SchemaFactory.createForClass(MealPlanDraftSlot);
+MealPlanDraftSlotSchema.index(
+  { userId: 1, day: 1, section: 1 },
+  { unique: true },
+);
+MealPlanDraftSlotSchema.index(
+  { updatedAt: 1 },
+  { expireAfterSeconds: 6 * 60 * 60 },
+);

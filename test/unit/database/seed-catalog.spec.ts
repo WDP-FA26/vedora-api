@@ -139,4 +139,15 @@ describe('Catalog seed', () => {
 
     expect((await recipe())?.imageUrl).toBe(chosen);
   });
+
+  it('backfills empty ingredients on an existing recipe without overwriting existing ones', async () => {
+    await seedCatalog(mongo, data);
+    await mongo.connection
+      .model<Recipe>('Recipe')
+      .updateOne({ title: 'Đậu hũ sốt cà' }, { $set: { ingredients: [] } });
+
+    await seedCatalog(mongo, data);
+
+    expect((await recipe())?.ingredients).toHaveLength(2);
+  });
 });

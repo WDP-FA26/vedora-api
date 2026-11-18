@@ -6,7 +6,7 @@ import type { AuthenticatedRequest } from '../../../src/auth-core/auth.types.js'
 import { MealPlanController } from '../../../src/meal-plan/meal-plan.controller.js';
 import type { MealPlanService } from '../../../src/meal-plan/meal-plan.service.js';
 import type { MealPlannerChatService } from '../../../src/meal-plan/meal-planner-chat.service.js';
-import { UserRole, Weekday } from '../../../src/mongo/models.js';
+import { MealSection, UserRole, Weekday } from '../../../src/mongo/models.js';
 
 const { pipeUIMessageStreamToResponse } = vi.hoisted(() => ({
   pipeUIMessageStreamToResponse: vi.fn<() => Promise<void>>(() =>
@@ -79,6 +79,27 @@ describe('MealPlanController', () => {
 
     await expect(controller.apply(req, { days })).resolves.toBe(saved);
     expect(mealPlan.apply).toHaveBeenCalledWith(userId, days);
+  });
+
+  it('delegates generate, draft, and discardDraft to MealPlanService', async () => {
+    const generateDto = {
+      days: [Weekday.MON],
+      sections: [MealSection.LUNCH],
+      onlyEmpty: true,
+    };
+    const preview = { days: [], problems: [] };
+    mealPlan.generate.mockResolvedValue(preview);
+    await expect(controller.generate(req, generateDto)).resolves.toBe(preview);
+    expect(mealPlan.generate).toHaveBeenCalledWith(userId, generateDto);
+
+    const draft = { days: [], problems: [], ok: false };
+    mealPlan.getDraft.mockResolvedValue(draft);
+    await expect(controller.draft(req)).resolves.toBe(draft);
+    expect(mealPlan.getDraft).toHaveBeenCalledWith(userId);
+
+    mealPlan.discardDraft.mockResolvedValue(undefined);
+    await expect(controller.discardDraft(req)).resolves.toBeUndefined();
+    expect(mealPlan.discardDraft).toHaveBeenCalledWith(userId);
   });
 
   it('streams chat responses and aborts when the HTTP response closes', async () => {

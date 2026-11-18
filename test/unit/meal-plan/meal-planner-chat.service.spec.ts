@@ -153,6 +153,12 @@ describe('MealPlannerChatService', () => {
       })),
       problems: [],
     });
+    mealPlan.getDraft.mockResolvedValue({
+      days: [],
+      problems: [],
+      ok: false,
+    });
+    mealPlan.discardDraft.mockResolvedValue(undefined);
 
     createOpenRouter.mockClear();
     languageModel.mockClear();
@@ -210,7 +216,8 @@ describe('MealPlannerChatService', () => {
       ),
     ).rejects.toSatisfy(
       (err: unknown) =>
-        err instanceof QuotaReachedException && err.code === 'AI_QUOTA_EXCEEDED',
+        err instanceof QuotaReachedException &&
+        err.code === 'AI_QUOTA_EXCEEDED',
     );
     expect(aiUsage.consume).toHaveBeenCalledWith(
       USER_ID,
@@ -271,7 +278,7 @@ describe('MealPlannerChatService', () => {
     expect(aiUsage.refund).toHaveBeenCalledWith(TICKET);
   });
 
-  it('loads user profile + meal plan, streams with all 3 tools, and completes the ticket', async () => {
+  it('loads user profile + meal plan, streams with all 6 tools, and completes the ticket', async () => {
     const service = await createService();
 
     const chunks = await convertReadableStreamToArray(
@@ -288,16 +295,57 @@ describe('MealPlannerChatService', () => {
         questions: { verdict: NUTRITION_POLICY },
       }),
     );
+    expect(mealPlan.discardDraft).toHaveBeenCalledWith(USER_ID);
     expect(dietary.find).toHaveBeenCalledWith(USER_ID);
     expect(mealPlan.find).toHaveBeenCalledWith(USER_ID);
+    expect(mealPlan.getDraft).toHaveBeenCalledWith(USER_ID);
     expect(replyText(chunks)).toBe('Mình đã gợi ý thực đơn.');
     expect(model.doStreamCalls[0].tools?.map((t) => t.name)).toEqual([
       'searchKnowledge',
       'searchRecipes',
-      'proposeMealPlan',
+      'getRecipe',
+      'getPlan',
+      'fillSlots',
+      'editDraft',
     ]);
     expect(aiUsage.complete).toHaveBeenCalledWith(TICKET);
     expect(aiUsage.refund).not.toHaveBeenCalled();
+  });
+
+  it('discards the draft only on a new turn or after a dismissed proposal', async () => {
+    const service = await createService();
+
+    await convertReadableStreamToArray(
+      await service.stream(
+        USER_ID,
+        [
+          { role: 'user', text: 'Lên thực đơn' },
+          {
+            role: 'assistant',
+            text: 'Đã tạo.\n[Đề xuất (chưa áp dụng): Thứ Hai (sáng: Phở chay (id 1))]',
+          },
+          { role: 'user', text: 'Đổi món tối T4' },
+        ],
+        new AbortController().signal,
+      ),
+    );
+    expect(mealPlan.discardDraft).not.toHaveBeenCalled();
+
+    await convertReadableStreamToArray(
+      await service.stream(
+        USER_ID,
+        [
+          { role: 'user', text: 'Lên thực đơn' },
+          {
+            role: 'assistant',
+            text: 'Đã tạo.\n[Đề xuất (người dùng đã bỏ qua): Thứ Hai (sáng: Phở chay (id 1))]',
+          },
+          { role: 'user', text: 'Lên thực đơn khác' },
+        ],
+        new AbortController().signal,
+      ),
+    );
+    expect(mealPlan.discardDraft).toHaveBeenCalledWith(USER_ID);
   });
 
   it('refunds the ticket when downstream setup throws after moderation', async () => {
@@ -315,7 +363,7 @@ describe('MealPlannerChatService', () => {
   });
 
   it('forces an answer on the final step (MAX_STEPS - 1)', async () => {
-    steps = Array.from({ length: 7 }, () => searchRecipesChunk);
+    steps = Array.from({ length: 9 }, () => searchRecipesChunk);
     mealPlan.suggestions.mockResolvedValue([]);
     const service = await createService();
 
@@ -327,9 +375,9 @@ describe('MealPlannerChatService', () => {
       ),
     );
 
-    expect(mealPlan.suggestions).toHaveBeenCalledTimes(7);
-    expect(model.doStreamCalls).toHaveLength(8);
-    expect(model.doStreamCalls[7].toolChoice).toEqual({ type: 'none' });
+    expect(mealPlan.suggestions).toHaveBeenCalledTimes(9);
+    expect(model.doStreamCalls).toHaveLength(10);
+    expect(model.doStreamCalls[9].toolChoice).toEqual({ type: 'none' });
   });
 
   it('refunds the ticket and emits error code when the model stream errors', async () => {

@@ -1,19 +1,23 @@
 import { runtimeConfig } from '../../config/runtime-config.js';
 import { applyDecorators } from '@nestjs/common';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { MealSection, Weekday } from '../../mongo/models.js';
+import { MealSection, RecipeTag, Weekday } from '../../mongo/models.js';
 import { Type } from 'class-transformer';
 import {
   ArrayMaxSize,
   ArrayMinSize,
   ArrayUnique,
   IsArray,
+  IsBoolean,
   IsEnum,
   IsIn,
+  IsInt,
   IsOptional,
   IsString,
   IsUUID,
+  Max,
   MaxLength,
+  Min,
   MinLength,
   ValidateNested,
 } from 'class-validator';
@@ -76,6 +80,163 @@ export class SaveMealDaysDto {
   days!: SaveMealDayDto[];
 }
 
+export const MAX_GENERATE_MINUTES = 240;
+export const MAX_GENERATE_QUERY_LENGTH =
+  runtimeConfig.RECIPE_CATALOG_QUERY_MAX_LENGTH;
+export const MAX_GENERATE_EXCLUDES = 10;
+
+export const MAX_GENERATE_IDS = 200;
+
+export class SlotRefDto {
+  @ApiProperty({ enum: Weekday })
+  @IsEnum(Weekday)
+  day!: Weekday;
+
+  @ApiProperty({ enum: MealSection })
+  @IsEnum(MealSection)
+  section!: MealSection;
+
+  @ApiPropertyOptional({
+    type: [String],
+    format: 'uuid',
+    maxItems: MAX_DISHES_PER_SECTION,
+    description:
+      'Optional recipes to place in this pinned slot before filling the rest',
+  })
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(MAX_DISHES_PER_SECTION)
+  @ArrayUnique()
+  @IsUUID('4', { each: true })
+  recipeIds?: string[];
+}
+
+export class GenerateMealDaysDto {
+  @ApiProperty({
+    enum: Weekday,
+    isArray: true,
+    description: 'Days to fill',
+  })
+  @IsArray()
+  @ArrayMinSize(1)
+  @ArrayUnique()
+  @IsEnum(Weekday, { each: true })
+  days!: Weekday[];
+
+  @ApiProperty({
+    enum: MealSection,
+    isArray: true,
+    description: 'Sections to fill with one dish each',
+  })
+  @IsArray()
+  @ArrayMinSize(1)
+  @ArrayUnique()
+  @IsEnum(MealSection, { each: true })
+  sections!: MealSection[];
+
+  @ApiProperty({
+    description:
+      'true keeps every slot that already has a dish; false replaces the chosen sections',
+  })
+  @IsBoolean()
+  onlyEmpty!: boolean;
+
+  @ApiPropertyOptional({
+    minimum: 1,
+    maximum: MAX_GENERATE_MINUTES,
+    description: 'Longest total time (prep + cook) of a dish',
+  })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(MAX_GENERATE_MINUTES)
+  maxMinutes?: number;
+
+  @ApiPropertyOptional({
+    maxLength: MAX_GENERATE_QUERY_LENGTH,
+    description:
+      'A dish or ingredient to prefer, e.g. "đậu hũ". Only a preference: dishes without it can still be chosen',
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(MAX_GENERATE_QUERY_LENGTH)
+  query?: string;
+
+  @ApiPropertyOptional({
+    type: [String],
+    maxItems: MAX_GENERATE_EXCLUDES,
+    description:
+      'Words a dish must not have in its title or ingredients, e.g. "chiên". Unlike `query` this is a hard filter',
+  })
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(MAX_GENERATE_EXCLUDES)
+  @IsString({ each: true })
+  @MaxLength(MAX_GENERATE_QUERY_LENGTH, { each: true })
+  exclude?: string[];
+
+  @ApiPropertyOptional({
+    enum: RecipeTag,
+    isArray: true,
+    description:
+      'Only choose dishes with one of these tags. Untagged dishes are left out when set',
+  })
+  @IsOptional()
+  @IsArray()
+  @ArrayUnique()
+  @IsEnum(RecipeTag, { each: true })
+  tags?: RecipeTag[];
+
+  @ApiPropertyOptional({
+    minimum: 1,
+    maximum: MAX_DISHES_PER_SECTION,
+    default: 1,
+    description: 'Dishes per filled slot',
+  })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(MAX_DISHES_PER_SECTION)
+  perSection?: number;
+
+  @ApiPropertyOptional({
+    type: [String],
+    format: 'uuid',
+    maxItems: MAX_GENERATE_IDS,
+    description:
+      'Only choose from these recipes, e.g. a shortlist built from a search. Still subject to every other rule',
+  })
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(MAX_GENERATE_IDS)
+  @ArrayUnique()
+  @IsUUID('4', { each: true })
+  candidateIds?: string[];
+
+  @ApiPropertyOptional({
+    type: [String],
+    format: 'uuid',
+    maxItems: MAX_GENERATE_IDS,
+    description: 'Never choose these recipes',
+  })
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(MAX_GENERATE_IDS)
+  @ArrayUnique()
+  @IsUUID('4', { each: true })
+  avoidIds?: string[];
+
+  @ApiPropertyOptional({
+    type: [SlotRefDto],
+    description: 'Slots to leave exactly as they are, whatever else is set',
+  })
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => SlotRefDto)
+  pinned?: SlotRefDto[];
+}
+
 export class MealIngredientDto {
   @ApiProperty() name!: string;
   @ApiProperty({ nullable: true, type: Number }) quantity!: number | null;
@@ -88,6 +249,8 @@ export class MealRecipeDto {
   @ApiProperty() title!: string;
   @ApiProperty({ nullable: true, type: String, format: 'uri' })
   imageUrl!: string | null;
+  @ApiProperty({ enum: RecipeTag, nullable: true })
+  tag!: RecipeTag | null;
   @ApiProperty() servings!: number;
   @ApiProperty({ nullable: true, type: Number }) prepMinutes!: number | null;
   @ApiProperty({ nullable: true, type: Number }) cookMinutes!: number | null;
@@ -158,6 +321,8 @@ export class MealPlanDto {
 export class MealRecipeRefDto {
   @ApiProperty({ format: 'uuid' }) id!: string;
   @ApiProperty() title!: string;
+  @ApiProperty({ enum: RecipeTag, nullable: true })
+  tag!: RecipeTag | null;
 }
 
 export class MealPlanPreviewSectionDto {
@@ -176,6 +341,19 @@ export class MealPlanPreviewDto {
   @ApiProperty({ type: [MealPlanPreviewDayDto] })
   days!: MealPlanPreviewDayDto[];
   @ApiProperty({ type: [MealPlanProblemDto] }) problems!: MealPlanProblemDto[];
+}
+
+export class MealPlanDraftDto extends MealPlanPreviewDto {
+  @ApiProperty({
+    description:
+      'true when the draft has changes and passes every check, so it can be shown and saved',
+  })
+  ok!: boolean;
+}
+
+export class GenerateMealResultDto extends MealPlanDraftDto {
+  @ApiProperty({ description: 'Slots this call filled or changed' })
+  filled!: number;
 }
 
 const MAX_PLANNER_MESSAGES = runtimeConfig.PLANNER_CHAT_MAX_MESSAGES;
