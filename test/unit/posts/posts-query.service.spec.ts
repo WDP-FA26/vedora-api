@@ -13,6 +13,7 @@ import {
   MediaStatus,
   Post,
   PostBookmark,
+  PostRepost,
   PostStatus,
   PostType,
   type User,
@@ -41,6 +42,7 @@ describe('PostsQueryService', () => {
   let db: MongoService;
   let service: PostsQueryService;
   let bookmarksModel: Model<PostBookmark>;
+  let repostsModel: Model<PostRepost>;
   let followsModel: Model<Follow>;
   let mediaService: DeepMockProxy<MediaService>;
   let cloudinary: DeepMockProxy<CloudinaryService>;
@@ -76,6 +78,7 @@ describe('PostsQueryService', () => {
     db = app.get(MongoService);
     service = app.get(PostsQueryService);
     bookmarksModel = app.get(getModelToken(PostBookmark.name));
+    repostsModel = app.get(getModelToken(PostRepost.name));
     followsModel = app.get(getModelToken(Follow.name));
     author = await createUser(db, { username: 'chef.author' });
     viewer = await createUser(db, { username: 'chef.viewer' });
@@ -110,6 +113,7 @@ describe('PostsQueryService', () => {
       db.connection.model(Post.name).deleteMany({}),
       db.connection.model(MediaAsset.name).deleteMany({}),
       bookmarksModel.deleteMany({}),
+      repostsModel.deleteMany({}),
       followsModel.deleteMany({}),
     ]);
   });
@@ -234,6 +238,79 @@ describe('PostsQueryService', () => {
     });
   });
 
+  describe('listReposts', () => {
+    const repost = (postId: string, userId: string, at: string) =>
+      repostsModel.create({ postId, userId, createdAt: new Date(at) });
+
+    it('pages published reposts newest-reposted first, skipping unpublished posts without losing the cursor', async () => {
+      const first = await createPost(db, { authorId: author.id, body: 'A' });
+      const second = await createPost(db, { authorId: author.id, body: 'B' });
+      const hidden = await createPost(db, {
+        authorId: author.id,
+        status: PostStatus.PENDING_REVIEW,
+        publishedAt: null,
+      });
+      await repost(first.id, viewer.id, '2026-01-01T00:00:00Z');
+      await repost(hidden.id, viewer.id, '2026-01-02T00:00:00Z');
+      await repost(second.id, viewer.id, '2026-01-03T00:00:00Z');
+      await repost(first.id, author.id, '2026-01-04T00:00:00Z');
+
+      const page1 = await service.listReposts(viewer.id, { limit: 2 });
+      expect(page1.items.map((post) => post.id)).toEqual([second.id]);
+      expect(page1.nextCursor).toBe(hidden.id);
+
+      const page2 = await service.listReposts(viewer.id, {
+        limit: 2,
+        cursor: page1.nextCursor ?? undefined,
+      });
+      expect(page2.items.map((post) => post.id)).toEqual([first.id]);
+      expect(page2.nextCursor).toBeNull();
+    });
+
+    it('returns the viewer state, not the reposter state', async () => {
+      const post = await createPost(db, { authorId: author.id });
+      await repost(post.id, viewer.id, '2026-01-01T00:00:00Z');
+
+      const asGuest = await service.listReposts(viewer.id, { limit: 10 });
+      expect(asGuest.items[0]).toMatchObject({
+        isReposted: false,
+        repostCount: 1,
+      });
+      const asReposter = await service.listReposts(
+        viewer.id,
+        { limit: 10 },
+        viewer.id,
+      );
+      expect(asReposter.items[0]).toMatchObject({ isReposted: true });
+    });
+
+    it('returns an empty page for a cursor the user never reposted', async () => {
+      const post = await createPost(db, { authorId: author.id });
+      await repost(post.id, viewer.id, '2026-01-01T00:00:00Z');
+      await expect(
+        service.listReposts(viewer.id, { limit: 10, cursor: post.id }),
+      ).resolves.toEqual({ items: [], nextCursor: null });
+      await expect(
+        service.listReposts(author.id, { limit: 10, cursor: post.id }),
+      ).resolves.toEqual({ items: [], nextCursor: null });
+    });
+
+    it('throws NOT_FOUND for an unknown or unverified user', async () => {
+      await expect(
+        service.listReposts('00000000-0000-4000-8000-000000000000', {
+          limit: 10,
+        }),
+      ).rejects.toBeInstanceOf(ResourceNotFoundException);
+      const unverified = await createUser(db, {
+        username: 'chef.unverified',
+        emailVerifiedAt: null,
+      });
+      await expect(
+        service.listReposts(unverified.id, { limit: 10 }),
+      ).rejects.toBeInstanceOf(ResourceNotFoundException);
+    });
+  });
+
   describe('listBookmarks & listFollowing', () => {
     it('lists published bookmarks newest-saved first and handles invalid cursors', async () => {
       const p1 = await createPost(db, { authorId: author.id, body: 'First' });
@@ -277,8 +354,8 @@ describe('PostsQueryService', () => {
       expect(invalid).toEqual({ items: [], nextCursor: null });
     });
 
-    // BUG-M7: lookahead row is filtered for PUBLISHED after slice/fetch,
-    // so a non-published post in the lookahead slot stops pagination early.
+    // Regression for BUG-M7: a non-published post in the lookahead slot
+    // must not end pagination early.
     it('keeps paging past an unpublished post in bookmarks', async () => {
       const p1 = await createPost(db, { authorId: author.id, body: 'First' });
       const p2 = await createPost(db, { authorId: author.id, body: 'Second' });
@@ -310,7 +387,9 @@ describe('PostsQueryService', () => {
     });
 
     it('lists published short posts from followed authors and handles empty/invalid cursors', async () => {
-      const emptyFollows = await service.listFollowing(viewer.id, { limit: 10 });
+      const emptyFollows = await service.listFollowing(viewer.id, {
+        limit: 10,
+      });
       expect(emptyFollows).toEqual({ items: [], nextCursor: null });
 
       await followsModel.create({
