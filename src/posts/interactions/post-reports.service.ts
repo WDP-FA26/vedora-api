@@ -60,7 +60,9 @@ export interface PostRemovalNotice {
 }
 
 function excerptOf(post: Post): string | null {
-  const text = (post.blog?.title || post.body || '').replace(/\s+/g, ' ').trim();
+  const text = (post.blog?.title || post.body || '')
+    .replace(/\s+/g, ' ')
+    .trim();
   if (!text) return null;
   return text.length > EXCERPT_LENGTH
     ? `${text.slice(0, EXCERPT_LENGTH - 1).trimEnd()}…`
