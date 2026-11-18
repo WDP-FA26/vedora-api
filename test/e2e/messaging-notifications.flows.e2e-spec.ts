@@ -251,7 +251,7 @@ describe('Messaging and notification flows (HTTP)', () => {
       });
     });
 
-    it('drops requestDirection to null once both sides unfollow', async () => {
+    it('retains the incoming request after both sides unfollow so the recipient can accept it', async () => {
       await follow(alice, bob);
       await send(alice, bob, 'Hi').expect(201);
       await unfollow(alice, bob);
@@ -259,7 +259,13 @@ describe('Messaging and notification flows (HTTP)', () => {
       const response = await inbox(bob, 'box=requests').expect(200);
 
       expect(response.body).toMatchObject({
-        items: [{ requestDirection: null, canSend: false }],
+        items: [
+          {
+            requestDirection: 'incoming',
+            canSend: false,
+            canAcceptRequest: true,
+          },
+        ],
       });
     });
 
