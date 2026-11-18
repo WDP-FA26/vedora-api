@@ -25,6 +25,7 @@ import {
   ConversationDto,
   ConversationPageDto,
   ConversationReadDto,
+  DeletedMessageRequestDto,
   ConversationsQueryDto,
   MessageDto,
   MessagePageDto,
@@ -41,10 +42,33 @@ const members = (userId: string): QueryFilter<Conversation> => ({
 });
 const peerIdOf = (conversation: Conversation, userId: string) =>
   conversation.lowId === userId ? conversation.highId : conversation.lowId;
+const deletedThrough = (conversation: Conversation, userId: string) =>
+  (conversation.lowId === userId
+    ? conversation.lowDeletedThroughSequence
+    : conversation.highDeletedThroughSequence) ?? 0;
+const visibleMembers = (userId: string): QueryFilter<Conversation> => ({
+  $or: [
+    {
+      lowId: userId,
+      $expr: {
+        $gt: ['$sequence', { $ifNull: ['$lowDeletedThroughSequence', 0] }],
+      },
+    },
+    {
+      highId: userId,
+      $expr: {
+        $gt: ['$sequence', { $ifNull: ['$highDeletedThroughSequence', 0] }],
+      },
+    },
+  ],
+});
 const myReadSequence = (conversation: Conversation, userId: string) =>
-  conversation.lowId === userId
-    ? conversation.lowReadSequence
-    : conversation.highReadSequence;
+  Math.max(
+    deletedThrough(conversation, userId),
+    conversation.lowId === userId
+      ? conversation.lowReadSequence
+      : conversation.highReadSequence,
+  );
 
 function messageDto(message: DirectMessage): MessageDto {
   return {
@@ -93,7 +117,6 @@ export class MessagingService {
       const [lowId, highId] = [userId, peerId].sort();
       const conversation = await this.conversations
         .findOne({ lowId, highId })
-        .select('_id')
         .session(session)
         .exec();
       const followsPeer = relationships.following.has(peerId);
@@ -105,11 +128,15 @@ export class MessagingService {
           avatarUrl: peer.avatarUrl,
           isProfessional: peer.isProfessional,
         },
-        conversationId: conversation?.id ?? null,
-        box: this.box(peerId, relationships),
+        conversationId:
+          conversation &&
+          conversation.sequence > deletedThrough(conversation, userId)
+            ? conversation.id
+            : null,
+        box: this.box(peerId, relationships, conversation),
         followsPeer,
         peerFollowsYou: relationships.followers.has(peerId),
-        canSend: followsPeer,
+        canSend: followsPeer || Boolean(conversation?.acceptedAt),
       };
     });
   }
@@ -144,17 +171,17 @@ export class MessagingService {
         const follows = await this.follows
           .exists({ followerId: senderId, followingId: recipientId })
           .session(session);
-        if (!follows) {
-          throw new AccessDeniedException(
-            'MESSAGE_FOLLOW_REQUIRED',
-            'Follow the recipient before sending messages',
-          );
-        }
         const [lowId, highId] = [senderId, recipientId].sort();
         let conversation = await this.conversations
           .findOne({ lowId, highId })
           .session(session)
           .exec();
+        if (!follows && !conversation?.acceptedAt) {
+          throw new AccessDeniedException(
+            'MESSAGE_FOLLOW_REQUIRED',
+            'Follow the recipient or accept their message request before sending messages',
+          );
+        }
         if (
           expectedConversationId &&
           conversation?.id !== expectedConversationId
@@ -166,7 +193,7 @@ export class MessagingService {
         }
         if (!conversation) {
           [conversation] = await this.conversations.create(
-            [{ lowId, highId }],
+            [{ lowId, highId, requestInitiatorId: senderId }],
             { session },
           );
         }
@@ -248,7 +275,7 @@ export class MessagingService {
     dto: SendMessageDto,
   ): Promise<SendMessageResponseDto> {
     const conversation = await this.requireConversation(userId, id);
-    // Rechecks membership/account/follow state in the transaction, not from a client-supplied peer.
+    // Rechecks membership, account and permission inside the transaction.
     return this.sendToUser(userId, peerIdOf(conversation, userId), dto, id);
   }
 
@@ -267,9 +294,23 @@ export class MessagingService {
           : { $nin: friends };
       // Filter the selected inbox BEFORE limiting, so other categories cannot consume the page.
       const filter: QueryFilter<Conversation> = {
-        $or: [
-          { lowId: userId, highId: peerFilter },
-          { highId: userId, lowId: peerFilter },
+        $and: [
+          visibleMembers(userId),
+          query.box === MessagingInbox.FRIENDS
+            ? {
+                $or: [
+                  { acceptedAt: { $ne: null } },
+                  { lowId: userId, highId: peerFilter },
+                  { highId: userId, lowId: peerFilter },
+                ],
+              }
+            : {
+                acceptedAt: null,
+                $or: [
+                  { lowId: userId, highId: peerFilter },
+                  { highId: userId, lowId: peerFilter },
+                ],
+              },
         ],
         lastMessageAt: { $ne: null },
       };
@@ -282,15 +323,15 @@ export class MessagingService {
         const peer = peerIdOf(cursor, userId);
         if (
           !cursor.lastMessageAt ||
-          this.box(peer, relationships) !== query.box
+          this.box(peer, relationships, cursor) !== query.box
         )
           this.invalidCursor();
-        filter.$and = [
+        filter.$and!.push(
           afterCursor<Conversation>('lastMessageAt', {
             value: cursor.lastMessageAt,
             id: cursor.id,
           }),
-        ];
+        );
       }
       const rows = await this.conversations
         .find(filter)
@@ -331,16 +372,24 @@ export class MessagingService {
     query: CursorPaginationQueryDto,
   ): Promise<MessagePageDto> {
     return this.mongo.withTransaction(async (session) => {
-      await this.requireConversation(userId, id, session);
-      const filter: QueryFilter<DirectMessage> = { conversationId: id };
+      const conversation = await this.requireConversation(userId, id, session);
+      const cutoff = deletedThrough(conversation, userId);
+      const filter: QueryFilter<DirectMessage> = {
+        conversationId: id,
+        sequence: { $gt: cutoff },
+      };
       if (query.cursor) {
         const cursor = await this.messages
-          .findOne({ _id: query.cursor, conversationId: id })
+          .findOne({
+            _id: query.cursor,
+            conversationId: id,
+            sequence: { $gt: cutoff },
+          })
           .select('sequence')
           .session(session)
           .exec();
         if (!cursor) this.invalidCursor();
-        filter.sequence = { $lt: cursor.sequence };
+        filter.sequence = { $gt: cutoff, $lt: cursor.sequence };
       }
       const rows = await this.messages
         .find(filter)
@@ -370,7 +419,11 @@ export class MessagingService {
           session,
         );
         const message = await this.messages
-          .findOne({ _id: messageId, conversationId: id })
+          .findOne({
+            _id: messageId,
+            conversationId: id,
+            sequence: { $gt: deletedThrough(conversation, userId) },
+          })
           .session(session)
           .exec();
         if (!message)
@@ -411,6 +464,171 @@ export class MessagingService {
     );
   }
 
+  async acceptRequest(userId: string, id: string): Promise<ConversationDto> {
+    const initial = await this.requireConversation(userId, id);
+    return withUserLocks(
+      this.mongo,
+      [initial.lowId, initial.highId],
+      async (session) => {
+        await this.requireSender(userId, session);
+        const conversation = await this.requireConversation(
+          userId,
+          id,
+          session,
+        );
+        if (!conversation.acceptedAt) {
+          const initiators = await this.requestInitiators(
+            [conversation],
+            session,
+          );
+          const peerId = peerIdOf(conversation, userId);
+          if (initiators.get(id) !== peerId)
+            throw new AccessDeniedException(
+              'MESSAGE_REQUEST_RECEIVER_REQUIRED',
+              'Only the recipient can accept a message request',
+            );
+          const peer = await this.users
+            .findById(peerId)
+            .session(session)
+            .exec();
+          if (!peer || peer.status !== AccountStatus.ACTIVE)
+            throw new ResourceNotFoundException(
+              'NOT_FOUND',
+              'Recipient is unavailable',
+            );
+          conversation.acceptedAt = new Date();
+          conversation.requestInitiatorId = peerId;
+          await this.conversations.updateOne(
+            { _id: id },
+            {
+              $set: {
+                acceptedAt: conversation.acceptedAt,
+                requestInitiatorId: peerId,
+              },
+            },
+            { session },
+          );
+          await this.events.record(
+            [conversation.lowId, conversation.highId],
+            {
+              type: MessagingEventType.REQUEST_ACCEPTED,
+              conversationId: id,
+            },
+            session,
+          );
+        }
+        const relationships = await this.relationships(userId, session);
+        const [result] = await this.hydrate(
+          userId,
+          [conversation],
+          relationships,
+          session,
+        );
+        return result;
+      },
+    );
+  }
+
+  async deleteRequest(
+    userId: string,
+    id: string,
+    throughMessageId: string,
+  ): Promise<DeletedMessageRequestDto> {
+    // Hidden requests remain addressable here so a retry cannot erase newer messages.
+    const initial = await this.requireConversation(userId, id, undefined, true);
+    return withUserLocks(
+      this.mongo,
+      [initial.lowId, initial.highId],
+      async (session) => {
+        await this.requireSender(userId, session);
+        const conversation = await this.requireConversation(
+          userId,
+          id,
+          session,
+          true,
+        );
+        const relationships = await this.relationships(userId, session);
+        if (
+          this.box(
+            peerIdOf(conversation, userId),
+            relationships,
+            conversation,
+          ) === MessagingInbox.FRIENDS
+        )
+          throw new StateConflictException(
+            'MESSAGE_REQUEST_NOT_PENDING',
+            'The conversation is already in Friends',
+          );
+        const initiators = await this.requestInitiators(
+          [conversation],
+          session,
+        );
+        if (initiators.get(id) !== peerIdOf(conversation, userId))
+          throw new AccessDeniedException(
+            'MESSAGE_REQUEST_RECEIVER_REQUIRED',
+            'Only the recipient can delete a message request',
+          );
+        const message = await this.messages
+          .findOne({ _id: throughMessageId, conversationId: id })
+          .session(session)
+          .exec();
+        if (!message)
+          throw new ResourceNotFoundException('NOT_FOUND', 'Message not found');
+        const previous = deletedThrough(conversation, userId);
+        const cutoff = Math.max(previous, message.sequence);
+        if (cutoff > previous) {
+          const field =
+            conversation.lowId === userId
+              ? 'lowDeletedThroughSequence'
+              : 'highDeletedThroughSequence';
+          await this.conversations.updateOne(
+            { _id: id },
+            { $set: { [field]: cutoff } },
+            { session },
+          );
+          // Deletion is private to this participant; it is not a read receipt.
+          await this.events.record(
+            [userId],
+            { type: MessagingEventType.REQUEST_DELETED, conversationId: id },
+            session,
+          );
+        }
+        return { conversationId: id, deletedThroughSequence: cutoff };
+      },
+    );
+  }
+
+  private async requestInitiators(
+    rows: Conversation[],
+    session: ClientSession,
+  ): Promise<Map<string, string>> {
+    const result = new Map(
+      rows
+        .filter((row) => row.requestInitiatorId)
+        .map((row) => [row.id, row.requestInitiatorId!]),
+    );
+    const legacyIds = rows
+      .filter((row) => !row.requestInitiatorId)
+      .map((row) => row.id);
+    if (legacyIds.length) {
+      const legacy = await this.messages
+        .aggregate<{ _id: string; senderId: string }>([
+          { $match: { conversationId: { $in: legacyIds } } },
+          { $sort: { sequence: 1 } },
+          {
+            $group: {
+              _id: '$conversationId',
+              senderId: { $first: '$senderId' },
+            },
+          },
+        ])
+        .session(session)
+        .exec();
+      for (const row of legacy) result.set(row._id, row.senderId);
+    }
+    return result;
+  }
+
   private async requireSender(
     id: string,
     session: ClientSession,
@@ -428,9 +646,13 @@ export class MessagingService {
     userId: string,
     id: string,
     session?: ClientSession,
+    includeDeleted = false,
   ): Promise<Conversation> {
     const conversation = await this.conversations
-      .findOne({ _id: id, ...members(userId) })
+      .findOne({
+        _id: id,
+        ...(includeDeleted ? members(userId) : visibleMembers(userId)),
+      })
       .session(session ?? null)
       .exec();
     // Membership is enforced on every path, including for administrators.
@@ -465,9 +687,14 @@ export class MessagingService {
     };
   }
 
-  private box(peerId: string, relationships: Relationships): MessagingInbox {
-    return relationships.following.has(peerId) &&
-      relationships.followers.has(peerId)
+  private box(
+    peerId: string,
+    relationships: Relationships,
+    conversation?: Conversation | null,
+  ): MessagingInbox {
+    return conversation?.acceptedAt ||
+      (relationships.following.has(peerId) &&
+        relationships.followers.has(peerId))
       ? MessagingInbox.FRIENDS
       : MessagingInbox.REQUESTS;
   }
@@ -485,6 +712,7 @@ export class MessagingService {
       .session(session)
       .exec();
     const byId = new Map(peers.map((peer) => [peer.id, peer]));
+    const initiators = await this.requestInitiators(rows, session);
     const counts = await this.messages
       .aggregate<{ _id: string; count: number }>([
         {
@@ -506,7 +734,9 @@ export class MessagingService {
       if (!peer) return [];
       const followsPeer = relationships.following.has(peer.id);
       const peerFollowsYou = relationships.followers.has(peer.id);
-      const box = this.box(peer.id, relationships);
+      const box = this.box(peer.id, relationships, row);
+      const incomingRequest =
+        box === MessagingInbox.REQUESTS && initiators.get(row.id) === peer.id;
       return [
         {
           id: row.id,
@@ -520,13 +750,19 @@ export class MessagingService {
           box,
           followsPeer,
           peerFollowsYou,
-          canSend: followsPeer && peer.status === AccountStatus.ACTIVE,
+          canSend:
+            (followsPeer || Boolean(row.acceptedAt)) &&
+            peer.status === AccountStatus.ACTIVE,
+          canAcceptRequest:
+            incomingRequest && peer.status === AccountStatus.ACTIVE,
+          canDeleteRequest: incomingRequest,
+          deletedThroughSequence: deletedThrough(row, userId),
           requestDirection:
             box === MessagingInbox.FRIENDS
               ? null
-              : followsPeer
+              : initiators.get(row.id) === userId
                 ? ('outgoing' as const)
-                : peerFollowsYou
+                : incomingRequest
                   ? ('incoming' as const)
                   : null,
           lastMessage:
