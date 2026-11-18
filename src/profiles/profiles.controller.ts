@@ -24,8 +24,12 @@ import {
   ApiTags,
 } from '@nestjs/swagger';
 import { ProfileImageKind } from '../mongo/models.js';
-import type { AuthenticatedRequest } from '../auth-core/auth.types.js';
+import type {
+  AuthenticatedRequest,
+  OptionalAuthenticatedRequest,
+} from '../auth-core/auth.types.js';
 import { JwtAuthGuard } from '../auth-core/jwt-auth.guard.js';
+import { OptionalJwtAuthGuard } from '../auth-core/optional-jwt-auth.guard.js';
 import { CursorPaginationQueryDto } from '../common/pagination/index.js';
 import {
   FollowSuggestionListDto,
@@ -37,8 +41,10 @@ import {
   ProfileImageUploadDto,
   ProfileListDto,
   ProfileRelationshipDto,
+  ProfileSearchPageDto,
   UpdateProfileDto,
 } from './dto/profile.dto.js';
+import { SearchProfilesQueryDto } from './dto/search-profiles-query.dto.js';
 import { FollowSuggestionsService } from './follow-suggestions.service.js';
 import { ProfilesService } from './profiles.service.js';
 
@@ -108,6 +114,22 @@ export class ProfilesController {
     @Param('kind', new ParseEnumPipe(ProfileImageKind)) kind: ProfileImageKind,
   ): Promise<ProfileDto> {
     return this.profiles.clearImage(request.user.sub, kind);
+  }
+
+  @Get('search')
+  @UseGuards(OptionalJwtAuthGuard)
+  @ApiOperation({
+    summary: 'Search public profiles, best BM25 match first',
+    description:
+      'Matches display name, @username, and bio using Qdrant BM25 (accents optional and prefix-tolerant). Send a Bearer token to receive `isFollowing` for each profile.',
+    security: [{}, { bearer: [] }],
+  })
+  @ApiOkResponse({ type: ProfileSearchPageDto })
+  search(
+    @Query() query: SearchProfilesQueryDto,
+    @Req() request: OptionalAuthenticatedRequest,
+  ): Promise<ProfileSearchPageDto> {
+    return this.profiles.search(query, request.user?.sub);
   }
 
   @Get('suggestions')

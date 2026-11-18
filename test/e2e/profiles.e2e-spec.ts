@@ -1,5 +1,8 @@
 import request from 'supertest';
+import { mockDeep, mockReset } from 'vitest-mock-extended';
 import { Follow, User } from '../../src/mongo/models.js';
+import { ProfileSearchIndexService } from '../../src/profiles/search/profile-search-index.service.js';
+import { ProfileSearchService } from '../../src/profiles/search/profile-search.service.js';
 import { createE2eApp, type E2eApp } from '../support/e2e-app.js';
 import { createPost, createUser } from '../support/fixtures.js';
 
@@ -8,9 +11,17 @@ describe('Profiles and follows (e2e)', () => {
   let user: User;
   let other: User;
   let token: string;
+  const profileSearch = mockDeep<ProfileSearchService>();
+  const profileSearchIndex = mockDeep<ProfileSearchIndexService>();
 
   beforeAll(async () => {
-    e2e = await createE2eApp('profiles_e2e');
+    e2e = await createE2eApp('profiles_e2e', (builder) =>
+      builder
+        .overrideProvider(ProfileSearchService)
+        .useValue(profileSearch)
+        .overrideProvider(ProfileSearchIndexService)
+        .useValue(profileSearchIndex),
+    );
     user = await createUser(e2e.mongo, { username: 'vedora.user' });
     other = await createUser(e2e.mongo, {
       username: 'vedora.other',
@@ -19,6 +30,11 @@ describe('Profiles and follows (e2e)', () => {
     token = await e2e.sign(user);
     await createPost(e2e.mongo, { authorId: other.id });
     await createPost(e2e.mongo, { authorId: other.id });
+  });
+
+  beforeEach(() => {
+    mockReset(profileSearch);
+    mockReset(profileSearchIndex);
   });
 
   afterAll(async () => {
@@ -87,5 +103,45 @@ describe('Profiles and follows (e2e)', () => {
       .findOne({ _id: user.id })
       .exec();
     expect(stored?.avatarUrl).toBeNull();
+  });
+
+  it('searches profiles with optional auth for isFollowing and rejects empty queries', async () => {
+    await request(e2e.app.getHttpServer())
+      .get('/api/v1/profiles/search?q=%20%20')
+      .expect(400);
+
+    profileSearch.search.mockResolvedValue({
+      ids: [other.id],
+      hasMore: false,
+    });
+
+    const authed = await request(e2e.app.getHttpServer())
+      .get('/api/v1/profiles/search?q=vedora&limit=10')
+      .auth(token, { type: 'bearer' })
+      .expect(200);
+    expect(profileSearch.search).toHaveBeenCalledWith('vedora', 0, 10);
+    expect(authed.body).toEqual({
+      items: [
+        expect.objectContaining({
+          id: other.id,
+          username: 'vedora.other',
+          isFollowing: true,
+        }),
+      ],
+      nextCursor: null,
+    });
+
+    const guest = await request(e2e.app.getHttpServer())
+      .get('/api/v1/profiles/search?q=vedora')
+      .expect(200);
+    expect(guest.body).toEqual({
+      items: [
+        expect.objectContaining({
+          id: other.id,
+          isFollowing: false,
+        }),
+      ],
+      nextCursor: null,
+    });
   });
 });

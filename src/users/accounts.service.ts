@@ -1,9 +1,10 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Optional } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import type { Model } from 'mongoose';
 import { hashPassword } from '../auth-core/password.js';
 import { AccountStatus, User, UserRole } from '../mongo/models.js';
 import { MongoService } from '../mongo/mongo.service.js';
+import { ProfileSearchIndexService } from '../profiles/search/profile-search-index.service.js';
 import { CreateUserDto } from './dto/create-user.dto.js';
 import {
   type PublicUser,
@@ -23,6 +24,7 @@ export class AccountsService {
   constructor(
     @InjectModel(User.name) private readonly users: Model<User>,
     private readonly mongo: MongoService,
+    @Optional() private readonly profileSearchIndex?: ProfileSearchIndexService,
   ) {}
 
   async create(data: NewUser): Promise<PublicUser> {
@@ -37,6 +39,9 @@ export class AccountsService {
         likedIngredientIds: [],
         ...data,
       });
+      if (user.status === AccountStatus.ACTIVE && user.emailVerifiedAt) {
+        this.profileSearchIndex?.schedule();
+      }
       return toPublicUser(user);
     } catch (error: unknown) {
       rethrowUniqueViolation(error);
@@ -98,6 +103,7 @@ export class AccountsService {
         .exec();
       if (!linked)
         throw new ResourceNotFoundException('NOT_FOUND', 'User not found');
+      this.profileSearchIndex?.schedule();
       return toPublicUser(linked);
     } catch (error: unknown) {
       rethrowUniqueViolation(error);

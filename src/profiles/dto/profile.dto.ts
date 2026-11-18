@@ -36,6 +36,15 @@ export class ProfileListDto {
     string | null;
 }
 
+export class ProfileSearchItemDto extends ProfileSummaryDto {
+  @ApiProperty() isFollowing!: boolean;
+}
+
+export class ProfileSearchPageDto {
+  @ApiProperty({ type: [ProfileSearchItemDto] }) items!: ProfileSearchItemDto[];
+  @ApiProperty({ nullable: true, type: String }) nextCursor!: string | null;
+}
+
 export class ProfileRelationshipDto {
   @ApiProperty() isFollowing!: boolean;
 }

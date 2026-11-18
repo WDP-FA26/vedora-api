@@ -230,6 +230,9 @@ export class EnvironmentVariables {
   QDRANT_POSTS_COLLECTION = 'vedora_posts_v2';
 
   @IsString()
+  QDRANT_PROFILES_COLLECTION = 'vedora_profiles_v1';
+
+  @IsString()
   POST_SEARCH_EMBEDDING_MODEL = 'google/gemini-embedding-2';
 
   @Type(() => Number)

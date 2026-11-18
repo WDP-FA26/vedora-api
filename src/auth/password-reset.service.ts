@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Optional } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import type { Model } from 'mongoose';
 import {
@@ -10,6 +10,7 @@ import {
 } from '../mongo/models.js';
 import { MailService } from '../mail/mail.service.js';
 import { MongoService } from '../mongo/mongo.service.js';
+import { ProfileSearchIndexService } from '../profiles/search/profile-search-index.service.js';
 import {
   CODE_TTL_MS,
   MAX_ATTEMPTS,
@@ -35,6 +36,7 @@ export class PasswordResetService {
     @InjectModel(User.name) private readonly users: Model<User>,
     private readonly mongo: MongoService,
     private readonly mailService: MailService,
+    @Optional() private readonly profileSearchIndex?: ProfileSearchIndexService,
   ) {}
 
   async send(user: { id: string; email: string }): Promise<SendResult> {
@@ -131,6 +133,7 @@ export class PasswordResetService {
       await this.guesses.deleteOne({ _id: user.email }, { session });
       return true;
     });
+    if (applied) this.profileSearchIndex?.schedule();
     return applied ? 'reset' : 'invalid';
   }
 

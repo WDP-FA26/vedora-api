@@ -20,6 +20,7 @@ import {
   StorageTarget,
 } from '../../../src/storage/storage.service.js';
 import {
+  AccountStatus,
   Follow,
   Post,
   ProfileImageKind,
@@ -28,6 +29,8 @@ import {
   User,
 } from '../../../src/mongo/models.js';
 import { ProfilesService } from '../../../src/profiles/profiles.service.js';
+import { ProfileSearchIndexService } from '../../../src/profiles/search/profile-search-index.service.js';
+import { ProfileSearchService } from '../../../src/profiles/search/profile-search.service.js';
 
 const userId = '4a1e32e4-e18e-4dd7-8b4a-246ef2113ff2';
 const viewerId = '0b8f0c1e-3c55-4c1b-9d0e-2f7f3a9f7a10';
@@ -52,6 +55,8 @@ describe('ProfilesService', () => {
     delete: vi.fn(),
   };
   const notifications = { notify: vi.fn() };
+  const profileSearch = { search: vi.fn(), prune: vi.fn() };
+  const profileSearchIndex = { schedule: vi.fn() };
 
   const users = () => db.connection.model<User>(User.name);
   const follows = () => db.connection.model<Follow>(Follow.name);
@@ -85,6 +90,8 @@ describe('ProfilesService', () => {
         ProfilesService,
         { provide: StorageService, useValue: storage },
         { provide: NotificationsService, useValue: notifications },
+        { provide: ProfileSearchService, useValue: profileSearch },
+        { provide: ProfileSearchIndexService, useValue: profileSearchIndex },
       ],
     }).compile();
     app = moduleRef.createNestApplication();
@@ -324,5 +331,76 @@ describe('ProfilesService', () => {
 
     expect(uploads).toBeDefined();
     expect(storage.delete).not.toHaveBeenCalled();
+  });
+
+  it('hydrates BM25 search results in rank order, includes isFollowing, and prunes ineligible ids', async () => {
+    const deletedId = '11111111-1111-4111-8111-111111111111';
+    const viewer = await createUser(db, {
+      id: viewerId,
+      username: 'viewer.cook',
+      fullName: 'Viewer Cook',
+      emailVerifiedAt: new Date(),
+      status: AccountStatus.ACTIVE,
+    });
+    const first = await createUser(db, {
+      id: userId,
+      username: 'an.nguyen',
+      fullName: 'Nguyễn An',
+      bio: 'Bếp chay',
+      emailVerifiedAt: new Date(),
+      status: AccountStatus.ACTIVE,
+    });
+    const suspended = await createUser(db, {
+      username: 'suspended.an',
+      fullName: 'Suspended An',
+      emailVerifiedAt: new Date(),
+      status: AccountStatus.SUSPENDED,
+    });
+    await insertFollow(viewer.id, first.id, new Date());
+    profileSearch.search.mockResolvedValue({
+      ids: [first.id, viewer.id, suspended.id, deletedId],
+      hasMore: true,
+    });
+    profileSearch.prune.mockResolvedValue();
+
+    const page = await service.search({ q: 'an', limit: 10 }, viewer.id);
+
+    expect(page.items).toEqual([
+      expect.objectContaining({
+        id: first.id,
+        username: 'an.nguyen',
+        fullName: 'Nguyễn An',
+        isFollowing: true,
+      }),
+      expect.objectContaining({
+        id: viewer.id,
+        isFollowing: false,
+      }),
+    ]);
+    expect(page.nextCursor).toBe('10');
+    expect(profileSearch.prune).toHaveBeenCalledWith([suspended.id, deletedId]);
+
+    const guestPage = await service.search({ q: 'an', limit: 10 });
+    expect(guestPage.items.map((item) => item.isFollowing)).toEqual([
+      false,
+      false,
+    ]);
+  });
+
+  it('clears searchIndexedAt and schedules reindexing when profile text changes', async () => {
+    await createUser(db, {
+      id: userId,
+      username: 'vedora.user',
+      fullName: 'Old Name',
+      emailVerifiedAt: new Date(),
+      searchIndexedAt: new Date(),
+    });
+
+    await service.updateMe(userId, { fullName: 'New Name', bio: 'Món chay' });
+
+    expect(
+      (await users().findOne({ _id: userId }))?.searchIndexedAt,
+    ).toBeNull();
+    expect(profileSearchIndex.schedule).toHaveBeenCalledOnce();
   });
 });

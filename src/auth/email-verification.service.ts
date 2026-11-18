@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Optional } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import type { Model } from 'mongoose';
 import {
@@ -10,6 +10,7 @@ import {
 } from '../mongo/models.js';
 import { MailService } from '../mail/mail.service.js';
 import { MongoService } from '../mongo/mongo.service.js';
+import { ProfileSearchIndexService } from '../profiles/search/profile-search-index.service.js';
 import {
   CODE_TTL_MS,
   MAX_ATTEMPTS,
@@ -38,6 +39,7 @@ export class EmailVerificationService {
     @InjectModel(User.name) private readonly users: Model<User>,
     private readonly mongo: MongoService,
     private readonly mailService: MailService,
+    @Optional() private readonly profileSearchIndex?: ProfileSearchIndexService,
   ) {}
 
   async send(user: { id: string; email: string }): Promise<SendResult> {
@@ -130,6 +132,7 @@ export class EmailVerificationService {
       await this.codes.deleteOne(codeKey(user.id, PURPOSE), { session });
       await this.guesses.deleteOne({ _id: user.email }, { session });
     });
+    this.profileSearchIndex?.schedule();
     return 'verified';
   }
 
