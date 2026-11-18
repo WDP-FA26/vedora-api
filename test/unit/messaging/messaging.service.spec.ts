@@ -91,6 +91,86 @@ describe('MessagingService', () => {
     }
   });
 
+  describe('global unread count', () => {
+    it('counts only incoming unread messages across friends and requests and respects read positions', async () => {
+      expect(await service.unreadCount(bob.id)).toEqual({ unreadCount: 0 });
+      await follow(alice, bob);
+      await follow(carol, bob);
+      await follow(bob, carol);
+      const first = await service.sendToUser(alice.id, bob.id, {
+        body: 'Request',
+        clientMessageId: randomUUID(),
+      });
+      await service.sendToUser(alice.id, bob.id, {
+        body: 'Another',
+        clientMessageId: randomUUID(),
+      });
+      const friend = await service.sendToUser(carol.id, bob.id, {
+        body: 'Friend',
+        clientMessageId: randomUUID(),
+      });
+      await service.sendToUser(bob.id, carol.id, {
+        body: 'Outgoing',
+        clientMessageId: randomUUID(),
+      });
+      expect(await service.unreadCount(bob.id)).toEqual({ unreadCount: 3 });
+      expect(await service.unreadCount(admin.id)).toEqual({ unreadCount: 0 });
+      await service.markRead(bob.id, first.conversationId, first.message.id);
+      expect(await service.unreadCount(bob.id)).toEqual({ unreadCount: 2 });
+      await service.markRead(bob.id, friend.conversationId, friend.message.id);
+      expect(await service.unreadCount(bob.id)).toEqual({ unreadCount: 1 });
+    });
+
+    it('excludes privately deleted requests, counts new messages again, and preserves the sender view', async () => {
+      await follow(alice, bob);
+      const first = await service.sendToUser(alice.id, bob.id, {
+        body: 'Old',
+        clientMessageId: randomUUID(),
+      });
+      await service.deleteRequest(
+        bob.id,
+        first.conversationId,
+        first.message.id,
+      );
+      expect(await service.unreadCount(bob.id)).toEqual({ unreadCount: 0 });
+      const newer = await service.sendToUser(alice.id, bob.id, {
+        body: 'New',
+        clientMessageId: randomUUID(),
+      });
+      expect(await service.unreadCount(bob.id)).toEqual({ unreadCount: 1 });
+      await service.acceptRequest(bob.id, first.conversationId);
+      expect(await service.unreadCount(bob.id)).toEqual({ unreadCount: 1 });
+      await service.markRead(bob.id, first.conversationId, newer.message.id);
+      expect(await service.unreadCount(bob.id)).toEqual({ unreadCount: 0 });
+      expect(
+        (
+          await service.listMessages(alice.id, first.conversationId, {
+            limit: 20,
+          })
+        ).items,
+      ).toHaveLength(2);
+    });
+
+    it('includes conversations beyond the first inbox page', async () => {
+      for (let index = 0; index < 22; index++) {
+        const peer = await createUser(db);
+        await follow(peer, alice);
+        await service.sendToUser(peer.id, alice.id, {
+          body: 'Unread',
+          clientMessageId: randomUUID(),
+        });
+      }
+      const firstPage = await service.listConversations(alice.id, {
+        box: MessagingInbox.REQUESTS,
+        limit: 20,
+      });
+      expect(firstPage.items).toHaveLength(20);
+      expect(firstPage.nextCursor).not.toBeNull();
+      expect(await service.unreadCount(alice.id)).toEqual({ unreadCount: 22 });
+      expect(await service.unreadCount(bob.id)).toEqual({ unreadCount: 0 });
+    });
+  });
+
   describe('shared posts', () => {
     it('shares a public post through the existing message pipeline and hydrates history', async () => {
       await follow(alice, bob);
