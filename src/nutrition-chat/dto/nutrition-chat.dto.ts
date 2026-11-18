@@ -1,3 +1,4 @@
+import { runtimeConfig } from '../../config/runtime-config.js';
 import { ApiProperty } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import {
@@ -12,8 +13,8 @@ import {
 } from 'class-validator';
 import { LastMessageFromUser } from '../../ai/guardrails/conversation-state.js';
 
-const MAX_CHAT_MESSAGES = 5;
-const MAX_CHAT_MESSAGE_LENGTH = 2000;
+const MAX_CHAT_MESSAGES = runtimeConfig.NUTRITION_CHAT_MAX_MESSAGES;
+const MAX_CHAT_MESSAGE_LENGTH = runtimeConfig.NUTRITION_CHAT_MAX_MESSAGE_LENGTH;
 
 export class ChatMessageDto {
   @ApiProperty({ enum: ['user', 'assistant'] })

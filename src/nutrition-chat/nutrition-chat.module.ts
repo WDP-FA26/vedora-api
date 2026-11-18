@@ -1,3 +1,4 @@
+import { runtimeConfig } from '../config/runtime-config.js';
 import { Module } from '@nestjs/common';
 import { ThrottlerModule } from '@nestjs/throttler';
 import { CaptchaModule } from '../captcha/captcha.module.js';
@@ -13,7 +14,12 @@ import { NutritionChatService } from './nutrition-chat.service.js';
   imports: [
     CaptchaModule,
     KnowledgeModule,
-    ThrottlerModule.forRoot([{ ttl: 60_000, limit: 10 }]),
+    ThrottlerModule.forRoot([
+      {
+        ttl: runtimeConfig.AI_RATE_LIMIT_WINDOW_MS,
+        limit: runtimeConfig.AI_CHAT_RATE_LIMIT,
+      },
+    ]),
   ],
   controllers: [NutritionChatController],
   providers: [
