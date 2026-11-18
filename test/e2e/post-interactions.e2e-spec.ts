@@ -481,4 +481,113 @@ describe('Post comments and likes (e2e)', () => {
       properties: { likeCount: {}, commentCount: {}, isLiked: {} },
     });
   });
+
+  describe('reply API', () => {
+    const path = () => `${posts()}/comments/${comment.id}/replies`;
+
+    it('requires login and validates reply bodies and IDs', async () => {
+      await request(server()).post(path()).send({ body: 'Hi' }).expect(401);
+      for (const body of ['', '   ', 'x'.repeat(1001)]) {
+        await request(server())
+          .post(path())
+          .auth(otherToken, { type: 'bearer' })
+          .send({ body })
+          .expect(400);
+      }
+      await request(server())
+        .post(path())
+        .auth(otherToken, { type: 'bearer' })
+        .send({ body: 'Hi', parentId: randomUUID() })
+        .expect(400);
+      await request(server())
+        .get(`${posts()}/comments/invalid/replies`)
+        .expect(400);
+      await request(server())
+        .get(`${posts()}/comments/${randomUUID()}/replies`)
+        .expect(404);
+    });
+
+    it('creates and reads a flat thread, notifies the target, edits, and deletes the entire root', async () => {
+      const first = await request(server())
+        .post(path())
+        .auth(otherToken, { type: 'bearer' })
+        .send({ body: '  Reply  ' })
+        .expect(201);
+      const reply = first.body as { id: string };
+      expect(first.body).toMatchObject({
+        body: 'Reply',
+        parentId: comment.id,
+        replyToId: comment.id,
+        replyToAuthor: { id: user.id },
+      });
+      const second = await request(server())
+        .post(`${posts()}/comments/${reply.id}/replies`)
+        .auth(token, { type: 'bearer' })
+        .send({ body: 'Nested target' })
+        .expect(201);
+      const secondId = (second.body as { id: string }).id;
+      expect(second.body).toMatchObject({
+        parentId: comment.id,
+        replyToId: reply.id,
+        replyToAuthor: { id: other.id },
+      });
+      const roots = await request(server())
+        .get(`${posts()}/comments`)
+        .expect(200);
+      expect((roots.body as CommentPageDto).items).toHaveLength(1);
+      expect((roots.body as CommentPageDto).items[0]).toMatchObject({
+        id: comment.id,
+        replyCount: 2,
+      });
+      const page = await request(server()).get(`${path()}?limit=1`).expect(200);
+      expect((page.body as CommentPageDto).items[0].id).toBe(secondId);
+      await request(server())
+        .get(`${posts()}/comments/${secondId}`)
+        .expect(200);
+      const notes = await request(server())
+        .get('/api/v1/notifications')
+        .auth(token, { type: 'bearer' })
+        .expect(200);
+      const notifications = notes.body as {
+        items: { type: string; commentId: string | null }[];
+      };
+      expect(
+        notifications.items.some(
+          (item) =>
+            item.type === 'COMMENT_REPLY' && item.commentId === reply.id,
+        ),
+      ).toBe(true);
+      await request(server())
+        .patch(`${posts()}/comments/${reply.id}`)
+        .auth(token, { type: 'bearer' })
+        .send({ body: 'No' })
+        .expect(403);
+      await request(server())
+        .patch(`${posts()}/comments/${reply.id}`)
+        .auth(otherToken, { type: 'bearer' })
+        .send({ body: 'Edited reply' })
+        .expect(200);
+      const detail = await request(server()).get(posts()).expect(200);
+      expect(detail.body).toMatchObject({ commentCount: 3 });
+      await request(server())
+        .delete(`${posts()}/comments/${comment.id}`)
+        .auth(token, { type: 'bearer' })
+        .expect(204);
+      await request(server())
+        .get(`${posts()}/comments/${secondId}`)
+        .expect(404);
+      const after = await request(server()).get(posts()).expect(200);
+      expect(after.body).toMatchObject({ commentCount: 0 });
+    });
+
+    it('runs reply moderation before persistence', async () => {
+      await request(server())
+        .post(path())
+        .auth(otherToken, { type: 'bearer' })
+        .send({ body: VIOLATION_MARKER })
+        .expect(422);
+      const replies = await request(server()).get(path()).expect(200);
+      expect((replies.body as CommentPageDto).items).toEqual([]);
+    });
+  });
 });
