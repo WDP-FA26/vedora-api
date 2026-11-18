@@ -65,7 +65,10 @@ const NOT_FOR_MAIN_MEALS: readonly RecipeTag[] = [
   RecipeTag.SNACK,
 ];
 
-const REPEAT_PENALTY = 10;
+// A dish may appear in different meals (lunch and dinner), but never twice in
+// the same meal across the week unless nothing else is left.
+const SAME_MEAL_REPEAT_PENALTY = 100;
+const REPEAT_PENALTY = 2;
 const FIT_BONUS = 4;
 const MISFIT_PENALTY = 6;
 const QUERY_BONUS = 5;
@@ -136,7 +139,17 @@ export async function generateMealDays(
 
       const pickedIds: string[] = [];
       while (pickedIds.length < input.perSection) {
-        const picked = await pickDish(input, byId, useCount, section, dayIds);
+        const sameMeal = idsInMeal(week, section, day);
+        for (const id of pickedIds) sameMeal.add(id);
+        const picked = await pickDish(
+          input,
+          byId,
+          useCount,
+          section,
+          dayIds,
+          sameMeal,
+          pickedIds,
+        );
         if (picked === null) break;
         pickedIds.push(picked);
         dayIds.add(picked);
@@ -159,22 +172,39 @@ export async function generateMealDays(
   return changedDays.map((day) => ({ day, ...(week.get(day) ?? emptyDay()) }));
 }
 
+/** Dishes already in this meal (e.g. every breakfast) on the other days. */
+function idsInMeal(
+  week: ReadonlyMap<Weekday, SlotRecipeIds>,
+  section: MealSection,
+  exceptDay: Weekday,
+): Set<string> {
+  const ids = new Set<string>();
+  for (const [day, slots] of week) {
+    if (day === exceptDay) continue;
+    for (const id of slots[section]) ids.add(id);
+  }
+  return ids;
+}
+
 async function pickDish(
   input: GeneratorInput,
   byId: ReadonlyMap<string, GeneratorCandidate>,
   useCount: ReadonlyMap<string, number>,
   section: MealSection,
   dayIdsWithoutSlot: ReadonlySet<string>,
+  sameMeal: ReadonlySet<string>,
+  slotIds: readonly string[],
 ): Promise<string | null> {
   const ranked = input.candidates
-    .filter((recipe) => !dayIdsWithoutSlot.has(recipe.id))
+    .filter((recipe) => !slotIds.includes(recipe.id))
     .map((recipe) => ({
       recipe,
       score:
         (input.ignoreFit ? 0 : fitScore(recipe.tag, section)) +
         (recipe.matchesQuery ? QUERY_BONUS : 0) +
         recipe.likedCount * LIKED_BONUS -
-        (useCount.get(recipe.id) ?? 0) * REPEAT_PENALTY +
+        (useCount.get(recipe.id) ?? 0) * REPEAT_PENALTY -
+        (sameMeal.has(recipe.id) ? SAME_MEAL_REPEAT_PENALTY : 0) +
         input.random(),
     }))
     .sort((a, b) => b.score - a.score)

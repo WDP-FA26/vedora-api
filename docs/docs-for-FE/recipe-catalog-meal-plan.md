@@ -103,8 +103,9 @@ cho kết quả tuân theo ràng buộc. Body:
 | `perSection` | Không | 1–6, mặc định 1; số món cho mỗi ô được điền |
 
 Món được xếp hạng theo: `tag` hợp với bữa (ví dụ `BREAD` cho bữa sáng, `DRINK` chỉ
-hợp phần Khác), nguyên liệu người dùng thích, khớp `query`; món đã xuất hiện trong
-tuần bị trừ điểm. Món chứa nguyên liệu người dùng không ăn, món tự xung đột và
+hợp phần Khác), nguyên liệu người dùng thích, khớp `query`; món không lặp trong cùng một
+bữa (ví dụ các bữa sáng của cả tuần) trừ khi hết món khác; giữa các bữa khác nhau,
+kể cả cùng một ngày, một món vẫn được dùng lại (chỉ bị trừ điểm nhẹ). Món chứa nguyên liệu người dùng không ăn, món tự xung đột và
 món gây xung đột nguyên liệu với các món khác cùng ngày đều bị loại. Món chưa có
 `tag` không được cộng hay trừ điểm theo bữa.
 

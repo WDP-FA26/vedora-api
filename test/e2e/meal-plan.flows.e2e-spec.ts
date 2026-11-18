@@ -658,6 +658,38 @@ describe('Meal plan and shopping list flows (e2e)', () => {
       expect(new Set(ids).size).toBe(2);
     });
 
+    it('never repeats a dish within one meal across the week', async () => {
+      const grain = await createIngredient(e2e.mongo, { name: 'Bột mì' });
+      for (let index = 1; index <= 8; index += 1) {
+        await createRecipe(e2e.mongo, { title: `Bánh số ${index}` }, [
+          grain.id,
+        ]);
+      }
+      const { token } = await signedUser();
+      for (const section of ['BREAKFAST', 'LUNCH', 'DINNER']) {
+        const response = await generate(token, {
+          days: allDays,
+          sections: [section],
+          onlyEmpty: false,
+        }).expect(200);
+        const ids = dishesOf(response.body as MealPlanPreviewDto);
+        expect(ids).toHaveLength(7);
+        expect(new Set(ids).size).toBe(7);
+      }
+    });
+
+    it('may reuse a dish in a different meal of the same day', async () => {
+      const { token } = await signedUser();
+      const response = await generate(token, {
+        days: ['SUN'],
+        sections: ['LUNCH', 'DINNER'],
+        onlyEmpty: false,
+        tags: ['SOUP'],
+      }).expect(200);
+      const ids = dishesOf(response.body as MealPlanPreviewDto);
+      expect(ids).toEqual([soup.id, soup.id]);
+    });
+
     it('returns no days when no dish fits', async () => {
       const { token } = await signedUser();
       const response = await generate(token, {
