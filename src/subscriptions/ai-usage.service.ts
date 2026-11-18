@@ -1,3 +1,4 @@
+import { runtimeConfig } from '../config/runtime-config.js';
 import { createHash, randomUUID } from 'node:crypto';
 import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
@@ -13,8 +14,8 @@ import {
   type SubscriptionPeriod,
 } from './subscriptions.service.js';
 
-const LEASE_MS = 10 * 60_000;
-const MAX_REQUESTS_PER_TURN = 8;
+const LEASE_MS = runtimeConfig.AI_USAGE_RESERVATION_TTL_SECONDS * 1000;
+const MAX_REQUESTS_PER_TURN = runtimeConfig.AI_MAX_CONTINUATIONS_PER_TURN;
 export const usageHash = (value: unknown) =>
   createHash('sha256').update(JSON.stringify(value)).digest('hex');
 export interface UsageContext {
