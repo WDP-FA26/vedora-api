@@ -1,7 +1,12 @@
 import { runtimeConfig } from '../../config/runtime-config.js';
 import { applyDecorators } from '@nestjs/common';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { MealSection, RecipeTag, Weekday } from '../../mongo/models.js';
+import {
+  type MealPlanChatProposalStatus,
+  MealSection,
+  RecipeTag,
+  Weekday,
+} from '../../mongo/models.js';
 import { Type } from 'class-transformer';
 import {
   ArrayMaxSize,
@@ -12,6 +17,7 @@ import {
   IsEnum,
   IsIn,
   IsInt,
+  IsObject,
   IsOptional,
   IsString,
   IsUUID,
@@ -374,6 +380,14 @@ export class PlannerMessageDto {
 
 export class MealPlannerChatDto {
   @ApiPropertyOptional({
+    format: 'uuid',
+    description: 'Chat thread ID to load/save conversation history',
+  })
+  @IsOptional()
+  @IsUUID('4')
+  threadId?: string;
+
+  @ApiPropertyOptional({
     maxLength: 100,
     description: 'Stable logical user-turn ID for quota/idempotency',
   })
@@ -394,4 +408,110 @@ export class MealPlannerChatDto {
   @ValidateNested({ each: true })
   @Type(() => PlannerMessageDto)
   messages!: PlannerMessageDto[];
+}
+
+export const MAX_CHAT_THREAD_TITLE_LENGTH = 120;
+export const MAX_STORED_MESSAGE_TEXT_LENGTH = 20000;
+export const MAX_STORED_MESSAGE_PARTS = 100;
+export const MAX_SYNC_MESSAGES = 200;
+
+export class MealPlanChatThreadSummaryDto {
+  @ApiProperty({ format: 'uuid' }) id!: string;
+  @ApiProperty() title!: string;
+  @ApiProperty() messageCount!: number;
+  @ApiProperty({ nullable: true, type: String })
+  lastMessagePreview!: string | null;
+  @ApiProperty({ type: Date }) lastMessageAt!: Date;
+  @ApiProperty({ type: Date }) createdAt!: Date;
+  @ApiProperty({ type: Date }) updatedAt!: Date;
+}
+
+export class MealPlanChatMessageDto {
+  @ApiProperty() id!: string;
+  @ApiProperty({ enum: ['user', 'assistant'] }) role!: 'user' | 'assistant';
+  @ApiProperty() text!: string;
+  @ApiProperty({ type: [Object] }) parts!: Record<string, unknown>[];
+  @ApiPropertyOptional({ nullable: true, type: Object })
+  metadata!: { refused?: boolean } | null;
+  @ApiProperty({ type: Date }) createdAt!: Date;
+}
+
+export class MealPlanChatThreadDetailDto extends MealPlanChatThreadSummaryDto {
+  @ApiProperty({
+    type: Object,
+    description: 'Proposal status map keyed by proposal/toolCall ID',
+  })
+  proposalStatuses!: Record<string, MealPlanChatProposalStatus>;
+
+  @ApiProperty({ type: [MealPlanChatMessageDto] })
+  messages!: MealPlanChatMessageDto[];
+}
+
+export class CreateMealPlanChatThreadDto {
+  @ApiPropertyOptional({ format: 'uuid' })
+  @IsOptional()
+  @IsUUID('4')
+  id?: string;
+
+  @ApiPropertyOptional({ maxLength: MAX_CHAT_THREAD_TITLE_LENGTH })
+  @IsOptional()
+  @IsString()
+  @MinLength(1)
+  @MaxLength(MAX_CHAT_THREAD_TITLE_LENGTH)
+  title?: string;
+}
+
+export class SyncMealPlanChatMessageDto {
+  @ApiProperty({ maxLength: 100 })
+  @IsString()
+  @MinLength(1)
+  @MaxLength(100)
+  id!: string;
+
+  @ApiProperty({ enum: ['user', 'assistant'] })
+  @IsIn(['user', 'assistant'])
+  role!: 'user' | 'assistant';
+
+  @ApiPropertyOptional({ maxLength: MAX_STORED_MESSAGE_TEXT_LENGTH })
+  @IsOptional()
+  @IsString()
+  @MaxLength(MAX_STORED_MESSAGE_TEXT_LENGTH)
+  text?: string;
+
+  @ApiPropertyOptional({ type: [Object], maxItems: MAX_STORED_MESSAGE_PARTS })
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(MAX_STORED_MESSAGE_PARTS)
+  @IsObject({ each: true })
+  parts?: Record<string, unknown>[];
+
+  @ApiPropertyOptional({ nullable: true, type: Object })
+  @IsOptional()
+  @IsObject()
+  metadata?: { refused?: boolean } | null;
+}
+
+export class UpdateMealPlanChatThreadDto {
+  @ApiPropertyOptional({ maxLength: MAX_CHAT_THREAD_TITLE_LENGTH })
+  @IsOptional()
+  @IsString()
+  @MinLength(1)
+  @MaxLength(MAX_CHAT_THREAD_TITLE_LENGTH)
+  title?: string;
+
+  @ApiPropertyOptional({ type: Object })
+  @IsOptional()
+  @IsObject()
+  proposalStatuses?: Record<string, MealPlanChatProposalStatus>;
+
+  @ApiPropertyOptional({
+    type: [SyncMealPlanChatMessageDto],
+    maxItems: MAX_SYNC_MESSAGES,
+  })
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(MAX_SYNC_MESSAGES)
+  @ValidateNested({ each: true })
+  @Type(() => SyncMealPlanChatMessageDto)
+  messages?: SyncMealPlanChatMessageDto[];
 }

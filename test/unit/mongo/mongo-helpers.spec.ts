@@ -60,7 +60,7 @@ describe('mongo helpers & module', () => {
     await app.init();
     await dropTestDatabase(app);
     await app.close();
-  });
+  }, 30_000);
 
   it('MongoService.ping throws when db is absent and pings when ready', async () => {
     const unready = new MongoService({ db: undefined } as unknown as Connection);

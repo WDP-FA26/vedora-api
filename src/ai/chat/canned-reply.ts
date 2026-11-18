@@ -1,9 +1,13 @@
 import { createUIMessageStream } from 'ai';
 
-export function cannedReply(text: string) {
+export function cannedReply(text: string, messageId?: string) {
   return createUIMessageStream({
     execute: ({ writer }) => {
-      writer.write({ type: 'start', messageMetadata: { refused: true } });
+      writer.write({
+        type: 'start',
+        ...(messageId ? { messageId } : {}),
+        messageMetadata: { refused: true },
+      });
       writer.write({ type: 'text-start', id: 'reply' });
       writer.write({ type: 'text-delta', id: 'reply', delta: text });
       writer.write({ type: 'text-end', id: 'reply' });

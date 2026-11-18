@@ -1,5 +1,6 @@
+import { randomUUID } from 'node:crypto';
+import { Inject, Injectable, Logger, Optional } from '@nestjs/common';
 import { runtimeConfig } from '../config/runtime-config.js';
-import { Inject, Injectable, Logger } from '@nestjs/common';
 import { InjectModel } from '@nestjs/ai';
 import {
   type Experimental_EvaluationModel,
@@ -23,6 +24,7 @@ import { KnowledgeSearchService } from '../knowledge/retrieval/knowledge-search.
 import { DietaryService } from '../recipes/dietary.service.js';
 import type { PlannerMessageDto } from './dto/meal-plan.dto.js';
 import { MealPlanService } from './meal-plan.service.js';
+import { MealPlannerChatHistoryService } from './meal-planner-chat-history.service.js';
 import { plannerInstructions } from './meal-planner.prompt.js';
 import { PLANNER_REFUSALS } from './meal-planner.refusals.js';
 import { editDraftTool } from './tools/edit-draft.tool.js';
@@ -69,6 +71,7 @@ export class MealPlannerChatService {
     private readonly dietary: DietaryService,
     private readonly knowledge: KnowledgeSearchService,
     private readonly usage: AiUsageService,
+    @Optional() private readonly history?: MealPlannerChatHistoryService,
   ) {}
 
   async stream(
@@ -76,8 +79,13 @@ export class MealPlannerChatService {
     messages: PlannerMessageDto[],
     abortSignal: AbortSignal,
     requestId?: string,
+    threadId?: string,
   ) {
     assertLastMessageFromUser(messages);
+    if (threadId) {
+      await this.history?.assertThreadAccess(userId, threadId);
+    }
+    const activeThreadId = threadId ?? randomUUID();
     abortSignal = AbortSignal.any([
       abortSignal,
       AbortSignal.timeout(runtimeConfig.AI_CHAT_TIMEOUT_MS),
@@ -93,6 +101,12 @@ export class MealPlannerChatService {
         'Your shared AI text allowance is exhausted',
       );
     try {
+      await this.history?.recordUserTurn(
+        userId,
+        activeThreadId,
+        messages,
+        requestId,
+      );
       const { choice: verdict } = await decide(
         this.moderator,
         conversationModerationState(messages),
@@ -108,8 +122,15 @@ export class MealPlannerChatService {
       });
       if (verdict !== 'allow') {
         this.logger.warn(`Moderation answered ${verdict}`);
+        const assistantMessageId = randomUUID();
+        await this.history?.recordAssistantMessage(userId, activeThreadId, {
+          id: assistantMessageId,
+          role: 'assistant',
+          parts: [{ type: 'text', text: PLANNER_REFUSALS[verdict] }],
+          metadata: { refused: true },
+        });
         await this.usage.refund(ticket);
-        return cannedReply(PLANNER_REFUSALS[verdict]);
+        return cannedReply(PLANNER_REFUSALS[verdict], assistantMessageId);
       }
 
       if (shouldDiscardPreviousDraft(messages)) {
@@ -144,10 +165,25 @@ export class MealPlannerChatService {
         timeout: { tools: { searchKnowledgeMs: SEARCH_TIMEOUT_MS } },
         experimental_transform: replyFilter(),
       });
+      const assistantMessageId = randomUUID();
       return quotaStream(
         toUIMessageStream({
           stream: result.stream,
           tools: agent.tools,
+          generateMessageId: () => assistantMessageId,
+          onEnd: async ({ responseMessage }) => {
+            try {
+              await this.history?.recordAssistantMessage(
+                userId,
+                activeThreadId,
+                responseMessage,
+              );
+            } catch (error) {
+              this.logger.warn(
+                `Failed to save assistant chat message: ${String(error)}`,
+              );
+            }
+          },
           onError: (error) => {
             this.logger.error(
               `Meal planner stream failed: ${

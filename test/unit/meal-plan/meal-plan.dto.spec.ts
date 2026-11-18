@@ -2,11 +2,13 @@ import 'reflect-metadata';
 import { plainToInstance } from 'class-transformer';
 import { validate } from 'class-validator';
 import {
+  CreateMealPlanChatThreadDto,
   GenerateMealDaysDto,
   MAX_DISHES_PER_SECTION,
   MealPlannerChatDto,
   SaveMealDayDto,
   SaveMealDaysDto,
+  UpdateMealPlanChatThreadDto,
   WEEKDAYS,
 } from '../../../src/meal-plan/dto/meal-plan.dto.js';
 import { ShoppingListQueryDto } from '../../../src/meal-plan/dto/shopping-list.dto.js';
@@ -141,8 +143,9 @@ describe('MealPlan & ShoppingList DTOs', () => {
   });
 
   describe('MealPlannerChatDto', () => {
-    it('accepts valid chat messages ending with user and optional requestId', async () => {
+    it('accepts valid chat messages ending with user and optional requestId and threadId', async () => {
       const dto = plainToInstance(MealPlannerChatDto, {
+        threadId: uuid1,
         requestId: 'req-123',
         messages: [
           { role: 'user', text: 'Gợi ý thực đơn' },
@@ -151,6 +154,12 @@ describe('MealPlan & ShoppingList DTOs', () => {
         ],
       });
       expect(await validate(dto)).toHaveLength(0);
+
+      const invalidThread = plainToInstance(MealPlannerChatDto, {
+        threadId: 'not-a-uuid',
+        messages: [{ role: 'user', text: 'hi' }],
+      });
+      expect(await validate(invalidThread)).not.toHaveLength(0);
     });
 
     it('rejects a conversation ending with an assistant turn', async () => {
@@ -262,6 +271,54 @@ describe('MealPlan & ShoppingList DTOs', () => {
         ],
       });
       expect(await validate(tooMany)).not.toHaveLength(0);
+    });
+  });
+
+  describe('CreateMealPlanChatThreadDto & UpdateMealPlanChatThreadDto', () => {
+    it('accepts valid create and update payloads', async () => {
+      const createDto = plainToInstance(CreateMealPlanChatThreadDto, {
+        id: uuid1,
+        title: 'Thực đơn chay',
+      });
+      expect(await validate(createDto)).toHaveLength(0);
+
+      const updateDto = plainToInstance(UpdateMealPlanChatThreadDto, {
+        title: 'Thực đơn mới',
+        proposalStatuses: { 'call-1': 'saved' },
+        messages: [
+          {
+            id: 'msg-1',
+            role: 'user',
+            text: 'Xin chào',
+            parts: [{ type: 'text', text: 'Xin chào' }],
+          },
+        ],
+      });
+      expect(await validate(updateDto)).toHaveLength(0);
+    });
+
+    it('rejects invalid create/update chat thread fields', async () => {
+      expect(
+        await validate(
+          plainToInstance(CreateMealPlanChatThreadDto, { id: 'bad-id' }),
+        ),
+      ).not.toHaveLength(0);
+
+      expect(
+        await validate(
+          plainToInstance(UpdateMealPlanChatThreadDto, {
+            title: '',
+          }),
+        ),
+      ).not.toHaveLength(0);
+
+      expect(
+        await validate(
+          plainToInstance(UpdateMealPlanChatThreadDto, {
+            messages: [{ id: 'm1', role: 'system', text: 'bad' }],
+          }),
+        ),
+      ).not.toHaveLength(0);
     });
   });
 });

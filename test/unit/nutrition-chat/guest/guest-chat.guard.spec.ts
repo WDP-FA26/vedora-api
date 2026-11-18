@@ -1,3 +1,4 @@
+import 'reflect-metadata';
 import type { ExecutionContext } from '@nestjs/common';
 import type { Request } from 'express';
 import { type DeepMockProxy, mockDeep } from 'vitest-mock-extended';
@@ -9,8 +10,8 @@ import { GuestChatGuard } from '../../../../src/nutrition-chat/guest/guest-chat.
 import type { GuestQuotaService } from '../../../../src/nutrition-chat/guest/guest-quota.service.js';
 import type { GuestSessionService } from '../../../../src/nutrition-chat/guest/guest-session.service.js';
 
-function contextWithAuth(authorization?: string): ExecutionContext {
-  const request = { headers: { authorization } } as unknown as Request;
+function contextWithAuth(authorization?: string, body?: unknown): ExecutionContext {
+  const request = { headers: { authorization }, body } as unknown as Request;
   return {
     switchToHttp: () => ({
       getRequest: <T>() => request as unknown as T,
@@ -99,5 +100,24 @@ describe('GuestChatGuard', () => {
     await expect(
       guard.canActivate(contextWithAuth('Bearer valid-token')),
     ).resolves.toBe(true);
+  });
+
+  it('skips quota consumption for malformed request bodies so ValidationPipe returns 400', async () => {
+    sessions.verify.mockResolvedValue('guest-1');
+    quota.consume.mockReturnValue('ok');
+
+    await expect(
+      guard.canActivate(contextWithAuth('Bearer valid-token', { messages: [] })),
+    ).resolves.toBe(true);
+    expect(quota.consume).not.toHaveBeenCalled();
+
+    await expect(
+      guard.canActivate(
+        contextWithAuth('Bearer valid-token', {
+          messages: [{ role: 'user', text: 'Đậu phụ có gì?' }],
+        }),
+      ),
+    ).resolves.toBe(true);
+    expect(quota.consume).toHaveBeenCalledTimes(1);
   });
 });
