@@ -4,12 +4,20 @@
 Chỉ đọc thực đơn của người gọi, kể cả Admin; không nhận `userId` và không thay
 đổi/lưu thực đơn, hồ sơ hoặc trạng thái đã mua. Response: `Cache-Control: private, no-store`.
 
+## Chọn tuần
+
+`weekStart` (tùy chọn): thứ Hai của tuần, `YYYY-MM-DD`; mặc định tuần hiện tại. Sai định dạng
+hoặc không phải thứ Hai trả 400; xa hơn 4 tuần sau tuần hiện tại trả `409 MEAL_WEEK_OUT_OF_RANGE`
+(xem [recipe-catalog-meal-plan.md](recipe-catalog-meal-plan.md#thực-đơn-theo-tuần)).
+Danh sách chỉ gồm món **từ hôm nay trở đi**: ngày đã qua bị bỏ khỏi `days` và khỏi `items`,
+nên tuần đã qua trả `days: []`, `items: []`.
+
 ## Lọc ngày
 
-Mặc định cả tuần MON–SUN. Chọn ngày bằng một trong hai dạng:
+Mặc định cả tuần MON–SUN (trừ ngày đã qua). Chọn ngày bằng một trong hai dạng:
 
 ```http
-GET /api/v1/meal-plan/shopping-list?days=MON,TUE
+GET /api/v1/meal-plan/shopping-list?weekStart=2026-11-16&days=MON,TUE
 GET /api/v1/meal-plan/shopping-list?days=MON&days=TUE
 Authorization: Bearer <accessToken>
 ```
@@ -41,6 +49,7 @@ thích đây là lượng cho cả công thức, không phải lượng cho mộ
 
 ```json
 {
+  "weekStart": "2026-11-16",
   "days": ["MON"],
   "quantityBasis": "RECIPE_PER_OCCURRENCE",
   "items": [

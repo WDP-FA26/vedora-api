@@ -43,6 +43,13 @@ import {
   type WeekIds,
 } from './meal-plan-draft.js';
 import { ResourceNotFoundException } from '../common/exceptions/resource-not-found.exception.js';
+import { InvalidInputException } from '../common/exceptions/invalid-input.exception.js';
+import {
+  assertDaysEditable,
+  assertWithinHorizon,
+  currentMealWeek,
+  type MealWeek,
+} from './meal-week.js';
 import { StateConflictException } from '../common/exceptions/state-conflict.exception.js';
 
 type RecipeRow = Omit<Recipe, 'ingredients'> & {
@@ -127,6 +134,21 @@ const allSlots = (): SlotKey[] =>
 const dishes = (day: DaySections | undefined): RecipeRow[] =>
   day ? MEAL_SECTIONS.flatMap((section) => day[section]) : [];
 
+/** The request without the days that have passed, and the pins on them. */
+function onlyEditable(
+  dto: GenerateMealDaysDto,
+  week: MealWeek,
+): GenerateMealDaysDto {
+  const pinned = (dto.pinned ?? []).filter(({ day }) =>
+    week.editableDays.includes(day),
+  );
+  return {
+    ...dto,
+    days: dto.days.filter((day) => week.editableDays.includes(day)),
+    pinned: dto.pinned === undefined ? undefined : pinned,
+  };
+}
+
 const toRef = ({ id, title, tag }: RecipeRow): RecipeRef => ({
   id,
   title,
@@ -149,16 +171,43 @@ export class MealPlanService {
     private readonly mongo: MongoService,
   ) {}
 
-  async find(userId: string): Promise<MealPlanDto> {
-    return this.toPlan(userId, await this.saved(userId));
+  /** The saved plan of one week; the current week when `weekStart` is left out. */
+  async find(userId: string, weekStart?: string): Promise<MealPlanDto> {
+    const week = currentMealWeek(weekStart);
+    assertWithinHorizon(week);
+    return this.toPlan(userId, week, await this.saved(userId, week.weekStart));
   }
 
-  private async toPlan(userId: string, saved: Week): Promise<MealPlanDto> {
+  /** The earliest week to browse back to: the first one with a dish, or the current week. */
+  private async minWeekStart(userId: string, week: MealWeek): Promise<string> {
+    const first = await this.entries
+      .findOne({ userId })
+      .sort({ weekStart: 1 })
+      .exec();
+    if (!first || first.weekStart > week.currentWeekStart) {
+      return week.currentWeekStart;
+    }
+    return first.weekStart;
+  }
+
+  private async toPlan(
+    userId: string,
+    week: MealWeek,
+    saved: Week,
+  ): Promise<MealPlanDto> {
     return {
+      weekStart: week.weekStart,
+      currentWeekStart: week.currentWeekStart,
+      today: week.today,
+      maxWeekStart: week.maxWeekStart,
+      minWeekStart: await this.minWeekStart(userId, week),
+      editable: week.editableDays.length > 0,
       days: WEEKDAYS.map((day) => {
         const sections = saved.get(day) ?? emptyDay();
         return {
           day,
+          date: week.dates[day],
+          editable: week.editableDays.includes(day),
           sections: MEAL_SECTIONS.map((section) => ({
             section,
             recipes: sections[section].map(toRecipeDto),
@@ -166,17 +215,25 @@ export class MealPlanService {
         };
       }),
       problems: await this.problems(userId, saved, {
-        avoidedDays: WEEKDAYS,
-        conflictSlots: allSlots(),
+        avoidedDays: week.editableDays,
+        conflictSlots: allSlots().filter(({ day }) =>
+          week.editableDays.includes(day),
+        ),
       }),
     };
   }
 
   async preview(
     userId: string,
+    weekStart: string,
     days: SaveMealDayDto[],
   ): Promise<MealPlanPreview> {
-    const saved = await this.saved(userId);
+    const week = currentMealWeek(weekStart);
+    assertDaysEditable(
+      week,
+      days.map(({ day }) => day),
+    );
+    const saved = await this.saved(userId, week.weekStart);
     const requested = (day: SaveMealDayDto): Record<MealSection, string[]> => ({
       BREAKFAST: day.breakfast,
       LUNCH: day.lunch,
@@ -245,6 +302,7 @@ export class MealPlanService {
       })),
     );
     return {
+      weekStart: week.weekStart,
       days: [...next].map(([day, sections]) => ({
         day,
         sections: MEAL_SECTIONS.map((section) => ({
@@ -336,31 +394,40 @@ export class MealPlanService {
     userId: string,
     dto: GenerateMealDaysDto,
   ): Promise<MealPlanPreview> {
+    const week = currentMealWeek(dto.weekStart);
+    assertWithinHorizon(week);
+    const request = onlyEditable(dto, week);
+    if (request.days.length === 0) {
+      return { weekStart: week.weekStart, days: [], problems: [] };
+    }
     const [{ candidates, ingredientsById }, saved] = await Promise.all([
-      this.buildGeneratorPool(userId, dto),
-      this.saved(userId),
+      this.buildGeneratorPool(userId, request),
+      this.saved(userId, week.weekStart),
     ]);
     const savedIds = this.weekIds(saved);
-    const { week, skip } = applyPinnedSlots(savedIds, dto.pinned);
-    const tags = dto.tags && dto.tags.length > 0 ? dto.tags : null;
+    const { week: base, skip } = applyPinnedSlots(savedIds, request.pinned);
+    const tags = request.tags && request.tags.length > 0 ? request.tags : null;
 
     const generated = await generateMealDays({
       candidates,
-      saved: week,
-      days: dto.days,
-      sections: dto.sections,
-      onlyEmpty: dto.onlyEmpty,
-      perSection: dto.perSection ?? 1,
+      saved: base,
+      days: request.days,
+      sections: request.sections,
+      onlyEmpty: request.onlyEmpty,
+      perSection: request.perSection ?? 1,
       ignoreFit: tags !== null,
       skip,
       ingredientsById,
       areCompatible: (sets) => this.areCompatible(sets),
       random: Math.random,
     });
-    if (generated.length === 0) return { days: [], problems: [] };
+    if (generated.length === 0) {
+      return { weekStart: week.weekStart, days: [], problems: [] };
+    }
 
     return this.preview(
       userId,
+      week.weekStart,
       generated.map(({ day, BREAKFAST, LUNCH, DINNER, OTHER }) => ({
         day,
         breakfast: BREAKFAST,
@@ -382,15 +449,22 @@ export class MealPlanService {
   ): Promise<
     DraftProposal & { filled: number; allSlotsAlreadyFilled: boolean }
   > {
+    const week = currentMealWeek(dto.weekStart);
+    assertWithinHorizon(week);
+    const request = onlyEditable(dto, week);
+    if (request.days.length === 0) {
+      const current = await this.getDraft(userId, week.weekStart);
+      return { ...current, filled: 0, allSlotsAlreadyFilled: false };
+    }
     const [{ candidates, ingredientsById }, { savedIds, ids }] =
       await Promise.all([
-        this.buildGeneratorPool(userId, dto),
-        this.effective(userId),
+        this.buildGeneratorPool(userId, request),
+        this.effective(userId, week),
       ]);
-    const { week: base, skip: dtoSkip } = applyPinnedSlots(ids, dto.pinned);
+    const { week: base, skip: dtoSkip } = applyPinnedSlots(ids, request.pinned);
     const skip = [...dtoSkip, ...extraPinned];
-    const targetSlots = dto.days.flatMap((day) =>
-      dto.sections
+    const targetSlots = request.days.flatMap((day) =>
+      request.sections
         .filter(
           (section) =>
             !skip.some((slot) => slot.day === day && slot.section === section),
@@ -398,20 +472,20 @@ export class MealPlanService {
         .map((section) => ({ day, section })),
     );
     const allSlotsAlreadyFilled =
-      dto.onlyEmpty &&
+      request.onlyEmpty &&
       targetSlots.length > 0 &&
       targetSlots.every(
         ({ day, section }) => (base.get(day)?.[section].length ?? 0) > 0,
       );
 
-    const tags = dto.tags && dto.tags.length > 0 ? dto.tags : null;
+    const tags = request.tags && request.tags.length > 0 ? request.tags : null;
     const generated = await generateMealDays({
       candidates,
       saved: base,
-      days: dto.days,
-      sections: dto.sections,
-      onlyEmpty: dto.onlyEmpty,
-      perSection: dto.perSection ?? 1,
+      days: request.days,
+      sections: request.sections,
+      onlyEmpty: request.onlyEmpty,
+      perSection: request.perSection ?? 1,
       ignoreFit: tags !== null,
       skip,
       ingredientsById,
@@ -425,17 +499,24 @@ export class MealPlanService {
     }
     const changed = changedSlots(next, ids, MEAL_SECTIONS).length;
     const filled = changed > 0 ? changed : generated.length > 0 ? 1 : 0;
-    const proposal = await this.commitDraft(userId, next, savedIds);
+    const proposal = await this.commitDraft(userId, week, next, savedIds);
     return { ...proposal, filled, allSlotsAlreadyFilled };
   }
 
   /** The unsaved draft the assistant is building, against the saved plan. */
-  async getDraft(userId: string): Promise<DraftProposal> {
-    const { savedIds, ids } = await this.effective(userId);
-    return this.proposalFor(userId, ids, savedIds);
+  async getDraft(userId: string, weekStart?: string): Promise<DraftProposal> {
+    const week = currentMealWeek(weekStart);
+    assertWithinHorizon(week);
+    const { savedIds, ids } = await this.effective(userId, week);
+    return this.proposalFor(userId, week, ids, savedIds);
   }
 
-  async discardDraft(userId: string): Promise<void> {
+  async discardDraft(userId: string, weekStart: string): Promise<void> {
+    await this.draftSlots.deleteMany({ userId, weekStart }).exec();
+  }
+
+  /** Drops the unsaved drafts of every week, as a new conversation starts. */
+  async discardAllDrafts(userId: string): Promise<void> {
     await this.draftSlots.deleteMany({ userId }).exec();
   }
 
@@ -446,11 +527,17 @@ export class MealPlanService {
    */
   async editDraft(
     userId: string,
+    weekStart: string,
     ops: DraftOp[],
   ): Promise<DraftProposal & { errors: string[] }> {
-    const { savedIds, ids } = await this.effective(userId);
-    const { week, errors } = applyDraftOps(ids, ops);
-    const committed = await this.commitDraft(userId, week, savedIds);
+    const mealWeek = currentMealWeek(weekStart);
+    assertWithinHorizon(mealWeek);
+    const { savedIds, ids } = await this.effective(userId, mealWeek);
+    const locked = WEEKDAYS.filter(
+      (day) => !mealWeek.editableDays.includes(day),
+    );
+    const { week, errors } = applyDraftOps(ids, ops, locked);
+    const committed = await this.commitDraft(userId, mealWeek, week, savedIds);
     if (committed.problems.length === 0 && errors.length === 0) {
       return { ...committed, ok: true, errors };
     }
@@ -472,14 +559,17 @@ export class MealPlanService {
   /** The saved plan and the same plan with the draft laid over it. */
   private async effective(
     userId: string,
+    week: MealWeek,
   ): Promise<{ savedIds: WeekIds; ids: WeekIds }> {
     const [saved, drafts] = await Promise.all([
-      this.saved(userId),
-      this.draftSlots.find({ userId }).exec(),
+      this.saved(userId, week.weekStart),
+      this.draftSlots.find({ userId, weekStart: week.weekStart }).exec(),
     ]);
     const savedIds = this.weekIds(saved);
     const ids = cloneWeekIds(savedIds);
     for (const slot of drafts) {
+      // A draft kept overnight may reach a day that has passed since.
+      if (!week.editableDays.includes(slot.day)) continue;
       const day = ids.get(slot.day);
       if (day) day[slot.section] = [...slot.recipeIds];
     }
@@ -488,6 +578,7 @@ export class MealPlanService {
 
   private async proposalFor(
     userId: string,
+    week: MealWeek,
     ids: WeekIds,
     savedIds: WeekIds,
   ): Promise<DraftProposal> {
@@ -495,7 +586,9 @@ export class MealPlanService {
     const days = WEEKDAYS.filter((day) =>
       changed.some((slot) => slot.day === day),
     );
-    if (days.length === 0) return { days: [], problems: [], ok: false };
+    if (days.length === 0) {
+      return { weekStart: week.weekStart, days: [], problems: [], ok: false };
+    }
 
     const inputs: SaveMealDayDto[] = days.map((day) => {
       const slots = ids.get(day) ?? emptyWeekIds([day]).get(day);
@@ -507,25 +600,29 @@ export class MealPlanService {
         others: slots?.OTHER ?? [],
       };
     });
-    const preview = await this.preview(userId, inputs);
+    const preview = await this.preview(userId, week.weekStart, inputs);
     return { ...preview, ok: preview.problems.length === 0 };
   }
 
   private async commitDraft(
     userId: string,
+    week: MealWeek,
     ids: WeekIds,
     savedIds: WeekIds,
   ): Promise<DraftProposal> {
-    const proposal = await this.proposalFor(userId, ids, savedIds);
+    const proposal = await this.proposalFor(userId, week, ids, savedIds);
     if (hasFatalProblem(proposal.problems)) return proposal;
 
-    await this.draftSlots.deleteMany({ userId }).exec();
+    await this.draftSlots
+      .deleteMany({ userId, weekStart: week.weekStart })
+      .exec();
     const changed = changedSlots(ids, savedIds, MEAL_SECTIONS);
     if (changed.length > 0) {
       await this.draftSlots.insertMany(
         changed.map((slot) => ({
           _id: randomUUID(),
           userId,
+          weekStart: week.weekStart,
           ...slot,
           updatedAt: new Date(),
         })),
@@ -534,8 +631,14 @@ export class MealPlanService {
     return proposal;
   }
 
-  async apply(userId: string, days: SaveMealDayDto[]): Promise<MealPlanDto> {
-    const preview = await this.preview(userId, days);
+  async apply(
+    userId: string,
+    weekStart: string,
+    days: SaveMealDayDto[],
+    options: { requireEmptyDays?: boolean } = {},
+  ): Promise<MealPlanDto> {
+    const week = currentMealWeek(weekStart);
+    const preview = await this.preview(userId, week.weekStart, days);
     // A DAY_CONFLICT is a warning: the user may still choose to eat these
     // together, and it comes back in `MealPlanDto.problems`. Only a dish the
     // user avoids or one that no longer exists is refused.
@@ -555,6 +658,7 @@ export class MealPlanService {
         recipes.map(({ id }, position) => ({
           _id: randomUUID(),
           userId,
+          weekStart: week.weekStart,
           day,
           section,
           recipeId: id,
@@ -571,11 +675,32 @@ export class MealPlanService {
       if (!user)
         throw new ResourceNotFoundException('NOT_FOUND', 'User not found');
       const appliedDays = preview.days.map(({ day }) => day);
+      if (options.requireEmptyDays) {
+        const taken = await this.entries
+          .countDocuments(
+            { userId, weekStart: week.weekStart, day: { $in: appliedDays } },
+            { session },
+          )
+          .exec();
+        if (taken > 0) {
+          throw new StateConflictException(
+            'MEAL_WEEK_NOT_EMPTY',
+            'The target week already has dishes; pass overwrite to replace them',
+            { weekStart: week.weekStart },
+          );
+        }
+      }
       await this.entries
-        .deleteMany({ userId, day: { $in: appliedDays } }, { session })
+        .deleteMany(
+          { userId, weekStart: week.weekStart, day: { $in: appliedDays } },
+          { session },
+        )
         .exec();
       await this.draftSlots
-        .deleteMany({ userId, day: { $in: appliedDays } }, { session })
+        .deleteMany(
+          { userId, weekStart: week.weekStart, day: { $in: appliedDays } },
+          { session },
+        )
         .exec();
       if (entries.length > 0) {
         await this.entries
@@ -589,12 +714,55 @@ export class MealPlanService {
           );
       }
       return this.entries
-        .find({ userId })
+        .find({ userId, weekStart: week.weekStart })
         .sort({ position: 1 })
         .session(session)
         .exec();
     });
-    return this.toPlan(userId, await this.weekOf(saved));
+    return this.toPlan(userId, week, await this.weekOf(saved));
+  }
+
+  /**
+   * Copies the dishes of one week onto the days of another that may still
+   * change. The target must be empty on those days unless `overwrite` is set,
+   * and the whole copy is saved or refused together.
+   */
+  async copyWeek(
+    userId: string,
+    fromWeekStart: string,
+    toWeekStart: string,
+    overwrite: boolean,
+  ): Promise<MealPlanDto> {
+    if (fromWeekStart === toWeekStart) {
+      throw new InvalidInputException(
+        'BAD_REQUEST',
+        'Choose a different week to copy from',
+      );
+    }
+    const target = currentMealWeek(toWeekStart);
+    assertWithinHorizon(target);
+    const source = currentMealWeek(fromWeekStart);
+    const sourcePlan = await this.saved(userId, source.weekStart);
+    const days: SaveMealDayDto[] = target.editableDays.map((day) => {
+      const sections = sourcePlan.get(day) ?? emptyDay();
+      return {
+        day,
+        breakfast: sections.BREAKFAST.map(({ id }) => id),
+        lunch: sections.LUNCH.map(({ id }) => id),
+        dinner: sections.DINNER.map(({ id }) => id),
+        others: sections.OTHER.map(({ id }) => id),
+      };
+    });
+    if (days.length === 0) {
+      throw new StateConflictException(
+        'MEAL_DAY_LOCKED',
+        'Every day of this week has passed',
+        { weekStart: target.weekStart, days: [], today: target.today },
+      );
+    }
+    return this.apply(userId, target.weekStart, days, {
+      requireEmptyDays: !overwrite,
+    });
   }
 
   async suggestions(
@@ -691,9 +859,12 @@ export class MealPlanService {
     };
   }
 
-  private async saved(userId: string): Promise<Week> {
+  private async saved(userId: string, weekStart: string): Promise<Week> {
     return this.weekOf(
-      await this.entries.find({ userId }).sort({ position: 1 }).exec(),
+      await this.entries
+        .find({ userId, weekStart })
+        .sort({ position: 1 })
+        .exec(),
     );
   }
 

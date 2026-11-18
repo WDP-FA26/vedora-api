@@ -1,9 +1,10 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Optional } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { StateConflictException } from '../common/exceptions/state-conflict.exception.js';
 import type { ClientSession, Model, QueryFilter } from 'mongoose';
 import { assertAccountActive } from '../auth-core/account-access.js';
 import type { AuthenticatedUser } from '../auth-core/auth.types.js';
+import { ProfileSearchIndexService } from '../profiles/search/profile-search-index.service.js';
 import {
   createPaginatedResponse,
   getPaginationArgs,
@@ -41,6 +42,7 @@ export class UsersService {
     private readonly audits: Model<UserAccountAudit>,
     private readonly mongo: MongoService,
     private readonly accounts: AccountsService,
+    @Optional() private readonly profileSearchIndex?: ProfileSearchIndexService,
   ) {}
 
   async findAll(
@@ -95,6 +97,8 @@ export class UsersService {
   ): Promise<PublicUser> {
     this.assertCanAccess(id, actor);
     try {
+      const hasSearchField =
+        dto.username !== undefined || dto.fullName !== undefined;
       const user = await this.users
         .findOneAndUpdate(
           { _id: id },
@@ -102,6 +106,7 @@ export class UsersService {
             $set: {
               ...(dto.username !== undefined && { username: dto.username }),
               ...(dto.fullName !== undefined && { fullName: dto.fullName }),
+              ...(hasSearchField && { searchIndexedAt: null }),
             },
           },
           { returnDocument: 'after' },
@@ -109,6 +114,7 @@ export class UsersService {
         .exec();
       if (!user)
         throw new ResourceNotFoundException('NOT_FOUND', 'User not found');
+      if (hasSearchField) this.profileSearchIndex?.schedule();
       return toPublicUser(user);
     } catch (error: unknown) {
       rethrowUniqueViolation(error);
@@ -131,6 +137,7 @@ export class UsersService {
         );
         await this.users.deleteOne({ _id: id }, { session }).exec();
       });
+      await this.profileSearchIndex?.remove(id);
     } catch (error: unknown) {
       rethrowUniqueViolation(error);
     }
@@ -188,37 +195,49 @@ export class UsersService {
         'FORBIDDEN',
         'Only admins can change account status',
       );
-    return this.withAccountGate(id, actor, true, async (target, session) => {
-      this.assertVersion(target, dto.expectedVersion);
-      if (target.status === dto.status) return toPublicUser(target);
-      if (
-        (target.status !== AccountStatus.ACTIVE &&
-          target.status !== AccountStatus.SUSPENDED) ||
-        (dto.status === AccountStatus.ACTIVE && !target.emailVerifiedAt)
-      ) {
-        throw new StateConflictException(
-          'INVALID_ACCOUNT_TRANSITION',
-          'Only verified ACTIVE/SUSPENDED accounts can be suspended or reactivated',
+    const updated = await this.withAccountGate(
+      id,
+      actor,
+      true,
+      async (target, session) => {
+        this.assertVersion(target, dto.expectedVersion);
+        if (target.status === dto.status) return toPublicUser(target);
+        if (
+          (target.status !== AccountStatus.ACTIVE &&
+            target.status !== AccountStatus.SUSPENDED) ||
+          (dto.status === AccountStatus.ACTIVE && !target.emailVerifiedAt)
+        ) {
+          throw new StateConflictException(
+            'INVALID_ACCOUNT_TRANSITION',
+            'Only verified ACTIVE/SUSPENDED accounts can be suspended or reactivated',
+          );
+        }
+        if (dto.status === AccountStatus.SUSPENDED)
+          await this.assertNotLastAdmin(target, session);
+        const changed = await this.changeAccount(session, target, {
+          status: dto.status,
+          searchIndexedAt: null,
+        });
+        await this.writeAudit(
+          session,
+          actor.sub,
+          target,
+          dto.status === AccountStatus.SUSPENDED
+            ? UserAccountAction.SUSPEND
+            : UserAccountAction.REACTIVATE,
+          dto.reason,
+          dto.status,
+          target.role,
         );
-      }
-      if (dto.status === AccountStatus.SUSPENDED)
-        await this.assertNotLastAdmin(target, session);
-      const updated = await this.changeAccount(session, target, {
-        status: dto.status,
-      });
-      await this.writeAudit(
-        session,
-        actor.sub,
-        target,
-        dto.status === AccountStatus.SUSPENDED
-          ? UserAccountAction.SUSPEND
-          : UserAccountAction.REACTIVATE,
-        dto.reason,
-        dto.status,
-        target.role,
-      );
-      return updated;
-    });
+        return changed;
+      },
+    );
+    if (dto.status === AccountStatus.SUSPENDED) {
+      await this.profileSearchIndex?.remove(id);
+    } else if (dto.status === AccountStatus.ACTIVE) {
+      this.profileSearchIndex?.schedule();
+    }
+    return updated;
   }
 
   private assertCanAccess(id: string, actor: AuthenticatedUser): void {
@@ -263,7 +282,7 @@ export class UsersService {
   private async changeAccount(
     session: ClientSession,
     target: User,
-    change: Partial<Pick<User, 'role' | 'status'>>,
+    change: Partial<Pick<User, 'role' | 'status' | 'searchIndexedAt'>>,
   ): Promise<PublicUser> {
     const updated = await this.users
       .findOneAndUpdate(

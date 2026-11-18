@@ -14,6 +14,7 @@ import { MongoService } from '../mongo/mongo.service.js';
 import { withUserLocks } from '../mongo/with-user-locks.js';
 import { MessagingEventsService } from '../messaging/messaging-events.service.js';
 import {
+  AccountStatus,
   Follow,
   MessagingEventType,
   NotificationType,
@@ -31,9 +32,17 @@ import {
   ProfileImageUploadDto,
   ProfileListDto,
   ProfileRelationshipDto,
+  ProfileSearchItemDto,
+  ProfileSearchPageDto,
   ProfileSummaryDto,
   UpdateProfileDto,
 } from './dto/profile.dto.js';
+import { SearchProfilesQueryDto } from './dto/search-profiles-query.dto.js';
+import { ProfileSearchIndexService } from './search/profile-search-index.service.js';
+import {
+  MAX_PROFILE_SEARCH_RESULTS,
+  ProfileSearchService,
+} from './search/profile-search.service.js';
 import { FileTooLargeException } from '../common/exceptions/file-too-large.exception.js';
 import { InvalidInputException } from '../common/exceptions/invalid-input.exception.js';
 import { ResourceNotFoundException } from '../common/exceptions/resource-not-found.exception.js';
@@ -66,7 +75,78 @@ export class ProfilesService {
     private readonly notifications: NotificationsService,
     private readonly mongo: MongoService,
     @Optional() private readonly messagingEvents?: MessagingEventsService,
+    @Optional() private readonly profileSearch?: ProfileSearchService,
+    @Optional() private readonly profileSearchIndex?: ProfileSearchIndexService,
   ) {}
+
+  async search(
+    query: SearchProfilesQueryDto,
+    viewerId?: string,
+  ): Promise<ProfileSearchPageDto> {
+    const offset = query.cursor ?? 0;
+    const limit = Math.min(query.limit, MAX_PROFILE_SEARCH_RESULTS - offset);
+    if (limit <= 0 || !this.profileSearch) {
+      return { items: [], nextCursor: null };
+    }
+
+    const { ids, hasMore } = await this.profileSearch.search(
+      query.q,
+      offset,
+      limit,
+    );
+    if (ids.length === 0) return { items: [], nextCursor: null };
+
+    const users = await this.users.find({ _id: { $in: ids } }).exec();
+    const active = new Map(
+      users
+        .filter(
+          (user) =>
+            Boolean(user.emailVerifiedAt) &&
+            user.status === AccountStatus.ACTIVE,
+        )
+        .map((user) => [user.id, user]),
+    );
+    const stale = ids.filter((id) => !active.has(id));
+    if (stale.length > 0) {
+      void this.profileSearch.prune(stale).catch(() => undefined);
+    }
+
+    const activeIds = [...active.keys()];
+    const followingIds =
+      viewerId && activeIds.length > 0
+        ? new Set(
+            (
+              await this.follows
+                .find({
+                  followerId: viewerId,
+                  followingId: { $in: activeIds },
+                })
+                .select('followingId')
+                .exec()
+            ).map(({ followingId }) => followingId),
+          )
+        : new Set<string>();
+
+    const items: ProfileSearchItemDto[] = [];
+    for (const id of ids) {
+      const user = active.get(id);
+      if (!user) continue;
+      items.push({
+        ...this.summary(user),
+        isFollowing: Boolean(
+          viewerId && id !== viewerId && followingIds.has(id),
+        ),
+      });
+    }
+
+    return {
+      items,
+      nextCursor:
+        hasMore && offset + limit < MAX_PROFILE_SEARCH_RESULTS
+          ? String(offset + limit)
+          : null,
+    };
+  }
 
   async findOne(id: string): Promise<ProfileDto> {
     const user = await this.requirePublicUser(id);
@@ -97,9 +177,11 @@ export class ProfilesService {
         $set: {
           ...(fullName !== undefined && { fullName }),
           ...(dto.bio !== undefined && { bio: dto.bio.trim() || null }),
+          searchIndexedAt: null,
         },
       },
     );
+    this.profileSearchIndex?.schedule();
     return this.findOne(id);
   }
 

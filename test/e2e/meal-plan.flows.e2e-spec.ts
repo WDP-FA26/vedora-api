@@ -35,6 +35,10 @@ type Sections = {
   others?: string[];
 };
 
+// 00:30 on Monday 2026-11-16 in the app time zone, so every day is still ahead.
+const WEEK = '2026-11-16';
+const MONDAY_MORNING = new Date('2026-11-15T17:30:00Z');
+
 const dayBody = (day: string, sections: Sections = {}) => ({
   day,
   breakfast: sections.breakfast ?? [],
@@ -61,13 +65,13 @@ describe('Meal plan and shopping list flows (e2e)', () => {
     request(server())
       .put('/api/v1/meal-plan/days')
       .set('Authorization', `Bearer ${token}`)
-      .send({ days });
+      .send({ weekStart: WEEK, days });
 
   const previewDays = (token: string, days: unknown) =>
     request(server())
       .post('/api/v1/meal-plan/preview')
       .set('Authorization', `Bearer ${token}`)
-      .send({ days });
+      .send({ weekStart: WEEK, days });
 
   const getPlan = async (token: string): Promise<MealPlanDto> =>
     (
@@ -93,6 +97,7 @@ describe('Meal plan and shopping list flows (e2e)', () => {
       ?.recipes.map(({ id }) => id);
 
   beforeAll(async () => {
+    vi.useFakeTimers({ toFake: ['Date'], now: MONDAY_MORNING });
     e2e = await createE2eApp('mealplan_flows_e2e');
     tofu = await createIngredient(e2e.mongo, { name: 'Đậu hũ' });
     honey = await createIngredient(e2e.mongo, { name: 'Mật ong' });
@@ -111,6 +116,7 @@ describe('Meal plan and shopping list flows (e2e)', () => {
   });
 
   afterAll(async () => {
+    vi.useRealTimers();
     await e2e.close();
   });
 
@@ -268,6 +274,7 @@ describe('Meal plan and shopping list flows (e2e)', () => {
         {
           _id: randomUUID(),
           userId: user.id,
+          weekStart: WEEK,
           day: 'SUN',
           section: 'LUNCH',
           recipeId: tofuDish.id,
@@ -276,6 +283,7 @@ describe('Meal plan and shopping list flows (e2e)', () => {
         {
           _id: randomUUID(),
           userId: user.id,
+          weekStart: WEEK,
           day: 'SUN',
           section: 'LUNCH',
           recipeId: honeyDish.id,
@@ -505,12 +513,217 @@ describe('Meal plan and shopping list flows (e2e)', () => {
       expect((response.body as ShoppingListDto).items).toEqual([]);
     });
   });
+  describe('weeks', () => {
+    const NEXT_WEEK = '2026-11-23';
+    // 12:00 on Wednesday 2026-11-18 in the app time zone.
+    const WEDNESDAY = new Date('2026-11-18T05:00:00Z');
+
+    afterEach(() => {
+      vi.setSystemTime(MONDAY_MORNING);
+    });
+
+    const putWeek = (token: string, weekStart: unknown, days: unknown) =>
+      request(server())
+        .put('/api/v1/meal-plan/days')
+        .set('Authorization', `Bearer ${token}`)
+        .send({ weekStart, days });
+
+    const getWeek = (token: string, query: string) =>
+      request(server())
+        .get(`/api/v1/meal-plan${query}`)
+        .set('Authorization', `Bearer ${token}`);
+
+    it('describes the current week when none is asked for', async () => {
+      const { token } = await signedUser();
+
+      const response = await getWeek(token, '').expect(200);
+      const plan = response.body as MealPlanDto;
+
+      expect(plan).toMatchObject({
+        weekStart: WEEK,
+        currentWeekStart: WEEK,
+        today: WEEK,
+        minWeekStart: WEEK,
+        maxWeekStart: '2026-12-14',
+        editable: true,
+      });
+      expect(plan.days[0]).toMatchObject({ date: WEEK, editable: true });
+      expect(plan.days[6]).toMatchObject({ date: '2026-11-22' });
+    });
+
+    it('keeps every week apart over HTTP', async () => {
+      const { token } = await signedUser();
+      await putWeek(token, WEEK, [
+        dayBody('MON', { lunch: [tofuDish.id] }),
+      ]).expect(200);
+      await putWeek(token, NEXT_WEEK, [
+        dayBody('MON', { lunch: [tofuDish.id] }),
+      ]).expect(200);
+      await putWeek(token, NEXT_WEEK, [dayBody('MON')]).expect(200);
+
+      const thisWeek = (await getWeek(token, `?weekStart=${WEEK}`).expect(200))
+        .body as MealPlanDto;
+      const nextWeek = (
+        await getWeek(token, `?weekStart=${NEXT_WEEK}`).expect(200)
+      ).body as MealPlanDto;
+
+      expect(sectionIds(thisWeek, 'MON', 'LUNCH')).toEqual([tofuDish.id]);
+      expect(sectionIds(nextWeek, 'MON', 'LUNCH')).toEqual([]);
+    });
+
+    it.each([
+      ['a Sunday', '2026-11-22'],
+      ['a date that does not exist', '2026-02-30'],
+      ['text', 'next-week'],
+    ])('rejects %s as weekStart with 400', async (_label, weekStart) => {
+      const { token } = await signedUser();
+
+      await getWeek(token, `?weekStart=${weekStart}`).expect(400);
+      await putWeek(token, weekStart, [dayBody('MON')]).expect(400);
+    });
+
+    it('requires weekStart to save, preview, generate and discard a draft', async () => {
+      const { token } = await signedUser();
+      const auth = (test: request.Test) =>
+        test.set('Authorization', `Bearer ${token}`);
+
+      await auth(request(server()).put('/api/v1/meal-plan/days'))
+        .send({ days: [dayBody('MON')] })
+        .expect(400);
+      await auth(request(server()).post('/api/v1/meal-plan/preview'))
+        .send({ days: [dayBody('MON')] })
+        .expect(400);
+      await auth(request(server()).post('/api/v1/meal-plan/generate'))
+        .send({ days: ['MON'], sections: ['LUNCH'], onlyEmpty: true })
+        .expect(400);
+      await auth(request(server()).delete('/api/v1/meal-plan/draft')).expect(
+        400,
+      );
+      await auth(
+        request(server()).delete(`/api/v1/meal-plan/draft?weekStart=${WEEK}`),
+      ).expect(204);
+    });
+
+    it('refuses a week further ahead than four weeks, for reading and saving', async () => {
+      const { token } = await signedUser();
+
+      const read = await getWeek(token, '?weekStart=2026-12-21').expect(409);
+      const write = await putWeek(token, '2026-12-21', [dayBody('MON')]).expect(
+        409,
+      );
+
+      expect((read.body as ErrorBody).code).toBe('MEAL_WEEK_OUT_OF_RANGE');
+      expect((write.body as ErrorBody).code).toBe('MEAL_WEEK_OUT_OF_RANGE');
+      await putWeek(token, '2026-12-14', [dayBody('MON')]).expect(200);
+    });
+
+    it('refuses to save or preview a day before today and saves nothing', async () => {
+      vi.setSystemTime(WEDNESDAY);
+      const { user, token } = await signedUser();
+
+      const save = await putWeek(token, WEEK, [
+        dayBody('TUE', { lunch: [tofuDish.id] }),
+        dayBody('THU', { lunch: [tofuDish.id] }),
+      ]).expect(409);
+      await previewDays(token, [dayBody('MON')]).expect(409);
+
+      const body = save.body as ErrorBody & {
+        details: { days: string[]; today: string };
+      };
+      expect(body.code).toBe('MEAL_DAY_LOCKED');
+      expect(body.details).toMatchObject({
+        days: ['TUE'],
+        today: '2026-11-18',
+      });
+      expect(
+        await model<MealPlanEntry>('MealPlanEntry').countDocuments({
+          userId: user.id,
+        }),
+      ).toBe(0);
+    });
+
+    it('marks days before today read-only and the finished week not editable', async () => {
+      vi.setSystemTime(WEDNESDAY);
+      const { token } = await signedUser();
+
+      const current = (await getWeek(token, '').expect(200))
+        .body as MealPlanDto;
+      const past = (await getWeek(token, '?weekStart=2026-11-09').expect(200))
+        .body as MealPlanDto;
+
+      expect(current.days.map(({ editable }) => editable)).toEqual([
+        false,
+        false,
+        true,
+        true,
+        true,
+        true,
+        true,
+      ]);
+      expect(past.editable).toBe(false);
+      await putWeek(token, '2026-11-09', [dayBody('MON')]).expect(409);
+    });
+
+    it('copies a week onto an empty one and protects a week that has dishes', async () => {
+      const { token } = await signedUser();
+      const copy = (body: object) =>
+        request(server())
+          .post('/api/v1/meal-plan/copy')
+          .set('Authorization', `Bearer ${token}`)
+          .send(body);
+      await putWeek(token, WEEK, [
+        dayBody('MON', { lunch: [tofuDish.id] }),
+      ]).expect(200);
+
+      const copied = await copy({
+        fromWeekStart: WEEK,
+        toWeekStart: NEXT_WEEK,
+      }).expect(200);
+      const refused = await copy({
+        fromWeekStart: WEEK,
+        toWeekStart: NEXT_WEEK,
+      }).expect(409);
+      await copy({
+        fromWeekStart: WEEK,
+        toWeekStart: NEXT_WEEK,
+        overwrite: true,
+      }).expect(200);
+      await copy({ fromWeekStart: WEEK, toWeekStart: WEEK }).expect(400);
+      await copy({ fromWeekStart: WEEK, toWeekStart: '2026-11-22' }).expect(
+        400,
+      );
+
+      const plan = copied.body as MealPlanDto;
+      expect(plan.weekStart).toBe(NEXT_WEEK);
+      expect(sectionIds(plan, 'MON', 'LUNCH')).toEqual([tofuDish.id]);
+      expect((refused.body as ErrorBody).code).toBe('MEAL_WEEK_NOT_EMPTY');
+    });
+
+    it('builds the shopping list of the week asked for', async () => {
+      const { token } = await signedUser();
+      await putWeek(token, NEXT_WEEK, [
+        dayBody('MON', { lunch: [tofuDish.id] }),
+      ]).expect(200);
+
+      const thisWeek = await shopping(token, `?weekStart=${WEEK}`).expect(200);
+      const nextWeek = await shopping(token, `?weekStart=${NEXT_WEEK}`).expect(
+        200,
+      );
+
+      expect((thisWeek.body as ShoppingListDto).items).toEqual([]);
+      expect((nextWeek.body as ShoppingListDto).weekStart).toBe(NEXT_WEEK);
+      expect((nextWeek.body as ShoppingListDto).items).toHaveLength(1);
+      await shopping(token, '?weekStart=2026-11-22').expect(400);
+      await shopping(token, '?weekStart=2026-12-21').expect(409);
+    });
+  });
+
   describe('generating dishes with the algorithm', () => {
     const generate = (token: string, body: Record<string, unknown>) =>
       request(server())
         .post('/api/v1/meal-plan/generate')
         .set('Authorization', `Bearer ${token}`)
-        .send(body);
+        .send({ weekStart: WEEK, ...body });
 
     const allDays = Object.values(Weekday);
     const meals = ['BREAKFAST', 'LUNCH', 'DINNER'];
@@ -709,7 +922,11 @@ describe('Meal plan and shopping list flows (e2e)', () => {
         onlyEmpty: true,
         maxMinutes: 1,
       }).expect(200);
-      expect(response.body).toEqual({ days: [], problems: [] });
+      expect(response.body).toEqual({
+        weekStart: WEEK,
+        days: [],
+        problems: [],
+      });
     });
 
     it('rejects an empty selection and unknown fields with 400', async () => {
@@ -736,7 +953,12 @@ describe('Meal plan and shopping list flows (e2e)', () => {
     it('rejects a guest with 401', async () => {
       await request(server())
         .post('/api/v1/meal-plan/generate')
-        .send({ days: ['MON'], sections: meals, onlyEmpty: true })
+        .send({
+          weekStart: WEEK,
+          days: ['MON'],
+          sections: meals,
+          onlyEmpty: true,
+        })
         .expect(401);
     });
   });

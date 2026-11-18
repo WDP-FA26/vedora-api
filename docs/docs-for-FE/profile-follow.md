@@ -34,9 +34,29 @@ type ProfileList = {
   items: ProfileSummary[];
   nextCursor: string | null;
 };
+
+type ProfileSearchItem = ProfileSummary & {
+  isFollowing: boolean;
+};
+
+type ProfileSearchPage = {
+  items: ProfileSearchItem[];
+  nextCursor: string | null;
+};
 ```
 
 Không dùng object từ `/auth/me` để render profile người khác vì nó có `email` và `role`.
+
+## Tìm kiếm người dùng
+
+| Method | Endpoint           | Auth     | Query                           | Thành công          |
+| ------ | ------------------ | -------- | ------------------------------- | ------------------- |
+| `GET`  | `/profiles/search` | Tùy chọn | `q` (bắt buộc), `limit`, `cursor` | `ProfileSearchPage` |
+
+- `q`: 1–200 ký tự sau trim. Dùng Qdrant `qdrant/bm25` (hỗ trợ có dấu, không dấu và khớp tiền tố `fullName`/`@username`, kèm `bio`), xếp hạng theo độ khớp.
+- Chỉ trả tài khoản đã xác minh email và đang hoạt động (`ACTIVE`).
+- Nếu gửi `Authorization: Bearer <accessToken>`, mỗi item có `isFollowing` thật của người xem (với guest hoặc chính mình luôn là `false`).
+- `limit`: 1–50, mặc định 20; `cursor`: chuỗi mờ từ `nextCursor` (tối đa 200 kết quả).
 
 ## Đọc profile và bài đăng
 

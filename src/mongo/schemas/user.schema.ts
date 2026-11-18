@@ -58,6 +58,9 @@ export class User extends Identified {
   @Prop({ type: Date, default: null })
   emailVerifiedAt!: Date | null;
 
+  @Prop({ type: Date, default: null })
+  searchIndexedAt!: Date | null;
+
   @Prop({ type: [String], required: true, default: [] })
   avoidedIngredientIds!: string[];
 
@@ -84,6 +87,7 @@ UserSchema.index(
     partialFilterExpression: { googleId: { $type: 'string' } },
   },
 );
+UserSchema.index({ status: 1, emailVerifiedAt: 1, searchIndexedAt: 1 });
 
 cascadeOnDelete(UserSchema, [
   { model: 'Post', field: 'authorId', action: 'delete' },

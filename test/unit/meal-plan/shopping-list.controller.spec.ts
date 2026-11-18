@@ -25,6 +25,7 @@ describe('ShoppingListController', () => {
     const res = { setHeader } as unknown as Response;
     const query = { days: [Weekday.MON, Weekday.TUE] };
     const expected: ShoppingListDto = {
+      weekStart: '2026-11-16',
       days: [Weekday.MON, Weekday.TUE],
       quantityBasis: 'RECIPE_PER_OCCURRENCE',
       items: [],
@@ -32,7 +33,10 @@ describe('ShoppingListController', () => {
     shopping.get.mockResolvedValue(expected);
 
     await expect(controller.get(req, query, res)).resolves.toBe(expected);
-    expect(setHeader).toHaveBeenCalledWith('Cache-Control', 'private, no-store');
+    expect(setHeader).toHaveBeenCalledWith(
+      'Cache-Control',
+      'private, no-store',
+    );
     expect(shopping.get).toHaveBeenCalledWith(userId, query);
   });
 });

@@ -9,6 +9,12 @@ import {
   MAX_GENERATE_QUERY_LENGTH,
 } from '../dto/meal-plan.dto.js';
 import type { MealPlanService } from '../meal-plan.service.js';
+import { DAY_NAMES } from '../meal-planner.prompt.js';
+import {
+  passedDays,
+  plannableWeekStarts,
+  weekStartInput,
+} from './planner-weeks.js';
 import { proposalFeedback, type DraftProposal } from './proposal-text.js';
 
 const slotKey = z.object({
@@ -23,7 +29,7 @@ const slotKey = z.object({
     ),
 });
 
-const input = z.object({
+const fields = {
   days: z
     .array(z.enum(Weekday))
     .min(1)
@@ -95,30 +101,58 @@ const input = z.object({
     .max(MAX_DISHES_PER_SECTION)
     .optional()
     .describe('Dishes per filled slot, default 1'),
-});
+};
 
 export type FillSlotsOutput = DraftProposal & {
   filled: number;
   allSlotsAlreadyFilled: boolean;
+  /** Requested days that came before today, which were left alone. */
+  passedDays?: { day: Weekday; date: string }[];
 };
 
-export function fillSlotsTool(mealPlan: MealPlanService, userId: string) {
+/** Tells the model which requested days had passed, so it can say so to the user. */
+function passedNote(output: FillSlotsOutput): string {
+  if (!output.passedDays || output.passedDays.length === 0) return '';
+  const days = output.passedDays
+    .map(({ day, date }) => `${DAY_NAMES[day]} ${date}`)
+    .join(', ');
+  return `\nDAY_PASSED: ${days} came before today, so they were skipped and cannot change. Tell the user plainly.`;
+}
+
+export function fillSlotsTool(
+  mealPlan: MealPlanService,
+  userId: string,
+  openWeekStart: string,
+) {
+  const input = z.object({
+    ...fields,
+    weekStart: weekStartInput(plannableWeekStarts()),
+  });
   return tool({
     description:
-      'Optional helper to fill many slots at once with an algorithm that respects avoided ingredients, cooking time, same-day clashes and meal variety (a dish never repeats within one meal across the week). Combine freely with editDraft in any order: pass onlyEmpty: true to fill empty slots around dishes you placed, or onlyEmpty: false (with optional pinned slots/recipeIds) to build or refresh a range.',
+      'Optional helper to fill many slots at once with an algorithm that respects avoided ingredients, cooking time, same-day clashes and meal variety (a dish never repeats within one meal across the week; days before today are skipped and reported as DAY_PASSED). Pass weekStart to work on a week other than the one the user has open. Combine freely with editDraft in any order: pass onlyEmpty: true to fill empty slots around dishes you placed, or onlyEmpty: false (with optional pinned slots/recipeIds) to build or refresh a range.',
     inputSchema: input,
-    execute: (request): Promise<FillSlotsOutput> =>
-      mealPlan.fillDraft(userId, request),
+    execute: async ({ weekStart, ...request }): Promise<FillSlotsOutput> => {
+      const week = weekStart ?? openWeekStart;
+      const result = await mealPlan.fillDraft(userId, {
+        ...request,
+        weekStart: week,
+      });
+      const passed = passedDays(week, request.days);
+      if (passed.length === 0) return result;
+      return { ...result, passedDays: passed };
+    },
     toModelOutput: ({ output }) => {
+      const note = passedNote(output);
       if (output.filled === 0 && output.problems.length === 0) {
         return {
           type: 'text',
           value: output.allSlotsAlreadyFilled
-            ? 'Every requested slot already has a dish. To replace existing dishes, call fillSlots again with onlyEmpty: false (and use pinned for any slot you want to keep).'
-            : 'No dish fits these requests, so nothing changed. Relax the filters or omit candidateIds.',
+            ? `Every requested slot already has a dish. To replace existing dishes, call fillSlots again with onlyEmpty: false (and use pinned for any slot you want to keep).${note}`
+            : `No dish fits these requests, so nothing changed. Relax the filters or omit candidateIds.${note}`,
         };
       }
-      return { type: 'text', value: proposalFeedback(output) };
+      return { type: 'text', value: `${proposalFeedback(output)}${note}` };
     },
   });
 }

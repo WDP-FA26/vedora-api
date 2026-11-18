@@ -8,6 +8,7 @@ import {
   type Weekday,
 } from '../mongo/models.js';
 import { MongoService } from '../mongo/mongo.service.js';
+import { assertWithinHorizon, currentMealWeek } from './meal-week.js';
 import { MEAL_SECTIONS, WEEKDAYS } from './dto/meal-plan.dto.js';
 import {
   ShoppingListDto,
@@ -31,8 +32,17 @@ export class ShoppingListService {
     userId: string,
     query: ShoppingListQueryDto,
   ): Promise<ShoppingListDto> {
-    const days = WEEKDAYS.filter((day) => query.days.includes(day));
-    const { loaded, ingredientById } = await this.load(userId, days);
+    const week = currentMealWeek(query.weekStart);
+    assertWithinHorizon(week);
+    // Shopping is for what is still to be cooked: days before today are left out.
+    const days = WEEKDAYS.filter(
+      (day) => query.days.includes(day) && week.editableDays.includes(day),
+    );
+    const { loaded, ingredientById } = await this.load(
+      userId,
+      week.weekStart,
+      days,
+    );
     const entries = loaded.sort(
       (a, b) =>
         WEEKDAYS.indexOf(a.day) - WEEKDAYS.indexOf(b.day) ||
@@ -91,13 +101,18 @@ export class ShoppingListService {
           a.ingredientId.localeCompare(b.ingredientId) ||
           (a.unit ?? '').localeCompare(b.unit ?? ''),
       );
-    return { days, quantityBasis: 'RECIPE_PER_OCCURRENCE', items };
+    return {
+      weekStart: week.weekStart,
+      days,
+      quantityBasis: 'RECIPE_PER_OCCURRENCE',
+      items,
+    };
   }
 
-  private load(userId: string, days: Weekday[]) {
+  private load(userId: string, weekStart: string, days: Weekday[]) {
     return this.mongo.withTransaction(async (session) => {
       const entries = await this.entries
-        .find({ userId, day: { $in: days } })
+        .find({ userId, weekStart, day: { $in: days } })
         .sort({ position: 1, recipeId: 1 })
         .session(session)
         .exec();

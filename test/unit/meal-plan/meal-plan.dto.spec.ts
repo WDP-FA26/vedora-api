@@ -11,6 +11,10 @@ import {
   UpdateMealPlanChatThreadDto,
   WEEKDAYS,
 } from '../../../src/meal-plan/dto/meal-plan.dto.js';
+import {
+  RequiredWeekQueryDto,
+  WeekQueryDto,
+} from '../../../src/meal-plan/dto/week-start.js';
 import { ShoppingListQueryDto } from '../../../src/meal-plan/dto/shopping-list.dto.js';
 import { MealSection, Weekday } from '../../../src/mongo/models.js';
 
@@ -26,7 +30,9 @@ describe('MealPlan & ShoppingList DTOs', () => {
     });
 
     it('parses comma-separated days and preserves array input', async () => {
-      const csv = plainToInstance(ShoppingListQueryDto, { days: ' MON , TUE ' });
+      const csv = plainToInstance(ShoppingListQueryDto, {
+        days: ' MON , TUE ',
+      });
       expect(await validate(csv)).toHaveLength(0);
       expect(csv.days).toEqual([Weekday.MON, Weekday.TUE]);
 
@@ -50,9 +56,7 @@ describe('MealPlan & ShoppingList DTOs', () => {
         ),
       ).not.toHaveLength(0);
       expect(
-        await validate(
-          plainToInstance(ShoppingListQueryDto, { days: [] }),
-        ),
+        await validate(plainToInstance(ShoppingListQueryDto, { days: [] })),
       ).not.toHaveLength(0);
       expect(
         await validate(
@@ -75,6 +79,7 @@ describe('MealPlan & ShoppingList DTOs', () => {
 
     it('accepts valid day updates', async () => {
       const dto = plainToInstance(SaveMealDaysDto, {
+        weekStart: '2026-11-16',
         days: [validDay(Weekday.MON), validDay(Weekday.TUE)],
       });
       expect(await validate(dto)).toHaveLength(0);
@@ -83,12 +88,18 @@ describe('MealPlan & ShoppingList DTOs', () => {
 
     it('rejects empty days, duplicate days, invalid weekday, or > 7 days', async () => {
       expect(
-        await validate(plainToInstance(SaveMealDaysDto, { days: [] })),
+        await validate(
+          plainToInstance(SaveMealDaysDto, {
+            weekStart: '2026-11-16',
+            days: [],
+          }),
+        ),
       ).not.toHaveLength(0);
 
       expect(
         await validate(
           plainToInstance(SaveMealDaysDto, {
+            weekStart: '2026-11-16',
             days: [validDay(Weekday.MON), validDay(Weekday.MON)],
           }),
         ),
@@ -97,6 +108,7 @@ describe('MealPlan & ShoppingList DTOs', () => {
       expect(
         await validate(
           plainToInstance(SaveMealDaysDto, {
+            weekStart: '2026-11-16',
             days: [{ ...validDay(), day: 'INVALID' }],
           }),
         ),
@@ -105,6 +117,7 @@ describe('MealPlan & ShoppingList DTOs', () => {
       expect(
         await validate(
           plainToInstance(SaveMealDaysDto, {
+            weekStart: '2026-11-16',
             days: [...WEEKDAYS, Weekday.MON].map((d) => validDay(d)),
           }),
         ),
@@ -115,6 +128,7 @@ describe('MealPlan & ShoppingList DTOs', () => {
       expect(
         await validate(
           plainToInstance(SaveMealDaysDto, {
+            weekStart: '2026-11-16',
             days: [{ ...validDay(), lunch: [uuid1, uuid1] }],
           }),
         ),
@@ -123,6 +137,7 @@ describe('MealPlan & ShoppingList DTOs', () => {
       expect(
         await validate(
           plainToInstance(SaveMealDaysDto, {
+            weekStart: '2026-11-16',
             days: [{ ...validDay(), lunch: ['not-a-uuid'] }],
           }),
         ),
@@ -135,6 +150,7 @@ describe('MealPlan & ShoppingList DTOs', () => {
       expect(
         await validate(
           plainToInstance(SaveMealDaysDto, {
+            weekStart: '2026-11-16',
             days: [{ ...validDay(), others: sevenIds }],
           }),
         ),
@@ -145,6 +161,7 @@ describe('MealPlan & ShoppingList DTOs', () => {
   describe('MealPlannerChatDto', () => {
     it('accepts valid chat messages ending with user and optional requestId and threadId', async () => {
       const dto = plainToInstance(MealPlannerChatDto, {
+        weekStart: '2026-11-16',
         threadId: uuid1,
         requestId: 'req-123',
         messages: [
@@ -156,6 +173,7 @@ describe('MealPlan & ShoppingList DTOs', () => {
       expect(await validate(dto)).toHaveLength(0);
 
       const invalidThread = plainToInstance(MealPlannerChatDto, {
+        weekStart: '2026-11-16',
         threadId: 'not-a-uuid',
         messages: [{ role: 'user', text: 'hi' }],
       });
@@ -164,6 +182,7 @@ describe('MealPlan & ShoppingList DTOs', () => {
 
     it('rejects a conversation ending with an assistant turn', async () => {
       const dto = plainToInstance(MealPlannerChatDto, {
+        weekStart: '2026-11-16',
         messages: [
           { role: 'user', text: 'Gợi ý thực đơn' },
           { role: 'assistant', text: 'Đây là gợi ý' },
@@ -176,6 +195,7 @@ describe('MealPlan & ShoppingList DTOs', () => {
       expect(
         await validate(
           plainToInstance(MealPlannerChatDto, {
+            weekStart: '2026-11-16',
             requestId: '',
             messages: [{ role: 'user', text: 'hi' }],
           }),
@@ -185,6 +205,7 @@ describe('MealPlan & ShoppingList DTOs', () => {
       expect(
         await validate(
           plainToInstance(MealPlannerChatDto, {
+            weekStart: '2026-11-16',
             requestId: 'r'.repeat(101),
             messages: [{ role: 'user', text: 'hi' }],
           }),
@@ -192,12 +213,18 @@ describe('MealPlan & ShoppingList DTOs', () => {
       ).not.toHaveLength(0);
 
       expect(
-        await validate(plainToInstance(MealPlannerChatDto, { messages: [] })),
+        await validate(
+          plainToInstance(MealPlannerChatDto, {
+            weekStart: '2026-11-16',
+            messages: [],
+          }),
+        ),
       ).not.toHaveLength(0);
 
       expect(
         await validate(
           plainToInstance(MealPlannerChatDto, {
+            weekStart: '2026-11-16',
             messages: Array.from({ length: 11 }, () => ({
               role: 'user',
               text: 'hi',
@@ -209,6 +236,7 @@ describe('MealPlan & ShoppingList DTOs', () => {
       expect(
         await validate(
           plainToInstance(MealPlannerChatDto, {
+            weekStart: '2026-11-16',
             messages: [{ role: 'system', text: 'hi' }],
           }),
         ),
@@ -217,6 +245,7 @@ describe('MealPlan & ShoppingList DTOs', () => {
       expect(
         await validate(
           plainToInstance(MealPlannerChatDto, {
+            weekStart: '2026-11-16',
             messages: [{ role: 'user', text: 'a'.repeat(4001) }],
           }),
         ),
@@ -227,6 +256,7 @@ describe('MealPlan & ShoppingList DTOs', () => {
   describe('GenerateMealDaysDto', () => {
     it('accepts candidateIds, avoidIds, and pinned slots with optional recipeIds', async () => {
       const dto = plainToInstance(GenerateMealDaysDto, {
+        weekStart: '2026-11-16',
         days: [Weekday.MON, Weekday.WED],
         sections: [MealSection.LUNCH, MealSection.DINNER],
         onlyEmpty: false,
@@ -241,6 +271,7 @@ describe('MealPlan & ShoppingList DTOs', () => {
 
     it('rejects invalid UUIDs or too many recipeIds in pinned slots', async () => {
       const invalidUuid = plainToInstance(GenerateMealDaysDto, {
+        weekStart: '2026-11-16',
         days: [Weekday.MON],
         sections: [MealSection.LUNCH],
         onlyEmpty: false,
@@ -259,6 +290,7 @@ describe('MealPlan & ShoppingList DTOs', () => {
         (_, i) => `d1a2d3e4-0000-4000-8000-00000000001${i}`,
       );
       const tooMany = plainToInstance(GenerateMealDaysDto, {
+        weekStart: '2026-11-16',
         days: [Weekday.MON],
         sections: [MealSection.LUNCH],
         onlyEmpty: false,
@@ -271,6 +303,79 @@ describe('MealPlan & ShoppingList DTOs', () => {
         ],
       });
       expect(await validate(tooMany)).not.toHaveLength(0);
+    });
+  });
+
+  describe('weekStart', () => {
+    const dayUpdate = {
+      day: Weekday.MON,
+      breakfast: [],
+      lunch: [],
+      dinner: [],
+      others: [],
+    };
+
+    it.each(['2026-11-16', '2026-11-23', '2027-01-04'])(
+      'accepts the Monday %s',
+      async (weekStart) => {
+        const dto = plainToInstance(SaveMealDaysDto, {
+          weekStart,
+          days: [dayUpdate],
+        });
+        expect(await validate(dto)).toHaveLength(0);
+      },
+    );
+
+    it.each([
+      ['a Sunday', '2026-11-22'],
+      ['a Tuesday', '2026-11-17'],
+      ['a date that does not exist', '2026-02-30'],
+      ['a date with a time', '2026-11-16T00:00:00Z'],
+      ['an unpadded date', '2026-1-5'],
+      ['text', 'next week'],
+      ['an empty string', ''],
+    ])('rejects %s', async (_label, weekStart) => {
+      const dto = plainToInstance(SaveMealDaysDto, {
+        weekStart,
+        days: [dayUpdate],
+      });
+      expect(await validate(dto)).not.toHaveLength(0);
+    });
+
+    it('requires it when saving, generating and chatting', async () => {
+      const messages = [{ role: 'user', text: 'Xin chào' }];
+      expect(
+        await validate(plainToInstance(SaveMealDaysDto, { days: [dayUpdate] })),
+      ).not.toHaveLength(0);
+      expect(
+        await validate(
+          plainToInstance(GenerateMealDaysDto, {
+            days: [Weekday.MON],
+            sections: [MealSection.LUNCH],
+            onlyEmpty: true,
+          }),
+        ),
+      ).not.toHaveLength(0);
+      expect(
+        await validate(plainToInstance(MealPlannerChatDto, { messages })),
+      ).not.toHaveLength(0);
+    });
+
+    it('may be left out when reading, but not when discarding a draft', async () => {
+      expect(await validate(plainToInstance(WeekQueryDto, {}))).toHaveLength(0);
+      expect(
+        await validate(
+          plainToInstance(WeekQueryDto, { weekStart: '2026-11-22' }),
+        ),
+      ).not.toHaveLength(0);
+      expect(
+        await validate(plainToInstance(RequiredWeekQueryDto, {})),
+      ).not.toHaveLength(0);
+      expect(
+        await validate(
+          plainToInstance(RequiredWeekQueryDto, { weekStart: '2026-11-16' }),
+        ),
+      ).toHaveLength(0);
     });
   });
 

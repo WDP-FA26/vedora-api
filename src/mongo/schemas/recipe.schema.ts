@@ -228,13 +228,22 @@ export const RecipeRatingSchema = SchemaFactory.createForClass(RecipeRating);
 RecipeRatingSchema.index({ recipeId: 1, userId: 1 }, { unique: true });
 RecipeRatingSchema.index({ userId: 1 });
 
-@Schema(collectionSchema('meal_plan_entries', 'none'))
+/**
+ * One dish in one slot of one week of a user's plan. `weekStart` is the Monday
+ * of the week as `YYYY-MM-DD` in the app time zone. The collection is new:
+ * the earlier `meal_plan_entries` held one recurring week without dates and
+ * has a unique index that would reject the same dish in two weeks.
+ */
+@Schema(collectionSchema('meal_plan_week_entries', 'none'))
 export class MealPlanEntry extends Identified {
   @Prop({ type: String, default: () => randomUUID() })
   _id!: string;
 
   @Prop({ type: String, required: true })
   userId!: string;
+
+  @Prop({ type: String, required: true })
+  weekStart!: string;
 
   @Prop({ type: String, enum: Object.values(Weekday), required: true })
   day!: Weekday;
@@ -251,7 +260,7 @@ export class MealPlanEntry extends Identified {
 
 export const MealPlanEntrySchema = SchemaFactory.createForClass(MealPlanEntry);
 MealPlanEntrySchema.index(
-  { userId: 1, day: 1, section: 1, recipeId: 1 },
+  { userId: 1, weekStart: 1, day: 1, section: 1, recipeId: 1 },
   { unique: true },
 );
 MealPlanEntrySchema.index({ recipeId: 1 });
@@ -261,13 +270,16 @@ MealPlanEntrySchema.index({ recipeId: 1 });
  * assistant. Only slots that differ from the saved plan are kept, and the
  * whole draft expires on its own if the user walks away.
  */
-@Schema(collectionSchema('meal_plan_draft_slots', 'none'))
+@Schema(collectionSchema('meal_plan_week_draft_slots', 'none'))
 export class MealPlanDraftSlot extends Identified {
   @Prop({ type: String, default: () => randomUUID() })
   _id!: string;
 
   @Prop({ type: String, required: true })
   userId!: string;
+
+  @Prop({ type: String, required: true })
+  weekStart!: string;
 
   @Prop({ type: String, enum: Object.values(Weekday), required: true })
   day!: Weekday;
@@ -285,7 +297,7 @@ export class MealPlanDraftSlot extends Identified {
 export const MealPlanDraftSlotSchema =
   SchemaFactory.createForClass(MealPlanDraftSlot);
 MealPlanDraftSlotSchema.index(
-  { userId: 1, day: 1, section: 1 },
+  { userId: 1, weekStart: 1, day: 1, section: 1 },
   { unique: true },
 );
 MealPlanDraftSlotSchema.index(

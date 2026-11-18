@@ -36,6 +36,10 @@ const SPINACH_RECIPE = 'd1a2d3e4-0000-4000-8000-000000000002';
 const RICE_RECIPE = 'd1a2d3e4-0000-4000-8000-000000000003';
 const RULE_ID = 'c1a2d3e4-0000-4000-8000-000000000001';
 const REASON = 'Oxalat cản hấp thu canxi';
+const WEEK = '2026-11-16';
+const NEXT_WEEK = '2026-11-23';
+// 00:30 on Monday 2026-11-16 in the app time zone, so every day is still editable.
+const MONDAY_MORNING = new Date('2026-11-15T17:30:00Z');
 
 describe('MealPlanService', () => {
   let app: INestApplication;
@@ -58,6 +62,7 @@ describe('MealPlanService', () => {
     entries().create({
       _id: randomUUID(),
       userId: USER_ID,
+      weekStart: WEEK,
       day,
       section,
       recipeId,
@@ -65,6 +70,7 @@ describe('MealPlanService', () => {
     });
 
   beforeAll(async () => {
+    vi.useFakeTimers({ toFake: ['Date'], now: MONDAY_MORNING });
     const moduleRef = await Test.createTestingModule({
       imports: [MongoModule.forTest(createTestMongoUrl('mealplan'))],
       providers: [MealPlanService, DietaryService, IncompatibilityRulesService],
@@ -76,9 +82,10 @@ describe('MealPlanService', () => {
     service = app.get(MealPlanService);
   });
   beforeEach(async () => {
+    vi.setSystemTime(MONDAY_MORNING);
     for (const collection of [
-      'meal_plan_draft_slots',
-      'meal_plan_entries',
+      'meal_plan_week_draft_slots',
+      'meal_plan_week_entries',
       'recipes',
       'ingredients',
       'ingredient_groups',
@@ -132,12 +139,13 @@ describe('MealPlanService', () => {
     });
   });
   afterAll(async () => {
+    vi.useRealTimers();
     await dropTestDatabase(app);
     await app.close();
   });
 
   it('does not mix up two meals of one day', async () => {
-    const { problems } = await service.preview(USER_ID, [
+    const { problems } = await service.preview(USER_ID, WEEK, [
       {
         day: Weekday.MON,
         breakfast: [],
@@ -151,7 +159,7 @@ describe('MealPlanService', () => {
   });
 
   it('flags incompatible ingredients in one meal', async () => {
-    const { problems } = await service.preview(USER_ID, [
+    const { problems } = await service.preview(USER_ID, WEEK, [
       {
         day: Weekday.MON,
         breakfast: [],
@@ -174,7 +182,7 @@ describe('MealPlanService', () => {
   });
 
   it('allows incompatible ingredients on different days', async () => {
-    const { problems, days } = await service.preview(USER_ID, [
+    const { problems, days } = await service.preview(USER_ID, WEEK, [
       {
         day: Weekday.MON,
         breakfast: [],
@@ -201,7 +209,7 @@ describe('MealPlanService', () => {
       { $set: { avoidedIngredientIds: [TOFU_ID] } },
     );
 
-    const { problems } = await service.preview(USER_ID, [
+    const { problems } = await service.preview(USER_ID, WEEK, [
       {
         day: Weekday.WED,
         breakfast: [RICE_RECIPE],
@@ -227,7 +235,7 @@ describe('MealPlanService', () => {
     await saved(Weekday.MON, MealSection.DINNER, SPINACH_RECIPE);
     await saved(Weekday.MON, MealSection.OTHER, RICE_RECIPE);
 
-    const { problems, days } = await service.preview(USER_ID, [
+    const { problems, days } = await service.preview(USER_ID, WEEK, [
       {
         day: Weekday.MON,
         breakfast: [],
@@ -246,7 +254,7 @@ describe('MealPlanService', () => {
   it('reports a recipe that does not exist', async () => {
     const missing = 'd1a2d3e4-0000-4000-8000-000000000099';
 
-    const { problems } = await service.preview(USER_ID, [
+    const { problems } = await service.preview(USER_ID, WEEK, [
       {
         day: Weekday.MON,
         breakfast: [RICE_RECIPE],
@@ -267,7 +275,7 @@ describe('MealPlanService', () => {
   });
 
   it('saves a day with incompatible dishes and reports the clash as a warning', async () => {
-    const plan = await service.apply(USER_ID, [
+    const plan = await service.apply(USER_ID, WEEK, [
       {
         day: Weekday.MON,
         breakfast: [],
@@ -285,7 +293,7 @@ describe('MealPlanService', () => {
 
   it('saves nothing when a day has a dish that does not exist', async () => {
     await expect(
-      service.apply(USER_ID, [
+      service.apply(USER_ID, WEEK, [
         {
           day: Weekday.MON,
           breakfast: [],
@@ -301,7 +309,7 @@ describe('MealPlanService', () => {
   it('replaces the listed days only, keeping the order', async () => {
     await saved(Weekday.WED, MealSection.LUNCH, SPINACH_RECIPE);
 
-    await service.apply(USER_ID, [
+    await service.apply(USER_ID, WEEK, [
       {
         day: Weekday.MON,
         breakfast: [],
@@ -350,7 +358,7 @@ describe('MealPlanService', () => {
       'd1a2d3e4-0000-4000-8000-000000000099',
     );
 
-    const plan = await service.find(USER_ID);
+    const plan = await service.find(USER_ID, WEEK);
 
     expect(plan.days).toHaveLength(7);
     expect(plan.days[0].day).toBe(Weekday.MON);
@@ -373,7 +381,7 @@ describe('MealPlanService', () => {
   it('clears a day when empty sections are applied and rejects apply for a missing user', async () => {
     await saved(Weekday.MON, MealSection.LUNCH, RICE_RECIPE);
 
-    const updated = await service.apply(USER_ID, [
+    const updated = await service.apply(USER_ID, WEEK, [
       {
         day: Weekday.MON,
         breakfast: [],
@@ -388,7 +396,7 @@ describe('MealPlanService', () => {
     expect(await entries().countDocuments({ userId: USER_ID })).toBe(0);
 
     await expect(
-      service.apply('4a1e32e4-e18e-4dd7-8b4a-246ef2113fff', [
+      service.apply('4a1e32e4-e18e-4dd7-8b4a-246ef2113fff', WEEK, [
         {
           day: Weekday.MON,
           breakfast: [RICE_RECIPE],
@@ -477,8 +485,13 @@ describe('MealPlanService', () => {
       );
 
       const result = await service.fillDraft(USER_ID, {
+        weekStart: WEEK,
         days: [Weekday.WED],
-        sections: [MealSection.BREAKFAST, MealSection.LUNCH, MealSection.DINNER],
+        sections: [
+          MealSection.BREAKFAST,
+          MealSection.LUNCH,
+          MealSection.DINNER,
+        ],
         onlyEmpty: false,
         pinned: [
           {
@@ -498,10 +511,11 @@ describe('MealPlanService', () => {
           ?.recipes.map((r) => r.id);
       expect(sectionIds(MealSection.LUNCH)).toEqual([phoId]);
 
-      const draft = await service.getDraft(USER_ID);
+      const draft = await service.getDraft(USER_ID, WEEK);
       expect(draft.days).toHaveLength(1);
-      await service.discardDraft(USER_ID);
-      expect(await service.getDraft(USER_ID)).toEqual({
+      await service.discardDraft(USER_ID, WEEK);
+      expect(await service.getDraft(USER_ID, WEEK)).toEqual({
+        weekStart: WEEK,
         days: [],
         problems: [],
         ok: false,
@@ -509,7 +523,7 @@ describe('MealPlanService', () => {
     });
 
     it('editDraft keeps DAY_CONFLICT in draft for the agent to resolve without mutating other slots', async () => {
-      await service.editDraft(USER_ID, [
+      await service.editDraft(USER_ID, WEEK, [
         {
           op: 'set',
           day: Weekday.WED,
@@ -518,7 +532,7 @@ describe('MealPlanService', () => {
         },
       ]);
 
-      const clash = await service.editDraft(USER_ID, [
+      const clash = await service.editDraft(USER_ID, WEEK, [
         {
           op: 'set',
           day: Weekday.WED,
@@ -529,10 +543,10 @@ describe('MealPlanService', () => {
 
       expect(clash.ok).toBe(false);
       expect(clash.problems[0]?.code).toBe('DAY_CONFLICT');
-      const draft = await service.getDraft(USER_ID);
+      const draft = await service.getDraft(USER_ID, WEEK);
       expect(draft.days).toHaveLength(1);
 
-      const resolved = await service.editDraft(USER_ID, [
+      const resolved = await service.editDraft(USER_ID, WEEK, [
         {
           op: 'set',
           day: Weekday.WED,
@@ -553,7 +567,7 @@ describe('MealPlanService', () => {
     });
 
     it('persists draft on a DAY_CONFLICT inside one meal, but keeps nothing on fatal problems', async () => {
-      const clash = await service.editDraft(USER_ID, [
+      const clash = await service.editDraft(USER_ID, WEEK, [
         {
           op: 'set',
           day: Weekday.MON,
@@ -571,7 +585,7 @@ describe('MealPlanService', () => {
       expect(clash.ok).toBe(false);
       expect(clash.problems[0]?.code).toBe('DAY_CONFLICT');
       // Still persisted so fixing one slot keeps the other
-      const fixed = await service.editDraft(USER_ID, [
+      const fixed = await service.editDraft(USER_ID, WEEK, [
         {
           op: 'set',
           day: Weekday.MON,
@@ -582,8 +596,8 @@ describe('MealPlanService', () => {
       expect(fixed.ok).toBe(true);
       expect(fixed.problems).toEqual([]);
 
-      await service.discardDraft(USER_ID);
-      const unknown = await service.editDraft(USER_ID, [
+      await service.discardDraft(USER_ID, WEEK);
+      const unknown = await service.editDraft(USER_ID, WEEK, [
         {
           op: 'set',
           day: Weekday.TUE,
@@ -593,11 +607,11 @@ describe('MealPlanService', () => {
       ]);
       expect(unknown.ok).toBe(false);
       expect(unknown.problems[0]?.code).toBe('UNKNOWN_RECIPE');
-      expect((await service.getDraft(USER_ID)).days).toEqual([]);
+      expect((await service.getDraft(USER_ID, WEEK)).days).toEqual([]);
     });
 
     it('returns ok=true with empty days when editDraft clears draft back to saved plan', async () => {
-      await service.editDraft(USER_ID, [
+      await service.editDraft(USER_ID, WEEK, [
         {
           op: 'set',
           day: Weekday.FRI,
@@ -606,7 +620,7 @@ describe('MealPlanService', () => {
         },
       ]);
 
-      const cleared = await service.editDraft(USER_ID, [
+      const cleared = await service.editDraft(USER_ID, WEEK, [
         {
           op: 'clear',
           day: Weekday.FRI,
@@ -615,6 +629,7 @@ describe('MealPlanService', () => {
       ]);
 
       expect(cleared).toEqual({
+        weekStart: WEEK,
         days: [],
         problems: [],
         ok: true,
@@ -651,6 +666,427 @@ describe('MealPlanService', () => {
         exclude: ['chiên'],
       });
       expect(withoutFried.map((r) => r.id)).not.toContain(friedId);
+    });
+  });
+  describe('weeks', () => {
+    // 12:00 on Wednesday 2026-11-18 in the app time zone.
+    const WEDNESDAY = new Date('2026-11-18T05:00:00Z');
+
+    const day = (
+      name: Weekday,
+      lunch: string[] = [],
+    ): {
+      day: Weekday;
+      breakfast: string[];
+      lunch: string[];
+      dinner: string[];
+      others: string[];
+    } => ({ day: name, breakfast: [], lunch, dinner: [], others: [] });
+
+    const lunchIds = (
+      plan: Awaited<ReturnType<MealPlanService['find']>>,
+      name: Weekday,
+    ): string[] => {
+      const found = plan.days.find((item) => item.day === name);
+      const lunch = found?.sections.find(
+        ({ section }) => section === MealSection.LUNCH,
+      );
+      return (lunch?.recipes ?? []).map(({ id }) => id);
+    };
+
+    it('keeps the same dish in the same slot of two weeks', async () => {
+      await service.apply(USER_ID, WEEK, [day(Weekday.MON, [TOFU_RECIPE])]);
+      await service.apply(USER_ID, NEXT_WEEK, [
+        day(Weekday.MON, [TOFU_RECIPE]),
+      ]);
+
+      expect(lunchIds(await service.find(USER_ID, WEEK), Weekday.MON)).toEqual([
+        TOFU_RECIPE,
+      ]);
+      expect(
+        lunchIds(await service.find(USER_ID, NEXT_WEEK), Weekday.MON),
+      ).toEqual([TOFU_RECIPE]);
+      expect(await entries().countDocuments({ userId: USER_ID })).toBe(2);
+    });
+
+    it('changes only the week it was saved for', async () => {
+      await service.apply(USER_ID, WEEK, [day(Weekday.MON, [TOFU_RECIPE])]);
+      await service.apply(USER_ID, NEXT_WEEK, [
+        day(Weekday.MON, [RICE_RECIPE]),
+      ]);
+
+      expect(lunchIds(await service.find(USER_ID, WEEK), Weekday.MON)).toEqual([
+        TOFU_RECIPE,
+      ]);
+      expect(
+        lunchIds(await service.find(USER_ID, NEXT_WEEK), Weekday.MON),
+      ).toEqual([RICE_RECIPE]);
+    });
+
+    it('leaves a week nobody planned empty instead of inheriting another', async () => {
+      await service.apply(USER_ID, WEEK, [day(Weekday.MON, [TOFU_RECIPE])]);
+
+      const plan = await service.find(USER_ID, NEXT_WEEK);
+
+      expect(
+        plan.days.every(({ sections }) =>
+          sections.every(({ recipes }) => recipes.length === 0),
+        ),
+      ).toBe(true);
+    });
+
+    it('describes the week: dates, editable days and how far to browse', async () => {
+      vi.setSystemTime(WEDNESDAY);
+      await service.apply(USER_ID, WEEK, [day(Weekday.THU, [TOFU_RECIPE])]);
+
+      const plan = await service.find(USER_ID);
+
+      expect(plan).toMatchObject({
+        weekStart: WEEK,
+        currentWeekStart: WEEK,
+        today: '2026-11-18',
+        maxWeekStart: '2026-12-14',
+        minWeekStart: WEEK,
+        editable: true,
+      });
+      expect(plan.days.map(({ date }) => date)).toEqual([
+        '2026-11-16',
+        '2026-11-17',
+        '2026-11-18',
+        '2026-11-19',
+        '2026-11-20',
+        '2026-11-21',
+        '2026-11-22',
+      ]);
+      expect(plan.days.map(({ editable }) => editable)).toEqual([
+        false,
+        false,
+        true,
+        true,
+        true,
+        true,
+        true,
+      ]);
+    });
+
+    it('treats the day as over at midnight in the app time zone', async () => {
+      // 23:30 on Tuesday in Bangkok is still Tuesday; 00:30 Wednesday is not.
+      vi.setSystemTime(new Date('2026-11-17T16:30:00Z'));
+      const tuesday = await service.find(USER_ID);
+      vi.setSystemTime(new Date('2026-11-17T17:30:00Z'));
+      const wednesday = await service.find(USER_ID);
+
+      expect(tuesday.today).toBe('2026-11-17');
+      expect(tuesday.days[1].editable).toBe(true);
+      expect(wednesday.today).toBe('2026-11-18');
+      expect(wednesday.days[1].editable).toBe(false);
+    });
+
+    it('refuses to change a day before today', async () => {
+      vi.setSystemTime(WEDNESDAY);
+
+      const error = await service
+        .apply(USER_ID, WEEK, [day(Weekday.TUE, [TOFU_RECIPE])])
+        .catch((caught: unknown) => caught);
+
+      expect(error).toBeInstanceOf(StateConflictException);
+      expect(error).toMatchObject({
+        code: 'MEAL_DAY_LOCKED',
+        details: { days: [Weekday.TUE], today: '2026-11-18' },
+      });
+      expect(await entries().countDocuments({ userId: USER_ID })).toBe(0);
+    });
+
+    it('editDraft reports DAY_PASSED for a slot before today and keeps the rest', async () => {
+      vi.setSystemTime(WEDNESDAY);
+
+      const result = await service.editDraft(USER_ID, WEEK, [
+        {
+          op: 'set',
+          day: Weekday.TUE,
+          section: MealSection.DINNER,
+          recipeIds: [RICE_RECIPE],
+        },
+        {
+          op: 'move',
+          from: { day: Weekday.MON, section: MealSection.LUNCH },
+          to: { day: Weekday.FRI, section: MealSection.LUNCH },
+          recipeId: RICE_RECIPE,
+        },
+        {
+          op: 'set',
+          day: Weekday.FRI,
+          section: MealSection.DINNER,
+          recipeIds: [RICE_RECIPE],
+        },
+      ]);
+
+      expect(result.errors).toEqual([
+        'DAY_PASSED: set TUE DINNER is on a day before today that cannot change',
+        'DAY_PASSED: move touches MON, a day before today that cannot change',
+      ]);
+      expect(result.days.map(({ day: changed }) => changed)).toEqual([
+        Weekday.FRI,
+      ]);
+    });
+
+    it('discardAllDrafts drops the drafts of every week', async () => {
+      const set = {
+        op: 'set' as const,
+        day: Weekday.FRI,
+        section: MealSection.DINNER,
+        recipeIds: [RICE_RECIPE],
+      };
+      await service.editDraft(USER_ID, WEEK, [set]);
+      await service.editDraft(USER_ID, NEXT_WEEK, [set]);
+
+      await service.discardAllDrafts(USER_ID);
+
+      expect((await service.getDraft(USER_ID, WEEK)).days).toEqual([]);
+      expect((await service.getDraft(USER_ID, NEXT_WEEK)).days).toEqual([]);
+    });
+
+    it('refuses to preview a day before today', async () => {
+      vi.setSystemTime(WEDNESDAY);
+
+      await expect(
+        service.preview(USER_ID, WEEK, [day(Weekday.MON, [TOFU_RECIPE])]),
+      ).rejects.toMatchObject({ code: 'MEAL_DAY_LOCKED' });
+    });
+
+    it('refuses to change a week that is over, while still showing it', async () => {
+      await service.apply(USER_ID, WEEK, [day(Weekday.MON, [TOFU_RECIPE])]);
+      vi.setSystemTime(new Date('2026-11-25T05:00:00Z'));
+
+      await expect(
+        service.apply(USER_ID, WEEK, [day(Weekday.MON, [RICE_RECIPE])]),
+      ).rejects.toMatchObject({ code: 'MEAL_DAY_LOCKED' });
+      const plan = await service.find(USER_ID, WEEK);
+
+      expect(plan.editable).toBe(false);
+      expect(plan.minWeekStart).toBe(WEEK);
+      expect(lunchIds(plan, Weekday.MON)).toEqual([TOFU_RECIPE]);
+    });
+
+    it('keeps the dishes of a day that passed, and does not report their problems', async () => {
+      await service.apply(USER_ID, WEEK, [day(Weekday.MON, [TOFU_RECIPE])]);
+      vi.setSystemTime(WEDNESDAY);
+
+      const plan = await service.find(USER_ID, WEEK);
+
+      expect(lunchIds(plan, Weekday.MON)).toEqual([TOFU_RECIPE]);
+      expect(plan.days[0].editable).toBe(false);
+    });
+
+    it('allows the last week ahead and refuses the one after it', async () => {
+      const last = '2026-12-14';
+      await service.apply(USER_ID, last, [day(Weekday.MON, [TOFU_RECIPE])]);
+
+      await expect(
+        service.apply(USER_ID, '2026-12-21', [day(Weekday.MON, [TOFU_RECIPE])]),
+      ).rejects.toMatchObject({ code: 'MEAL_WEEK_OUT_OF_RANGE' });
+      await expect(service.find(USER_ID, '2026-12-21')).rejects.toMatchObject({
+        code: 'MEAL_WEEK_OUT_OF_RANGE',
+      });
+      expect(lunchIds(await service.find(USER_ID, last), Weekday.MON)).toEqual([
+        TOFU_RECIPE,
+      ]);
+    });
+
+    it('gives every week its own draft', async () => {
+      await service.editDraft(USER_ID, WEEK, [
+        {
+          op: 'set',
+          day: Weekday.MON,
+          section: MealSection.LUNCH,
+          recipeIds: [TOFU_RECIPE],
+        },
+      ]);
+
+      const thisWeek = await service.getDraft(USER_ID, WEEK);
+      const nextWeek = await service.getDraft(USER_ID, NEXT_WEEK);
+      await service.discardDraft(USER_ID, NEXT_WEEK);
+
+      expect(thisWeek.weekStart).toBe(WEEK);
+      expect(thisWeek.days).toHaveLength(1);
+      expect(nextWeek).toMatchObject({ weekStart: NEXT_WEEK, days: [] });
+      expect((await service.getDraft(USER_ID, WEEK)).days).toHaveLength(1);
+    });
+
+    it("clears only that week's draft when it is saved", async () => {
+      const lunch = {
+        op: 'set' as const,
+        day: Weekday.MON,
+        section: MealSection.LUNCH,
+        recipeIds: [TOFU_RECIPE],
+      };
+      await service.editDraft(USER_ID, WEEK, [lunch]);
+      await service.editDraft(USER_ID, NEXT_WEEK, [lunch]);
+
+      await service.apply(USER_ID, WEEK, [day(Weekday.MON, [TOFU_RECIPE])]);
+
+      expect((await service.getDraft(USER_ID, WEEK)).days).toEqual([]);
+      expect((await service.getDraft(USER_ID, NEXT_WEEK)).days).toHaveLength(1);
+    });
+
+    it('does not let the draft touch a day before today', async () => {
+      vi.setSystemTime(WEDNESDAY);
+
+      const result = await service.editDraft(USER_ID, WEEK, [
+        {
+          op: 'set',
+          day: Weekday.MON,
+          section: MealSection.LUNCH,
+          recipeIds: [TOFU_RECIPE],
+        },
+        {
+          op: 'set',
+          day: Weekday.THU,
+          section: MealSection.LUNCH,
+          recipeIds: [RICE_RECIPE],
+        },
+      ]);
+
+      expect(result.errors).toHaveLength(1);
+      expect(result.days.map(({ day: name }) => name)).toEqual([Weekday.THU]);
+    });
+
+    it('drops draft slots of a day that passed overnight', async () => {
+      await service.editDraft(USER_ID, WEEK, [
+        {
+          op: 'set',
+          day: Weekday.TUE,
+          section: MealSection.LUNCH,
+          recipeIds: [TOFU_RECIPE],
+        },
+      ]);
+      vi.setSystemTime(WEDNESDAY);
+
+      expect(await service.getDraft(USER_ID, WEEK)).toMatchObject({
+        days: [],
+        ok: false,
+      });
+    });
+
+    it('fills only days from today on', async () => {
+      vi.setSystemTime(WEDNESDAY);
+
+      const result = await service.fillDraft(USER_ID, {
+        weekStart: WEEK,
+        days: [Weekday.MON, Weekday.TUE, Weekday.WED],
+        sections: [MealSection.LUNCH],
+        onlyEmpty: true,
+      });
+
+      expect(result.days.map(({ day: name }) => name)).toEqual([Weekday.WED]);
+    });
+
+    it('fills nothing for a week that is over', async () => {
+      vi.setSystemTime(new Date('2026-11-25T05:00:00Z'));
+
+      const result = await service.fillDraft(USER_ID, {
+        weekStart: WEEK,
+        days: [Weekday.MON],
+        sections: [MealSection.LUNCH],
+        onlyEmpty: true,
+      });
+
+      expect(result).toMatchObject({ days: [], filled: 0 });
+    });
+
+    it('generates only for days from today on', async () => {
+      vi.setSystemTime(WEDNESDAY);
+
+      const none = await service.generate(USER_ID, {
+        weekStart: WEEK,
+        days: [Weekday.MON, Weekday.TUE],
+        sections: [MealSection.LUNCH],
+        onlyEmpty: true,
+      });
+      const some = await service.generate(USER_ID, {
+        weekStart: WEEK,
+        days: [Weekday.TUE, Weekday.WED],
+        sections: [MealSection.LUNCH],
+        onlyEmpty: true,
+      });
+
+      expect(none).toEqual({ weekStart: WEEK, days: [], problems: [] });
+      expect(some.days.map(({ day: name }) => name)).toEqual([Weekday.WED]);
+    });
+
+    describe('copyWeek', () => {
+      it('copies one week onto an empty one', async () => {
+        await service.apply(USER_ID, WEEK, [
+          day(Weekday.MON, [TOFU_RECIPE]),
+          day(Weekday.FRI, [RICE_RECIPE]),
+        ]);
+
+        const plan = await service.copyWeek(USER_ID, WEEK, NEXT_WEEK, false);
+
+        expect(plan.weekStart).toBe(NEXT_WEEK);
+        expect(lunchIds(plan, Weekday.MON)).toEqual([TOFU_RECIPE]);
+        expect(lunchIds(plan, Weekday.FRI)).toEqual([RICE_RECIPE]);
+        expect(
+          lunchIds(await service.find(USER_ID, WEEK), Weekday.MON),
+        ).toEqual([TOFU_RECIPE]);
+      });
+
+      it('refuses a target that already has dishes, and changes nothing', async () => {
+        await service.apply(USER_ID, WEEK, [day(Weekday.MON, [TOFU_RECIPE])]);
+        await service.apply(USER_ID, NEXT_WEEK, [
+          day(Weekday.TUE, [RICE_RECIPE]),
+        ]);
+
+        await expect(
+          service.copyWeek(USER_ID, WEEK, NEXT_WEEK, false),
+        ).rejects.toMatchObject({ code: 'MEAL_WEEK_NOT_EMPTY' });
+
+        const plan = await service.find(USER_ID, NEXT_WEEK);
+        expect(lunchIds(plan, Weekday.MON)).toEqual([]);
+        expect(lunchIds(plan, Weekday.TUE)).toEqual([RICE_RECIPE]);
+      });
+
+      it('replaces the target when asked to overwrite', async () => {
+        await service.apply(USER_ID, WEEK, [day(Weekday.MON, [TOFU_RECIPE])]);
+        await service.apply(USER_ID, NEXT_WEEK, [
+          day(Weekday.TUE, [RICE_RECIPE]),
+        ]);
+
+        const plan = await service.copyWeek(USER_ID, WEEK, NEXT_WEEK, true);
+
+        expect(lunchIds(plan, Weekday.MON)).toEqual([TOFU_RECIPE]);
+        expect(lunchIds(plan, Weekday.TUE)).toEqual([]);
+      });
+
+      it('leaves the days before today of the target week alone', async () => {
+        await service.apply(USER_ID, WEEK, [day(Weekday.MON, [TOFU_RECIPE])]);
+        await service.apply(USER_ID, NEXT_WEEK, [
+          day(Weekday.MON, [RICE_RECIPE]),
+          day(Weekday.THU, [RICE_RECIPE]),
+        ]);
+        vi.setSystemTime(WEDNESDAY);
+
+        const plan = await service.copyWeek(USER_ID, NEXT_WEEK, WEEK, true);
+
+        expect(lunchIds(plan, Weekday.MON)).toEqual([TOFU_RECIPE]);
+        expect(lunchIds(plan, Weekday.THU)).toEqual([RICE_RECIPE]);
+      });
+
+      it('refuses to copy a week onto itself', async () => {
+        await expect(
+          service.copyWeek(USER_ID, WEEK, WEEK, true),
+        ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
+      });
+
+      it('refuses a week too far ahead and a week that is over', async () => {
+        await expect(
+          service.copyWeek(USER_ID, WEEK, '2026-12-21', false),
+        ).rejects.toMatchObject({ code: 'MEAL_WEEK_OUT_OF_RANGE' });
+        vi.setSystemTime(new Date('2026-11-25T05:00:00Z'));
+        await expect(
+          service.copyWeek(USER_ID, NEXT_WEEK, WEEK, false),
+        ).rejects.toMatchObject({ code: 'MEAL_DAY_LOCKED' });
+      });
     });
   });
 });

@@ -11,7 +11,9 @@ import type {
   ProfileImageUploadDto,
   ProfileListDto,
   ProfileRelationshipDto,
+  ProfileSearchPageDto,
 } from '../../../src/profiles/dto/profile.dto.js';
+import type { SearchProfilesQueryDto } from '../../../src/profiles/dto/search-profiles-query.dto.js';
 import type { FollowSuggestionsService } from '../../../src/profiles/follow-suggestions.service.js';
 import { ProfilesController } from '../../../src/profiles/profiles.controller.js';
 import type { ProfilesService } from '../../../src/profiles/profiles.service.js';
@@ -193,5 +195,17 @@ describe('ProfilesController', () => {
 
     await expect(controller.findOne(otherId)).resolves.toBe(profile);
     expect(profilesService.findOne).toHaveBeenCalledExactlyOnceWith(otherId);
+  });
+
+  it('delegates search() with query and optional viewer sub', async () => {
+    const query: SearchProfilesQueryDto = { q: 'vedora', limit: 20 };
+    const page: ProfileSearchPageDto = { items: [], nextCursor: null };
+    profilesService.search.mockResolvedValue(page);
+
+    await expect(controller.search(query, request)).resolves.toBe(page);
+    expect(profilesService.search).toHaveBeenCalledExactlyOnceWith(
+      query,
+      userId,
+    );
   });
 });

@@ -30,9 +30,7 @@ export const DEFAULT_CHAT_THREAD_TITLE = 'Cuộc trò chuyện mới';
 const MAX_AUTO_TITLE_LENGTH = 80;
 const MAX_PREVIEW_LENGTH = 160;
 
-function isProposalStatus(
-  value: unknown,
-): value is MealPlanChatProposalStatus {
+function isProposalStatus(value: unknown): value is MealPlanChatProposalStatus {
   return value === 'staged' || value === 'saved' || value === 'dismissed';
 }
 
@@ -100,9 +98,7 @@ function hasRenderableContent(
   return text.trim().length > 0 || parts.some(hasRenderablePart);
 }
 
-function normalizeMetadata(
-  metadata: unknown,
-): { refused?: boolean } | null {
+function normalizeMetadata(metadata: unknown): { refused?: boolean } | null {
   if (!isPlainRecord(metadata)) return null;
   if (typeof metadata.refused === 'boolean') {
     return { refused: metadata.refused };
@@ -128,7 +124,8 @@ function derivePreview(
     return `${normalized.slice(0, MAX_PREVIEW_LENGTH - 1)}…`;
   }
   const hasProposal = parts.some(
-    (part) => typeof part.type === 'string' && PROPOSAL_TOOL_TYPES.has(part.type),
+    (part) =>
+      typeof part.type === 'string' && PROPOSAL_TOOL_TYPES.has(part.type),
   );
   if (hasProposal) return 'Đã tạo đề xuất thực đơn';
   const hasTool = parts.some(
@@ -171,11 +168,7 @@ function toProposalStatuses(
   if (!isPlainRecord(raw)) return {};
   const result: Record<string, MealPlanChatProposalStatus> = {};
   for (const [key, value] of Object.entries(raw)) {
-    if (
-      value === 'staged' ||
-      value === 'saved' ||
-      value === 'dismissed'
-    ) {
+    if (value === 'staged' || value === 'saved' || value === 'dismissed') {
       result[key] = value;
     }
   }
@@ -268,7 +261,9 @@ export class MealPlannerChatHistoryService {
       existing.metadata = metadata;
       await existing.save();
 
-      const thread = await this.threads.findOne({ _id: threadId, userId }).exec();
+      const thread = await this.threads
+        .findOne({ _id: threadId, userId })
+        .exec();
       if (thread && existing.sequence === thread.sequence && preview !== null) {
         thread.lastMessagePreview = preview;
         thread.lastMessageAt = now;
@@ -401,11 +396,7 @@ export class MealPlannerChatHistoryService {
         .exec(),
       this.threads.countDocuments(filter).exec(),
     ]);
-    return createPaginatedResponse(
-      rows.map(toThreadSummary),
-      total,
-      query,
-    );
+    return createPaginatedResponse(rows.map(toThreadSummary), total, query);
   }
 
   async createThread(

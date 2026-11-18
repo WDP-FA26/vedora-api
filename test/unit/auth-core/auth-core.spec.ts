@@ -235,6 +235,22 @@ describe('auth-core', () => {
         'user-123',
       );
     });
+
+    it('skips throttling for admins only', async () => {
+      class ExposedUserThrottlerGuard extends UserThrottlerGuard {
+        skips(context: ExecutionContext): Promise<boolean> {
+          return this.shouldSkip(context);
+        }
+      }
+      const guard = Object.create(
+        ExposedUserThrottlerGuard.prototype,
+      ) as ExposedUserThrottlerGuard;
+      const contextFor = (role: UserRole) =>
+        createHttpContext({ user: { sub: 'user-1', role } });
+
+      await expect(guard.skips(contextFor(UserRole.ADMIN))).resolves.toBe(true);
+      await expect(guard.skips(contextFor(UserRole.USER))).resolves.toBe(false);
+    });
   });
 
   describe('AuthCoreModule', () => {

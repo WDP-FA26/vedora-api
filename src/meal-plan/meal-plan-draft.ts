@@ -65,11 +65,14 @@ const label = ({ day, section }: SlotKey) => `${day} ${section}`;
 export function applyDraftOps(
   week: WeekIds,
   ops: readonly DraftOp[],
+  lockedDays: readonly Weekday[] = [],
 ): { week: WeekIds; errors: string[] } {
   const next = cloneWeekIds(week);
   const errors: string[] = [];
 
+  const passed = (key: SlotKey): boolean => lockedDays.includes(key.day);
   const slotOf = (key: SlotKey): string[] | null => {
+    if (passed(key)) return null;
     const day = next.get(key.day);
     if (!day) return null;
     return day[key.section];
@@ -77,10 +80,17 @@ export function applyDraftOps(
 
   for (const op of ops) {
     if (op.op === 'move') {
+      const passedKey = [op.from, op.to].find(passed);
+      if (passedKey) {
+        errors.push(
+          `DAY_PASSED: move touches ${passedKey.day}, a day before today that cannot change`,
+        );
+        continue;
+      }
       const from = slotOf(op.from);
       const to = slotOf(op.to);
       if (!from || !to) {
-        errors.push(`move: unknown slot`);
+        errors.push('move: unknown slot');
         continue;
       }
       if (!from.includes(op.recipeId)) {
@@ -96,6 +106,12 @@ export function applyDraftOps(
       continue;
     }
 
+    if (passed(op)) {
+      errors.push(
+        `DAY_PASSED: ${op.op} ${label(op)} is on a day before today that cannot change`,
+      );
+      continue;
+    }
     const slot = slotOf(op);
     if (!slot) {
       errors.push(`${op.op}: unknown slot`);

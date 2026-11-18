@@ -53,7 +53,7 @@ describe('RecipesService', () => {
       'recipes',
       'recipe_favorites',
       'recipe_ratings',
-      'meal_plan_entries',
+      'meal_plan_week_entries',
       'ingredients',
       'ingredient_groups',
       'incompatibility_rules',
