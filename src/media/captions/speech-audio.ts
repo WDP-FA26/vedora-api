@@ -1,3 +1,4 @@
+import { runtimeConfig } from '../../config/runtime-config.js';
 import { createWriteStream } from 'node:fs';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -16,12 +17,12 @@ export interface Interval {
   end: number;
 }
 
-const SILENCE_NOISE = '-35dB';
-const MIN_SILENCE_SEC = 0.6;
-const PADDING_SEC = 0.2;
-const MIN_SPEECH_SEC = 0.3;
-const FFMPEG_TIMEOUT_MS = 5 * 60_000;
-const DOWNLOAD_TIMEOUT_MS = 5 * 60_000;
+const SILENCE_NOISE = `${runtimeConfig.AUDIO_SILENCE_NOISE_DB}dB`;
+const MIN_SILENCE_SEC = runtimeConfig.AUDIO_MIN_SILENCE_SECONDS;
+const PADDING_SEC = runtimeConfig.AUDIO_PADDING_SECONDS;
+const MIN_SPEECH_SEC = runtimeConfig.AUDIO_MIN_SPEECH_SECONDS;
+const FFMPEG_TIMEOUT_MS = runtimeConfig.AUDIO_FFMPEG_TIMEOUT_MS;
+const DOWNLOAD_TIMEOUT_MS = runtimeConfig.AUDIO_DOWNLOAD_TIMEOUT_MS;
 
 const NO_AUDIO = /does not contain any stream|matches no streams/;
 

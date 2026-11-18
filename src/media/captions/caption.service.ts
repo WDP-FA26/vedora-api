@@ -1,3 +1,4 @@
+import { runtimeConfig } from '../../config/runtime-config.js';
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectModel } from '@nestjs/mongoose';
@@ -20,9 +21,9 @@ import {
 } from './transcription.service.js';
 import { type Cue, toVtt, vttText } from './vtt.js';
 
-const BATCH_SIZE = 10;
-const STALE_AFTER_MS = 30 * 60 * 1000;
-const TRACK_TIMEOUT_MS = 15_000;
+const BATCH_SIZE = runtimeConfig.CAPTION_BATCH_SIZE;
+const STALE_AFTER_MS = runtimeConfig.CAPTION_STALE_AFTER_SECONDS * 1000;
+const TRACK_TIMEOUT_MS = runtimeConfig.CAPTION_TRACK_TIMEOUT_MS;
 
 @Injectable()
 export class CaptionService {

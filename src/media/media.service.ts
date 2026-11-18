@@ -1,3 +1,4 @@
+import { runtimeConfig } from '../config/runtime-config.js';
 import { Injectable, Logger } from '@nestjs/common';
 import { InvalidInputException } from '../common/exceptions/invalid-input.exception.js';
 import { QuotaReachedException } from '../common/exceptions/quota-reached.exception.js';
@@ -37,10 +38,10 @@ const PENDING: readonly MediaStatus[] = [
 
 const LIVE: QueryFilter<MediaAsset> = { discardedAt: null };
 
-const MAX_UNATTACHED_UPLOADS = 5;
-const UPLOAD_GRACE_MS = 10 * 60 * 1000;
-const REFRESH_INTERVAL_MS = 15 * 1000;
-const ENCODING_TIMEOUT_MS = 60 * 60 * 1000;
+const MAX_UNATTACHED_UPLOADS = runtimeConfig.MEDIA_MAX_UNATTACHED_UPLOADS;
+const UPLOAD_GRACE_MS = runtimeConfig.MEDIA_UPLOAD_GRACE_SECONDS * 1000;
+const REFRESH_INTERVAL_MS = runtimeConfig.MEDIA_REFRESH_INTERVAL_MS;
+const ENCODING_TIMEOUT_MS = runtimeConfig.MEDIA_ENCODING_TIMEOUT_SECONDS * 1000;
 
 function streamBuilt(video: CloudinaryVideo): boolean {
   const profile = STREAM_TRANSFORMATION.split('/')[0];

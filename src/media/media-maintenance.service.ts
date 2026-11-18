@@ -1,5 +1,6 @@
+import { runtimeConfig } from '../config/runtime-config.js';
 import { Injectable, Logger } from '@nestjs/common';
-import { Cron, CronExpression } from '@nestjs/schedule';
+import { Cron } from '@nestjs/schedule';
 import { InjectModel } from '@nestjs/mongoose';
 import type { Model } from 'mongoose';
 import { MediaAsset, MediaStatus, Post, PostStatus } from '../mongo/models.js';
@@ -7,11 +8,12 @@ import { CloudinaryService } from '../cloudinary/cloudinary.service.js';
 import { CaptionService } from './captions/caption.service.js';
 import { MediaService } from './media.service.js';
 
-const STALE_AFTER_MS = 10 * 60 * 1000;
-const ORPHAN_AFTER_MS = 24 * 60 * 60 * 1000;
-const BATCH_SIZE = 50;
-const RETRY_MODERATION_AFTER_MS = 2 * 60 * 1000;
-const REFRESH_BATCH_SIZE = 20;
+const STALE_AFTER_MS = runtimeConfig.MEDIA_STALE_AFTER_SECONDS * 1000;
+const ORPHAN_AFTER_MS = runtimeConfig.MEDIA_ORPHAN_AFTER_SECONDS * 1000;
+const BATCH_SIZE = runtimeConfig.MEDIA_MAINTENANCE_BATCH_SIZE;
+const RETRY_MODERATION_AFTER_MS =
+  runtimeConfig.MEDIA_MODERATION_RETRY_AFTER_SECONDS * 1000;
+const REFRESH_BATCH_SIZE = runtimeConfig.MEDIA_REFRESH_BATCH_SIZE;
 
 @Injectable()
 export class MediaMaintenanceService {
@@ -26,7 +28,7 @@ export class MediaMaintenanceService {
     private readonly captions: CaptionService,
   ) {}
 
-  @Cron(CronExpression.EVERY_10_MINUTES)
+  @Cron(runtimeConfig.MEDIA_REFRESH_CRON)
   async refreshStale(): Promise<void> {
     if (!this.cloudinary.configured) return;
     const stale = await this.mediaAssets
@@ -45,7 +47,7 @@ export class MediaMaintenanceService {
     }
   }
 
-  @Cron(CronExpression.EVERY_5_MINUTES)
+  @Cron(runtimeConfig.MEDIA_MODERATION_RETRY_CRON)
   async retryModeration(): Promise<void> {
     const pending = await this.posts
       .find({
@@ -60,18 +62,18 @@ export class MediaMaintenanceService {
     await this.mediaService.settlePosts(pending.map(({ id }) => id));
   }
 
-  @Cron(CronExpression.EVERY_10_MINUTES)
+  @Cron(runtimeConfig.MEDIA_CAPTION_ADVANCE_CRON)
   async advanceCaptions(): Promise<void> {
     await this.captions.releaseStale();
     this.captions.schedule();
   }
 
-  @Cron(CronExpression.EVERY_10_MINUTES)
+  @Cron(runtimeConfig.MEDIA_TRANSCRIPT_BACKFILL_CRON)
   backfillTranscripts(): Promise<void> {
     return this.captions.backfillTranscripts();
   }
 
-  @Cron(CronExpression.EVERY_HOUR)
+  @Cron(runtimeConfig.MEDIA_ORPHAN_CLEANUP_CRON)
   async deleteOrphans(): Promise<void> {
     const orphans = await this.mediaAssets
       .find({
@@ -91,7 +93,7 @@ export class MediaMaintenanceService {
     this.logger.log(`Discarded ${orphans.length} unposted uploads`);
   }
 
-  @Cron(CronExpression.EVERY_10_MINUTES)
+  @Cron(runtimeConfig.MEDIA_PURGE_CRON)
   async purgeDiscarded(): Promise<void> {
     if (!this.cloudinary.configured) return;
     await this.mediaAssets.updateMany(
