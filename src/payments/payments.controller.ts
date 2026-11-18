@@ -1,3 +1,4 @@
+import { runtimeConfig } from '../config/runtime-config.js';
 import {
   Body,
   Controller,
@@ -216,7 +217,7 @@ export class PaymentReconciliationController {
     const rows = await this.webhookReceipts
       .find()
       .sort({ createdAt: -1, _id: -1 })
-      .limit(50)
+      .limit(runtimeConfig.ADMIN_RECENT_WEBHOOK_RECEIPTS_LIMIT)
       .exec();
     return rows.map(
       ({

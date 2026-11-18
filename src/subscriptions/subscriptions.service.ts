@@ -6,6 +6,7 @@ import {
   effectivePlan,
   freePeriod,
   SUBSCRIPTION_LIMITS,
+  purchasedLimits,
   type SubscriptionPlan,
 } from './subscription-policy.js';
 
@@ -41,14 +42,14 @@ export class SubscriptionsService {
       );
       if (expiresAt > now) {
         const planCode = effectivePlan(latest),
-          limits = SUBSCRIPTION_LIMITS[planCode];
+          limits = purchasedLimits(latest);
         return {
           planCode,
           key: `payment:${latest.id}`,
           startsAt: latest.capturedAt,
           expiresAt,
-          textLimit: latest.textLimit ?? limits.text,
-          imageLimit: latest.imageLimit ?? limits.images,
+          textLimit: limits.text,
+          imageLimit: limits.images,
         };
       }
     }
@@ -56,7 +57,7 @@ export class SubscriptionsService {
       planCode: 'FREE',
       ...freePeriod(now),
       textLimit: SUBSCRIPTION_LIMITS.FREE.text,
-      imageLimit: 0,
+      imageLimit: SUBSCRIPTION_LIMITS.FREE.images,
     };
   }
 }

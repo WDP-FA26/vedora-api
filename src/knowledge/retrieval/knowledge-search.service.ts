@@ -1,3 +1,4 @@
+import { runtimeConfig } from '../../config/runtime-config.js';
 import { Injectable, Logger } from '@nestjs/common';
 import { parsePayload } from '../../common/validation.js';
 import { QdrantService } from '../../qdrant/qdrant.service.js';
@@ -14,11 +15,11 @@ import {
   type RerankResult,
 } from './knowledge-models.service.js';
 
-const PREFETCH_LIMIT = 40;
-const CANDIDATES = 20;
-const RESULTS = 6;
-const MIN_RELEVANCE = 0.08;
-const RERANK_BUDGET_MS = 800;
+const PREFETCH_LIMIT = runtimeConfig.KNOWLEDGE_PREFETCH_LIMIT;
+const CANDIDATES = runtimeConfig.KNOWLEDGE_CANDIDATE_LIMIT;
+const RESULTS = runtimeConfig.KNOWLEDGE_RESULT_LIMIT;
+const MIN_RELEVANCE = runtimeConfig.KNOWLEDGE_MIN_RELEVANCE;
+const RERANK_BUDGET_MS = runtimeConfig.KNOWLEDGE_RERANK_TIMEOUT_MS;
 
 export type KnowledgeHit = Pick<
   KnowledgePointPayload,

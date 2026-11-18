@@ -1,0 +1,354 @@
+# Bổ sung env production cho Vedora BE
+
+Đối chiếu danh sách tên biến bạn cung cấp với nhánh `refactor/backend-env-config`, revision `05bd913db885c81dbf6f987f010d5afdf140390a`, đã tích hợp main `b6d2217`. Chỉ tài liệu: chưa thay đổi env hoặc triển khai lên production. Không lưu lại secret, mật khẩu hay thông tin tài khoản ngân hàng đã gửi.
+
+## 1. Xoá hai biến giá cũ
+
+| Biến xoá khỏi cấu hình production | Lý do |
+| --- | --- |
+| `BILLING_PRO_PRICE_VND` | Code hiện tại không đọc tên này. |
+| `BILLING_PREMIUM_PRICE_VND` | Code hiện tại không đọc tên này; catalogue hiện là Plus/Pro. |
+
+Theo yêu cầu mới nhất, bỏ hai biến cũ và không chuyển mức giá cũ sang cấu hình mới. Giá hiện tại trong code là **Plus 49.000đ, Pro 99.000đ**. `BILLING_DURATION_DAYS=30` đã có trong danh sách của bạn và vẫn được dùng; giữ nguyên. Đơn đã tạo vẫn giữ số tiền và thời hạn đã lưu.
+
+Không cần sửa hoặc xoá tên biến trong source: hai tên cũ đã không còn được source BE đọc. Việc xoá trên trang cấu hình production cần thực hiện ở nơi bạn đang lưu env; tài liệu này không truy cập hoặc chỉnh hệ thống đó.
+
+## 2. Các biến nên bổ sung trước
+
+Hai biến giá giúp khai báo rõ giá của catalogue hiện tại. Nếu không khai báo, code cũng mặc định 49000/99000.
+
+Hai biến Redis bên dưới dành cho realtime thanh toán. URI là ví dụ đúng theo service `redis` trong Docker Compose của repo: chỉ dùng khi API và Redis thực sự nằm cùng Docker network và hostname đó phân giải được. Nếu production dùng Redis ở nơi khác, thay URI bằng địa chỉ kết nối thực tế. Nếu chưa có Redis, có thể chưa thêm `PAYMENT_REDIS_URL`; chạy API trực tiếp khi biến rỗng sẽ tắt Redis realtime và vẫn xử lý thanh toán bằng API/webhook. Compose của repo tự đặt URI Redis mặc định, nên phải kiểm tra cả cấu hình container cuối cùng.
+
+Channel đề xuất tách production khỏi các môi trường khác dùng chung Redis. Đây là giá trị đề xuất cho môi trường của bạn; mặc định trong source là `vedora:payments:v1`. Tất cả API instance của cùng môi trường phải dùng cùng channel.
+
+```dotenv
+SUBSCRIPTION_PLUS_PRICE_VND=49000
+SUBSCRIPTION_PRO_PRICE_VND=99000
+PAYMENT_REDIS_URL=redis://redis:6379
+PAYMENT_EVENTS_CHANNEL=vedora:payments:production:v1
+```
+
+## 3. Các biến đã được BE hỗ trợ nhưng chưa có trong danh sách của bạn
+
+27 biến dưới đây không bắt buộc phải thêm hết: BE có mặc định. Có thể khai báo để cấu hình production minh bạch hơn. Giá trị đều theo mặc định code, ngoại trừ `FRONTEND_URL` điền theo domain FE bạn cung cấp.
+
+`FRONTEND_URL` hiện mới được khai báo trong schema env, chưa được service nghiệp vụ sử dụng; không phải điều kiện sửa đăng nhập hiện tại. `BLOG_AI_MODEL` để rỗng sẽ dùng `OPENROUTER_MODEL` bạn đã có. `SEPAY_QR_TRANSFER_PREFIX` để rỗng; tiền tố mã thanh toán `SEPAY_PAYMENT_CODE_PREFIX` của bạn vẫn giữ nguyên.
+
+Giữ nguyên collection/model/số chiều embedding đang dùng nếu Qdrant đã có dữ liệu; không đổi chúng để thử cấu hình, vì model hoặc số chiều khác có thể yêu cầu collection mới và index lại. Các giá trị dưới đây là mặc định của code, không phải kết quả đọc cấu hình Qdrant production.
+
+Ngưỡng moderation trong DB có thể ghi đè mặc định env; các giá trị này không chứng minh policy hiện đang hiệu lực trên production.
+
+```dotenv
+FRONTEND_URL=https://vedora-opal.vercel.app
+MAX_VIDEO_DURATION_SEC=180
+CAPTIONS_ENABLED=true
+TRANSCRIPTION_MODEL=elevenlabs/scribe-v2
+OPENROUTER_REASONING_EFFORT=low
+STORAGE_REGION=us-east-1
+STORAGE_KNOWLEDGE_BUCKET=vedora-knowledge
+STORAGE_PROFILES_BUCKET=vedora-profiles
+STORAGE_BLOGS_BUCKET=vedora-blogs
+STORAGE_VERIFICATIONS_BUCKET=vedora-verifications
+QDRANT_COLLECTION=vedora_knowledge
+OPENROUTER_EMBEDDING_MODEL=google/gemini-embedding-2
+KNOWLEDGE_EMBEDDING_DIMENSIONS=1536
+OPENROUTER_MODERATION_MODEL=openai/gpt-6-luna-decisions
+OPENROUTER_CONTENT_MODERATION_MODEL=openai/gpt-6-luna-decisions
+MODERATION_REJECT_THRESHOLD=0.85
+MODERATION_REVIEW_THRESHOLD=0.3
+GUEST_DAILY_MESSAGES=5
+GUEST_DAILY_MESSAGES_PER_IP=20
+GUEST_DAILY_BUDGET=500
+QDRANT_POSTS_COLLECTION=vedora_posts_v2
+POST_SEARCH_EMBEDDING_MODEL=google/gemini-embedding-2
+POST_SEARCH_EMBEDDING_DIMENSIONS=768
+POST_SEARCH_MIN_SCORE=0.65
+BLOG_AI_MODEL=
+OPENROUTER_IMAGE_MODEL=qwen/qwen-image-2.1-turbo
+SEPAY_QR_TRANSFER_PREFIX=
+```
+
+## 4. Toàn bộ 259 biến vận hành mới sau refactor
+
+Những biến này đều chưa có trong danh sách bạn gửi và đã có fallback trong code; **không cần chép hết mới chạy được**. Nếu muốn khai báo rõ toàn bộ cấu hình, nối thêm khối dưới đây vào các biến hiện có. Giá trị lấy trực tiếp từ `src/config/runtime-defaults.ts`, không ước tính.
+
+Đơn vị: `_MS` là mili giây; `_SECONDS` là giây; `_MB` tương ứng 1024 × 1024 byte; các cron có 6 trường, trường đầu là giây. Chuỗi có khoảng trắng phải được đặt trong dấu nháy khi dùng file dotenv; trên dashboard env, nhập giá trị nguyên gốc và không thêm dấu nháy bao ngoài nếu dashboard lưu trực tiếp chuỗi đó.
+
+Các mặc định đã theo main mới nhất: tối đa 5 món/bữa, 60 gợi ý, planner tối đa 10 bước và timeout quyết định moderation 10000 ms. TTL đơn mới 1800 giây; mã thanh toán dùng tiền tố bạn đã cấu hình cộng 6 ký tự.
+
+```dotenv
+ACCOUNT_OPERATION_REASON_MAX_LENGTH=500
+ADMIN_AI_COST_MODEL_MAX_LENGTH=200
+ADMIN_EXPORT_MAX_ROWS=10000
+ADMIN_PAGINATION_DEFAULT_LIMIT=25
+ADMIN_PAGINATION_MAX_LIMIT=100
+ADMIN_PAGINATION_MAX_PAGE=100000
+ADMIN_PAYMENT_SEARCH_MAX_LENGTH=200
+ADMIN_RECEIPT_CODE_MAX_LENGTH=100
+ADMIN_RECEIPT_REFERENCE_MAX_LENGTH=200
+ADMIN_RECENT_WEBHOOK_RECEIPTS_LIMIT=50
+ADMIN_REPORT_DEFAULT_DAYS=30
+ADMIN_REPORT_MAX_DAYS=90
+AI_CHAT_RATE_LIMIT=10
+AI_CHAT_TIMEOUT_MS=300000
+AI_COST_GROUP_LIMIT=100
+AI_COST_JSON_MAX_CHARS=16777216
+AI_COST_PAGINATION_DEFAULT_LIMIT=50
+AI_COST_RECONCILE_STALE_SECONDS=900
+AI_COST_RECONCILE_TIMEOUT_MS=10000
+AI_COST_SSE_LINE_MAX_CHARS=1048576
+AI_COST_TOP_TURNS_LIMIT=20
+AI_DECISION_MAX_RETRIES=2
+AI_DECISION_TIMEOUT_MS=10000
+AI_EMBEDDING_BATCH_SIZE=64
+AI_IMAGE_ALLOWED_ASPECT_RATIOS=1:1,4:3,3:4,16:9
+AI_IMAGE_DEFAULT_ASPECT_RATIO=4:3
+AI_IMAGE_MAX_RETRIES=1
+AI_KNOWLEDGE_TOOL_TIMEOUT_MS=5000
+AI_MAX_CONTINUATIONS_PER_TURN=8
+AI_MODERATION_CONTEXT_MAX_CHARS=24000
+AI_RATE_LIMIT_WINDOW_MS=60000
+AI_USAGE_RESERVATION_TTL_SECONDS=600
+APP_TIMEZONE=Asia/Bangkok
+AUDIO_DOWNLOAD_TIMEOUT_MS=300000
+AUDIO_FFMPEG_TIMEOUT_MS=300000
+AUDIO_MIN_SILENCE_SECONDS=0.6
+AUDIO_MIN_SPEECH_SECONDS=0.3
+AUDIO_PADDING_SECONDS=0.2
+AUDIO_SILENCE_NOISE_DB=-35
+AUTH_BCRYPT_ROUNDS=12
+AUTH_FULL_NAME_MAX_LENGTH=100
+AUTH_OTP_GUESS_WINDOW_SECONDS=86400
+AUTH_OTP_LENGTH=6
+AUTH_OTP_MAX_ATTEMPTS=5
+AUTH_OTP_MAX_GUESSES_PER_EMAIL=15
+AUTH_OTP_MAX_RESENDS=3
+AUTH_OTP_RESEND_COOLDOWN_SECONDS=120
+AUTH_OTP_RESEND_WINDOW_SECONDS=3600
+AUTH_OTP_TTL_SECONDS=600
+AUTH_PASSWORD_MIN_LENGTH=8
+AUTH_UNVERIFIED_ACCOUNT_TTL_SECONDS=3600
+AUTH_USERNAME_MAX_LENGTH=30
+AUTH_USERNAME_MIN_LENGTH=3
+BILLING_RECENT_PAYMENTS_LIMIT=20
+BLOG_AI_IMAGE_ALT_MAX_LENGTH=200
+BLOG_AI_IMAGE_PROMPT_MAX_LENGTH=1000
+BLOG_AI_IMAGE_URL_MAX_LENGTH=2048
+BLOG_AI_MAX_EDIT_LENGTH=8000
+BLOG_AI_MAX_MESSAGES=40
+BLOG_AI_MAX_OUTPUT_TOKENS=4000
+BLOG_AI_MAX_SELECTION_LENGTH=4000
+BLOG_AI_MAX_STEPS=8
+BLOG_AI_RATE_LIMIT=30
+BLOG_AI_TOOL_REASON_MAX_LENGTH=500
+BLOG_CONTENT_MAX_LENGTH=50000
+BLOG_COVER_URL_MAX_LENGTH=2048
+BLOG_EXCERPT_MAX_LENGTH=280
+BLOG_GUARDRAIL_POLICY_FILE=config/policies/blog-assistant.json
+BLOG_IMAGE_MAX_MB=5
+BLOG_MAX_RECIPES=10
+BLOG_SYSTEM_PROMPT_FILE=config/prompts/blog-assistant.md
+BLOG_TITLE_MAX_LENGTH=150
+CAPTION_BATCH_SIZE=10
+CAPTION_CUE_GAP_SECONDS=0.8
+CAPTION_MAX_CUE_SECONDS=7
+CAPTION_STALE_AFTER_SECONDS=1800
+CAPTION_TRACK_TIMEOUT_MS=15000
+CLOUDINARY_API_BASE_URL=https://api.cloudinary.com/v1_1
+CLOUDINARY_CDN_BASE_URL=https://res.cloudinary.com
+CLOUDINARY_FRAME_MAX_WIDTH=1024
+CLOUDINARY_IMAGE_FORMATS=jpg,jpeg,png,webp
+CLOUDINARY_STREAM_TRANSFORMATION=sp_auto/m3u8
+CLOUDINARY_UPLOAD_CHUNK_MB=20
+CLOUDINARY_UPLOAD_SIGNATURE_TTL_SECONDS=3600
+CLOUDINARY_WEBHOOK_MAX_AGE_SECONDS=7200
+COMMENT_MAX_LENGTH=1000
+DIETARY_MAX_AVOIDED_GROUPS=50
+DIETARY_MAX_AVOIDED_INGREDIENTS=200
+DIETARY_MAX_LIKED_INGREDIENTS=100
+FEED_EXPLORE_EVERY=5
+FEED_FRESH_WINDOW_SECONDS=604800
+FEED_FRESHNESS_WEIGHT=0.05
+FEED_HALF_LIFE_SECONDS=172800
+FEED_MAX_RESULTS=200
+FEED_TASTE_POSTS=20
+FFMPEG_DEFAULT_TIMEOUT_MS=30000
+FOLLOW_SUGGESTION_ACTIVE_POOL_SIZE=50
+FOLLOW_SUGGESTION_ACTIVE_WINDOW_SECONDS=2592000
+FOLLOW_SUGGESTION_BATCH_SIZE=200
+FOLLOW_SUGGESTION_CACHE_TTL_SECONDS=600
+FOLLOW_SUGGESTION_FAN_OUT=200
+FOLLOW_SUGGESTION_FOLLOWS_YOU_SCORE=1000
+FOLLOW_SUGGESTION_KEPT_PER_USER=30
+FOLLOW_SUGGESTION_MAX_RESULTS=20
+FOLLOW_SUGGESTION_REBUILD_CRON="0 0 * * * *"
+GUEST_QUOTA_TIMEZONE=UTC
+GUEST_SESSION_TTL_SECONDS=86400
+HTTP_JSON_BODY_LIMIT_KB=512
+INGREDIENT_DESCRIPTION_MAX_LENGTH=500
+INGREDIENT_GROUP_MAX_MEMBERS=500
+INGREDIENT_MAX_ALIASES=20
+INGREDIENT_MAX_GROUPS=50
+INGREDIENT_NAME_MAX_LENGTH=100
+KNOWLEDGE_CANDIDATE_LIMIT=20
+KNOWLEDGE_CHUNK_MAX_CHARS=1000
+KNOWLEDGE_EMBED_TIMEOUT_MS=60000
+KNOWLEDGE_FILE_URL_TTL_SECONDS=900
+KNOWLEDGE_FILENAME_MAX_LENGTH=255
+KNOWLEDGE_IMAGE_BATCH_SIZE=8
+KNOWLEDGE_JPEG_QUALITY=80
+KNOWLEDGE_MAINTENANCE_CRON="0 */10 * * * *"
+KNOWLEDGE_MAX_IMAGE_PX=1024
+KNOWLEDGE_MAX_IMAGES_PER_DOCUMENT=100
+KNOWLEDGE_MIN_IMAGE_PT=48
+KNOWLEDGE_MIN_IMAGE_PX=100
+KNOWLEDGE_MIN_OCR_COVERAGE=0.9
+KNOWLEDGE_MIN_RELEVANCE=0.08
+KNOWLEDGE_OCR_CARRIER_MAX_TOKENS=16
+KNOWLEDGE_OCR_CARRIER_MODEL=google/gemini-3.1-flash-lite
+KNOWLEDGE_OCR_ENGINE=mistral-ocr
+KNOWLEDGE_OCR_TIMEOUT_MS=300000
+KNOWLEDGE_PAGE_MAX_LENGTH=100000
+KNOWLEDGE_PREFETCH_LIMIT=40
+KNOWLEDGE_RERANK_TIMEOUT_MS=800
+KNOWLEDGE_RESULT_LIMIT=6
+KNOWLEDGE_REVIEW_NOTE_MAX_LENGTH=500
+KNOWLEDGE_STALE_PROCESSING_SECONDS=900
+KNOWLEDGE_UPLOAD_EVENT_GRACE_SECONDS=600
+KNOWLEDGE_UPSERT_BATCH_SIZE=64
+MEAL_PLAN_MAX_DISHES_PER_SECTION=5
+MEAL_PLAN_SUGGESTIONS_LIMIT=60
+MEDIA_CAPTION_ADVANCE_CRON="0 */10 * * * *"
+MEDIA_ENCODING_TIMEOUT_SECONDS=3600
+MEDIA_MAINTENANCE_BATCH_SIZE=50
+MEDIA_MAX_UNATTACHED_UPLOADS=5
+MEDIA_MODERATION_RETRY_AFTER_SECONDS=120
+MEDIA_MODERATION_RETRY_CRON="0 */5 * * * *"
+MEDIA_ORPHAN_AFTER_SECONDS=86400
+MEDIA_ORPHAN_CLEANUP_CRON="0 0 * * * *"
+MEDIA_PURGE_CRON="0 */10 * * * *"
+MEDIA_REFRESH_BATCH_SIZE=20
+MEDIA_REFRESH_CRON="0 */10 * * * *"
+MEDIA_REFRESH_INTERVAL_MS=15000
+MEDIA_STALE_AFTER_SECONDS=600
+MEDIA_TRANSCRIPT_BACKFILL_CRON="0 */10 * * * *"
+MEDIA_UPLOAD_GRACE_SECONDS=600
+MESSAGE_MAX_LENGTH=2000
+MESSAGING_EVENTS_RETRY_MS=3000
+MESSAGING_SSE_HEARTBEAT_MS=15000
+MODERATION_CACHE_TTL_MS=15000
+MODERATION_CONTENT_TIMEOUT_MS=20000
+MODERATION_DEFAULT_POLICY_FILE=config/policies/content.json
+MODERATION_IMAGE_MAX_SIDE_PX=1280
+MODERATION_IMAGE_MIN_SIDE_PX=288
+MODERATION_MAX_CHOICES=16
+MODERATION_MAX_INLINE_IMAGES=5
+MODERATION_MAX_TEXT_CHARS=30000
+MODERATION_TEST_MAX_LENGTH=5000
+MODERATION_VIDEO_FRAME_COUNT=4
+NOTIFICATION_SSE_HEARTBEAT_MS=25000
+NUTRITION_CHAT_MAX_MESSAGE_LENGTH=2000
+NUTRITION_CHAT_MAX_MESSAGES=5
+NUTRITION_CHAT_MAX_OUTPUT_TOKENS=1000
+NUTRITION_CHAT_MAX_STEPS=3
+NUTRITION_GUARDRAIL_POLICY_FILE=config/policies/nutrition.json
+NUTRITION_SYSTEM_PROMPT_FILE=config/prompts/nutrition.md
+OPENROUTER_API_BASE_URL=https://openrouter.ai/api/v1
+PAGINATION_DEFAULT_LIMIT=20
+PAGINATION_MAX_LIMIT=50
+PAGINATION_MAX_PAGE=1000000
+PAYMENT_CODE_ALLOCATION_ATTEMPTS=5
+PAYMENT_CODE_SUFFIX_LENGTH=6
+PAYMENT_EVENTS_CONNECT_TIMEOUT_MS=1500
+PAYMENT_EVENTS_OPEN_TIMEOUT_MS=2000
+PAYMENT_EVENTS_PUBLISH_TIMEOUT_MS=1000
+PAYMENT_EVENTS_RETRY_MS=3000
+PAYMENT_EXPIRATION_BATCH_SIZE=100
+PAYMENT_EXPIRATION_CRON="*/10 * * * * *"
+PAYMENT_INTENT_TTL_SECONDS=1800
+PAYMENT_SSE_HEARTBEAT_MS=15000
+PLANNER_CHAT_MAX_MESSAGE_LENGTH=4000
+PLANNER_CHAT_MAX_MESSAGES=10
+PLANNER_CHAT_MAX_OUTPUT_TOKENS=4000
+PLANNER_CHAT_MAX_STEPS=10
+PLANNER_SYSTEM_PROMPT_FILE=config/prompts/meal-planner.md
+POST_MAX_LENGTH=2000
+POST_MAX_MEDIA=4
+POST_MAX_WORDS=250
+POST_REVIEW_NOTE_MAX_LENGTH=500
+POST_SEARCH_CHUNK_MAX_CHARS=1500
+POST_SEARCH_INDEX_BATCH_SIZE=64
+POST_SEARCH_INDEX_CRON="0 * * * * *"
+POST_SEARCH_MAX_RESULTS=200
+POST_VIEW_MAX_BATCH=50
+POST_VIEWS_DEDUPE_WINDOW_SECONDS=1800
+POST_VIEWS_FLUSH_BATCH_SIZE=500
+POST_VIEWS_FLUSH_INTERVAL_MS=10000
+POST_VIEWS_MAX_DEDUPE_ENTRIES=200000
+PROFILE_AVATAR_MAX_MB=5
+PROFILE_BIO_MAX_LENGTH=500
+PROFILE_COVER_MAX_MB=10
+PROFILE_IMAGE_ACTIVATION_TTL_SECONDS=86400
+PROFILE_IMAGE_CLEANUP_AGE_SECONDS=172800
+PROFILE_IMAGE_CLEANUP_BATCH_SIZE=100
+PROFILE_IMAGE_CLEANUP_CRON="0 0 * * * *"
+PUBLIC_IMAGE_FETCH_TIMEOUT_MS=10000
+PUBLIC_IMAGE_MAX_MB=10
+QDRANT_STARTUP_TIMEOUT_MS=5000
+RECIPE_CATALOG_MAX_MINUTES=2880
+RECIPE_CATALOG_QUERY_MAX_LENGTH=100
+RECIPE_DESCRIPTION_MAX_LENGTH=1000
+RECIPE_IMAGE_URL_MAX_LENGTH=2048
+RECIPE_INGREDIENT_MAX_QUANTITY=999999.99
+RECIPE_MAX_INGREDIENTS=50
+RECIPE_MAX_MINUTES=1440
+RECIPE_MAX_SERVINGS=100
+RECIPE_MAX_STEPS=50
+RECIPE_NOTE_MAX_LENGTH=200
+RECIPE_STEP_MAX_LENGTH=1000
+RECIPE_TITLE_MAX_LENGTH=150
+RECIPE_UNIT_MAX_LENGTH=30
+REPORT_MAX_DETAILS_LENGTH=500
+SEARCH_QUERY_MAX_LENGTH=200
+SEPAY_QR_IMAGE_BASE_URL=https://vietqr.app/img
+STORAGE_CONNECTION_TIMEOUT_MS=3000
+STORAGE_REQUEST_TIMEOUT_MS=10000
+STORAGE_UPLOAD_TTL_SECONDS=3600
+SUBSCRIPTION_FREE_IMAGE_LIMIT=0
+SUBSCRIPTION_FREE_TEXT_LIMIT=5
+SUBSCRIPTION_PLUS_IMAGE_LIMIT=10
+SUBSCRIPTION_PLUS_TEXT_LIMIT=300
+SUBSCRIPTION_PRO_IMAGE_LIMIT=40
+SUBSCRIPTION_PRO_TEXT_LIMIT=900
+TRANSCRIPTION_MAX_NO_SPEECH_PROB=0.6
+TRANSCRIPTION_MIN_AVG_LOGPROB=-1
+TRANSCRIPTION_TIMEOUT_MS=180000
+TURNSTILE_VERIFY_TIMEOUT_MS=5000
+TURNSTILE_VERIFY_URL=https://challenges.cloudflare.com/turnstile/v0/siteverify
+USERS_SEARCH_MAX_LENGTH=100
+VERIFICATION_CLEANUP_AGE_SECONDS=172800
+VERIFICATION_CLEANUP_BATCH_SIZE=200
+VERIFICATION_CLEANUP_CRON="0 0 * * * *"
+VERIFICATION_MAX_PROOFS=6
+VERIFICATION_MAX_UNSUBMITTED_PROOFS=12
+VERIFICATION_PROOF_MAX_MB=10
+VERIFICATION_PROOF_URL_TTL_SECONDS=600
+VERIFICATION_REVIEW_NOTE_MAX_LENGTH=500
+VERIFICATION_STATEMENT_MAX_LENGTH=2000
+VERIFICATION_STATEMENT_MIN_LENGTH=20
+```
+
+## 5. Áp dụng và kiểm tra
+
+1. Xoá hai biến giá cũ ở mục 1. Thêm các biến cần dùng ở mục 2, rồi chọn khai báo thêm mục 3/4 nếu muốn cố định các mặc định. Không ghi đè các secret hoặc model bạn đã có bằng dữ liệu ví dụ.
+2. Nếu ký tự escape trong tin nhắn chỉ do công cụ export thì bỏ qua; nếu nó thực sự nằm trong env, sửa URL về dạng thông thường như `https://...`. File `.env` không cần dấu `\` ở cuối mỗi dòng hay escape dấu hai chấm trong URL.
+3. Env được đọc một lần lúc startup; phải tạo lại/restart process hoặc container sau khi cập nhật. Sửa file `.env` bên ngoài container rồi chỉ restart container cũ không bảo đảm Docker cập nhật environment đã cấp cho container. Với Compose, áp dụng bằng `docker compose up -d --build api` sau khi sửa env phù hợp.
+4. Với dashboard deploy hoặc Dockerfile riêng, bảo đảm các biến được truyền vào process API thực tế. Docker Compose của nhánh này đã map đủ 259 biến vận hành. Giữ thư mục `config/` trong image để các prompt/policy mặc định được đọc thành công.
+5. Sau triển khai, kiểm tra `GET /api/v1/health`, `GET /api/v1/billing/plans` (giá/chu kỳ/hạn mức) và `GET /api/v1/public-config` (các giới hạn công khai). Xem request payment events trong FE để kiểm tra kết nối SSE; tài liệu này chưa kiểm thử kết nối Redis production hoặc giao dịch tiền thật.
+6. Trước khi thay đổi giới hạn công khai khác các mặc định, đồng bộ FE theo [hợp đồng public config](docs-for-FE/runtime-config.md). Đổi env không tự đổi các hằng số cũ ở FE. Các giá trị trong tài liệu này giữ mặc định hiện hành.
+
+Tổng cộng có **290 tên biến được BE hỗ trợ nhưng chưa xuất hiện trong danh sách đã gửi**: 31 biến cấu hình đã hỗ trợ từ trước và 259 biến vận hành. Các khối env ở mục 2–4 không trùng tên và chỉ chứa các tên còn thiếu. Không có nghĩa 290 biến đó đều bắt buộc để khởi động.
+
+Các secret đã được gửi nguyên văn trong cuộc trò chuyện nên được đổi/thu hồi tại nhà cung cấp hoặc nơi quản lý tương ứng. File này chỉ chứa cấu hình không bí mật; không sao chép giá trị credential đã gửi vào Git hoặc ClickUp.
+
+Nguồn đối chiếu: [schema env](../src/config/environment.ts), [mặc định vận hành](../src/config/runtime-defaults.ts), [catalogue thanh toán](../src/payments/payments.service.ts), [Redis payment events](../src/payments/payment-events.service.ts), [Docker Compose](../docker-compose.yml), [bảng env đầy đủ](BE_ENV_REFERENCE.md).

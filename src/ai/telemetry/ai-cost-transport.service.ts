@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { runtimeConfig } from '../../config/runtime-config.js';
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Types, type Model } from 'mongoose';
@@ -44,10 +45,15 @@ export class AiCostTransportService {
     const url = new URL(
       typeof input === 'string' || input instanceof URL ? input : input.url,
     );
+    const provider = new URL(runtimeConfig.OPENROUTER_API_BASE_URL);
+    const apiPath = provider.pathname.replace(/\/$/, '');
+    const alphaPath = apiPath.replace(/\/v1$/, '');
     // A provider's fetch hook can serve other hosts; never record credentials or arbitrary URLs.
     if (
-      url.hostname !== 'openrouter.ai' ||
-      !/^\/api\/(?:v1|alpha)\//.test(url.pathname)
+      url.origin !== provider.origin ||
+      ![`${apiPath}/`, `${alphaPath}/alpha/`].some((prefix) =>
+        url.pathname.startsWith(prefix),
+      )
     )
       return underlying(input, init);
     const operation = /\/embeddings$/.test(url.pathname)

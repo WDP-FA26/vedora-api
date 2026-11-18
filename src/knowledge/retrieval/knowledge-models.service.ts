@@ -1,3 +1,4 @@
+import { runtimeConfig } from '../../config/runtime-config.js';
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { AiService } from '@nestjs/ai';
@@ -18,11 +19,11 @@ export interface RerankResult {
   relevanceScore: number;
 }
 
-const OPENROUTER_API = 'https://openrouter.ai/api/v1';
-const IMAGE_BATCH = 8;
-const EMBED_TIMEOUT_MS = 60_000;
-const OCR_TIMEOUT_MS = 5 * 60_000;
-const OCR_CARRIER_MODEL = 'google/gemini-3.1-flash-lite';
+const OPENROUTER_API = runtimeConfig.OPENROUTER_API_BASE_URL;
+const IMAGE_BATCH = runtimeConfig.KNOWLEDGE_IMAGE_BATCH_SIZE;
+const EMBED_TIMEOUT_MS = runtimeConfig.KNOWLEDGE_EMBED_TIMEOUT_MS;
+const OCR_TIMEOUT_MS = runtimeConfig.KNOWLEDGE_OCR_TIMEOUT_MS;
+const OCR_CARRIER_MODEL = runtimeConfig.KNOWLEDGE_OCR_CARRIER_MODEL;
 
 @Injectable()
 export class KnowledgeModelsService {
@@ -119,7 +120,7 @@ export class KnowledgeModelsService {
       '/chat/completions',
       {
         model: OCR_CARRIER_MODEL,
-        max_tokens: 16,
+        max_tokens: runtimeConfig.KNOWLEDGE_OCR_CARRIER_MAX_TOKENS,
         messages: [
           {
             role: 'user',
@@ -135,7 +136,12 @@ export class KnowledgeModelsService {
             ],
           },
         ],
-        plugins: [{ id: 'file-parser', pdf: { engine: 'mistral-ocr' } }],
+        plugins: [
+          {
+            id: 'file-parser',
+            pdf: { engine: runtimeConfig.KNOWLEDGE_OCR_ENGINE },
+          },
+        ],
       },
       AbortSignal.timeout(OCR_TIMEOUT_MS),
     );

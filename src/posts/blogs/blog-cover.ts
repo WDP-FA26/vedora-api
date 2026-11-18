@@ -1,13 +1,12 @@
-export const MAX_COVER_URL_LENGTH = 2048;
+import { runtimeConfig } from '../../config/runtime-config.js';
+export const MAX_COVER_URL_LENGTH = runtimeConfig.BLOG_COVER_URL_MAX_LENGTH;
 
 /** An image or video on a line of its own, as the blog editor writes it. */
 const MEDIA_LINE = /^!\[[^\]]*\]\((https?:\/\/[^\s)]+)\)\s*$/gm;
 
 /** Same test as the web editor's `isVideoUrl`: videos are not covers. */
 export function isVideoUrl(url: string): boolean {
-  return (
-    /\/video\/upload\//.test(url) || /\.(mp4|webm|mov)(\?|#|$)/i.test(url)
-  );
+  return /\/video\/upload\//.test(url) || /\.(mp4|webm|mov)(\?|#|$)/i.test(url);
 }
 
 /**

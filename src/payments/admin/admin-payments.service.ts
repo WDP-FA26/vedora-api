@@ -1,3 +1,4 @@
+import { runtimeConfig } from '../../config/runtime-config.js';
 import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import type { Model, PipelineStage } from 'mongoose';
@@ -132,7 +133,7 @@ export class AdminPaymentsService {
       $dateToString: {
         date: `$${field}`,
         format: '%Y-%m-%d',
-        timezone: 'Asia/Bangkok',
+        timezone: runtimeConfig.APP_TIMEZONE,
       },
     });
     const [[created], [captured], memberships] = await Promise.all([
@@ -388,13 +389,13 @@ export class AdminPaymentsService {
       .aggregate<AdminIntent>([
         ...this.scope(query, 'createdAt'),
         { $sort: { createdAt: -1, _id: -1 } },
-        { $limit: 10001 },
+        { $limit: runtimeConfig.ADMIN_EXPORT_MAX_ROWS + 1 },
       ])
       .exec();
-    if (rows.length > 10000)
+    if (rows.length > runtimeConfig.ADMIN_EXPORT_MAX_ROWS)
       throw new InvalidInputException(
         'BAD_REQUEST',
-        'CSV exceeds 10000 orders; narrow the filters',
+        `CSV exceeds ${runtimeConfig.ADMIN_EXPORT_MAX_ROWS} orders; narrow the filters`,
       );
     const headers = [
       'id',

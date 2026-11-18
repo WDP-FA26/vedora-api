@@ -1,3 +1,4 @@
+import { runtimeConfig } from '../../config/runtime-config.js';
 import { ApiProperty } from '@nestjs/swagger';
 import { IsIn, IsInt, Max, Min } from 'class-validator';
 import { SignedUploadDto } from '../../media/dto/media-response.dto.js';
@@ -10,7 +11,7 @@ export const BLOG_IMAGE_TYPES = [
   'image/gif',
 ] as const;
 
-export const MAX_BLOG_IMAGE_BYTES = 5 * 1024 * 1024;
+export const MAX_BLOG_IMAGE_BYTES = runtimeConfig.BLOG_IMAGE_MAX_MB * 1048576;
 
 export class CreateBlogImageUploadDto {
   @ApiProperty({ enum: BLOG_IMAGE_TYPES })

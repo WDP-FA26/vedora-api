@@ -1,3 +1,4 @@
+import { runtimeConfig } from '../../config/runtime-config.js';
 import { createOpenRouter } from '@openrouter/ai-sdk-provider';
 import {
   experimental_evaluate as evaluate,
@@ -13,8 +14,8 @@ export interface DecisionPolicy<V extends string> {
 type DecisionState = Parameters<typeof evaluate>[0]['state'];
 
 // One budget for the whole call, retries included.
-const DEFAULT_TIMEOUT_MS = 10_000;
-const MAX_RETRIES = 2;
+const DEFAULT_TIMEOUT_MS = runtimeConfig.AI_DECISION_TIMEOUT_MS;
+const MAX_RETRIES = runtimeConfig.AI_DECISION_MAX_RETRIES;
 
 export function evaluationModel({
   apiKey,
@@ -25,9 +26,11 @@ export function evaluationModel({
   modelId: string;
   fetch?: typeof fetch;
 }): Experimental_EvaluationModel {
-  return createOpenRouter({ apiKey, fetch: customFetch }).evaluationModel(
-    modelId,
-  );
+  return createOpenRouter({
+    apiKey,
+    fetch: customFetch,
+    baseURL: runtimeConfig.OPENROUTER_API_BASE_URL,
+  }).evaluationModel(modelId);
 }
 
 export async function decide<V extends string>(

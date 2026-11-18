@@ -1,3 +1,4 @@
+import { runtimeConfig } from './config/runtime-config.js';
 import {
   INestApplication,
   ValidationError,
@@ -30,7 +31,7 @@ function validationMessages(
 
 export function configureApp(app: INestApplication): void {
   (app.getHttpAdapter() as ExpressAdapter).useBodyParser('json', true, {
-    limit: '512kb',
+    limit: `${runtimeConfig.HTTP_JSON_BODY_LIMIT_KB}kb`,
   });
   const config = app.get(ConfigService);
   const prefix = config.get<string>('API_PREFIX', 'api/v1');

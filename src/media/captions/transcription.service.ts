@@ -1,3 +1,4 @@
+import { runtimeConfig } from '../../config/runtime-config.js';
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { AiService } from '@nestjs/ai';
@@ -13,24 +14,24 @@ import {
 } from './transcription.dto.js';
 import type { Cue } from './vtt.js';
 
-const OPENROUTER_API = 'https://openrouter.ai/api/v1';
-const TRANSCRIBE_TIMEOUT_MS = 3 * 60_000;
+const OPENROUTER_API = runtimeConfig.OPENROUTER_API_BASE_URL;
+const TRANSCRIBE_TIMEOUT_MS = runtimeConfig.TRANSCRIPTION_TIMEOUT_MS;
 
 const CAPTION_PROMPT =
   'Vedora, tàu hủ, đậu hũ, chao, nấm mèo, bún tàu, hạt nêm, dầu điều, nước tương, mắm chay, tempeh, seitan.';
 const NEVER_TRANSLATE = ['Vedora'];
 
-const MAX_NO_SPEECH_PROB = 0.6;
-const MIN_AVG_LOGPROB = -1;
+const MAX_NO_SPEECH_PROB = runtimeConfig.TRANSCRIPTION_MAX_NO_SPEECH_PROB;
+const MIN_AVG_LOGPROB = runtimeConfig.TRANSCRIPTION_MIN_AVG_LOGPROB;
 const HALLUCINATIONS = [
   /ghiền mì gõ/i,
   /đăng ký kênh/i,
   /subscribe cho kênh/i,
   /thanks for watching/i,
 ];
-const MAX_CUE_SEC = 7;
+const MAX_CUE_SEC = runtimeConfig.CAPTION_MAX_CUE_SECONDS;
 
-const CUE_GAP_SEC = 0.8;
+const CUE_GAP_SEC = runtimeConfig.CAPTION_CUE_GAP_SECONDS;
 
 const LANGUAGE_CODES: Record<string, string> = {
   vietnamese: 'vi',

@@ -20,6 +20,10 @@ import {
   DEFAULT_MODERATION_MODEL,
 } from '../ai/openrouter.js';
 import { REASONING_EFFORTS } from '../ai/reasoning.js';
+import {
+  parseRuntimeSettings,
+  type RuntimeSettings,
+} from './runtime-settings.js';
 
 const toBoolean = ({ value }: { value: unknown }): unknown => {
   if (typeof value === 'boolean') return value;
@@ -202,7 +206,7 @@ export class EnvironmentVariables {
   @ValidateIf((env: EnvironmentVariables) => env.NODE_ENV === 'production')
   @IsString()
   @IsNotEmpty()
-  TURNSTILE_SECRET_KEY = TURNSTILE_TEST_SECRET;
+  TURNSTILE_SECRET_KEY = '';
 
   @Type(() => Number)
   @IsInt()
@@ -332,11 +336,19 @@ export class EnvironmentVariables {
 
 export function validateEnvironment(
   config: Record<string, unknown>,
-): EnvironmentVariables {
+): EnvironmentVariables & RuntimeSettings {
   const source = { ...config };
   if (!source.TURNSTILE_SECRET_KEY && source.NODE_ENV !== 'production')
     source.TURNSTILE_SECRET_KEY = TURNSTILE_TEST_SECRET;
   const instance = plainToInstance(EnvironmentVariables, source);
+  if (
+    instance.NODE_ENV === 'production' &&
+    /^[123]x0+AA$/.test(instance.TURNSTILE_SECRET_KEY)
+  ) {
+    throw new Error(
+      'Config validation error: TURNSTILE_SECRET_KEY must not be a test key in production',
+    );
+  }
   const errors = validateSync(instance, {
     skipMissingProperties: false,
     forbidUnknownValues: false,
@@ -347,5 +359,5 @@ export function validateEnvironment(
       .join('; ');
     throw new Error(`Config validation error: ${messages}`);
   }
-  return instance;
+  return Object.assign(instance, parseRuntimeSettings(config));
 }

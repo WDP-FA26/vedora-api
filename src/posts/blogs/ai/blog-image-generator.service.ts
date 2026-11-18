@@ -1,3 +1,4 @@
+import { runtimeConfig } from '../../../config/runtime-config.js';
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { AiFeature } from '../../../mongo/models.js';
@@ -19,7 +20,10 @@ import {
 import { BLOG_ASSISTANT_POLICY } from '../../../ai/guardrails/policies/blog-assistant.js';
 import { blogRefusal } from './blog-assistant.moderation.js';
 
-export const IMAGE_ASPECT_RATIOS = ['1:1', '4:3', '3:4', '16:9'] as const;
+export const IMAGE_ASPECT_RATIOS =
+  runtimeConfig.AI_IMAGE_ALLOWED_ASPECT_RATIOS.split(',').map((value) =>
+    value.trim(),
+  ) as ('1:1' | '4:3' | '3:4' | '16:9')[];
 export type ImageAspectRatio = (typeof IMAGE_ASPECT_RATIOS)[number];
 
 export const IMAGE_ERRORS = [
@@ -72,7 +76,7 @@ export class BlogImageGeneratorService {
         model: this.imageModel,
         prompt,
         aspectRatio,
-        maxRetries: 1,
+        maxRetries: runtimeConfig.AI_IMAGE_MAX_RETRIES,
         abortSignal,
       }),
     );
@@ -92,7 +96,7 @@ export class BlogImageGeneratorService {
       return generateImage({
         model: this.imageModel,
         prompt: { images: [source], text: instruction },
-        maxRetries: 1,
+        maxRetries: runtimeConfig.AI_IMAGE_MAX_RETRIES,
         abortSignal,
       });
     });

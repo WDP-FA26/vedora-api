@@ -1,3 +1,4 @@
+import { runtimeConfig } from '../../config/runtime-config.js';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { AiFeature } from '../../mongo/models.js';
 import { Type } from 'class-transformer';
@@ -14,13 +15,16 @@ import {
 } from 'class-validator';
 import { MAX_BLOG_CONTENT } from './blog.dto.js';
 
-export const MAX_ASSISTANT_MESSAGES = 40;
-export const MAX_SELECTION = 4000;
+export const MAX_ASSISTANT_MESSAGES = runtimeConfig.BLOG_AI_MAX_MESSAGES;
+export const MAX_SELECTION = runtimeConfig.BLOG_AI_MAX_SELECTION_LENGTH;
 
 export class EditorSnapshotDto {
-  @ApiProperty({ maxLength: 150, description: 'May be empty' })
+  @ApiProperty({
+    maxLength: runtimeConfig.BLOG_TITLE_MAX_LENGTH,
+    description: 'May be empty',
+  })
   @IsString()
-  @MaxLength(150)
+  @MaxLength(runtimeConfig.BLOG_TITLE_MAX_LENGTH)
   title!: string;
 
   @ApiProperty({ maxLength: MAX_BLOG_CONTENT, description: 'Markdown draft' })
@@ -91,8 +95,7 @@ export class AiQuotaDto {
   @ApiProperty() used!: number;
   @ApiProperty() limit!: number;
   @ApiProperty({
-    description:
-      'Next midnight in Asia/Bangkok for Free, or subscription expiry for Plus/Pro',
+    description: `Next midnight in ${runtimeConfig.APP_TIMEZONE} for Free, or subscription expiry for Plus/Pro`,
   })
   resetsAt!: Date;
 }

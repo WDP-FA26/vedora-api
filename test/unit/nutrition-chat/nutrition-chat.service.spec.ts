@@ -177,6 +177,7 @@ describe('NutritionChatService', () => {
 
     expect(createOpenRouter).toHaveBeenCalledWith({
       apiKey: 'key',
+      baseURL: 'https://openrouter.ai/api/v1',
       fetch,
     });
     expect(languageModel).toHaveBeenCalledWith('test/model', {

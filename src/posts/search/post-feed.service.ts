@@ -1,3 +1,4 @@
+import { runtimeConfig } from '../../config/runtime-config.js';
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import type { Model } from 'mongoose';
@@ -12,12 +13,12 @@ import { QdrantService } from '../../qdrant/qdrant.service.js';
 import { DENSE_VECTOR, toEpochSeconds } from './post-search-collection.js';
 import { PostSearchIndexService } from './post-search-index.service.js';
 
-export const MAX_FEED_RESULTS = 200;
-const TASTE_POSTS = 20;
-const WINDOW_SECONDS = 7 * 24 * 60 * 60;
-const HALF_LIFE_SECONDS = 2 * 24 * 60 * 60;
-const FRESHNESS_WEIGHT = 0.05;
-const EXPLORE_EVERY = 5;
+export const MAX_FEED_RESULTS = runtimeConfig.FEED_MAX_RESULTS;
+const TASTE_POSTS = runtimeConfig.FEED_TASTE_POSTS;
+const WINDOW_SECONDS = runtimeConfig.FEED_FRESH_WINDOW_SECONDS;
+const HALF_LIFE_SECONDS = runtimeConfig.FEED_HALF_LIFE_SECONDS;
+const FRESHNESS_WEIGHT = runtimeConfig.FEED_FRESHNESS_WEIGHT;
+const EXPLORE_EVERY = runtimeConfig.FEED_EXPLORE_EVERY;
 
 @Injectable()
 export class PostFeedService {

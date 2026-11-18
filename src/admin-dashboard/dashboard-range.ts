@@ -1,8 +1,10 @@
+import { runtimeConfig } from '../config/runtime-config.js';
+import { zonedMidnight, nextCalendarDay } from '../config/time-zone.js';
 import { InvalidInputException } from '../common/exceptions/invalid-input.exception.js';
 
-export const DASHBOARD_TIME_ZONE = 'Asia/Bangkok';
+export const DASHBOARD_TIME_ZONE = runtimeConfig.APP_TIMEZONE;
 export const DAY_MS = 86_400_000;
-export const MAX_DASHBOARD_DAYS = 90;
+export const MAX_DASHBOARD_DAYS = runtimeConfig.ADMIN_REPORT_MAX_DAYS;
 
 export interface DashboardRange {
   from: string;
@@ -16,7 +18,7 @@ export interface DashboardRange {
 function invalidRange(): never {
   throw new InvalidInputException(
     'INVALID_DASHBOARD_RANGE',
-    'Provide both from/to as valid YYYY-MM-DD dates, in ascending order, spanning at most 90 inclusive days',
+    `Provide both from/to as valid YYYY-MM-DD dates, in ascending order, spanning at most ${MAX_DASHBOARD_DAYS} inclusive days`,
   );
 }
 
@@ -46,7 +48,10 @@ export function resolveDashboardRange(
   const to = query.to ?? today;
   const last = dayEpoch(to);
   const from =
-    query.from ?? new Date(last - 29 * DAY_MS).toISOString().slice(0, 10);
+    query.from ??
+    new Date(last - (runtimeConfig.ADMIN_REPORT_DEFAULT_DAYS - 1) * DAY_MS)
+      .toISOString()
+      .slice(0, 10);
   const first = dayEpoch(from);
   const dayCount = (last - first) / DAY_MS + 1;
   if (dayCount < 1 || dayCount > MAX_DASHBOARD_DAYS) invalidRange();
@@ -55,7 +60,7 @@ export function resolveDashboardRange(
     to,
     dayCount,
     timeZone: DASHBOARD_TIME_ZONE,
-    start: new Date(`${from}T00:00:00+07:00`),
-    endExclusive: new Date(Date.parse(`${to}T00:00:00+07:00`) + DAY_MS),
+    start: zonedMidnight(from, DASHBOARD_TIME_ZONE),
+    endExclusive: zonedMidnight(nextCalendarDay(to), DASHBOARD_TIME_ZONE),
   };
 }

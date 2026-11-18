@@ -1,9 +1,10 @@
+import { runtimeConfig } from '../config/runtime-config.js';
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { z } from 'zod';
 
-const VERIFY_URL = 'https://challenges.cloudflare.com/turnstile/v0/siteverify';
-const TIMEOUT_MS = 5000;
+const VERIFY_URL = runtimeConfig.TURNSTILE_VERIFY_URL;
+const TIMEOUT_MS = runtimeConfig.TURNSTILE_VERIFY_TIMEOUT_MS;
 
 const turnstileResultSchema = z.object({ success: z.boolean().optional() });
 

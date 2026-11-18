@@ -1,20 +1,25 @@
+import { runtimeConfig } from '../../../config/runtime-config.js';
 import { tool } from 'ai';
 import { z } from 'zod';
 import type { KnowledgeSearchService } from '../../../knowledge/retrieval/knowledge-search.service.js';
 import { searchKnowledgeTool } from '../../../knowledge/tools/search-knowledge.tool.js';
 import {
   type BlogImageGeneratorService,
+  type ImageAspectRatio,
   IMAGE_ASPECT_RATIOS,
   IMAGE_ERRORS,
 } from './blog-image-generator.service.js';
 
-export const MAX_EDIT_MARKDOWN = 8000;
-const MAX_TITLE = 150;
+export const MAX_EDIT_MARKDOWN = runtimeConfig.BLOG_AI_MAX_EDIT_LENGTH;
+const MAX_TITLE = runtimeConfig.BLOG_TITLE_MAX_LENGTH;
 
 const editorOutput = z.object({
   applied: z.boolean(),
   error: z.enum(['NO_SELECTION', 'NOT_FOUND', 'AMBIGUOUS', 'STALE']).optional(),
-  reason: z.string().max(500).optional(),
+  reason: z
+    .string()
+    .max(runtimeConfig.BLOG_AI_TOOL_REASON_MAX_LENGTH)
+    .optional(),
 });
 export type EditorToolOutput = z.infer<typeof editorOutput>;
 
@@ -65,13 +70,13 @@ export const editorTools = {
       alt: z
         .string()
         .min(1)
-        .max(200)
+        .max(runtimeConfig.BLOG_AI_IMAGE_ALT_MAX_LENGTH)
         .describe('Short description, in the language of the draft'),
       position: z.enum(['cursor', 'end', 'after']),
       after: z.string().max(MAX_EDIT_MARKDOWN).optional(),
       replaces: z
         .string()
-        .max(2048)
+        .max(runtimeConfig.BLOG_AI_IMAGE_URL_MAX_LENGTH)
         .optional()
         .describe(
           'URL of an image in <draft> that this one takes the place of, copied exactly; position is then ignored',
@@ -98,8 +103,15 @@ export function blogAssistantTools(
       description:
         "Generate a new illustration for the blog and store it. Costs one image from the user's current subscription allowance: only call it when the user asks for an image. Write the prompt in English, describing a plant-based dish or scene (subject, angle, lighting, style); no text in the image, no real people. Returns a URL to pass to insertImage, or an error code to explain to the user.",
       inputSchema: z.object({
-        prompt: z.string().min(1).max(1000),
-        aspectRatio: z.enum(IMAGE_ASPECT_RATIOS).default('4:3'),
+        prompt: z
+          .string()
+          .min(1)
+          .max(runtimeConfig.BLOG_AI_IMAGE_PROMPT_MAX_LENGTH),
+        aspectRatio: z
+          .enum(IMAGE_ASPECT_RATIOS)
+          .default(
+            runtimeConfig.AI_IMAGE_DEFAULT_ASPECT_RATIO as ImageAspectRatio,
+          ),
       }),
       outputSchema: imageOutput,
       execute: ({ prompt, aspectRatio }, { abortSignal }) =>
@@ -110,7 +122,11 @@ export function blogAssistantTools(
         "Edit an image already in the draft (one of the user's blog images) following an instruction, e.g. brighter, remove the spoon, change the background. Costs one image from the current subscription allowance. Returns the edited image's URL; the original is kept, so call insertImage with `replaces` set to the original URL to swap them.",
       inputSchema: z.object({
         imageUrl: z.url(),
-        instruction: z.string().min(1).max(1000).describe('In English'),
+        instruction: z
+          .string()
+          .min(1)
+          .max(runtimeConfig.BLOG_AI_IMAGE_PROMPT_MAX_LENGTH)
+          .describe('In English'),
       }),
       outputSchema: imageOutput,
       execute: ({ imageUrl, instruction }, { abortSignal }) =>

@@ -1,3 +1,4 @@
+import { runtimeConfig } from '../config/runtime-config.js';
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { InjectModel } from '@nestjs/ai';
 import {
@@ -35,8 +36,8 @@ import { AiUsageService } from '../subscriptions/ai-usage.service.js';
 import { quotaStream } from '../subscriptions/quota-stream.js';
 import { QuotaReachedException } from '../common/exceptions/quota-reached.exception.js';
 
-const MAX_STEPS = 10;
-const SEARCH_TIMEOUT_MS = 5000;
+const MAX_STEPS = runtimeConfig.PLANNER_CHAT_MAX_STEPS;
+const SEARCH_TIMEOUT_MS = runtimeConfig.AI_KNOWLEDGE_TOOL_TIMEOUT_MS;
 
 function shouldDiscardPreviousDraft(
   messages: readonly PlannerMessageDto[],
@@ -79,7 +80,7 @@ export class MealPlannerChatService {
     assertLastMessageFromUser(messages);
     abortSignal = AbortSignal.any([
       abortSignal,
-      AbortSignal.timeout(5 * 60_000),
+      AbortSignal.timeout(runtimeConfig.AI_CHAT_TIMEOUT_MS),
     ]);
     const ticket = await this.usage.consume(userId, AiFeature.MEAL_PLAN_CHAT, {
       requestId,
@@ -123,7 +124,7 @@ export class MealPlannerChatService {
       const agent = new ToolLoopAgent({
         model: this.model,
         instructions: plannerInstructions(restrictions, plan, draft),
-        maxOutputTokens: 4000,
+        maxOutputTokens: runtimeConfig.PLANNER_CHAT_MAX_OUTPUT_TOKENS,
         tools: {
           searchKnowledge: searchKnowledgeTool(this.knowledge),
           searchRecipes: searchRecipesTool(this.mealPlan, userId),

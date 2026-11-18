@@ -1,3 +1,4 @@
+import { runtimeConfig } from '../config/runtime-config.js';
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
@@ -41,7 +42,8 @@ import { UnauthenticatedException } from '../common/exceptions/unauthenticated.e
 const DUMMY_PASSWORD_HASH =
   '$2b$12$eMcBdg./eJofytkZPDuoGOyif9iLSXILzYk0MY95Vq6P7M6.c9nTe';
 
-const UNVERIFIED_ACCOUNT_TTL_MS = 60 * 60 * 1000;
+const UNVERIFIED_ACCOUNT_TTL_MS =
+  runtimeConfig.AUTH_UNVERIFIED_ACCOUNT_TTL_SECONDS * 1000;
 
 @Injectable()
 export class AuthService {

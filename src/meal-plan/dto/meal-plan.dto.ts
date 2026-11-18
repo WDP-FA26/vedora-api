@@ -1,3 +1,4 @@
+import { runtimeConfig } from '../../config/runtime-config.js';
 import { applyDecorators } from '@nestjs/common';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { MealSection, RecipeTag, Weekday } from '../../mongo/models.js';
@@ -24,7 +25,8 @@ import { LastMessageFromUser } from '../../ai/guardrails/conversation-state.js';
 
 export const WEEKDAYS = Object.values(Weekday);
 export const MEAL_SECTIONS = Object.values(MealSection);
-export const MAX_DISHES_PER_SECTION = 5;
+export const MAX_DISHES_PER_SECTION =
+  runtimeConfig.MEAL_PLAN_MAX_DISHES_PER_SECTION;
 
 const DishIds = (description: string) =>
   applyDecorators(
@@ -79,7 +81,8 @@ export class SaveMealDaysDto {
 }
 
 export const MAX_GENERATE_MINUTES = 240;
-export const MAX_GENERATE_QUERY_LENGTH = 100;
+export const MAX_GENERATE_QUERY_LENGTH =
+  runtimeConfig.RECIPE_CATALOG_QUERY_MAX_LENGTH;
 export const MAX_GENERATE_EXCLUDES = 10;
 
 export const MAX_GENERATE_IDS = 200;
@@ -353,8 +356,9 @@ export class GenerateMealResultDto extends MealPlanDraftDto {
   filled!: number;
 }
 
-const MAX_PLANNER_MESSAGES = 10;
-const MAX_PLANNER_MESSAGE_LENGTH = 4000;
+const MAX_PLANNER_MESSAGES = runtimeConfig.PLANNER_CHAT_MAX_MESSAGES;
+const MAX_PLANNER_MESSAGE_LENGTH =
+  runtimeConfig.PLANNER_CHAT_MAX_MESSAGE_LENGTH;
 
 export class PlannerMessageDto {
   @ApiProperty({ enum: ['user', 'assistant'] })

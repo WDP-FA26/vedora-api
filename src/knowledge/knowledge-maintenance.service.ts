@@ -1,5 +1,6 @@
+import { runtimeConfig } from '../config/runtime-config.js';
 import { Injectable, Logger } from '@nestjs/common';
-import { Cron, CronExpression } from '@nestjs/schedule';
+import { Cron } from '@nestjs/schedule';
 import { InjectModel } from '@nestjs/mongoose';
 import type { Model } from 'mongoose';
 import {
@@ -9,8 +10,10 @@ import {
 } from '../mongo/models.js';
 import { UPLOAD_TTL_SECONDS } from '../storage/storage.service.js';
 
-const EVENT_GRACE_MS = 10 * 60 * 1000;
-const STALE_PROCESSING_MS = 15 * 60 * 1000;
+const EVENT_GRACE_MS =
+  runtimeConfig.KNOWLEDGE_UPLOAD_EVENT_GRACE_SECONDS * 1000;
+const STALE_PROCESSING_MS =
+  runtimeConfig.KNOWLEDGE_STALE_PROCESSING_SECONDS * 1000;
 
 @Injectable()
 export class KnowledgeMaintenanceService {
@@ -21,7 +24,7 @@ export class KnowledgeMaintenanceService {
     private readonly documents: Model<KnowledgeDocument>,
   ) {}
 
-  @Cron(CronExpression.EVERY_10_MINUTES)
+  @Cron(runtimeConfig.KNOWLEDGE_MAINTENANCE_CRON)
   async failIncomplete(): Promise<void> {
     const now = Date.now();
     const expired = await this.documents

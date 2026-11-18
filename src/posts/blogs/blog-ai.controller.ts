@@ -1,3 +1,4 @@
+import { runtimeConfig } from '../../config/runtime-config.js';
 import {
   Body,
   Controller,
@@ -53,7 +54,12 @@ export class BlogAiController {
 
   @Post('chat')
   @UseGuards(UserThrottlerGuard)
-  @Throttle({ default: { limit: 30, ttl: 60_000 } })
+  @Throttle({
+    default: {
+      limit: runtimeConfig.BLOG_AI_RATE_LIMIT,
+      ttl: runtimeConfig.AI_RATE_LIMIT_WINDOW_MS,
+    },
+  })
   @ApiOperation({
     summary: 'Talk to the blog writing assistant',
     description:

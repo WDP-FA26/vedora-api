@@ -1,3 +1,4 @@
+import { runtimeConfig } from '../config/runtime-config.js';
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { APICallError, type Experimental_EvaluationModel } from 'ai';
 import { FeatureUnavailableException } from '../common/exceptions/feature-unavailable.exception.js';
@@ -23,7 +24,7 @@ export type ContentPart =
   | { kind: 'image'; source: Buffer }
   | { kind: 'jpeg'; source: Buffer };
 
-const CONTENT_TIMEOUT_MS = 20_000;
+const CONTENT_TIMEOUT_MS = runtimeConfig.MODERATION_CONTENT_TIMEOUT_MS;
 const PROHIBITED_CONTENT_CODE = 'prohibited_content';
 
 /** True when the model's provider refused the input itself (HTTP 400 `prohibited_content`). */
@@ -32,7 +33,7 @@ function isProviderRefusal(error: unknown): boolean {
   if (error.statusCode !== 400) return false;
   return error.responseBody?.includes(PROHIBITED_CONTENT_CODE) === true;
 }
-const MAX_TEXT_CHARS = 30_000;
+const MAX_TEXT_CHARS = runtimeConfig.MODERATION_MAX_TEXT_CHARS;
 
 @Injectable()
 export class ContentModerationService {

@@ -1,3 +1,4 @@
+import { runtimeConfig } from '../config/runtime-config.js';
 import {
   Controller,
   Header,
@@ -80,7 +81,7 @@ export class PaymentStreamController {
             : { type: `stream.${signal.type}`, data: {} },
         ),
       );
-    const heartbeat = interval(15_000).pipe(
+    const heartbeat = interval(runtimeConfig.PAYMENT_SSE_HEARTBEAT_MS).pipe(
       exhaustMap(async (): Promise<MessageEvent> => {
         try {
           await this.jwt.verifyAsync(token);

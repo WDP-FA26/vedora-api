@@ -1,3 +1,4 @@
+import { runtimeConfig } from '../../../config/runtime-config.js';
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { InjectModel as InjectAiModel } from '@nestjs/ai';
 import { InjectModel } from '@nestjs/mongoose';
@@ -60,9 +61,9 @@ import { InvalidInputException } from '../../../common/exceptions/invalid-input.
 import { QuotaReachedException } from '../../../common/exceptions/quota-reached.exception.js';
 import { ResourceNotFoundException } from '../../../common/exceptions/resource-not-found.exception.js';
 
-const MAX_STEPS = 8;
-const MAX_OUTPUT_TOKENS = 4000;
-const SEARCH_TIMEOUT_MS = 5000;
+const MAX_STEPS = runtimeConfig.BLOG_AI_MAX_STEPS;
+const MAX_OUTPUT_TOKENS = runtimeConfig.BLOG_AI_MAX_OUTPUT_TOKENS;
+const SEARCH_TIMEOUT_MS = runtimeConfig.AI_KNOWLEDGE_TOOL_TIMEOUT_MS;
 
 @Injectable()
 export class BlogAssistantService {
@@ -96,7 +97,7 @@ export class BlogAssistantService {
   ) {
     abortSignal = AbortSignal.any([
       abortSignal,
-      AbortSignal.timeout(5 * 60_000),
+      AbortSignal.timeout(runtimeConfig.AI_CHAT_TIMEOUT_MS),
     ]);
     const tools = blogAssistantTools(userId, this.knowledge, this.images);
     const messages = await parseMessages(dto.messages, tools);

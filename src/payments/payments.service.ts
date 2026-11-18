@@ -1,3 +1,4 @@
+import { runtimeConfig } from '../config/runtime-config.js';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
@@ -35,6 +36,7 @@ import {
   PLAN_VERSION,
   purchasedPlanName,
   SUBSCRIPTION_LIMITS,
+  purchasedLimits,
 } from '../subscriptions/subscription-policy.js';
 import { SubscriptionsService } from '../subscriptions/subscriptions.service.js';
 import { AiUsageService } from '../subscriptions/ai-usage.service.js';
@@ -119,10 +121,8 @@ export class PaymentsService {
       planCode: effectivePlan(intent),
       planVersion: intent.planVersion ?? 1,
       purchasedPlanName: purchasedPlanName(intent),
-      textLimit:
-        intent.textLimit ?? SUBSCRIPTION_LIMITS[effectivePlan(intent)].text,
-      imageLimit:
-        intent.imageLimit ?? SUBSCRIPTION_LIMITS[effectivePlan(intent)].images,
+      textLimit: purchasedLimits(intent).text,
+      imageLimit: purchasedLimits(intent).images,
       durationDays: intent.durationDays,
       amount: intent.amount.toString(),
       currency: intent.currency,
@@ -154,7 +154,7 @@ export class PaymentsService {
       this.intents
         .find({ userId })
         .sort({ createdAt: -1, _id: -1 })
-        .limit(20)
+        .limit(runtimeConfig.BILLING_RECENT_PAYMENTS_LIMIT)
         .exec(),
     ]);
     const [text, images] = await Promise.all([
@@ -263,12 +263,8 @@ export class PaymentsService {
           (effectivePlan(intent) !== planCode ||
             intent.amount.toString() !== plan.priceVnd ||
             intent.durationDays !== plan.durationDays ||
-            (intent.textLimit ??
-              SUBSCRIPTION_LIMITS[effectivePlan(intent)].text) !==
-              plan.textLimit ||
-            (intent.imageLimit ??
-              SUBSCRIPTION_LIMITS[effectivePlan(intent)].images) !==
-              plan.imageLimit)
+            purchasedLimits(intent).text !== plan.textLimit ||
+            purchasedLimits(intent).images !== plan.imageLimit)
         )
           throw new StateConflictException(
             'PENDING_PAYMENT_CONFLICT',
@@ -324,7 +320,11 @@ export class PaymentsService {
         );
         return { intent, expired };
       });
-    for (let attempt = 0; attempt < 5; attempt++) {
+    for (
+      let attempt = 0;
+      attempt < runtimeConfig.PAYMENT_CODE_ALLOCATION_ATTEMPTS;
+      attempt++
+    ) {
       try {
         const result = await attemptCreate();
         if (result.expired) await this.notifyCommitted(result.expired);
@@ -502,7 +502,7 @@ export class PaymentsService {
         ...(userId ? { userId } : {}),
       })
       .select('_id userId')
-      .limit(100)
+      .limit(runtimeConfig.PAYMENT_EXPIRATION_BATCH_SIZE)
       .exec();
     let count = 0;
     for (const candidate of candidates) {

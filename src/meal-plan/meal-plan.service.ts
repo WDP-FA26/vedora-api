@@ -1,3 +1,4 @@
+import { runtimeConfig } from '../config/runtime-config.js';
 import { rethrowAsStateConflict } from '../mongo/unique-conflict.js';
 import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
@@ -86,7 +87,7 @@ export type MealPlanPreview = MealPlanPreviewDto;
 /** The whole unsaved draft against the saved plan; `ok` only when it can be shown and saved. */
 export type DraftProposal = MealPlanPreview & { ok: boolean };
 
-const MAX_SUGGESTIONS = 60;
+const MAX_SUGGESTIONS = runtimeConfig.MEAL_PLAN_SUGGESTIONS_LIMIT;
 
 type SlotKey = { day: Weekday; section: MealSection };
 
@@ -121,9 +122,7 @@ const emptyDay = (): DaySections => ({
 });
 
 const allSlots = (): SlotKey[] =>
-  WEEKDAYS.flatMap((day) =>
-    MEAL_SECTIONS.map((section) => ({ day, section })),
-  );
+  WEEKDAYS.flatMap((day) => MEAL_SECTIONS.map((section) => ({ day, section })));
 
 const dishes = (day: DaySections | undefined): RecipeRow[] =>
   day ? MEAL_SECTIONS.flatMap((section) => day[section]) : [];

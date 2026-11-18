@@ -1,3 +1,4 @@
+import { runtimeConfig } from '../../config/runtime-config.js';
 import { ApiProperty } from '@nestjs/swagger';
 import { IsInt, IsString, MaxLength, Min, MinLength } from 'class-validator';
 
@@ -9,7 +10,7 @@ export class CreateKnowledgeUploadDto {
   })
   @IsString()
   @MinLength(1)
-  @MaxLength(255)
+  @MaxLength(runtimeConfig.KNOWLEDGE_FILENAME_MAX_LENGTH)
   filename!: string;
 
   @ApiProperty({ example: 482133, description: 'File size in bytes' })

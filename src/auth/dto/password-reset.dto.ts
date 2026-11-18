@@ -1,3 +1,4 @@
+import { runtimeConfig } from '../../config/runtime-config.js';
 import { ApiProperty } from '@nestjs/swagger';
 import { IsString, Matches, MaxLength, MinLength } from 'class-validator';
 import { ResendVerificationDto } from './email-verification.dto.js';
@@ -9,12 +10,14 @@ export class ResetPasswordDto extends ResendVerificationDto {
     example: '123456',
     description: 'Six-digit code from the password reset email',
   })
-  @Matches(/^\d{6}$/, { message: 'code must be 6 digits' })
+  @Matches(new RegExp('^[0-9]{' + runtimeConfig.AUTH_OTP_LENGTH + '}$'), {
+    message: `code must be ${runtimeConfig.AUTH_OTP_LENGTH} digits`,
+  })
   code!: string;
 
   @ApiProperty({ example: 'NewStrongPassword123!' })
   @IsString()
-  @MinLength(8)
+  @MinLength(runtimeConfig.AUTH_PASSWORD_MIN_LENGTH)
   @MaxLength(72)
   password!: string;
 }

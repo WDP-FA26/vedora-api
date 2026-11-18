@@ -1,6 +1,7 @@
+import { runtimeConfig } from '../config/runtime-config.js';
 import { randomUUID } from 'node:crypto';
 import { Injectable, Logger, Optional } from '@nestjs/common';
-import { Cron, CronExpression } from '@nestjs/schedule';
+import { Cron } from '@nestjs/schedule';
 import { InjectModel } from '@nestjs/mongoose';
 import type { Model, QueryFilter } from 'mongoose';
 import {
@@ -44,11 +45,12 @@ const IMAGE_EXTENSIONS: Record<string, string> = {
   'image/webp': 'webp',
 };
 const MAX_IMAGE_BYTES: Record<ProfileImageKind, number> = {
-  AVATAR: 5 * 1024 * 1024,
-  COVER: 10 * 1024 * 1024,
+  AVATAR: runtimeConfig.PROFILE_AVATAR_MAX_MB * 1024 * 1024,
+  COVER: runtimeConfig.PROFILE_COVER_MAX_MB * 1024 * 1024,
 };
-const ACTIVATE_TTL_MS = 24 * 60 * 60 * 1000;
-const CLEANUP_AGE_MS = 48 * 60 * 60 * 1000;
+const ACTIVATE_TTL_MS =
+  runtimeConfig.PROFILE_IMAGE_ACTIVATION_TTL_SECONDS * 1000;
+const CLEANUP_AGE_MS = runtimeConfig.PROFILE_IMAGE_CLEANUP_AGE_SECONDS * 1000;
 
 @Injectable()
 export class ProfilesService {
@@ -308,7 +310,7 @@ export class ProfilesService {
     return this.findOne(ownerId);
   }
 
-  @Cron(CronExpression.EVERY_HOUR)
+  @Cron(runtimeConfig.PROFILE_IMAGE_CLEANUP_CRON)
   async purgeUnusedImages(): Promise<void> {
     if (!this.storage.isConfigured()) return;
     const cutoff = new Date(Date.now() - CLEANUP_AGE_MS);
@@ -326,7 +328,7 @@ export class ProfilesService {
       const images = await this.uploads
         .find(filter)
         .sort({ createdAt: 1, _id: 1 })
-        .limit(100)
+        .limit(runtimeConfig.PROFILE_IMAGE_CLEANUP_BATCH_SIZE)
         .exec();
       for (const image of images) {
         const url = this.storage.publicObjectUrl(
@@ -347,8 +349,9 @@ export class ProfilesService {
         }
         await this.uploads.deleteOne({ _id: image.id });
       }
-      if (images.length < 100) break;
-      after = { id: images[99].id, createdAt: images[99].createdAt };
+      if (images.length < runtimeConfig.PROFILE_IMAGE_CLEANUP_BATCH_SIZE) break;
+      const last = images[images.length - 1];
+      after = { id: last.id, createdAt: last.createdAt };
     }
   }
 

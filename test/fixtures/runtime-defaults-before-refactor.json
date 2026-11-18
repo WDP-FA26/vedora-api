@@ -1,0 +1,1258 @@
+[
+  {
+    "file": "auth-core/password.ts",
+    "constant": "BCRYPT_ROUNDS",
+    "env": "AUTH_BCRYPT_ROUNDS",
+    "original": 12,
+    "default": 12,
+    "multiplier": 1
+  },
+  {
+    "file": "auth/one-time-code.ts",
+    "constant": "CODE_TTL_MS",
+    "env": "AUTH_OTP_TTL_SECONDS",
+    "original": 600000,
+    "default": 600,
+    "multiplier": 1000
+  },
+  {
+    "file": "auth/one-time-code.ts",
+    "constant": "RESEND_COOLDOWN_MS",
+    "env": "AUTH_OTP_RESEND_COOLDOWN_SECONDS",
+    "original": 120000,
+    "default": 120,
+    "multiplier": 1000
+  },
+  {
+    "file": "auth/one-time-code.ts",
+    "constant": "MAX_RESENDS",
+    "env": "AUTH_OTP_MAX_RESENDS",
+    "original": 3,
+    "default": 3,
+    "multiplier": 1
+  },
+  {
+    "file": "auth/one-time-code.ts",
+    "constant": "RESEND_WINDOW_MS",
+    "env": "AUTH_OTP_RESEND_WINDOW_SECONDS",
+    "original": 3600000,
+    "default": 3600,
+    "multiplier": 1000
+  },
+  {
+    "file": "auth/one-time-code.ts",
+    "constant": "MAX_ATTEMPTS",
+    "env": "AUTH_OTP_MAX_ATTEMPTS",
+    "original": 5,
+    "default": 5,
+    "multiplier": 1
+  },
+  {
+    "file": "auth/one-time-code.ts",
+    "constant": "MAX_GUESSES_PER_EMAIL",
+    "env": "AUTH_OTP_MAX_GUESSES_PER_EMAIL",
+    "original": 15,
+    "default": 15,
+    "multiplier": 1
+  },
+  {
+    "file": "auth/one-time-code.ts",
+    "constant": "GUESS_WINDOW_MS",
+    "env": "AUTH_OTP_GUESS_WINDOW_SECONDS",
+    "original": 86400000,
+    "default": 86400,
+    "multiplier": 1000
+  },
+  {
+    "file": "auth/auth.service.ts",
+    "constant": "UNVERIFIED_ACCOUNT_TTL_MS",
+    "env": "AUTH_UNVERIFIED_ACCOUNT_TTL_SECONDS",
+    "original": 3600000,
+    "default": 3600,
+    "multiplier": 1000
+  },
+  {
+    "file": "captcha/turnstile.service.ts",
+    "constant": "VERIFY_URL",
+    "env": "TURNSTILE_VERIFY_URL",
+    "original": "https://challenges.cloudflare.com/turnstile/v0/siteverify",
+    "default": "https://challenges.cloudflare.com/turnstile/v0/siteverify",
+    "multiplier": 1
+  },
+  {
+    "file": "captcha/turnstile.service.ts",
+    "constant": "TIMEOUT_MS",
+    "env": "TURNSTILE_VERIFY_TIMEOUT_MS",
+    "original": 5000,
+    "default": 5000,
+    "multiplier": 1
+  },
+  {
+    "file": "storage/storage.service.ts",
+    "constant": "UPLOAD_TTL_SECONDS",
+    "env": "STORAGE_UPLOAD_TTL_SECONDS",
+    "original": 3600,
+    "default": 3600,
+    "multiplier": 1
+  },
+  {
+    "file": "cloudinary/cloudinary.service.ts",
+    "constant": "STREAM_TRANSFORMATION",
+    "env": "CLOUDINARY_STREAM_TRANSFORMATION",
+    "original": "sp_auto/m3u8",
+    "default": "sp_auto/m3u8",
+    "multiplier": 1
+  },
+  {
+    "file": "cloudinary/cloudinary.service.ts",
+    "constant": "UPLOAD_SIGNATURE_TTL_SECONDS",
+    "env": "CLOUDINARY_UPLOAD_SIGNATURE_TTL_SECONDS",
+    "original": 3600,
+    "default": 3600,
+    "multiplier": 1
+  },
+  {
+    "file": "cloudinary/cloudinary.service.ts",
+    "constant": "UPLOAD_CHUNK_BYTES",
+    "env": "CLOUDINARY_UPLOAD_CHUNK_MB",
+    "original": 20971520,
+    "default": 20,
+    "multiplier": 1048576
+  },
+  {
+    "file": "profiles/profiles.service.ts",
+    "constant": "ACTIVATE_TTL_MS",
+    "env": "PROFILE_IMAGE_ACTIVATION_TTL_SECONDS",
+    "original": 86400000,
+    "default": 86400,
+    "multiplier": 1000
+  },
+  {
+    "file": "profiles/profiles.service.ts",
+    "constant": "CLEANUP_AGE_MS",
+    "env": "PROFILE_IMAGE_CLEANUP_AGE_SECONDS",
+    "original": 172800000,
+    "default": 172800,
+    "multiplier": 1000
+  },
+  {
+    "file": "profiles/follow-suggestions.service.ts",
+    "constant": "FAN_OUT",
+    "env": "FOLLOW_SUGGESTION_FAN_OUT",
+    "original": 200,
+    "default": 200,
+    "multiplier": 1
+  },
+  {
+    "file": "profiles/follow-suggestions.service.ts",
+    "constant": "KEPT_PER_USER",
+    "env": "FOLLOW_SUGGESTION_KEPT_PER_USER",
+    "original": 30,
+    "default": 30,
+    "multiplier": 1
+  },
+  {
+    "file": "profiles/follow-suggestions.service.ts",
+    "constant": "BATCH_SIZE",
+    "env": "FOLLOW_SUGGESTION_BATCH_SIZE",
+    "original": 200,
+    "default": 200,
+    "multiplier": 1
+  },
+  {
+    "file": "profiles/follow-suggestions.service.ts",
+    "constant": "FOLLOWS_YOU_SCORE",
+    "env": "FOLLOW_SUGGESTION_FOLLOWS_YOU_SCORE",
+    "original": 1000,
+    "default": 1000,
+    "multiplier": 1
+  },
+  {
+    "file": "profiles/follow-suggestions.service.ts",
+    "constant": "ACTIVE_WINDOW_MS",
+    "env": "FOLLOW_SUGGESTION_ACTIVE_WINDOW_SECONDS",
+    "original": 2592000000,
+    "default": 2592000,
+    "multiplier": 1000
+  },
+  {
+    "file": "profiles/follow-suggestions.service.ts",
+    "constant": "ACTIVE_POOL_SIZE",
+    "env": "FOLLOW_SUGGESTION_ACTIVE_POOL_SIZE",
+    "original": 50,
+    "default": 50,
+    "multiplier": 1
+  },
+  {
+    "file": "profiles/follow-suggestions.service.ts",
+    "constant": "ACTIVE_CACHE_MS",
+    "env": "FOLLOW_SUGGESTION_CACHE_TTL_SECONDS",
+    "original": 600000,
+    "default": 600,
+    "multiplier": 1000
+  },
+  {
+    "file": "profiles/dto/follow-suggestion.dto.ts",
+    "constant": "MAX_SUGGESTIONS",
+    "env": "FOLLOW_SUGGESTION_MAX_RESULTS",
+    "original": 20,
+    "default": 20,
+    "multiplier": 1
+  },
+  {
+    "file": "verification/verification.service.ts",
+    "constant": "MAX_PROOF_BYTES",
+    "env": "VERIFICATION_PROOF_MAX_MB",
+    "original": 10485760,
+    "default": 10,
+    "multiplier": 1048576
+  },
+  {
+    "file": "verification/verification.service.ts",
+    "constant": "MAX_UNSUBMITTED_PROOFS",
+    "env": "VERIFICATION_MAX_UNSUBMITTED_PROOFS",
+    "original": 12,
+    "default": 12,
+    "multiplier": 1
+  },
+  {
+    "file": "verification/verification.service.ts",
+    "constant": "CLEANUP_AGE_MS",
+    "env": "VERIFICATION_CLEANUP_AGE_SECONDS",
+    "original": 172800000,
+    "default": 172800,
+    "multiplier": 1000
+  },
+  {
+    "file": "verification/verification.service.ts",
+    "constant": "PROOF_URL_TTL_SECONDS",
+    "env": "VERIFICATION_PROOF_URL_TTL_SECONDS",
+    "original": 600,
+    "default": 600,
+    "multiplier": 1
+  },
+  {
+    "file": "verification/dto/verification.dto.ts",
+    "constant": "MAX_PROOFS",
+    "env": "VERIFICATION_MAX_PROOFS",
+    "original": 6,
+    "default": 6,
+    "multiplier": 1
+  },
+  {
+    "file": "verification/dto/verification.dto.ts",
+    "constant": "MIN_STATEMENT_LENGTH",
+    "env": "VERIFICATION_STATEMENT_MIN_LENGTH",
+    "original": 20,
+    "default": 20,
+    "multiplier": 1
+  },
+  {
+    "file": "verification/dto/verification.dto.ts",
+    "constant": "MAX_STATEMENT_LENGTH",
+    "env": "VERIFICATION_STATEMENT_MAX_LENGTH",
+    "original": 2000,
+    "default": 2000,
+    "multiplier": 1
+  },
+  {
+    "file": "verification/dto/verification.dto.ts",
+    "constant": "MAX_REVIEW_NOTE_LENGTH",
+    "env": "VERIFICATION_REVIEW_NOTE_MAX_LENGTH",
+    "original": 500,
+    "default": 500,
+    "multiplier": 1
+  },
+  {
+    "file": "posts/dto/create-post.dto.ts",
+    "constant": "MAX_POST_BODY_WORDS",
+    "env": "POST_MAX_WORDS",
+    "original": 250,
+    "default": 250,
+    "multiplier": 1
+  },
+  {
+    "file": "posts/dto/create-post.dto.ts",
+    "constant": "MAX_POST_BODY_LENGTH",
+    "env": "POST_MAX_LENGTH",
+    "original": 2000,
+    "default": 2000,
+    "multiplier": 1
+  },
+  {
+    "file": "posts/dto/create-post.dto.ts",
+    "constant": "MAX_POST_MEDIA",
+    "env": "POST_MAX_MEDIA",
+    "original": 4,
+    "default": 4,
+    "multiplier": 1
+  },
+  {
+    "file": "posts/dto/comment.dto.ts",
+    "constant": "MAX_COMMENT_BODY_LENGTH",
+    "env": "COMMENT_MAX_LENGTH",
+    "original": 1000,
+    "default": 1000,
+    "multiplier": 1
+  },
+  {
+    "file": "posts/dto/post-interaction.dto.ts",
+    "constant": "MAX_VIEW_BATCH",
+    "env": "POST_VIEW_MAX_BATCH",
+    "original": 50,
+    "default": 50,
+    "multiplier": 1
+  },
+  {
+    "file": "posts/dto/post-interaction.dto.ts",
+    "constant": "MAX_REPORT_DETAILS_LENGTH",
+    "env": "REPORT_MAX_DETAILS_LENGTH",
+    "original": 500,
+    "default": 500,
+    "multiplier": 1
+  },
+  {
+    "file": "posts/dto/search-posts-query.dto.ts",
+    "constant": "MAX_SEARCH_QUERY_LENGTH",
+    "env": "SEARCH_QUERY_MAX_LENGTH",
+    "original": 200,
+    "default": 200,
+    "multiplier": 1
+  },
+  {
+    "file": "posts/dto/blog.dto.ts",
+    "constant": "MAX_BLOG_CONTENT",
+    "env": "BLOG_CONTENT_MAX_LENGTH",
+    "original": 50000,
+    "default": 50000,
+    "multiplier": 1
+  },
+  {
+    "file": "posts/dto/blog.dto.ts",
+    "constant": "MAX_BLOG_RECIPES",
+    "env": "BLOG_MAX_RECIPES",
+    "original": 10,
+    "default": 10,
+    "multiplier": 1
+  },
+  {
+    "file": "posts/dto/blog-image.dto.ts",
+    "constant": "MAX_BLOG_IMAGE_BYTES",
+    "env": "BLOG_IMAGE_MAX_MB",
+    "original": 5242880,
+    "default": 5,
+    "multiplier": 1048576
+  },
+  {
+    "file": "posts/dto/blog-ai.dto.ts",
+    "constant": "MAX_ASSISTANT_MESSAGES",
+    "env": "BLOG_AI_MAX_MESSAGES",
+    "original": 40,
+    "default": 40,
+    "multiplier": 1
+  },
+  {
+    "file": "posts/dto/blog-ai.dto.ts",
+    "constant": "MAX_SELECTION",
+    "env": "BLOG_AI_MAX_SELECTION_LENGTH",
+    "original": 4000,
+    "default": 4000,
+    "multiplier": 1
+  },
+  {
+    "file": "posts/blogs/blog-cover.ts",
+    "constant": "MAX_COVER_URL_LENGTH",
+    "env": "BLOG_COVER_URL_MAX_LENGTH",
+    "original": 2048,
+    "default": 2048,
+    "multiplier": 1
+  },
+  {
+    "file": "posts/blogs/ai/blog-assistant.tools.ts",
+    "constant": "MAX_EDIT_MARKDOWN",
+    "env": "BLOG_AI_MAX_EDIT_LENGTH",
+    "original": 8000,
+    "default": 8000,
+    "multiplier": 1
+  },
+  {
+    "file": "posts/blogs/ai/blog-assistant.tools.ts",
+    "constant": "MAX_TITLE",
+    "env": "BLOG_TITLE_MAX_LENGTH",
+    "original": 150,
+    "default": 150,
+    "multiplier": 1
+  },
+  {
+    "file": "posts/blogs/ai/blog-assistant.service.ts",
+    "constant": "MAX_STEPS",
+    "env": "BLOG_AI_MAX_STEPS",
+    "original": 8,
+    "default": 8,
+    "multiplier": 1
+  },
+  {
+    "file": "posts/blogs/ai/blog-assistant.service.ts",
+    "constant": "MAX_OUTPUT_TOKENS",
+    "env": "BLOG_AI_MAX_OUTPUT_TOKENS",
+    "original": 4000,
+    "default": 4000,
+    "multiplier": 1
+  },
+  {
+    "file": "posts/blogs/ai/blog-assistant.service.ts",
+    "constant": "SEARCH_TIMEOUT_MS",
+    "env": "AI_KNOWLEDGE_TOOL_TIMEOUT_MS",
+    "original": 5000,
+    "default": 5000,
+    "multiplier": 1
+  },
+  {
+    "file": "posts/search/post-search.service.ts",
+    "constant": "MAX_SEARCH_RESULTS",
+    "env": "POST_SEARCH_MAX_RESULTS",
+    "original": 200,
+    "default": 200,
+    "multiplier": 1
+  },
+  {
+    "file": "posts/search/post-search-index.service.ts",
+    "constant": "BATCH_SIZE",
+    "env": "POST_SEARCH_INDEX_BATCH_SIZE",
+    "original": 64,
+    "default": 64,
+    "multiplier": 1
+  },
+  {
+    "file": "posts/search/post-search-index.service.ts",
+    "constant": "CHUNK_LENGTH",
+    "env": "POST_SEARCH_CHUNK_MAX_CHARS",
+    "original": 1500,
+    "default": 1500,
+    "multiplier": 1
+  },
+  {
+    "file": "posts/search/post-feed.service.ts",
+    "constant": "MAX_FEED_RESULTS",
+    "env": "FEED_MAX_RESULTS",
+    "original": 200,
+    "default": 200,
+    "multiplier": 1
+  },
+  {
+    "file": "posts/search/post-feed.service.ts",
+    "constant": "TASTE_POSTS",
+    "env": "FEED_TASTE_POSTS",
+    "original": 20,
+    "default": 20,
+    "multiplier": 1
+  },
+  {
+    "file": "posts/search/post-feed.service.ts",
+    "constant": "WINDOW_SECONDS",
+    "env": "FEED_FRESH_WINDOW_SECONDS",
+    "original": 604800,
+    "default": 604800,
+    "multiplier": 1
+  },
+  {
+    "file": "posts/search/post-feed.service.ts",
+    "constant": "HALF_LIFE_SECONDS",
+    "env": "FEED_HALF_LIFE_SECONDS",
+    "original": 172800,
+    "default": 172800,
+    "multiplier": 1
+  },
+  {
+    "file": "posts/search/post-feed.service.ts",
+    "constant": "FRESHNESS_WEIGHT",
+    "env": "FEED_FRESHNESS_WEIGHT",
+    "original": 0.05,
+    "default": 0.05,
+    "multiplier": 1
+  },
+  {
+    "file": "posts/search/post-feed.service.ts",
+    "constant": "EXPLORE_EVERY",
+    "env": "FEED_EXPLORE_EVERY",
+    "original": 5,
+    "default": 5,
+    "multiplier": 1
+  },
+  {
+    "file": "posts/post-views.service.ts",
+    "constant": "FLUSH_INTERVAL_MS",
+    "env": "POST_VIEWS_FLUSH_INTERVAL_MS",
+    "original": 10000,
+    "default": 10000,
+    "multiplier": 1
+  },
+  {
+    "file": "posts/post-views.service.ts",
+    "constant": "DEDUPE_WINDOW_MS",
+    "env": "POST_VIEWS_DEDUPE_WINDOW_SECONDS",
+    "original": 1800000,
+    "default": 1800,
+    "multiplier": 1000
+  },
+  {
+    "file": "posts/post-views.service.ts",
+    "constant": "MAX_DEDUPE_ENTRIES",
+    "env": "POST_VIEWS_MAX_DEDUPE_ENTRIES",
+    "original": 200000,
+    "default": 200000,
+    "multiplier": 1
+  },
+  {
+    "file": "posts/post-views.service.ts",
+    "constant": "FLUSH_BATCH_SIZE",
+    "env": "POST_VIEWS_FLUSH_BATCH_SIZE",
+    "original": 500,
+    "default": 500,
+    "multiplier": 1
+  },
+  {
+    "file": "messaging/dto/messaging.dto.ts",
+    "constant": "MAX_MESSAGE_LENGTH",
+    "env": "MESSAGE_MAX_LENGTH",
+    "original": 2000,
+    "default": 2000,
+    "multiplier": 1
+  },
+  {
+    "file": "notifications/notifications.controller.ts",
+    "constant": "HEARTBEAT_MS",
+    "env": "NOTIFICATION_SSE_HEARTBEAT_MS",
+    "original": 25000,
+    "default": 25000,
+    "multiplier": 1
+  },
+  {
+    "file": "recipes/dto/recipe.dto.ts",
+    "constant": "MAX_RECIPE_INGREDIENTS",
+    "env": "RECIPE_MAX_INGREDIENTS",
+    "original": 50,
+    "default": 50,
+    "multiplier": 1
+  },
+  {
+    "file": "recipes/dto/recipe.dto.ts",
+    "constant": "MAX_RECIPE_STEPS",
+    "env": "RECIPE_MAX_STEPS",
+    "original": 50,
+    "default": 50,
+    "multiplier": 1
+  },
+  {
+    "file": "recipes/dto/recipe.dto.ts",
+    "constant": "MAX_STEP_LENGTH",
+    "env": "RECIPE_STEP_MAX_LENGTH",
+    "original": 1000,
+    "default": 1000,
+    "multiplier": 1
+  },
+  {
+    "file": "recipes/dto/recipe.dto.ts",
+    "constant": "MAX_MINUTES",
+    "env": "RECIPE_MAX_MINUTES",
+    "original": 1440,
+    "default": 1440,
+    "multiplier": 1
+  },
+  {
+    "file": "recipes/dto/recipe.dto.ts",
+    "constant": "MAX_IMAGE_URL_LENGTH",
+    "env": "RECIPE_IMAGE_URL_MAX_LENGTH",
+    "original": 2048,
+    "default": 2048,
+    "multiplier": 1
+  },
+  {
+    "file": "recipes/dto/ingredient.dto.ts",
+    "constant": "MAX_NAME_LENGTH",
+    "env": "INGREDIENT_NAME_MAX_LENGTH",
+    "original": 100,
+    "default": 100,
+    "multiplier": 1
+  },
+  {
+    "file": "recipes/dto/ingredient.dto.ts",
+    "constant": "MAX_ALIASES",
+    "env": "INGREDIENT_MAX_ALIASES",
+    "original": 20,
+    "default": 20,
+    "multiplier": 1
+  },
+  {
+    "file": "recipes/dto/ingredient.dto.ts",
+    "constant": "MAX_GROUP_MEMBERS",
+    "env": "INGREDIENT_GROUP_MAX_MEMBERS",
+    "original": 500,
+    "default": 500,
+    "multiplier": 1
+  },
+  {
+    "file": "recipes/dto/ingredient.dto.ts",
+    "constant": "MAX_TEXT_LENGTH",
+    "env": "INGREDIENT_DESCRIPTION_MAX_LENGTH",
+    "original": 500,
+    "default": 500,
+    "multiplier": 1
+  },
+  {
+    "file": "recipes/dto/dietary.dto.ts",
+    "constant": "MAX_AVOIDED_INGREDIENTS",
+    "env": "DIETARY_MAX_AVOIDED_INGREDIENTS",
+    "original": 200,
+    "default": 200,
+    "multiplier": 1
+  },
+  {
+    "file": "recipes/dto/dietary.dto.ts",
+    "constant": "MAX_AVOIDED_GROUPS",
+    "env": "DIETARY_MAX_AVOIDED_GROUPS",
+    "original": 50,
+    "default": 50,
+    "multiplier": 1
+  },
+  {
+    "file": "recipes/dto/dietary.dto.ts",
+    "constant": "MAX_LIKED_INGREDIENTS",
+    "env": "DIETARY_MAX_LIKED_INGREDIENTS",
+    "original": 100,
+    "default": 100,
+    "multiplier": 1
+  },
+  {
+    "file": "meal-plan/dto/meal-plan.dto.ts",
+    "constant": "MAX_DISHES_PER_SECTION",
+    "env": "MEAL_PLAN_MAX_DISHES_PER_SECTION",
+    "original": 6,
+    "default": 6,
+    "multiplier": 1,
+    "upstreamOriginal": 5,
+    "upstreamCommit": "b6d221715fc61166f82e16b88d5add0b87047319"
+  },
+  {
+    "file": "meal-plan/dto/meal-plan.dto.ts",
+    "constant": "MAX_PLANNER_MESSAGES",
+    "env": "PLANNER_CHAT_MAX_MESSAGES",
+    "original": 10,
+    "default": 10,
+    "multiplier": 1
+  },
+  {
+    "file": "meal-plan/dto/meal-plan.dto.ts",
+    "constant": "MAX_PLANNER_MESSAGE_LENGTH",
+    "env": "PLANNER_CHAT_MAX_MESSAGE_LENGTH",
+    "original": 4000,
+    "default": 4000,
+    "multiplier": 1
+  },
+  {
+    "file": "meal-plan/meal-plan.service.ts",
+    "constant": "MAX_SUGGESTIONS",
+    "env": "MEAL_PLAN_SUGGESTIONS_LIMIT",
+    "original": 30,
+    "default": 30,
+    "multiplier": 1,
+    "upstreamOriginal": 60,
+    "upstreamCommit": "b6d221715fc61166f82e16b88d5add0b87047319"
+  },
+  {
+    "file": "meal-plan/meal-planner-chat.service.ts",
+    "constant": "MAX_STEPS",
+    "env": "PLANNER_CHAT_MAX_STEPS",
+    "original": 8,
+    "default": 8,
+    "multiplier": 1,
+    "upstreamOriginal": 10,
+    "upstreamCommit": "b6d221715fc61166f82e16b88d5add0b87047319"
+  },
+  {
+    "file": "meal-plan/meal-planner-chat.service.ts",
+    "constant": "SEARCH_TIMEOUT_MS",
+    "env": "AI_KNOWLEDGE_TOOL_TIMEOUT_MS",
+    "original": 5000,
+    "default": 5000,
+    "multiplier": 1
+  },
+  {
+    "file": "nutrition-chat/dto/nutrition-chat.dto.ts",
+    "constant": "MAX_CHAT_MESSAGES",
+    "env": "NUTRITION_CHAT_MAX_MESSAGES",
+    "original": 5,
+    "default": 5,
+    "multiplier": 1
+  },
+  {
+    "file": "nutrition-chat/dto/nutrition-chat.dto.ts",
+    "constant": "MAX_CHAT_MESSAGE_LENGTH",
+    "env": "NUTRITION_CHAT_MAX_MESSAGE_LENGTH",
+    "original": 2000,
+    "default": 2000,
+    "multiplier": 1
+  },
+  {
+    "file": "nutrition-chat/nutrition-chat.agent.ts",
+    "constant": "MAX_STEPS",
+    "env": "NUTRITION_CHAT_MAX_STEPS",
+    "original": 3,
+    "default": 3,
+    "multiplier": 1
+  },
+  {
+    "file": "nutrition-chat/nutrition-chat.agent.ts",
+    "constant": "MAX_OUTPUT_TOKENS",
+    "env": "NUTRITION_CHAT_MAX_OUTPUT_TOKENS",
+    "original": 1000,
+    "default": 1000,
+    "multiplier": 1
+  },
+  {
+    "file": "nutrition-chat/nutrition-chat.service.ts",
+    "constant": "SEARCH_TIMEOUT_MS",
+    "env": "AI_KNOWLEDGE_TOOL_TIMEOUT_MS",
+    "original": 5000,
+    "default": 5000,
+    "multiplier": 1
+  },
+  {
+    "file": "nutrition-chat/guest/guest-session.service.ts",
+    "constant": "GUEST_SESSION_TTL_SEC",
+    "env": "GUEST_SESSION_TTL_SECONDS",
+    "original": 86400,
+    "default": 86400,
+    "multiplier": 1
+  },
+  {
+    "file": "ai/openrouter.ts",
+    "constant": "EMBEDDING_BATCH_SIZE",
+    "env": "AI_EMBEDDING_BATCH_SIZE",
+    "original": 64,
+    "default": 64,
+    "multiplier": 1
+  },
+  {
+    "file": "ai/guardrails/conversation-state.ts",
+    "constant": "DEFAULT_MAX_MODERATION_CHARS",
+    "env": "AI_MODERATION_CONTEXT_MAX_CHARS",
+    "original": 24000,
+    "default": 24000,
+    "multiplier": 1
+  },
+  {
+    "file": "common/decision/decision.ts",
+    "constant": "DEFAULT_TIMEOUT_MS",
+    "env": "AI_DECISION_TIMEOUT_MS",
+    "original": 4000,
+    "default": 4000,
+    "multiplier": 1,
+    "upstreamOriginal": 10000,
+    "upstreamCommit": "b6d221715fc61166f82e16b88d5add0b87047319"
+  },
+  {
+    "file": "common/decision/decision.ts",
+    "constant": "MAX_RETRIES",
+    "env": "AI_DECISION_MAX_RETRIES",
+    "original": 2,
+    "default": 2,
+    "multiplier": 1
+  },
+  {
+    "file": "common/ffmpeg/ffmpeg.ts",
+    "constant": "DEFAULT_TIMEOUT_MS",
+    "env": "FFMPEG_DEFAULT_TIMEOUT_MS",
+    "original": 30000,
+    "default": 30000,
+    "multiplier": 1
+  },
+  {
+    "file": "common/http/fetch-public-image.ts",
+    "constant": "FETCH_TIMEOUT_MS",
+    "env": "PUBLIC_IMAGE_FETCH_TIMEOUT_MS",
+    "original": 10000,
+    "default": 10000,
+    "multiplier": 1
+  },
+  {
+    "file": "common/http/fetch-public-image.ts",
+    "constant": "MAX_IMAGE_BYTES",
+    "env": "PUBLIC_IMAGE_MAX_MB",
+    "original": 10485760,
+    "default": 10,
+    "multiplier": 1048576
+  },
+  {
+    "file": "common/pagination/pagination-limit.dto.ts",
+    "constant": "DEFAULT_PAGE_LIMIT",
+    "env": "PAGINATION_DEFAULT_LIMIT",
+    "original": 20,
+    "default": 20,
+    "multiplier": 1
+  },
+  {
+    "file": "common/pagination/pagination-limit.dto.ts",
+    "constant": "MAX_PAGE_LIMIT",
+    "env": "PAGINATION_MAX_LIMIT",
+    "original": 50,
+    "default": 50,
+    "multiplier": 1
+  },
+  {
+    "file": "common/pagination/pagination-query.dto.ts",
+    "constant": "MAX_PAGE_NUMBER",
+    "env": "PAGINATION_MAX_PAGE",
+    "original": 1000000,
+    "default": 1000000,
+    "multiplier": 1
+  },
+  {
+    "file": "subscriptions/ai-usage.service.ts",
+    "constant": "LEASE_MS",
+    "env": "AI_USAGE_RESERVATION_TTL_SECONDS",
+    "original": 600000,
+    "default": 600,
+    "multiplier": 1000
+  },
+  {
+    "file": "subscriptions/ai-usage.service.ts",
+    "constant": "MAX_REQUESTS_PER_TURN",
+    "env": "AI_MAX_CONTINUATIONS_PER_TURN",
+    "original": 8,
+    "default": 8,
+    "multiplier": 1
+  },
+  {
+    "file": "moderation/moderation-settings.service.ts",
+    "constant": "CACHE_TTL_MS",
+    "env": "MODERATION_CACHE_TTL_MS",
+    "original": 15000,
+    "default": 15000,
+    "multiplier": 1
+  },
+  {
+    "file": "moderation/content-moderation.service.ts",
+    "constant": "CONTENT_TIMEOUT_MS",
+    "env": "MODERATION_CONTENT_TIMEOUT_MS",
+    "original": 20000,
+    "default": 20000,
+    "multiplier": 1
+  },
+  {
+    "file": "moderation/content-moderation.service.ts",
+    "constant": "MAX_TEXT_CHARS",
+    "env": "MODERATION_MAX_TEXT_CHARS",
+    "original": 30000,
+    "default": 30000,
+    "multiplier": 1
+  },
+  {
+    "file": "moderation/moderation-image.ts",
+    "constant": "MAX_SIDE_PX",
+    "env": "MODERATION_IMAGE_MAX_SIDE_PX",
+    "original": 1280,
+    "default": 1280,
+    "multiplier": 1
+  },
+  {
+    "file": "moderation/moderation-image.ts",
+    "constant": "MIN_SIDE_PX",
+    "env": "MODERATION_IMAGE_MIN_SIDE_PX",
+    "original": 288,
+    "default": 288,
+    "multiplier": 1
+  },
+  {
+    "file": "moderation/dto/moderation-settings.dto.ts",
+    "constant": "MAX_CHOICES",
+    "env": "MODERATION_MAX_CHOICES",
+    "original": 16,
+    "default": 16,
+    "multiplier": 1
+  },
+  {
+    "file": "media/post-moderation.service.ts",
+    "constant": "FRAME_COUNT",
+    "env": "MODERATION_VIDEO_FRAME_COUNT",
+    "original": 4,
+    "default": 4,
+    "multiplier": 1
+  },
+  {
+    "file": "media/post-moderation.service.ts",
+    "constant": "MAX_INLINE_IMAGES",
+    "env": "MODERATION_MAX_INLINE_IMAGES",
+    "original": 5,
+    "default": 5,
+    "multiplier": 1
+  },
+  {
+    "file": "media/media.service.ts",
+    "constant": "MAX_UNATTACHED_UPLOADS",
+    "env": "MEDIA_MAX_UNATTACHED_UPLOADS",
+    "original": 5,
+    "default": 5,
+    "multiplier": 1
+  },
+  {
+    "file": "media/media.service.ts",
+    "constant": "UPLOAD_GRACE_MS",
+    "env": "MEDIA_UPLOAD_GRACE_SECONDS",
+    "original": 600000,
+    "default": 600,
+    "multiplier": 1000
+  },
+  {
+    "file": "media/media.service.ts",
+    "constant": "REFRESH_INTERVAL_MS",
+    "env": "MEDIA_REFRESH_INTERVAL_MS",
+    "original": 15000,
+    "default": 15000,
+    "multiplier": 1
+  },
+  {
+    "file": "media/media.service.ts",
+    "constant": "ENCODING_TIMEOUT_MS",
+    "env": "MEDIA_ENCODING_TIMEOUT_SECONDS",
+    "original": 3600000,
+    "default": 3600,
+    "multiplier": 1000
+  },
+  {
+    "file": "media/media-maintenance.service.ts",
+    "constant": "STALE_AFTER_MS",
+    "env": "MEDIA_STALE_AFTER_SECONDS",
+    "original": 600000,
+    "default": 600,
+    "multiplier": 1000
+  },
+  {
+    "file": "media/media-maintenance.service.ts",
+    "constant": "ORPHAN_AFTER_MS",
+    "env": "MEDIA_ORPHAN_AFTER_SECONDS",
+    "original": 86400000,
+    "default": 86400,
+    "multiplier": 1000
+  },
+  {
+    "file": "media/media-maintenance.service.ts",
+    "constant": "BATCH_SIZE",
+    "env": "MEDIA_MAINTENANCE_BATCH_SIZE",
+    "original": 50,
+    "default": 50,
+    "multiplier": 1
+  },
+  {
+    "file": "media/media-maintenance.service.ts",
+    "constant": "RETRY_MODERATION_AFTER_MS",
+    "env": "MEDIA_MODERATION_RETRY_AFTER_SECONDS",
+    "original": 120000,
+    "default": 120,
+    "multiplier": 1000
+  },
+  {
+    "file": "media/media-maintenance.service.ts",
+    "constant": "REFRESH_BATCH_SIZE",
+    "env": "MEDIA_REFRESH_BATCH_SIZE",
+    "original": 20,
+    "default": 20,
+    "multiplier": 1
+  },
+  {
+    "file": "media/captions/caption.service.ts",
+    "constant": "BATCH_SIZE",
+    "env": "CAPTION_BATCH_SIZE",
+    "original": 10,
+    "default": 10,
+    "multiplier": 1
+  },
+  {
+    "file": "media/captions/caption.service.ts",
+    "constant": "STALE_AFTER_MS",
+    "env": "CAPTION_STALE_AFTER_SECONDS",
+    "original": 1800000,
+    "default": 1800,
+    "multiplier": 1000
+  },
+  {
+    "file": "media/captions/caption.service.ts",
+    "constant": "TRACK_TIMEOUT_MS",
+    "env": "CAPTION_TRACK_TIMEOUT_MS",
+    "original": 15000,
+    "default": 15000,
+    "multiplier": 1
+  },
+  {
+    "file": "media/captions/transcription.service.ts",
+    "constant": "OPENROUTER_API",
+    "env": "OPENROUTER_API_BASE_URL",
+    "original": "https://openrouter.ai/api/v1",
+    "default": "https://openrouter.ai/api/v1",
+    "multiplier": 1
+  },
+  {
+    "file": "media/captions/transcription.service.ts",
+    "constant": "TRANSCRIBE_TIMEOUT_MS",
+    "env": "TRANSCRIPTION_TIMEOUT_MS",
+    "original": 180000,
+    "default": 180000,
+    "multiplier": 1
+  },
+  {
+    "file": "media/captions/transcription.service.ts",
+    "constant": "MAX_NO_SPEECH_PROB",
+    "env": "TRANSCRIPTION_MAX_NO_SPEECH_PROB",
+    "original": 0.6,
+    "default": 0.6,
+    "multiplier": 1
+  },
+  {
+    "file": "media/captions/transcription.service.ts",
+    "constant": "MIN_AVG_LOGPROB",
+    "env": "TRANSCRIPTION_MIN_AVG_LOGPROB",
+    "original": -1,
+    "default": -1,
+    "multiplier": 1
+  },
+  {
+    "file": "media/captions/transcription.service.ts",
+    "constant": "MAX_CUE_SEC",
+    "env": "CAPTION_MAX_CUE_SECONDS",
+    "original": 7,
+    "default": 7,
+    "multiplier": 1
+  },
+  {
+    "file": "media/captions/transcription.service.ts",
+    "constant": "CUE_GAP_SEC",
+    "env": "CAPTION_CUE_GAP_SECONDS",
+    "original": 0.8,
+    "default": 0.8,
+    "multiplier": 1
+  },
+  {
+    "file": "media/captions/speech-audio.ts",
+    "constant": "MIN_SILENCE_SEC",
+    "env": "AUDIO_MIN_SILENCE_SECONDS",
+    "original": 0.6,
+    "default": 0.6,
+    "multiplier": 1
+  },
+  {
+    "file": "media/captions/speech-audio.ts",
+    "constant": "PADDING_SEC",
+    "env": "AUDIO_PADDING_SECONDS",
+    "original": 0.2,
+    "default": 0.2,
+    "multiplier": 1
+  },
+  {
+    "file": "media/captions/speech-audio.ts",
+    "constant": "MIN_SPEECH_SEC",
+    "env": "AUDIO_MIN_SPEECH_SECONDS",
+    "original": 0.3,
+    "default": 0.3,
+    "multiplier": 1
+  },
+  {
+    "file": "media/captions/speech-audio.ts",
+    "constant": "FFMPEG_TIMEOUT_MS",
+    "env": "AUDIO_FFMPEG_TIMEOUT_MS",
+    "original": 300000,
+    "default": 300000,
+    "multiplier": 1
+  },
+  {
+    "file": "media/captions/speech-audio.ts",
+    "constant": "DOWNLOAD_TIMEOUT_MS",
+    "env": "AUDIO_DOWNLOAD_TIMEOUT_MS",
+    "original": 300000,
+    "default": 300000,
+    "multiplier": 1
+  },
+  {
+    "file": "knowledge/knowledge.service.ts",
+    "constant": "FILE_URL_TTL_SECONDS",
+    "env": "KNOWLEDGE_FILE_URL_TTL_SECONDS",
+    "original": 900,
+    "default": 900,
+    "multiplier": 1
+  },
+  {
+    "file": "knowledge/knowledge-maintenance.service.ts",
+    "constant": "EVENT_GRACE_MS",
+    "env": "KNOWLEDGE_UPLOAD_EVENT_GRACE_SECONDS",
+    "original": 600000,
+    "default": 600,
+    "multiplier": 1000
+  },
+  {
+    "file": "knowledge/knowledge-maintenance.service.ts",
+    "constant": "STALE_PROCESSING_MS",
+    "env": "KNOWLEDGE_STALE_PROCESSING_SECONDS",
+    "original": 900000,
+    "default": 900,
+    "multiplier": 1000
+  },
+  {
+    "file": "knowledge/extractors/pdf-extractor.ts",
+    "constant": "MIN_IMAGE_PX",
+    "env": "KNOWLEDGE_MIN_IMAGE_PX",
+    "original": 100,
+    "default": 100,
+    "multiplier": 1
+  },
+  {
+    "file": "knowledge/extractors/pdf-extractor.ts",
+    "constant": "MIN_IMAGE_PT",
+    "env": "KNOWLEDGE_MIN_IMAGE_PT",
+    "original": 48,
+    "default": 48,
+    "multiplier": 1
+  },
+  {
+    "file": "knowledge/extractors/pdf-extractor.ts",
+    "constant": "MAX_IMAGE_PX",
+    "env": "KNOWLEDGE_MAX_IMAGE_PX",
+    "original": 1024,
+    "default": 1024,
+    "multiplier": 1
+  },
+  {
+    "file": "knowledge/extractors/pdf-extractor.ts",
+    "constant": "MAX_IMAGES_PER_DOCUMENT",
+    "env": "KNOWLEDGE_MAX_IMAGES_PER_DOCUMENT",
+    "original": 100,
+    "default": 100,
+    "multiplier": 1
+  },
+  {
+    "file": "knowledge/extractors/pdf-extractor.ts",
+    "constant": "JPEG_QUALITY",
+    "env": "KNOWLEDGE_JPEG_QUALITY",
+    "original": 80,
+    "default": 80,
+    "multiplier": 1
+  },
+  {
+    "file": "knowledge/extractors/pdf-extractor.ts",
+    "constant": "MIN_OCR_COVERAGE",
+    "env": "KNOWLEDGE_MIN_OCR_COVERAGE",
+    "original": 0.9,
+    "default": 0.9,
+    "multiplier": 1
+  },
+  {
+    "file": "knowledge/retrieval/knowledge-index.service.ts",
+    "constant": "CHUNK_CHARS",
+    "env": "KNOWLEDGE_CHUNK_MAX_CHARS",
+    "original": 1000,
+    "default": 1000,
+    "multiplier": 1
+  },
+  {
+    "file": "knowledge/retrieval/knowledge-index.service.ts",
+    "constant": "UPSERT_BATCH",
+    "env": "KNOWLEDGE_UPSERT_BATCH_SIZE",
+    "original": 64,
+    "default": 64,
+    "multiplier": 1
+  },
+  {
+    "file": "knowledge/retrieval/knowledge-search.service.ts",
+    "constant": "PREFETCH_LIMIT",
+    "env": "KNOWLEDGE_PREFETCH_LIMIT",
+    "original": 40,
+    "default": 40,
+    "multiplier": 1
+  },
+  {
+    "file": "knowledge/retrieval/knowledge-search.service.ts",
+    "constant": "CANDIDATES",
+    "env": "KNOWLEDGE_CANDIDATE_LIMIT",
+    "original": 20,
+    "default": 20,
+    "multiplier": 1
+  },
+  {
+    "file": "knowledge/retrieval/knowledge-search.service.ts",
+    "constant": "RESULTS",
+    "env": "KNOWLEDGE_RESULT_LIMIT",
+    "original": 6,
+    "default": 6,
+    "multiplier": 1
+  },
+  {
+    "file": "knowledge/retrieval/knowledge-search.service.ts",
+    "constant": "MIN_RELEVANCE",
+    "env": "KNOWLEDGE_MIN_RELEVANCE",
+    "original": 0.08,
+    "default": 0.08,
+    "multiplier": 1
+  },
+  {
+    "file": "knowledge/retrieval/knowledge-search.service.ts",
+    "constant": "RERANK_BUDGET_MS",
+    "env": "KNOWLEDGE_RERANK_TIMEOUT_MS",
+    "original": 800,
+    "default": 800,
+    "multiplier": 1
+  },
+  {
+    "file": "knowledge/retrieval/knowledge-models.service.ts",
+    "constant": "OPENROUTER_API",
+    "env": "OPENROUTER_API_BASE_URL",
+    "original": "https://openrouter.ai/api/v1",
+    "default": "https://openrouter.ai/api/v1",
+    "multiplier": 1
+  },
+  {
+    "file": "knowledge/retrieval/knowledge-models.service.ts",
+    "constant": "IMAGE_BATCH",
+    "env": "KNOWLEDGE_IMAGE_BATCH_SIZE",
+    "original": 8,
+    "default": 8,
+    "multiplier": 1
+  },
+  {
+    "file": "knowledge/retrieval/knowledge-models.service.ts",
+    "constant": "EMBED_TIMEOUT_MS",
+    "env": "KNOWLEDGE_EMBED_TIMEOUT_MS",
+    "original": 60000,
+    "default": 60000,
+    "multiplier": 1
+  },
+  {
+    "file": "knowledge/retrieval/knowledge-models.service.ts",
+    "constant": "OCR_TIMEOUT_MS",
+    "env": "KNOWLEDGE_OCR_TIMEOUT_MS",
+    "original": 300000,
+    "default": 300000,
+    "multiplier": 1
+  },
+  {
+    "file": "knowledge/retrieval/knowledge-models.service.ts",
+    "constant": "OCR_CARRIER_MODEL",
+    "env": "KNOWLEDGE_OCR_CARRIER_MODEL",
+    "original": "google/gemini-3.1-flash-lite",
+    "default": "google/gemini-3.1-flash-lite",
+    "multiplier": 1
+  },
+  {
+    "file": "qdrant/qdrant.service.ts",
+    "constant": "STARTUP_TIMEOUT_MS",
+    "env": "QDRANT_STARTUP_TIMEOUT_MS",
+    "original": 5000,
+    "default": 5000,
+    "multiplier": 1
+  },
+  {
+    "file": "admin-dashboard/dashboard-range.ts",
+    "constant": "MAX_DASHBOARD_DAYS",
+    "env": "ADMIN_REPORT_MAX_DAYS",
+    "original": 90,
+    "default": 90,
+    "multiplier": 1
+  }
+]

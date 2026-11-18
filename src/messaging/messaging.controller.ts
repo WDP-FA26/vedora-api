@@ -1,3 +1,4 @@
+import { runtimeConfig } from '../config/runtime-config.js';
 import {
   Body,
   Controller,
@@ -136,7 +137,7 @@ export class MessagingController {
         subscription.unsubscribe();
       };
     });
-    const heartbeat = interval(15_000).pipe(
+    const heartbeat = interval(runtimeConfig.MESSAGING_SSE_HEARTBEAT_MS).pipe(
       exhaustMap(async (): Promise<MessageEvent> =>
         (await authenticate())
           ? { type: 'ping', data: { connected: this.events.isConnected() } }

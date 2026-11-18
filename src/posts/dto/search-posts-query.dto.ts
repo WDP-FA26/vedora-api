@@ -1,10 +1,11 @@
+import { runtimeConfig } from '../../config/runtime-config.js';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Transform, Type } from 'class-transformer';
 import { IsInt, IsOptional, IsString, Length, Max, Min } from 'class-validator';
 import { PaginationLimitDto } from '../../common/pagination/index.js';
 import { MAX_SEARCH_RESULTS } from '../search/post-search.service.js';
 
-export const MAX_SEARCH_QUERY_LENGTH = 200;
+export const MAX_SEARCH_QUERY_LENGTH = runtimeConfig.SEARCH_QUERY_MAX_LENGTH;
 
 export class SearchPostsQueryDto extends PaginationLimitDto {
   @ApiProperty({

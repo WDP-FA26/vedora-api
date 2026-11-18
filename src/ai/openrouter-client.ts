@@ -1,4 +1,5 @@
 import { HTTPClient, OpenRouter } from '@openrouter/sdk';
+import { runtimeConfig } from '../config/runtime-config.js';
 import { OpenRouterError } from '@openrouter/sdk/models/errors';
 import { ExternalServiceException } from '../common/exceptions/external-service.exception.js';
 
@@ -13,6 +14,7 @@ export function createOpenRouterClient(
 ): OpenRouter {
   return new OpenRouter({
     apiKey,
+    serverURL: runtimeConfig.OPENROUTER_API_BASE_URL,
     retryConfig: { strategy: 'none' },
     httpClient: fetcher ? new HTTPClient({ fetcher }) : undefined,
   });

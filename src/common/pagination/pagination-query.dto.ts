@@ -1,9 +1,10 @@
+import { runtimeConfig } from '../../config/runtime-config.js';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import { IsInt, IsOptional, Max, Min } from 'class-validator';
 import { PaginationLimitDto } from './pagination-limit.dto.js';
 
-export const MAX_PAGE_NUMBER = 1_000_000;
+export const MAX_PAGE_NUMBER = runtimeConfig.PAGINATION_MAX_PAGE;
 
 export class PaginationQueryDto extends PaginationLimitDto {
   @ApiPropertyOptional({

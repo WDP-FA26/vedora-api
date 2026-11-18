@@ -1,3 +1,4 @@
+import { runtimeConfig } from '../../config/runtime-config.js';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { PostType } from '../../mongo/models.js';
 import { Transform } from 'class-transformer';
@@ -14,9 +15,9 @@ import {
   type ValidationOptions,
 } from 'class-validator';
 
-export const MAX_POST_BODY_WORDS = 250;
-export const MAX_POST_BODY_LENGTH = 2000;
-export const MAX_POST_MEDIA = 4;
+export const MAX_POST_BODY_WORDS = runtimeConfig.POST_MAX_WORDS;
+export const MAX_POST_BODY_LENGTH = runtimeConfig.POST_MAX_LENGTH;
+export const MAX_POST_MEDIA = runtimeConfig.POST_MAX_MEDIA;
 
 export function countWords(text: string): number {
   return text.split(/\s+/).filter(Boolean).length;

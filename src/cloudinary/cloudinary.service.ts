@@ -1,3 +1,4 @@
+import { runtimeConfig } from '../config/runtime-config.js';
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { v2 as cloudinary } from 'cloudinary';
@@ -5,10 +6,13 @@ import { z } from 'zod';
 import { createHash, randomUUID, timingSafeEqual } from 'node:crypto';
 import { FeatureUnavailableException } from '../common/exceptions/feature-unavailable.exception.js';
 
-export const STREAM_TRANSFORMATION = 'sp_auto/m3u8';
-export const UPLOAD_SIGNATURE_TTL_SECONDS = 3600;
-export const UPLOAD_CHUNK_BYTES = 20 * 1024 * 1024;
-export const IMAGE_FORMATS = 'jpg,jpeg,png,webp';
+export const STREAM_TRANSFORMATION =
+  runtimeConfig.CLOUDINARY_STREAM_TRANSFORMATION;
+export const UPLOAD_SIGNATURE_TTL_SECONDS =
+  runtimeConfig.CLOUDINARY_UPLOAD_SIGNATURE_TTL_SECONDS;
+export const UPLOAD_CHUNK_BYTES =
+  runtimeConfig.CLOUDINARY_UPLOAD_CHUNK_MB * 1048576;
+export const IMAGE_FORMATS = runtimeConfig.CLOUDINARY_IMAGE_FORMATS;
 
 export interface SignedUpload {
   url: string;
@@ -97,13 +101,13 @@ export class CloudinaryService {
     const publicId = `${folder}/${randomUUID()}`;
     return {
       upload: this.signUpload({ public_id: publicId, asset_folder: folder }),
-      url: `https://res.cloudinary.com/${this.cloudName}/video/upload/q_auto/${publicId}.mp4`,
+      url: `${runtimeConfig.CLOUDINARY_CDN_BASE_URL}/${this.cloudName}/video/upload/q_auto/${publicId}.mp4`,
     };
   }
 
   isBlogVideoUrl(url: string): boolean {
     if (!this.cloudName) return false;
-    const prefix = `https://res.cloudinary.com/${this.cloudName}/video/upload/`;
+    const prefix = `${runtimeConfig.CLOUDINARY_CDN_BASE_URL}/${this.cloudName}/video/upload/`;
     if (!url.startsWith(prefix)) return false;
     const rest = url.slice(prefix.length).split(/[?#]/)[0];
     return (
@@ -125,7 +129,7 @@ export class CloudinaryService {
         },
         'image',
       ),
-      url: `https://res.cloudinary.com/${this.cloudName}/image/upload/f_auto,q_auto/${publicId}`,
+      url: `${runtimeConfig.CLOUDINARY_CDN_BASE_URL}/${this.cloudName}/image/upload/f_auto,q_auto/${publicId}`,
     };
   }
 
@@ -141,33 +145,33 @@ export class CloudinaryService {
     };
     const signature = cloudinary.utils.api_sign_request(signed, this.apiSecret);
     return {
-      url: `https://api.cloudinary.com/v1_1/${this.cloudName}/${resourceType}/upload`,
+      url: `${runtimeConfig.CLOUDINARY_API_BASE_URL}/${this.cloudName}/${resourceType}/upload`,
       fields: { ...signed, api_key: this.apiKey, signature },
       chunkSize: UPLOAD_CHUNK_BYTES,
     };
   }
 
   originalUrl(publicId: string): string {
-    return `https://res.cloudinary.com/${this.cloudName}/video/upload/${publicId}`;
+    return `${runtimeConfig.CLOUDINARY_CDN_BASE_URL}/${this.cloudName}/video/upload/${publicId}`;
   }
 
   hlsUrl(publicId: string): string {
-    return `https://res.cloudinary.com/${this.cloudName}/video/upload/${STREAM_TRANSFORMATION.replace('/m3u8', '')}/${publicId}.m3u8`;
+    return `${runtimeConfig.CLOUDINARY_CDN_BASE_URL}/${this.cloudName}/video/upload/${STREAM_TRANSFORMATION.replace('/m3u8', '')}/${publicId}.m3u8`;
   }
 
   frameUrl(publicId: string, seconds: number): string {
-    return `https://res.cloudinary.com/${this.cloudName}/video/upload/so_${seconds.toFixed(1)},w_1024,c_limit,f_jpg/${publicId}.jpg`;
+    return `${runtimeConfig.CLOUDINARY_CDN_BASE_URL}/${this.cloudName}/video/upload/so_${seconds.toFixed(1)},w_${runtimeConfig.CLOUDINARY_FRAME_MAX_WIDTH},c_limit,f_jpg/${publicId}.jpg`;
   }
 
   posterUrl(publicId: string): string {
-    return `https://res.cloudinary.com/${this.cloudName}/video/upload/so_0,q_auto/${publicId}.jpg`;
+    return `${runtimeConfig.CLOUDINARY_CDN_BASE_URL}/${this.cloudName}/video/upload/so_0,q_auto/${publicId}.jpg`;
   }
 
   verifyNotification(
     body: string,
     timestamp: string,
     signature: string,
-    maxAgeSec = 7200,
+    maxAgeSec = runtimeConfig.CLOUDINARY_WEBHOOK_MAX_AGE_SECONDS,
   ): boolean {
     const sentAt = Number(timestamp);
     if (!Number.isFinite(sentAt)) return false;

@@ -1,3 +1,4 @@
+import { runtimeConfig } from '../config/runtime-config.js';
 import { Injectable, Logger, type OnModuleInit } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import type { Model } from 'mongoose';
@@ -28,8 +29,8 @@ const STATUS_BY_DECISION: Record<ContentAssessment['decision'], PostStatus> = {
   reject: PostStatus.REJECTED,
 };
 
-const FRAME_COUNT = 4;
-const MAX_INLINE_IMAGES = 5;
+const FRAME_COUNT = runtimeConfig.MODERATION_VIDEO_FRAME_COUNT;
+const MAX_INLINE_IMAGES = runtimeConfig.MODERATION_MAX_INLINE_IMAGES;
 
 @Injectable()
 export class PostModerationService implements OnModuleInit {

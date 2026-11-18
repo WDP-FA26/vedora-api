@@ -1,3 +1,4 @@
+import { runtimeConfig } from '../../config/runtime-config.js';
 import { ApiProperty } from '@nestjs/swagger';
 import { Transform } from 'class-transformer';
 import {
@@ -16,8 +17,8 @@ export class RegisterDto {
     return typeof input === 'string' ? input.trim().toLowerCase() : input;
   })
   @IsString()
-  @MinLength(3)
-  @MaxLength(30)
+  @MinLength(runtimeConfig.AUTH_USERNAME_MIN_LENGTH)
+  @MaxLength(runtimeConfig.AUTH_USERNAME_MAX_LENGTH)
   @Matches(/^[a-z0-9._-]+$/, {
     message:
       'username can only contain lowercase letters, numbers, dots, underscores and hyphens',
@@ -26,7 +27,7 @@ export class RegisterDto {
 
   @ApiProperty({ example: 'StrongPassword123!' })
   @IsString()
-  @MinLength(8)
+  @MinLength(runtimeConfig.AUTH_PASSWORD_MIN_LENGTH)
   @MaxLength(72)
   password!: string;
 
@@ -37,7 +38,7 @@ export class RegisterDto {
   })
   @IsString()
   @IsNotEmpty()
-  @MaxLength(100)
+  @MaxLength(runtimeConfig.AUTH_FULL_NAME_MAX_LENGTH)
   fullName!: string;
 
   @ApiProperty({ example: 'hello@vedora.vn' })

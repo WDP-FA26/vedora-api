@@ -1,3 +1,4 @@
+import { runtimeConfig } from '../../config/runtime-config.js';
 import { registerDecorator, type ValidationOptions } from 'class-validator';
 import { InvalidInputException } from '../../common/exceptions/invalid-input.exception.js';
 
@@ -6,7 +7,8 @@ export interface ModerationTurn {
   text: string;
 }
 
-const DEFAULT_MAX_MODERATION_CHARS = 24_000;
+const DEFAULT_MAX_MODERATION_CHARS =
+  runtimeConfig.AI_MODERATION_CONTEXT_MAX_CHARS;
 
 /**
  * Formats chat turns into a single evaluation state so the guardrail inspects

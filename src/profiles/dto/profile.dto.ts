@@ -1,3 +1,4 @@
+import { runtimeConfig } from '../../config/runtime-config.js';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { ProfileImageKind } from '../../mongo/models.js';
 import {
@@ -40,20 +41,20 @@ export class ProfileRelationshipDto {
 }
 
 export class UpdateProfileDto {
-  @ApiPropertyOptional({ maxLength: 100 })
+  @ApiPropertyOptional({ maxLength: runtimeConfig.AUTH_FULL_NAME_MAX_LENGTH })
   @IsOptional()
   @IsString()
   @MinLength(1)
-  @MaxLength(100)
+  @MaxLength(runtimeConfig.AUTH_FULL_NAME_MAX_LENGTH)
   fullName?: string;
 
   @ApiPropertyOptional({
-    maxLength: 500,
+    maxLength: runtimeConfig.PROFILE_BIO_MAX_LENGTH,
     description: 'Empty string clears the bio',
   })
   @IsOptional()
   @IsString()
-  @MaxLength(500)
+  @MaxLength(runtimeConfig.PROFILE_BIO_MAX_LENGTH)
   bio?: string;
 }
 

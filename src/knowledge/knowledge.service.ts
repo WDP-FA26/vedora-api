@@ -1,3 +1,4 @@
+import { runtimeConfig } from '../config/runtime-config.js';
 import { randomUUID } from 'node:crypto';
 import { Injectable, Logger } from '@nestjs/common';
 import { FileTooLargeException } from '../common/exceptions/file-too-large.exception.js';
@@ -28,7 +29,7 @@ import { ResourceNotFoundException } from '../common/exceptions/resource-not-fou
 import { StateConflictException } from '../common/exceptions/state-conflict.exception.js';
 import { UnsupportedFileTypeException } from '../common/exceptions/unsupported-file-type.exception.js';
 
-const FILE_URL_TTL_SECONDS = 15 * 60;
+const FILE_URL_TTL_SECONDS = runtimeConfig.KNOWLEDGE_FILE_URL_TTL_SECONDS;
 
 @Injectable()
 export class KnowledgeService {

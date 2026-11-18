@@ -1,3 +1,4 @@
+import { runtimeConfig } from '../../config/runtime-config.js';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Transform } from 'class-transformer';
 import {
@@ -12,7 +13,7 @@ import {
   CursorPaginationQueryDto,
 } from '../../common/pagination/index.js';
 
-export const MAX_MESSAGE_LENGTH = 2000;
+export const MAX_MESSAGE_LENGTH = runtimeConfig.MESSAGE_MAX_LENGTH;
 export enum MessagingInbox {
   FRIENDS = 'friends',
   REQUESTS = 'requests',

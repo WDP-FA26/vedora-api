@@ -1,3 +1,4 @@
+import { runtimeConfig } from '../../config/runtime-config.js';
 import { ApiProperty } from '@nestjs/swagger';
 import { Transform } from 'class-transformer';
 import {
@@ -19,12 +20,15 @@ export class AccountOperationDto {
   @Max(2_147_483_646)
   expectedVersion!: number;
 
-  @ApiProperty({ minLength: 1, maxLength: 500 })
+  @ApiProperty({
+    minLength: 1,
+    maxLength: runtimeConfig.ACCOUNT_OPERATION_REASON_MAX_LENGTH,
+  })
   @Transform(({ value }: { value: unknown }) =>
     typeof value === 'string' ? value.trim() : value,
   )
   @IsString()
   @MinLength(1)
-  @MaxLength(500)
+  @MaxLength(runtimeConfig.ACCOUNT_OPERATION_REASON_MAX_LENGTH)
   reason!: string;
 }

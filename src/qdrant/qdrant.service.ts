@@ -1,9 +1,10 @@
+import { runtimeConfig } from '../config/runtime-config.js';
 import { Injectable, type OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { QdrantClient } from '@qdrant/js-client-rest';
 import { ExternalServiceException } from '../common/exceptions/external-service.exception.js';
 
-const STARTUP_TIMEOUT_MS = 5_000;
+const STARTUP_TIMEOUT_MS = runtimeConfig.QDRANT_STARTUP_TIMEOUT_MS;
 
 @Injectable()
 export class QdrantService extends QdrantClient implements OnModuleInit {

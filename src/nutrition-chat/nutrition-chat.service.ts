@@ -1,3 +1,4 @@
+import { runtimeConfig } from '../config/runtime-config.js';
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { InjectModel } from '@nestjs/ai';
 import {
@@ -24,7 +25,7 @@ import type { ChatMessageDto } from './dto/nutrition-chat.dto.js';
 import { NutritionAgent } from './nutrition-chat.agent.js';
 import { FeatureUnavailableException } from '../common/exceptions/feature-unavailable.exception.js';
 
-const SEARCH_TIMEOUT_MS = 5000;
+const SEARCH_TIMEOUT_MS = runtimeConfig.AI_KNOWLEDGE_TOOL_TIMEOUT_MS;
 const SLOW_MODERATION_MS = 2000;
 
 const REFUSALS: Record<Exclude<ModerationVerdict, 'allow'>, string> = {

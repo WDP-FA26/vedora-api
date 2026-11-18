@@ -7,6 +7,7 @@ FROM dependencies AS build
 WORKDIR /app
 COPY nest-cli.json tsconfig*.json ./
 COPY src ./src
+COPY config ./config
 RUN npm run build
 
 FROM node:26.12.1-alpine AS production
@@ -18,6 +19,7 @@ RUN apk add --no-cache dumb-init ffmpeg
 ENV FFMPEG_PATH=/usr/bin/ffmpeg
 COPY package*.json ./
 COPY seed-data ./seed-data
+COPY config ./config
 RUN npm ci --omit=dev && npm cache clean --force
 COPY --from=build /app/dist ./dist
 USER node

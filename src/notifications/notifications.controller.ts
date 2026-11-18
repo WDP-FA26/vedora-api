@@ -1,3 +1,4 @@
+import { runtimeConfig } from '../config/runtime-config.js';
 import {
   Controller,
   Get,
@@ -26,7 +27,7 @@ import { CursorPaginationQueryDto } from '../common/pagination/index.js';
 import { NotificationPageDto, UnreadCountDto } from './dto/notification.dto.js';
 import { NotificationsService } from './notifications.service.js';
 
-const HEARTBEAT_MS = 25_000;
+const HEARTBEAT_MS = runtimeConfig.NOTIFICATION_SSE_HEARTBEAT_MS;
 
 @ApiTags('notifications')
 @ApiBearerAuth()

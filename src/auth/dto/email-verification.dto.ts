@@ -1,3 +1,4 @@
+import { runtimeConfig } from '../../config/runtime-config.js';
 import { ApiProperty } from '@nestjs/swagger';
 import { Transform } from 'class-transformer';
 import { IsEmail, Matches, MaxLength } from 'class-validator';
@@ -16,9 +17,11 @@ export class ResendVerificationDto {
 export class VerifyEmailDto extends ResendVerificationDto {
   @ApiProperty({
     example: '123456',
-    description: 'Six-digit code from the email',
+    description: 'Code from the email (length configured by AUTH_OTP_LENGTH)',
   })
-  @Matches(/^\d{6}$/, { message: 'code must be 6 digits' })
+  @Matches(new RegExp('^[0-9]{' + runtimeConfig.AUTH_OTP_LENGTH + '}$'), {
+    message: `code must be ${runtimeConfig.AUTH_OTP_LENGTH} digits`,
+  })
   code!: string;
 }
 

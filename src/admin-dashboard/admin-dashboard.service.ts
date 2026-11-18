@@ -1,3 +1,4 @@
+import { runtimeConfig } from '../config/runtime-config.js';
 import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import type { Model, PipelineStage } from 'mongoose';
@@ -39,7 +40,7 @@ const dailyCounts = (
         $dateToString: {
           format: '%Y-%m-%d',
           date: `$${dateField}`,
-          timezone: 'Asia/Bangkok',
+          timezone: runtimeConfig.APP_TIMEZONE,
         },
       },
       count: { $sum: 1 },

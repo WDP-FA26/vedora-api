@@ -1,3 +1,4 @@
+import { runtimeConfig } from '../../config/runtime-config.js';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Transform } from 'class-transformer';
 import {
@@ -15,7 +16,7 @@ import { RecipeDetailDto, RecipeDto } from './recipe.dto.js';
 
 export class RecipeCatalogQueryDto extends PaginationQueryDto {
   @ApiPropertyOptional({
-    maxLength: 100,
+    maxLength: runtimeConfig.RECIPE_CATALOG_QUERY_MAX_LENGTH,
     description: 'Search titles, descriptions, ingredient names and aliases',
   })
   @IsOptional()
@@ -24,12 +25,12 @@ export class RecipeCatalogQueryDto extends PaginationQueryDto {
   )
   @IsString()
   @MinLength(1)
-  @MaxLength(100)
+  @MaxLength(runtimeConfig.RECIPE_CATALOG_QUERY_MAX_LENGTH)
   q?: string;
 
   @ApiPropertyOptional({
     minimum: 0,
-    maximum: 2880,
+    maximum: runtimeConfig.RECIPE_CATALOG_MAX_MINUTES,
     description:
       'Maximum prep + cook minutes; recipes with both times unknown are excluded',
   })
@@ -39,7 +40,7 @@ export class RecipeCatalogQueryDto extends PaginationQueryDto {
   )
   @IsInt()
   @Min(0)
-  @Max(2880)
+  @Max(runtimeConfig.RECIPE_CATALOG_MAX_MINUTES)
   maxMinutes?: number;
 
   @ApiPropertyOptional({

@@ -1,5 +1,6 @@
+import { runtimeConfig } from '../config/runtime-config.js';
 import { Injectable, Logger } from '@nestjs/common';
-import { Cron, CronExpression } from '@nestjs/schedule';
+import { Cron } from '@nestjs/schedule';
 import { InjectModel } from '@nestjs/mongoose';
 import type { Model } from 'mongoose';
 import { isUniqueViolation } from '../mongo/errors.js';
@@ -18,13 +19,15 @@ import {
   FollowSuggestionListDto,
 } from './dto/follow-suggestion.dto.js';
 
-const FAN_OUT = 200;
-const KEPT_PER_USER = 30;
-const BATCH_SIZE = 200;
-const FOLLOWS_YOU_SCORE = 1000;
-const ACTIVE_WINDOW_MS = 30 * 24 * 60 * 60 * 1000;
-const ACTIVE_POOL_SIZE = 50;
-const ACTIVE_CACHE_MS = 10 * 60 * 1000;
+const FAN_OUT = runtimeConfig.FOLLOW_SUGGESTION_FAN_OUT;
+const KEPT_PER_USER = runtimeConfig.FOLLOW_SUGGESTION_KEPT_PER_USER;
+const BATCH_SIZE = runtimeConfig.FOLLOW_SUGGESTION_BATCH_SIZE;
+const FOLLOWS_YOU_SCORE = runtimeConfig.FOLLOW_SUGGESTION_FOLLOWS_YOU_SCORE;
+const ACTIVE_WINDOW_MS =
+  runtimeConfig.FOLLOW_SUGGESTION_ACTIVE_WINDOW_SECONDS * 1000;
+const ACTIVE_POOL_SIZE = runtimeConfig.FOLLOW_SUGGESTION_ACTIVE_POOL_SIZE;
+const ACTIVE_CACHE_MS =
+  runtimeConfig.FOLLOW_SUGGESTION_CACHE_TTL_SECONDS * 1000;
 
 interface SuggestionRow {
   userId: string;
@@ -108,7 +111,7 @@ export class FollowSuggestionsService {
     await this.suggestions.deleteOne({ userId, candidateId });
   }
 
-  @Cron(CronExpression.EVERY_HOUR)
+  @Cron(runtimeConfig.FOLLOW_SUGGESTION_REBUILD_CRON)
   async rebuildAll(): Promise<void> {
     let after: string | undefined;
     let users = 0;

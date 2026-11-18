@@ -1,9 +1,10 @@
+import { runtimeConfig } from '../../config/runtime-config.js';
 import { randomUUID } from 'node:crypto';
 import { Injectable } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 
 const AUDIENCE = 'guest';
-export const GUEST_SESSION_TTL_SEC = 24 * 60 * 60;
+export const GUEST_SESSION_TTL_SEC = runtimeConfig.GUEST_SESSION_TTL_SECONDS;
 
 @Injectable()
 export class GuestSessionService {

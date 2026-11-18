@@ -1,3 +1,4 @@
+import { runtimeConfig } from '../../config/runtime-config.js';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { PostStatus, PostType } from '../../mongo/models.js';
 import { IsIn, IsEnum, IsOptional, IsString, MaxLength } from 'class-validator';
@@ -51,10 +52,10 @@ export class ModeratePostDto {
   @IsIn(MODERATION_DECISIONS)
   decision!: ModerationDecision;
 
-  @ApiPropertyOptional({ maxLength: 500 })
+  @ApiPropertyOptional({ maxLength: runtimeConfig.POST_REVIEW_NOTE_MAX_LENGTH })
   @IsOptional()
   @IsString()
-  @MaxLength(500)
+  @MaxLength(runtimeConfig.POST_REVIEW_NOTE_MAX_LENGTH)
   note?: string;
 }
 

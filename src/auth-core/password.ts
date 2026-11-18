@@ -1,7 +1,8 @@
+import { runtimeConfig } from '../config/runtime-config.js';
 import { hash, truncates } from 'bcryptjs';
 import { InvalidInputException } from '../common/exceptions/invalid-input.exception.js';
 
-const BCRYPT_ROUNDS = 12;
+const BCRYPT_ROUNDS = runtimeConfig.AUTH_BCRYPT_ROUNDS;
 
 export async function hashPassword(password: string): Promise<string> {
   if (truncates(password)) {

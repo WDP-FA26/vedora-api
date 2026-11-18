@@ -7,6 +7,7 @@ import { ScheduleModule } from '@nestjs/schedule';
 import { validateEnvironment } from './config/environment.js';
 import { PaymentsModule } from './payments/payments.module.js';
 import { AppController } from './app.controller.js';
+import { PublicConfigController } from './config/public-config.controller.js';
 import { AdminDashboardModule } from './admin-dashboard/admin-dashboard.module.js';
 import { AiModule } from './ai/ai.module.js';
 import { AuthCoreModule } from './auth-core/auth-core.module.js';
@@ -71,7 +72,7 @@ import { VerificationModule } from './verification/verification.module.js';
     VerificationModule,
     StorageWebhookModule,
   ],
-  controllers: [AppController],
+  controllers: [AppController, PublicConfigController],
   providers: [{ provide: APP_FILTER, useClass: AppExceptionFilter }],
 })
 export class AppModule {}

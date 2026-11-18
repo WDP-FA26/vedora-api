@@ -1,3 +1,4 @@
+import { runtimeConfig } from '../config/runtime-config.js';
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectModel } from '@nestjs/mongoose';
@@ -11,7 +12,7 @@ import {
 } from './policies/content.js';
 
 const SETTINGS_ID = 'content';
-const CACHE_TTL_MS = 15_000;
+const CACHE_TTL_MS = runtimeConfig.MODERATION_CACHE_TTL_MS;
 
 export interface ContentSettingsInput extends ContentPolicySettings {
   rejectThreshold: number;

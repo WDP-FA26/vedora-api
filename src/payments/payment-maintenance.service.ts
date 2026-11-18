@@ -1,3 +1,4 @@
+import { runtimeConfig } from '../config/runtime-config.js';
 import { Injectable, Logger, OnApplicationBootstrap } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import { PaymentsService } from './payments.service.js';
@@ -12,7 +13,7 @@ export class PaymentMaintenanceService implements OnApplicationBootstrap {
     await this.expireOrders();
   }
 
-  @Cron('*/10 * * * * *', { waitForCompletion: true })
+  @Cron(runtimeConfig.PAYMENT_EXPIRATION_CRON, { waitForCompletion: true })
   async expireOrders(): Promise<void> {
     try {
       await this.payments.expirePending();

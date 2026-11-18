@@ -1,3 +1,4 @@
+import { runtimeConfig } from '../../config/runtime-config.js';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Transform, Type } from 'class-transformer';
 import {
@@ -22,7 +23,7 @@ import {
 } from 'class-validator';
 import { ALLOW_KEY } from '../policies/content.js';
 
-const MAX_CHOICES = 16;
+const MAX_CHOICES = runtimeConfig.MODERATION_MAX_CHOICES;
 const KEY_PATTERN = /^[a-z][a-z0-9_]{1,31}$/;
 
 const Trim = () =>
@@ -162,9 +163,9 @@ export class ModerationSettingsDto extends ModerationPolicyDto {
 }
 
 export class TestModerationDto {
-  @ApiProperty({ maxLength: 5000 })
+  @ApiProperty({ maxLength: runtimeConfig.MODERATION_TEST_MAX_LENGTH })
   @IsString()
-  @MaxLength(5000)
+  @MaxLength(runtimeConfig.MODERATION_TEST_MAX_LENGTH)
   text!: string;
 
   @ApiPropertyOptional({

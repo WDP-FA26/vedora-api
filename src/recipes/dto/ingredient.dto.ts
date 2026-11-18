@@ -1,3 +1,4 @@
+import { runtimeConfig } from '../../config/runtime-config.js';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Transform, Type } from 'class-transformer';
 import {
@@ -14,10 +15,10 @@ import {
   ValidateNested,
 } from 'class-validator';
 
-export const MAX_NAME_LENGTH = 100;
-export const MAX_ALIASES = 20;
-export const MAX_GROUP_MEMBERS = 500;
-export const MAX_TEXT_LENGTH = 500;
+export const MAX_NAME_LENGTH = runtimeConfig.INGREDIENT_NAME_MAX_LENGTH;
+export const MAX_ALIASES = runtimeConfig.INGREDIENT_MAX_ALIASES;
+export const MAX_GROUP_MEMBERS = runtimeConfig.INGREDIENT_GROUP_MAX_MEMBERS;
+export const MAX_TEXT_LENGTH = runtimeConfig.INGREDIENT_DESCRIPTION_MAX_LENGTH;
 
 const trim = ({ value }: { value: unknown }): unknown =>
   typeof value === 'string' ? value.trim() : value;
@@ -60,7 +61,7 @@ export class SaveIngredientDto {
   @ApiPropertyOptional({ type: [String], format: 'uuid' })
   @IsOptional()
   @IsArray()
-  @ArrayMaxSize(50)
+  @ArrayMaxSize(runtimeConfig.INGREDIENT_MAX_GROUPS)
   @ArrayUnique()
   @IsUUID('4', { each: true })
   groupIds?: string[];

@@ -1,3 +1,4 @@
+import { runtimeConfig } from '../../config/runtime-config.js';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { VerificationStatus } from '../../mongo/models.js';
 import { Transform } from 'class-transformer';
@@ -24,10 +25,13 @@ export const PROOF_IMAGE_TYPES = [
   'image/png',
   'image/webp',
 ] as const;
-export const MAX_PROOFS = 6;
-export const MIN_STATEMENT_LENGTH = 20;
-export const MAX_STATEMENT_LENGTH = 2000;
-export const MAX_REVIEW_NOTE_LENGTH = 500;
+export const MAX_PROOFS = runtimeConfig.VERIFICATION_MAX_PROOFS;
+export const MIN_STATEMENT_LENGTH =
+  runtimeConfig.VERIFICATION_STATEMENT_MIN_LENGTH;
+export const MAX_STATEMENT_LENGTH =
+  runtimeConfig.VERIFICATION_STATEMENT_MAX_LENGTH;
+export const MAX_REVIEW_NOTE_LENGTH =
+  runtimeConfig.VERIFICATION_REVIEW_NOTE_MAX_LENGTH;
 
 const REVIEW_DECISIONS = [
   VerificationStatus.APPROVED,
