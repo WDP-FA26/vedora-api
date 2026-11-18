@@ -139,7 +139,8 @@ knowledge sources và proposal) vào đoạn chat đó. FE chỉ gửi tối đa
 nhất trong `messages` để làm ngữ cảnh cho LLM; toàn bộ tin nhắn trước đó vẫn được
 giữ đầy đủ trong MongoDB và trả về qua `GET /meal-plan/chat/threads/:threadId`.
 `PATCH /meal-plan/chat/threads/:threadId` dùng để cập nhật `title`, `proposalStatuses`
-(`staged | saved | dismissed`) hoặc đồng bộ thêm tin nhắn theo `id` (idempotent).
+(`staged | saved | dismissed`; FE mới chỉ ghi `saved | dismissed`) hoặc đồng bộ thêm tin nhắn theo `id`
+(idempotent).
  `imageUrl` là link HTTPS có
 thể bằng `null`. `post` chỉ có `{ id, author: { username, fullName } }` khi bài
 nguồn đã `PUBLISHED`; nếu bài đang xử lý, thất bại hoặc đã bị xóa thì `post=null`.
@@ -179,7 +180,8 @@ quyết định tuần nào hợp lệ; FE không tự tính ngày hay đoán tu
 - **Ngày trước hôm nay bị khóa**: không thêm, sửa hay xóa món (`409 MEAL_DAY_LOCKED`, `details.days` liệt kê
   ngày bị khóa). Tuần đã qua chỉ đọc. Ngày tính hết lúc 00:00 theo múi giờ của app. Món đã lưu cho
   một ngày trước khi ngày đó qua vẫn hiển thị để xem lại.
-- Tạo bằng thuật toán (`generate`) và trợ lý chat tự bỏ qua ngày bị khóa thay vì báo lỗi.
+- Tạo bằng thuật toán (`generate`) bỏ qua ngày bị khóa thay vì báo lỗi; trợ lý chat cũng bỏ qua nhưng báo
+  `DAY_PASSED` để nói lại với người dùng.
 - Bản nháp cũng theo tuần: mỗi tuần một bản nháp riêng, hết hạn sau 6 giờ. Lưu một tuần chỉ xóa nháp
   của tuần đó.
 
@@ -222,10 +224,21 @@ tránh thì `409 MEAL_PLAN_INVALID`; người dùng sửa món đó rồi sao ch
 
 ### Trợ lý chat
 
-Request mang `weekStart` của tuần đang mở. Trợ lý chỉ đọc và đề xuất cho tuần đó; khi người dùng nói
-"tuần sau", trợ lý bảo họ chuyển sang tuần ấy rồi hỏi lại. Output `fillSlots` và `editDraft` có `weekStart`;
-khi người dùng bấm **Áp dụng**, FE gửi `weekStart` của đề xuất đó (không phải tuần đang xem lúc bấm) tới
-`PUT /meal-plan/days`.
+Request mang `weekStart` của tuần đang xem; đó chỉ là tuần **mặc định**. Prompt có bảng lịch của tuần này
+và 4 tuần tới kèm ngày tháng, nên trợ lý tự hiểu "tuần sau", "25/11" hay "T4" và đề xuất cho bất kỳ tuần nào
+trong khoảng đó mà người dùng không cần chuyển trang. Khi tuần đang xem đã qua hết, mặc định là tuần hiện tại.
+
+- `getPlan`, `fillSlots`, `editDraft` nhận `weekStart` tùy chọn (chỉ các tuần lập được). Mỗi output đề xuất có
+  `weekStart` của nó; một tin nhắn có thể chứa đề xuất cho nhiều tuần. Mỗi output là **toàn bộ** bản nháp của
+  tuần đó so với thực đơn đã lưu, nên chỉ đề xuất mới nhất của mỗi tuần còn áp dụng được.
+- Người dùng nhắc ngày đã qua: công cụ báo `DAY_PASSED`, trợ lý nói rõ ngày đó không sửa được và làm nháp cho
+  đúng thứ đó của tuần sau.
+- **Áp dụng** nằm trên thẻ đề xuất trong khung chat: FE đọc lại `GET /meal-plan?weekStart=` của tuần đề xuất,
+  gửi các ngày đổi (bỏ ngày đã qua) tới `PUT /meal-plan/days` với `weekStart` của đề xuất, rồi đặt
+  `proposalStatuses[id] = 'saved'`. Lưu xóa nháp của các ngày đã lưu.
+- **Bỏ đề xuất**: đặt `'dismissed'` và gọi `DELETE /meal-plan/draft?weekStart=` của tuần đó.
+- Tin nhắn đầu của một đoạn chat mới xóa nháp của mọi tuần. `'staged'` chỉ còn trong đoạn chat cũ;
+  FE coi như chưa quyết định.
 
 ### Danh sách đi chợ
 

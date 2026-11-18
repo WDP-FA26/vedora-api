@@ -45,7 +45,7 @@ describe('meal-planner prompt & refusals', () => {
     expect(output).toContain('- Chủ nhật: (trống)');
   });
 
-  it('tells the assistant which week it plans, today, and which days are locked', () => {
+  it('lays out every plannable week with real dates and the passed days', () => {
     const restrictions: DietaryRestrictionsDto = {
       ingredients: [],
       groups: [],
@@ -54,28 +54,67 @@ describe('meal-planner prompt & refusals', () => {
 
     const output = plannerInstructions(restrictions, emptyPlan());
 
-    expect(output).toContain('Hôm nay là 2026-11-18');
-    expect(output).toContain('từ 2026-11-16 đến 2026-11-22');
-    expect(output).toContain('weekStart 2026-11-16');
+    expect(output).toContain('Hôm nay là Thứ Tư 2026-11-18.');
     expect(output).toContain(
-      'Ngày đã khóa (đã qua): Thứ Hai 2026-11-16, Thứ Ba 2026-11-17',
+      '- Tuần này 16/11–22/11 (weekStart 2026-11-16): đã qua, không sửa được: Thứ Hai 16/11, Thứ Ba 17/11; còn sửa được từ hôm nay — người dùng đang xem tuần này',
     );
-    expect(output).toContain('Ngày còn sửa được: Thứ Tư 2026-11-18');
+    expect(output).toContain(
+      '- Tuần sau 23/11–29/11 (weekStart 2026-11-23): mọi ngày còn sửa được',
+    );
+    expect(output).toContain('- Tuần 14/12–20/12 (weekStart 2026-12-14)');
+    expect(output).toContain('Sau 2026-12-20 là ngoài giới hạn');
+    expect(output).toContain('tuần người dùng đang xem (weekStart 2026-11-16');
   });
 
-  it('says so when no day of the week can change any more', () => {
+  it('marks the week on screen when it is a later week', () => {
     const restrictions: DietaryRestrictionsDto = {
       ingredients: [],
       groups: [],
       liked: [],
     };
-    const plan = emptyPlan();
-    for (const day of plan.days) day.editable = false;
+    const output = plannerInstructions(restrictions, {
+      ...emptyPlan(),
+      weekStart: '2026-11-23',
+    });
+
+    expect(output).toContain(
+      '(weekStart 2026-11-23): mọi ngày còn sửa được — người dùng đang xem tuần này',
+    );
+    expect(output).not.toContain(
+      'còn sửa được từ hôm nay — người dùng đang xem tuần này',
+    );
+  });
+
+  it('lists a past week on screen as read-only, before the plannable weeks', () => {
+    const restrictions: DietaryRestrictionsDto = {
+      ingredients: [],
+      groups: [],
+      liked: [],
+    };
+    const plan = { ...emptyPlan(), weekStart: '2026-11-09', editable: false };
 
     const output = plannerInstructions(restrictions, plan);
 
-    expect(output).toContain('không còn ngày nào, tuần này chỉ để xem');
-    expect(output).toContain('Ngày đã khóa (đã qua): Thứ Hai 2026-11-16');
+    expect(output).toContain(
+      'Lịch các tuần bạn được lập:\n- Tuần 09/11–15/11 (weekStart 2026-11-09): đã qua hết, chỉ để xem — người dùng đang xem tuần này',
+    );
+  });
+
+  it('says nothing has passed on a Monday', () => {
+    const restrictions: DietaryRestrictionsDto = {
+      ingredients: [],
+      groups: [],
+      liked: [],
+    };
+    const output = plannerInstructions(restrictions, {
+      ...emptyPlan(),
+      today: '2026-11-16',
+    });
+
+    expect(output).toContain('Hôm nay là Thứ Hai 2026-11-16.');
+    expect(output).toContain(
+      '- Tuần này 16/11–22/11 (weekStart 2026-11-16): mọi ngày còn sửa được',
+    );
   });
 
   it('formats avoided groups, avoided ingredients, liked ingredients, and scheduled dishes', () => {

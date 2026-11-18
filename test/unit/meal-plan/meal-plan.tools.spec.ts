@@ -239,8 +239,17 @@ describe('Meal planner AI tools', () => {
   });
 
   describe('fillSlotsTool', () => {
+    beforeEach(() => {
+      vi.useFakeTimers({ toFake: ['Date'] });
+      // Thursday 2026-11-19 in Vietnam: Monday to Wednesday have passed.
+      vi.setSystemTime(new Date('2026-11-19T03:00:00Z'));
+    });
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
     const request = {
-      days: [Weekday.MON],
+      days: [Weekday.FRI],
       sections: [MealSection.LUNCH],
       onlyEmpty: true,
       maxMinutes: 30,
@@ -249,6 +258,65 @@ describe('Meal planner AI tools', () => {
       section: MealSection.LUNCH,
       recipes,
       previous: [],
+    });
+
+    it('works on the week the model names and reports days that have passed', async () => {
+      const toolDef = fillSlotsTool(mealPlan, userId, WEEK);
+      const result = {
+        weekStart: WEEK,
+        days: [],
+        problems: [],
+        ok: false,
+        filled: 0,
+        allSlotsAlreadyFilled: false,
+      };
+      mealPlan.fillDraft.mockResolvedValue(result);
+
+      await toolDef.execute?.(
+        { ...request, days: [Weekday.FRI], weekStart: '2026-11-23' },
+        execOptions,
+      );
+      expect(mealPlan.fillDraft).toHaveBeenLastCalledWith(userId, {
+        ...request,
+        days: [Weekday.FRI],
+        weekStart: '2026-11-23',
+      });
+
+      const output = await toolDef.execute?.(
+        { ...request, days: [Weekday.WED, Weekday.FRI] },
+        execOptions,
+      );
+      const passed = {
+        ...result,
+        passedDays: [{ day: Weekday.WED, date: '2026-11-18' }],
+      };
+      expect(output).toEqual(passed);
+      const modelOut = await toolDef.toModelOutput?.({
+        input: request,
+        toolCallId: 'call-1',
+        output: passed,
+      });
+      expect(modelOut).toEqual({
+        type: 'text',
+        value: expect.stringContaining(
+          'DAY_PASSED: Thứ Tư 2026-11-18 came before today',
+        ) as unknown,
+      });
+    });
+
+    it('refuses a week outside the plannable range', () => {
+      const toolDef = fillSlotsTool(mealPlan, userId, WEEK);
+      const schema = toolDef.inputSchema;
+      if (!('safeParse' in schema)) throw new Error('expected a zod schema');
+      expect(
+        schema.safeParse({ ...request, weekStart: '2026-12-14' }).success,
+      ).toBe(true);
+      expect(
+        schema.safeParse({ ...request, weekStart: '2026-12-21' }).success,
+      ).toBe(false);
+      expect(
+        schema.safeParse({ ...request, weekStart: '2026-11-09' }).success,
+      ).toBe(false);
     });
 
     it('passes the request to fillDraft and summarizes the draft', async () => {

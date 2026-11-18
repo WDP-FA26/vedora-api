@@ -41,24 +41,6 @@ import { QuotaReachedException } from '../common/exceptions/quota-reached.except
 const MAX_STEPS = runtimeConfig.PLANNER_CHAT_MAX_STEPS;
 const SEARCH_TIMEOUT_MS = runtimeConfig.AI_KNOWLEDGE_TOOL_TIMEOUT_MS;
 
-function shouldDiscardPreviousDraft(
-  messages: readonly PlannerMessageDto[],
-): boolean {
-  if (messages.length === 1) return true;
-  let latestProposalNote: string | null = null;
-  for (const message of messages) {
-    if (message.role !== 'assistant') continue;
-    const matches = message.text.match(/\[Đề xuất \([^)]+\):[^\]]*\]/g);
-    if (matches && matches.length > 0) {
-      latestProposalNote = matches.at(-1) ?? null;
-    }
-  }
-  return (
-    latestProposalNote !== null &&
-    latestProposalNote.includes('người dùng đã bỏ qua')
-  );
-}
-
 @Injectable()
 export class MealPlannerChatService {
   private readonly logger = new Logger(MealPlannerChatService.name);
@@ -134,8 +116,10 @@ export class MealPlannerChatService {
         return cannedReply(PLANNER_REFUSALS[verdict], assistantMessageId);
       }
 
-      if (shouldDiscardPreviousDraft(messages)) {
-        await this.mealPlan.discardDraft(userId, weekStart);
+      // A new conversation starts from the saved plans of every week. A card
+      // the user dismisses later drops its week's draft through DELETE /draft.
+      if (messages.length === 1) {
+        await this.mealPlan.discardAllDrafts(userId);
       }
       const [restrictions, plan, draft] = await Promise.all([
         this.dietary.find(userId),
@@ -143,6 +127,11 @@ export class MealPlannerChatService {
         this.mealPlan.getDraft(userId, weekStart),
       ]);
 
+      // A week that has fully passed is read-only, so tools default to this week.
+      const toolWeek =
+        plan.weekStart < plan.currentWeekStart
+          ? plan.currentWeekStart
+          : plan.weekStart;
       const agent = new ToolLoopAgent({
         model: this.model,
         instructions: plannerInstructions(restrictions, plan, draft),
@@ -151,9 +140,9 @@ export class MealPlannerChatService {
           searchKnowledge: searchKnowledgeTool(this.knowledge),
           searchRecipes: searchRecipesTool(this.mealPlan, userId),
           getRecipe: getRecipeTool(this.mealPlan, userId),
-          getPlan: getPlanTool(this.mealPlan, userId, weekStart),
-          fillSlots: fillSlotsTool(this.mealPlan, userId, weekStart),
-          editDraft: editDraftTool(this.mealPlan, userId, weekStart),
+          getPlan: getPlanTool(this.mealPlan, userId, toolWeek),
+          fillSlots: fillSlotsTool(this.mealPlan, userId, toolWeek),
+          editDraft: editDraftTool(this.mealPlan, userId, toolWeek),
         },
         stopWhen: isStepCount(MAX_STEPS),
         prepareStep: ({ stepNumber }) =>

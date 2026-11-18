@@ -3,6 +3,8 @@ import { loadTextConfig } from '../config/config-files.js';
 import type { DietaryRestrictionsDto } from '../recipes/dto/dietary.dto.js';
 import type { MealPlanDto } from './dto/meal-plan.dto.js';
 import type { DraftProposal } from './meal-plan.service.js';
+import { addDays } from './meal-week.js';
+import { Weekday } from '../mongo/models.js';
 
 export const DAY_NAMES = {
   MON: 'Thứ Hai',
@@ -47,6 +49,64 @@ function draftSummary(draft: DraftProposal | undefined): string {
   return `\n\nBản nháp đang đề xuất (chưa lưu):\n${lines.join('\n')}`;
 }
 
+const WEEKDAYS: readonly Weekday[] = Object.values(Weekday);
+
+/** `2026-11-19` as `19/11`. */
+function dayMonth(date: string): string {
+  return `${date.slice(8, 10)}/${date.slice(5, 7)}`;
+}
+
+function weekLabel(weekStart: string, currentWeekStart: string): string {
+  if (weekStart === currentWeekStart) return 'Tuần này';
+  if (weekStart === addDays(currentWeekStart, 7)) return 'Tuần sau';
+  return 'Tuần';
+}
+
+/**
+ * Every week the planner may write to, with real dates, so the model turns
+ * "T4", "tuần sau" or "25/11" into one day without guessing.
+ */
+export function plannerCalendar(plan: MealPlanDto): string {
+  const { today, currentWeekStart, maxWeekStart, weekStart } = plan;
+  const todayIndex = WEEKDAYS.findIndex(
+    (_, index) => addDays(currentWeekStart, index) === today,
+  );
+  const todayName =
+    todayIndex >= 0 ? `${DAY_NAMES[WEEKDAYS[todayIndex]]} ` : '';
+  const lines: string[] = [];
+  for (
+    let start = currentWeekStart;
+    start <= maxWeekStart;
+    start = addDays(start, 7)
+  ) {
+    const end = addDays(start, 6);
+    const open = start === weekStart ? ' — người dùng đang xem tuần này' : '';
+    let status = 'mọi ngày còn sửa được';
+    if (start === currentWeekStart && todayIndex > 0) {
+      const passed = WEEKDAYS.slice(0, todayIndex)
+        .map(
+          (day, index) =>
+            `${DAY_NAMES[day]} ${dayMonth(addDays(start, index))}`,
+        )
+        .join(', ');
+      status = `đã qua, không sửa được: ${passed}; còn sửa được từ hôm nay`;
+    }
+    lines.push(
+      `- ${weekLabel(start, currentWeekStart)} ${dayMonth(start)}–${dayMonth(end)} (weekStart ${start}): ${status}${open}`,
+    );
+  }
+  if (weekStart < currentWeekStart) {
+    lines.unshift(
+      `- Tuần ${dayMonth(weekStart)}–${dayMonth(addDays(weekStart, 6))} (weekStart ${weekStart}): đã qua hết, chỉ để xem — người dùng đang xem tuần này`,
+    );
+  }
+  const lastDay = addDays(maxWeekStart, 6);
+  return `Hôm nay là ${todayName}${today}.
+Lịch các tuần bạn được lập:
+${lines.join('\n')}
+Sau ${lastDay} là ngoài giới hạn, không lập được.`;
+}
+
 export function plannerInstructions(
   restrictions: DietaryRestrictionsDto,
   plan: MealPlanDto,
@@ -67,18 +127,9 @@ export function plannerInstructions(
       );
     return `- ${DAY_NAMES[day]}: ${filled.length > 0 ? filled.join('; ') : '(trống)'}`;
   });
-  const lockedDays = plan.days
-    .filter(({ editable }) => !editable)
-    .map(({ day, date }) => `${DAY_NAMES[day]} ${date}`);
-  const editableDays = plan.days
-    .filter(({ editable }) => editable)
-    .map(({ day, date }) => `${DAY_NAMES[day]} ${date}`);
-  const weekContext = `Hôm nay là ${plan.today}. Tuần đang lập: từ ${plan.days[0].date} đến ${plan.days[6].date} (weekStart ${plan.weekStart}).
-Ngày còn sửa được: ${editableDays.length > 0 ? editableDays.join(', ') : 'không còn ngày nào, tuần này chỉ để xem'}.
-Ngày đã khóa (đã qua): ${lockedDays.length > 0 ? lockedDays.join(', ') : 'không có'}.`;
   return `${RULES}
 
-${weekContext}
+${plannerCalendar(plan)}
 
 Thực phẩm người dùng không ăn (searchRecipes đã loại sẵn các món chứa chúng): ${
     avoided.length > 0 ? avoided.join(', ') : 'chưa khai báo gì'
@@ -89,6 +140,6 @@ Nguyên liệu người dùng thích: ${
       : 'chưa khai báo gì'
   }.
 
-Thực đơn đang lưu của tuần này:
+Thực đơn đang lưu của tuần người dùng đang xem (weekStart ${plan.weekStart}, gọi getPlan để xem tuần khác):
 ${days.join('\n')}${draftSummary(draft)}`;
 }

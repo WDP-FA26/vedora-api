@@ -297,7 +297,10 @@ export class MealSectionDto {
 
 export class MealDayDto {
   @ApiProperty({ enum: Weekday }) day!: Weekday;
-  @ApiProperty({ example: '2026-11-18', description: 'Calendar date of the day' })
+  @ApiProperty({
+    example: '2026-11-18',
+    description: 'Calendar date of the day',
+  })
   date!: string;
   @ApiProperty({
     description:
@@ -351,7 +354,10 @@ export class MealPlanDto {
   })
   currentWeekStart!: string;
 
-  @ApiProperty({ example: '2026-11-18', description: 'Today in the app time zone' })
+  @ApiProperty({
+    example: '2026-11-18',
+    description: 'Today in the app time zone',
+  })
   today!: string;
 
   @ApiProperty({
@@ -406,7 +412,10 @@ export class MealPlanPreviewDayDto {
 }
 
 export class MealPlanPreviewDto {
-  @ApiProperty({ example: '2026-11-16', description: 'The week this proposal is for' })
+  @ApiProperty({
+    example: '2026-11-16',
+    description: 'The week this proposal is for',
+  })
   weekStart!: string;
   @ApiProperty({ type: [MealPlanPreviewDayDto] })
   days!: MealPlanPreviewDayDto[];

@@ -62,5 +62,5 @@ export function proposalFeedback(
   if (proposal.days.length === 0) {
     return `The draft has no changes from the saved plan.${notes}`;
   }
-  return `The draft is on screen, not saved. The user presses "Áp dụng" to keep it. Unsaved changes so far:\n${describeDraft(proposal)}${notes}`;
+  return `The draft for the week of ${proposal.weekStart} is shown to the user as a card in the chat, not saved. The user presses "Áp dụng" on that card to keep it. Unsaved changes so far:\n${describeDraft(proposal)}${notes}`;
 }

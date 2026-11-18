@@ -174,7 +174,7 @@ describe('MealPlannerChatService', () => {
       problems: [],
       ok: false,
     });
-    mealPlan.discardDraft.mockResolvedValue(undefined);
+    mealPlan.discardAllDrafts.mockResolvedValue(undefined);
 
     createOpenRouter.mockClear();
     languageModel.mockClear();
@@ -317,7 +317,7 @@ describe('MealPlannerChatService', () => {
         questions: { verdict: NUTRITION_POLICY },
       }),
     );
-    expect(mealPlan.discardDraft).toHaveBeenCalledWith(USER_ID, WEEK);
+    expect(mealPlan.discardAllDrafts).toHaveBeenCalledWith(USER_ID);
     expect(dietary.find).toHaveBeenCalledWith(USER_ID);
     expect(mealPlan.find).toHaveBeenCalledWith(USER_ID, WEEK);
     expect(mealPlan.getDraft).toHaveBeenCalledWith(USER_ID, WEEK);
@@ -334,25 +334,8 @@ describe('MealPlannerChatService', () => {
     expect(aiUsage.refund).not.toHaveBeenCalled();
   });
 
-  it('discards the draft only on a new turn or after a dismissed proposal', async () => {
+  it('keeps the drafts while a conversation goes on', async () => {
     const service = await createService();
-
-    await convertReadableStreamToArray(
-      await service.stream(
-        USER_ID,
-        [
-          { role: 'user', text: 'Lên thực đơn' },
-          {
-            role: 'assistant',
-            text: 'Đã tạo.\n[Đề xuất (chưa áp dụng): Thứ Hai (sáng: Phở chay (id 1))]',
-          },
-          { role: 'user', text: 'Đổi món tối T4' },
-        ],
-        new AbortController().signal,
-        WEEK,
-      ),
-    );
-    expect(mealPlan.discardDraft).not.toHaveBeenCalled();
 
     await convertReadableStreamToArray(
       await service.stream(
@@ -363,13 +346,14 @@ describe('MealPlannerChatService', () => {
             role: 'assistant',
             text: 'Đã tạo.\n[Đề xuất (người dùng đã bỏ qua): Thứ Hai (sáng: Phở chay (id 1))]',
           },
-          { role: 'user', text: 'Lên thực đơn khác' },
+          { role: 'user', text: 'Đổi món tối T4' },
         ],
         new AbortController().signal,
         WEEK,
       ),
     );
-    expect(mealPlan.discardDraft).toHaveBeenCalledWith(USER_ID, WEEK);
+    expect(mealPlan.discardAllDrafts).not.toHaveBeenCalled();
+    expect(mealPlan.discardDraft).not.toHaveBeenCalled();
   });
 
   it('refunds the ticket when downstream setup throws after moderation', async () => {

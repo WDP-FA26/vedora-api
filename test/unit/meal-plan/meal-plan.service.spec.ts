@@ -797,6 +797,55 @@ describe('MealPlanService', () => {
       expect(await entries().countDocuments({ userId: USER_ID })).toBe(0);
     });
 
+    it('editDraft reports DAY_PASSED for a slot before today and keeps the rest', async () => {
+      vi.setSystemTime(WEDNESDAY);
+
+      const result = await service.editDraft(USER_ID, WEEK, [
+        {
+          op: 'set',
+          day: Weekday.TUE,
+          section: MealSection.DINNER,
+          recipeIds: [RICE_RECIPE],
+        },
+        {
+          op: 'move',
+          from: { day: Weekday.MON, section: MealSection.LUNCH },
+          to: { day: Weekday.FRI, section: MealSection.LUNCH },
+          recipeId: RICE_RECIPE,
+        },
+        {
+          op: 'set',
+          day: Weekday.FRI,
+          section: MealSection.DINNER,
+          recipeIds: [RICE_RECIPE],
+        },
+      ]);
+
+      expect(result.errors).toEqual([
+        'DAY_PASSED: set TUE DINNER is on a day before today that cannot change',
+        'DAY_PASSED: move touches MON, a day before today that cannot change',
+      ]);
+      expect(result.days.map(({ day: changed }) => changed)).toEqual([
+        Weekday.FRI,
+      ]);
+    });
+
+    it('discardAllDrafts drops the drafts of every week', async () => {
+      const set = {
+        op: 'set' as const,
+        day: Weekday.FRI,
+        section: MealSection.DINNER,
+        recipeIds: [RICE_RECIPE],
+      };
+      await service.editDraft(USER_ID, WEEK, [set]);
+      await service.editDraft(USER_ID, NEXT_WEEK, [set]);
+
+      await service.discardAllDrafts(USER_ID);
+
+      expect((await service.getDraft(USER_ID, WEEK)).days).toEqual([]);
+      expect((await service.getDraft(USER_ID, NEXT_WEEK)).days).toEqual([]);
+    });
+
     it('refuses to preview a day before today', async () => {
       vi.setSystemTime(WEDNESDAY);
 

@@ -202,7 +202,7 @@ export class MealPlanController {
   @ApiOperation({
     summary: 'Talk to the assistant: meal planning and nutrition questions',
     description:
-      'Streams the reply as an AI SDK UI message stream (SSE) for `useChat`. Its `fillSlots` and `editDraft` tool outputs are checked proposals with the same shape (`days`, `problems`, `ok`); save one with `PUT /meal-plan/days`.',
+      'Streams the reply as an AI SDK UI message stream (SSE) for `useChat`. `weekStart` is the week on screen and only the default: the assistant may propose for any week from this one to `maxWeekStart`. Its `fillSlots` and `editDraft` tool outputs are checked proposals with the same shape (`weekStart`, `days`, `problems`, `ok`), each the whole draft of its week; save one with `PUT /meal-plan/days` and its own `weekStart`.',
   })
   @ApiTooManyRequestsResponse({
     type: ErrorBodyDto,
@@ -234,7 +234,9 @@ export class MealPlanController {
   }
 
   @Get('chat/threads')
-  @ApiOperation({ summary: 'List your meal planner chat threads, newest first' })
+  @ApiOperation({
+    summary: 'List your meal planner chat threads, newest first',
+  })
   @ApiPaginatedResponse(MealPlanChatThreadSummaryDto)
   listChatThreads(
     @Req() request: AuthenticatedRequest,
@@ -271,8 +273,7 @@ export class MealPlanController {
 
   @Patch('chat/threads/:threadId')
   @ApiOperation({
-    summary:
-      'Update a chat thread title, proposal statuses, or sync messages',
+    summary: 'Update a chat thread title, proposal statuses, or sync messages',
   })
   @ApiOkResponse({ type: MealPlanChatThreadDetailDto })
   @ApiNotFoundResponse({
@@ -293,7 +294,9 @@ export class MealPlanController {
 
   @Delete('chat/threads/:threadId')
   @HttpCode(HttpStatus.NO_CONTENT)
-  @ApiOperation({ summary: 'Delete a meal planner chat thread and its messages' })
+  @ApiOperation({
+    summary: 'Delete a meal planner chat thread and its messages',
+  })
   @ApiNoContentResponse({ description: 'Chat thread deleted' })
   @ApiNotFoundResponse({
     type: ErrorBodyDto,

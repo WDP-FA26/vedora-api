@@ -515,6 +515,11 @@ export class MealPlanService {
     await this.draftSlots.deleteMany({ userId, weekStart }).exec();
   }
 
+  /** Drops the unsaved drafts of every week, as a new conversation starts. */
+  async discardAllDrafts(userId: string): Promise<void> {
+    await this.draftSlots.deleteMany({ userId }).exec();
+  }
+
   /**
    * Applies slot operations to the draft and checks the whole result.
    * Non-fatal clashes stay in the draft so the caller can inspect and resolve
@@ -528,7 +533,9 @@ export class MealPlanService {
     const mealWeek = currentMealWeek(weekStart);
     assertWithinHorizon(mealWeek);
     const { savedIds, ids } = await this.effective(userId, mealWeek);
-    const locked = WEEKDAYS.filter((day) => !mealWeek.editableDays.includes(day));
+    const locked = WEEKDAYS.filter(
+      (day) => !mealWeek.editableDays.includes(day),
+    );
     const { week, errors } = applyDraftOps(ids, ops, locked);
     const committed = await this.commitDraft(userId, mealWeek, week, savedIds);
     if (committed.problems.length === 0 && errors.length === 0) {
