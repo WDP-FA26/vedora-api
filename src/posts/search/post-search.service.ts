@@ -1,3 +1,4 @@
+import { runtimeConfig } from '../../config/runtime-config.js';
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { AiService } from '@nestjs/ai';
@@ -10,7 +11,7 @@ import {
 } from './post-search-collection.js';
 import { PostSearchIndexService } from './post-search-index.service.js';
 
-export const MAX_SEARCH_RESULTS = 200;
+export const MAX_SEARCH_RESULTS = runtimeConfig.POST_SEARCH_MAX_RESULTS;
 
 export interface PostSearchPage {
   ids: string[];

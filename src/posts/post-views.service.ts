@@ -1,13 +1,14 @@
+import { runtimeConfig } from '../config/runtime-config.js';
 import { Injectable, Logger, OnApplicationShutdown } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Interval } from '@nestjs/schedule';
 import type { Model } from 'mongoose';
 import { Post, PostStatus } from '../mongo/models.js';
 
-const FLUSH_INTERVAL_MS = 10_000;
-const DEDUPE_WINDOW_MS = 30 * 60_000;
-const MAX_DEDUPE_ENTRIES = 200_000;
-const FLUSH_BATCH_SIZE = 500;
+const FLUSH_INTERVAL_MS = runtimeConfig.POST_VIEWS_FLUSH_INTERVAL_MS;
+const DEDUPE_WINDOW_MS = runtimeConfig.POST_VIEWS_DEDUPE_WINDOW_SECONDS * 1000;
+const MAX_DEDUPE_ENTRIES = runtimeConfig.POST_VIEWS_MAX_DEDUPE_ENTRIES;
+const FLUSH_BATCH_SIZE = runtimeConfig.POST_VIEWS_FLUSH_BATCH_SIZE;
 
 @Injectable()
 export class PostViewsService implements OnApplicationShutdown {

@@ -1,3 +1,4 @@
+import { runtimeConfig } from '../../config/runtime-config.js';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { PostReportReason, PostReportStatus } from '../../mongo/models.js';
 import { Transform } from 'class-transformer';
@@ -15,8 +16,9 @@ import {
 import { PaginationQueryDto } from '../../common/pagination/index.js';
 import { PostAuthorDto } from '../../common/dto/post-author.dto.js';
 
-export const MAX_VIEW_BATCH = 50;
-export const MAX_REPORT_DETAILS_LENGTH = 500;
+export const MAX_VIEW_BATCH = runtimeConfig.POST_VIEW_MAX_BATCH;
+export const MAX_REPORT_DETAILS_LENGTH =
+  runtimeConfig.REPORT_MAX_DETAILS_LENGTH;
 
 const REPORT_DECISIONS = [
   PostReportStatus.RESOLVED,

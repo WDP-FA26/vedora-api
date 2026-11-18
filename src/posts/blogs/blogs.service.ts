@@ -1,3 +1,4 @@
+import { runtimeConfig } from '../../config/runtime-config.js';
 import { Injectable, Optional } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { randomUUID } from 'node:crypto';
@@ -276,7 +277,7 @@ export class BlogsService {
 
   private excerpt(content: string) {
     return Array.from(content.replace(/\s+/g, ' ').trim())
-      .slice(0, 280)
+      .slice(0, runtimeConfig.BLOG_EXCERPT_MAX_LENGTH)
       .join('');
   }
 

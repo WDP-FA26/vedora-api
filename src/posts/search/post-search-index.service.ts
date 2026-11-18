@@ -1,8 +1,9 @@
+import { runtimeConfig } from '../../config/runtime-config.js';
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { AiService } from '@nestjs/ai';
 import { InjectModel } from '@nestjs/mongoose';
-import { Cron, CronExpression } from '@nestjs/schedule';
+import { Cron } from '@nestjs/schedule';
 import type { Model } from 'mongoose';
 import { MediaAsset, Post, PostStatus, PostType } from '../../mongo/models.js';
 import { QdrantService } from '../../qdrant/qdrant.service.js';
@@ -15,8 +16,8 @@ import {
   toEpochSeconds,
 } from './post-search-collection.js';
 
-const BATCH_SIZE = 64;
-const CHUNK_LENGTH = 1500;
+const BATCH_SIZE = runtimeConfig.POST_SEARCH_INDEX_BATCH_SIZE;
+const CHUNK_LENGTH = runtimeConfig.POST_SEARCH_CHUNK_MAX_CHARS;
 
 export const SEARCHABLE_POST = {
   type: PostType.POST,
@@ -67,7 +68,7 @@ export class PostSearchIndexService {
       });
   }
 
-  @Cron(CronExpression.EVERY_MINUTE)
+  @Cron(runtimeConfig.POST_SEARCH_INDEX_CRON)
   catchUp(): void {
     this.schedule();
   }

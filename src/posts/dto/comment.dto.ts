@@ -1,10 +1,11 @@
+import { runtimeConfig } from '../../config/runtime-config.js';
 import { ApiProperty } from '@nestjs/swagger';
 import { Transform } from 'class-transformer';
 import { IsNotEmpty, IsString, MaxLength } from 'class-validator';
 import { CursorPaginatedResponseDto } from '../../common/pagination/index.js';
 import { PostAuthorDto } from '../../common/dto/post-author.dto.js';
 
-export const MAX_COMMENT_BODY_LENGTH = 1000;
+export const MAX_COMMENT_BODY_LENGTH = runtimeConfig.COMMENT_MAX_LENGTH;
 
 export class CommentBodyDto {
   @ApiProperty({ maxLength: MAX_COMMENT_BODY_LENGTH, minLength: 1 })

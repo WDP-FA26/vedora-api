@@ -1,3 +1,4 @@
+import { runtimeConfig } from '../config/runtime-config.js';
 import {
   Body,
   Controller,
@@ -53,8 +54,7 @@ export class PostsController {
   @ApiBearerAuth()
   @ApiOperation({
     summary: 'Create a post',
-    description:
-      'Text and/or up to four videos from POST /media/uploads. The post is PROCESSING until every video is ready, then PUBLISHED.',
+    description: `Text and/or up to ${runtimeConfig.POST_MAX_MEDIA} videos from POST /media/uploads. The post is PROCESSING until every video is ready, then PUBLISHED.`,
   })
   create(
     @Req() request: AuthenticatedRequest,
