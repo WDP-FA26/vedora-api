@@ -25,6 +25,18 @@ export class CommentResponseDto {
   @ApiProperty({ format: 'uuid' })
   postId!: string;
 
+  @ApiProperty({ type: String, nullable: true, format: 'uuid' })
+  parentId!: string | null;
+
+  @ApiProperty({ type: String, nullable: true, format: 'uuid' })
+  replyToId!: string | null;
+
+  @ApiProperty({ type: PostAuthorDto, nullable: true })
+  replyToAuthor!: PostAuthorDto | null;
+
+  @ApiProperty({ minimum: 0 })
+  replyCount!: number;
+
   @ApiProperty()
   body!: string;
 
