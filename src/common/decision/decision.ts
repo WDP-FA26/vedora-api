@@ -12,7 +12,8 @@ export interface DecisionPolicy<V extends string> {
 
 type DecisionState = Parameters<typeof evaluate>[0]['state'];
 
-const DEFAULT_TIMEOUT_MS = 4000;
+// One budget for the whole call, retries included.
+const DEFAULT_TIMEOUT_MS = 10_000;
 const MAX_RETRIES = 2;
 
 export function evaluationModel({

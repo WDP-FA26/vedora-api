@@ -25,6 +25,7 @@ import { NutritionAgent } from './nutrition-chat.agent.js';
 import { FeatureUnavailableException } from '../common/exceptions/feature-unavailable.exception.js';
 
 const SEARCH_TIMEOUT_MS = 5000;
+const SLOW_MODERATION_MS = 2000;
 
 const REFUSALS: Record<Exclude<ModerationVerdict, 'allow'>, string> = {
   off_topic:
@@ -88,6 +89,7 @@ export class NutritionChatService {
     messages: readonly ModerationTurn[],
     abortSignal: AbortSignal,
   ): Promise<ModerationVerdict> {
+    const startedAt = Date.now();
     try {
       const { choice } = await decide(
         this.moderator,
@@ -95,10 +97,16 @@ export class NutritionChatService {
         abortSignal,
         NUTRITION_POLICY,
       );
+      const elapsedMs = Date.now() - startedAt;
+      if (elapsedMs > SLOW_MODERATION_MS) {
+        this.logger.warn(`Moderation was slow: ${elapsedMs}ms`);
+      }
       return choice;
     } catch (error) {
       if (abortSignal.aborted) throw error;
-      this.logger.error(`Moderation failed: ${String(error)}`);
+      this.logger.error(
+        `Moderation failed after ${Date.now() - startedAt}ms: ${String(error)}`,
+      );
       throw new FeatureUnavailableException(
         'SERVICE_UNAVAILABLE',
         'Moderation is unavailable',
