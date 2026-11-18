@@ -6,11 +6,12 @@
  *   npm run fix:blog-covers            # dry run: lists what would change
  *   npm run fix:blog-covers -- --apply # writes the changes
  *
- * Only `blog.coverImageUrl` is written; status, moderation and `updatedAt`
- * are left alone, so no blog goes back to review.
+ * Like BlogsService, only images in Vedora's blog storage count; a blog whose
+ * images are all external gets no cover. Only `blog.coverImageUrl` is
+ * written; status, moderation and `updatedAt` are left alone, so no blog goes
+ * back to review.
  */
 import 'dotenv/config';
-import { isURL } from 'class-validator';
 import mongoose from 'mongoose';
 import { coverFromContent } from '../posts/blogs/blog-cover.js';
 
@@ -30,9 +31,19 @@ async function main(): Promise<void> {
   // Same default as src/config/environment.ts.
   const bucket = process.env.STORAGE_BLOGS_BUCKET || 'vedora-blogs';
   const storagePrefix = `${required('STORAGE_PUBLIC_URL').replace(/\/+$/, '')}/${bucket}/`;
-  const isAllowed = (url: string) =>
-    isURL(url, { protocols: ['https'], require_protocol: true }) ||
-    url.startsWith(storagePrefix);
+  // Mirrors StorageService.keyFromPublicUrl, the only covers BlogsService
+  // accepts: images uploaded to Vedora's blog bucket.
+  const isAllowed = (url: string) => {
+    if (!url.startsWith(storagePrefix)) return false;
+    try {
+      const key = decodeURIComponent(
+        url.slice(storagePrefix.length).split(/[?#]/)[0],
+      );
+      return key !== '' && !key.split('/').includes('..');
+    } catch {
+      return false;
+    }
+  };
 
   const connection = await mongoose
     .createConnection(required('DATABASE_URL'))
