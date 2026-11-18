@@ -19,6 +19,7 @@ const execOptions: ExecOptions = {
 
 describe('Meal planner AI tools', () => {
   const userId = '4a1e32e4-e18e-4dd7-8b4a-246ef2113ff2';
+  const WEEK = '2026-11-16';
   const recipe1 = 'd1a2d3e4-0000-4000-8000-000000000001';
   let mealPlan: DeepMockProxy<MealPlanService>;
 
@@ -153,10 +154,18 @@ describe('Meal planner AI tools', () => {
 
   describe('getPlanTool', () => {
     it('formats the saved weekly plan and unsaved draft changes', async () => {
-      const toolDef = getPlanTool(mealPlan, userId);
+      const toolDef = getPlanTool(mealPlan, userId, WEEK);
       const savedPlan = {
+        weekStart: WEEK,
+        currentWeekStart: WEEK,
+        today: WEEK,
+        maxWeekStart: '2026-12-14',
+        minWeekStart: WEEK,
+        editable: true,
         days: Object.values(Weekday).map((day) => ({
           day,
+          date: WEEK,
+          editable: true,
           sections: Object.values(MealSection).map((section) => ({
             section,
             recipes:
@@ -180,6 +189,7 @@ describe('Meal planner AI tools', () => {
         problems: [],
       };
       const draft = {
+        weekStart: WEEK,
         days: [
           {
             day: Weekday.WED,
@@ -201,8 +211,8 @@ describe('Meal planner AI tools', () => {
       mealPlan.getDraft.mockResolvedValue(draft);
 
       const output = await toolDef.execute?.({}, execOptions);
-      expect(mealPlan.find).toHaveBeenCalledWith(userId);
-      expect(mealPlan.getDraft).toHaveBeenCalledWith(userId);
+      expect(mealPlan.find).toHaveBeenCalledWith(userId, WEEK);
+      expect(mealPlan.getDraft).toHaveBeenCalledWith(userId, WEEK);
       expect(output).toEqual({ plan: savedPlan, draft });
 
       if (!output || Symbol.asyncIterator in output) {
@@ -242,8 +252,9 @@ describe('Meal planner AI tools', () => {
     });
 
     it('passes the request to fillDraft and summarizes the draft', async () => {
-      const toolDef = fillSlotsTool(mealPlan, userId);
+      const toolDef = fillSlotsTool(mealPlan, userId, WEEK);
       const result = {
+        weekStart: WEEK,
         days: [
           {
             day: Weekday.MON,
@@ -260,7 +271,10 @@ describe('Meal planner AI tools', () => {
       mealPlan.fillDraft.mockResolvedValue(result);
 
       const output = await toolDef.execute?.(request, execOptions);
-      expect(mealPlan.fillDraft).toHaveBeenCalledWith(userId, request);
+      expect(mealPlan.fillDraft).toHaveBeenCalledWith(userId, {
+        ...request,
+        weekStart: WEEK,
+      });
       expect(output).toEqual(result);
 
       const modelOut = await toolDef.toModelOutput?.({
@@ -275,9 +289,10 @@ describe('Meal planner AI tools', () => {
     });
 
     it('reports when slots are already filled or when no dish matches', async () => {
-      const toolDef = fillSlotsTool(mealPlan, userId);
+      const toolDef = fillSlotsTool(mealPlan, userId, WEEK);
 
       const alreadyFilled = {
+        weekStart: WEEK,
         days: [],
         problems: [],
         ok: false,
@@ -297,6 +312,7 @@ describe('Meal planner AI tools', () => {
       });
 
       const noneFit = {
+        weekStart: WEEK,
         days: [],
         problems: [],
         ok: false,
@@ -328,8 +344,9 @@ describe('Meal planner AI tools', () => {
     ];
 
     it('applies operations and shows unsaved draft feedback when valid', async () => {
-      const toolDef = editDraftTool(mealPlan, userId);
+      const toolDef = editDraftTool(mealPlan, userId, WEEK);
       const result = {
+        weekStart: WEEK,
         days: [
           {
             day: Weekday.MON,
@@ -349,7 +366,7 @@ describe('Meal planner AI tools', () => {
       mealPlan.editDraft.mockResolvedValue(result);
 
       const output = await toolDef.execute?.({ operations }, execOptions);
-      expect(mealPlan.editDraft).toHaveBeenCalledWith(userId, operations);
+      expect(mealPlan.editDraft).toHaveBeenCalledWith(userId, WEEK, operations);
       expect(output).toEqual(result);
 
       if (!output || Symbol.asyncIterator in output) {
@@ -367,8 +384,9 @@ describe('Meal planner AI tools', () => {
     });
 
     it('formats all problem types and unapplied operation errors when invalid', async () => {
-      const toolDef = editDraftTool(mealPlan, userId);
+      const toolDef = editDraftTool(mealPlan, userId, WEEK);
       const result = {
+        weekStart: WEEK,
         days: [],
         problems: [
           {

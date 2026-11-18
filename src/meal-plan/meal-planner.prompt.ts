@@ -67,7 +67,18 @@ export function plannerInstructions(
       );
     return `- ${DAY_NAMES[day]}: ${filled.length > 0 ? filled.join('; ') : '(trống)'}`;
   });
+  const lockedDays = plan.days
+    .filter(({ editable }) => !editable)
+    .map(({ day, date }) => `${DAY_NAMES[day]} ${date}`);
+  const editableDays = plan.days
+    .filter(({ editable }) => editable)
+    .map(({ day, date }) => `${DAY_NAMES[day]} ${date}`);
+  const weekContext = `Hôm nay là ${plan.today}. Tuần đang lập: từ ${plan.days[0].date} đến ${plan.days[6].date} (weekStart ${plan.weekStart}).
+Ngày còn sửa được: ${editableDays.length > 0 ? editableDays.join(', ') : 'không còn ngày nào, tuần này chỉ để xem'}.
+Ngày đã khóa (đã qua): ${lockedDays.length > 0 ? lockedDays.join(', ') : 'không có'}.`;
   return `${RULES}
+
+${weekContext}
 
 Thực phẩm người dùng không ăn (searchRecipes đã loại sẵn các món chứa chúng): ${
     avoided.length > 0 ? avoided.join(', ') : 'chưa khai báo gì'
@@ -78,6 +89,6 @@ Nguyên liệu người dùng thích: ${
       : 'chưa khai báo gì'
   }.
 
-Thực đơn đang lưu:
+Thực đơn đang lưu của tuần này:
 ${days.join('\n')}${draftSummary(draft)}`;
 }

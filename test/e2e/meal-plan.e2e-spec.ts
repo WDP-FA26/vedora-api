@@ -14,6 +14,10 @@ import {
   createUser,
 } from '../support/fixtures.js';
 
+// 00:30 on Monday 2026-11-16 in the app time zone, so every day is still ahead.
+const WEEK = '2026-11-16';
+const MONDAY_MORNING = new Date('2026-11-15T17:30:00Z');
+
 describe('Meal plan (e2e)', () => {
   let e2e: E2eApp;
   let user: User;
@@ -26,6 +30,7 @@ describe('Meal plan (e2e)', () => {
     e2e.mongo.connection.model<MealPlanEntry>('MealPlanEntry').countDocuments();
 
   beforeAll(async () => {
+    vi.useFakeTimers({ toFake: ['Date'], now: MONDAY_MORNING });
     e2e = await createE2eApp('mealplan_e2e');
     user = await createUser(e2e.mongo, { username: 'vedora.user' });
     token = await e2e.sign(user);
@@ -36,6 +41,7 @@ describe('Meal plan (e2e)', () => {
       [tofu.id],
     );
     body = {
+      weekStart: WEEK,
       days: [
         {
           day: 'MON',
@@ -56,6 +62,7 @@ describe('Meal plan (e2e)', () => {
       .updateOne({ _id: user.id }, { $set: { avoidedIngredientIds: [] } });
   });
   afterAll(async () => {
+    vi.useRealTimers();
     await e2e.close();
   });
 
@@ -156,6 +163,7 @@ describe('Meal plan (e2e)', () => {
   it('rejects an unknown weekday', async () => {
     await auth(request(server()).put('/api/v1/meal-plan/days'))
       .send({
+        weekStart: WEEK,
         days: [
           { day: 'FUNDAY', breakfast: [], lunch: [], dinner: [], others: [] },
         ],
@@ -166,6 +174,7 @@ describe('Meal plan (e2e)', () => {
   it('returns missing recipe IDs in preview and save errors', async () => {
     const missing = randomUUID();
     const unknown = {
+      weekStart: WEEK,
       days: [
         { day: 'MON', breakfast: [], lunch: [missing], dinner: [], others: [] },
       ],

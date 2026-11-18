@@ -65,11 +65,13 @@ const label = ({ day, section }: SlotKey) => `${day} ${section}`;
 export function applyDraftOps(
   week: WeekIds,
   ops: readonly DraftOp[],
+  lockedDays: readonly Weekday[] = [],
 ): { week: WeekIds; errors: string[] } {
   const next = cloneWeekIds(week);
   const errors: string[] = [];
 
   const slotOf = (key: SlotKey): string[] | null => {
+    if (lockedDays.includes(key.day)) return null;
     const day = next.get(key.day);
     if (!day) return null;
     return day[key.section];
@@ -80,7 +82,7 @@ export function applyDraftOps(
       const from = slotOf(op.from);
       const to = slotOf(op.to);
       if (!from || !to) {
-        errors.push(`move: unknown slot`);
+        errors.push('move: unknown slot or a day that has passed');
         continue;
       }
       if (!from.includes(op.recipeId)) {
@@ -98,7 +100,7 @@ export function applyDraftOps(
 
     const slot = slotOf(op);
     if (!slot) {
-      errors.push(`${op.op}: unknown slot`);
+      errors.push(`${op.op}: unknown slot or a day that has passed`);
       continue;
     }
     switch (op.op) {

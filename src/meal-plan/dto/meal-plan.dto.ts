@@ -28,6 +28,7 @@ import {
   ValidateNested,
 } from 'class-validator';
 import { LastMessageFromUser } from '../../ai/guardrails/conversation-state.js';
+import { WeekStart } from './week-start.js';
 
 export const WEEKDAYS = Object.values(Weekday);
 export const MEAL_SECTIONS = Object.values(MealSection);
@@ -73,6 +74,9 @@ export class SaveMealDayDto {
 }
 
 export class SaveMealDaysDto {
+  @WeekStart()
+  weekStart!: string;
+
   @ApiProperty({
     type: [SaveMealDayDto],
     description: 'Only the days that change; the others stay as saved',
@@ -117,11 +121,32 @@ export class SlotRefDto {
   recipeIds?: string[];
 }
 
+export class CopyMealWeekDto {
+  @WeekStart()
+  fromWeekStart!: string;
+
+  @WeekStart()
+  toWeekStart!: string;
+
+  @ApiPropertyOptional({
+    default: false,
+    description:
+      'Replace dishes already in the target week. Without it the copy is refused when the target has any dish on a day that may still change',
+  })
+  @IsOptional()
+  @IsBoolean()
+  overwrite?: boolean;
+}
+
 export class GenerateMealDaysDto {
+  @WeekStart()
+  weekStart!: string;
+
   @ApiProperty({
     enum: Weekday,
     isArray: true,
-    description: 'Days to fill',
+    description:
+      'Days to fill. Days before today are left out; the call fills nothing when none is left',
   })
   @IsArray()
   @ArrayMinSize(1)
@@ -272,6 +297,13 @@ export class MealSectionDto {
 
 export class MealDayDto {
   @ApiProperty({ enum: Weekday }) day!: Weekday;
+  @ApiProperty({ example: '2026-11-18', description: 'Calendar date of the day' })
+  date!: string;
+  @ApiProperty({
+    description:
+      'false for a day before today: it is read-only and stays as it was',
+  })
+  editable!: boolean;
   @ApiProperty({
     type: [MealSectionDto],
     description: 'Always the four sections: breakfast, lunch, dinner, other',
@@ -310,6 +342,36 @@ export class MealPlanProblemDto {
 }
 
 export class MealPlanDto {
+  @ApiProperty({ example: '2026-11-16', description: 'Monday of this week' })
+  weekStart!: string;
+
+  @ApiProperty({
+    example: '2026-11-16',
+    description: 'Monday of the week that holds today',
+  })
+  currentWeekStart!: string;
+
+  @ApiProperty({ example: '2026-11-18', description: 'Today in the app time zone' })
+  today!: string;
+
+  @ApiProperty({
+    example: '2026-12-14',
+    description: 'Last week a plan may be made for',
+  })
+  maxWeekStart!: string;
+
+  @ApiProperty({
+    example: '2026-11-09',
+    description:
+      'Earliest week to browse back to: the first week with a saved dish, or the current week',
+  })
+  minWeekStart!: string;
+
+  @ApiProperty({
+    description: 'false for a week in the past: nothing in it can change',
+  })
+  editable!: boolean;
+
   @ApiProperty({
     type: [MealDayDto],
     description: 'All seven days, Monday first',
@@ -344,6 +406,8 @@ export class MealPlanPreviewDayDto {
 }
 
 export class MealPlanPreviewDto {
+  @ApiProperty({ example: '2026-11-16', description: 'The week this proposal is for' })
+  weekStart!: string;
   @ApiProperty({ type: [MealPlanPreviewDayDto] })
   days!: MealPlanPreviewDayDto[];
   @ApiProperty({ type: [MealPlanProblemDto] }) problems!: MealPlanProblemDto[];
@@ -379,6 +443,9 @@ export class PlannerMessageDto {
 }
 
 export class MealPlannerChatDto {
+  @WeekStart()
+  weekStart!: string;
+
   @ApiPropertyOptional({
     format: 'uuid',
     description: 'Chat thread ID to load/save conversation history',

@@ -116,6 +116,7 @@ vi.mock('@openrouter/ai-sdk-provider', () => ({
 }));
 
 const USER_ID = '4a1e32e4-e18e-4dd7-8b4a-246ef2113ff2';
+const WEEK = '2026-11-16';
 const TICKET: UsageTicket = { id: 'ticket-1', token: 'tok-1', hash: 'hash-1' };
 
 const replyText = (chunks: UIMessageChunk[]) =>
@@ -150,8 +151,16 @@ describe('MealPlannerChatService', () => {
       liked: [],
     });
     mealPlan.find.mockResolvedValue({
+      weekStart: WEEK,
+      currentWeekStart: WEEK,
+      today: WEEK,
+      maxWeekStart: '2026-12-14',
+      minWeekStart: WEEK,
+      editable: true,
       days: Object.values(Weekday).map((day) => ({
         day,
+        date: WEEK,
+        editable: true,
         sections: Object.values(MealSection).map((section) => ({
           section,
           recipes: [],
@@ -160,6 +169,7 @@ describe('MealPlannerChatService', () => {
       problems: [],
     });
     mealPlan.getDraft.mockResolvedValue({
+      weekStart: WEEK,
       days: [],
       problems: [],
       ok: false,
@@ -219,6 +229,7 @@ describe('MealPlannerChatService', () => {
         USER_ID,
         [{ role: 'user', text: 'Lên thực đơn' }],
         new AbortController().signal,
+        WEEK,
         'req-1',
       ),
     ).rejects.toSatisfy(
@@ -247,6 +258,7 @@ describe('MealPlannerChatService', () => {
         USER_ID,
         [{ role: 'user', text: 'Viết code JS' }],
         new AbortController().signal,
+        WEEK,
       ),
     );
 
@@ -265,6 +277,7 @@ describe('MealPlannerChatService', () => {
         USER_ID,
         [{ role: 'user', text: 'Lên thực đơn' }],
         new AbortController().signal,
+        WEEK,
       ),
     ).rejects.toThrow(FeatureUnavailableException);
     expect(aiUsage.refund).toHaveBeenCalledWith(TICKET);
@@ -280,6 +293,7 @@ describe('MealPlannerChatService', () => {
         USER_ID,
         [{ role: 'user', text: 'Lên thực đơn' }],
         abort.signal,
+        WEEK,
       ),
     ).rejects.toThrow('client closed');
     expect(aiUsage.refund).toHaveBeenCalledWith(TICKET);
@@ -293,6 +307,7 @@ describe('MealPlannerChatService', () => {
         USER_ID,
         [{ role: 'user', text: 'Lên thực đơn ngày thứ Hai' }],
         new AbortController().signal,
+        WEEK,
       ),
     );
 
@@ -302,10 +317,10 @@ describe('MealPlannerChatService', () => {
         questions: { verdict: NUTRITION_POLICY },
       }),
     );
-    expect(mealPlan.discardDraft).toHaveBeenCalledWith(USER_ID);
+    expect(mealPlan.discardDraft).toHaveBeenCalledWith(USER_ID, WEEK);
     expect(dietary.find).toHaveBeenCalledWith(USER_ID);
-    expect(mealPlan.find).toHaveBeenCalledWith(USER_ID);
-    expect(mealPlan.getDraft).toHaveBeenCalledWith(USER_ID);
+    expect(mealPlan.find).toHaveBeenCalledWith(USER_ID, WEEK);
+    expect(mealPlan.getDraft).toHaveBeenCalledWith(USER_ID, WEEK);
     expect(replyText(chunks)).toBe('Mình đã gợi ý thực đơn.');
     expect(model.doStreamCalls[0].tools?.map((t) => t.name)).toEqual([
       'searchKnowledge',
@@ -334,6 +349,7 @@ describe('MealPlannerChatService', () => {
           { role: 'user', text: 'Đổi món tối T4' },
         ],
         new AbortController().signal,
+        WEEK,
       ),
     );
     expect(mealPlan.discardDraft).not.toHaveBeenCalled();
@@ -350,9 +366,10 @@ describe('MealPlannerChatService', () => {
           { role: 'user', text: 'Lên thực đơn khác' },
         ],
         new AbortController().signal,
+        WEEK,
       ),
     );
-    expect(mealPlan.discardDraft).toHaveBeenCalledWith(USER_ID);
+    expect(mealPlan.discardDraft).toHaveBeenCalledWith(USER_ID, WEEK);
   });
 
   it('refunds the ticket when downstream setup throws after moderation', async () => {
@@ -364,6 +381,7 @@ describe('MealPlannerChatService', () => {
         USER_ID,
         [{ role: 'user', text: 'Lên thực đơn' }],
         new AbortController().signal,
+        WEEK,
       ),
     ).rejects.toThrow('DB down');
     expect(aiUsage.refund).toHaveBeenCalledWith(TICKET);
@@ -379,6 +397,7 @@ describe('MealPlannerChatService', () => {
         USER_ID,
         [{ role: 'user', text: 'Gợi ý món đậu hũ' }],
         new AbortController().signal,
+        WEEK,
       ),
     );
 
@@ -405,6 +424,7 @@ describe('MealPlannerChatService', () => {
         USER_ID,
         [{ role: 'user', text: 'Lên thực đơn' }],
         new AbortController().signal,
+        WEEK,
       ),
     );
 
@@ -426,6 +446,7 @@ describe('MealPlannerChatService', () => {
           { role: 'assistant', text: 'Được' },
         ],
         new AbortController().signal,
+        WEEK,
       ),
     ).rejects.toMatchObject({ statusCode: 400, code: 'BAD_REQUEST' });
     expect(aiUsage.consume).not.toHaveBeenCalled();
@@ -439,6 +460,7 @@ describe('MealPlannerChatService', () => {
           { role: 'user', text: 'Còn bữa trưa?' },
         ],
         new AbortController().signal,
+        WEEK,
       ),
     );
     expect(moderator.doEvaluate).toHaveBeenCalledWith(
@@ -461,6 +483,7 @@ describe('MealPlannerChatService', () => {
         USER_ID,
         [{ role: 'user', text: 'Lên thực đơn ngày thứ Hai' }],
         new AbortController().signal,
+        WEEK,
         'req-user-1',
         threadId,
       ),
@@ -495,6 +518,7 @@ describe('MealPlannerChatService', () => {
         USER_ID,
         [{ role: 'user', text: 'Viết code' }],
         new AbortController().signal,
+        WEEK,
         'req-user-2',
         threadId,
       ),

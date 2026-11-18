@@ -9,8 +9,12 @@ import {
   IsEnum,
 } from 'class-validator';
 import { WEEKDAYS } from './meal-plan.dto.js';
+import { OptionalWeekStart } from './week-start.js';
 
 export class ShoppingListQueryDto {
+  @OptionalWeekStart()
+  weekStart?: string;
+
   @ApiPropertyOptional({
     enum: Weekday,
     isArray: true,
@@ -63,7 +67,14 @@ export class ShoppingListItemDto {
 }
 
 export class ShoppingListDto {
-  @ApiProperty({ enum: Weekday, isArray: true }) days!: Weekday[];
+  @ApiProperty({ example: '2026-11-16' }) weekStart!: string;
+  @ApiProperty({
+    enum: Weekday,
+    isArray: true,
+    description:
+      'The requested days that are not before today, Monday first; days already past are left out',
+  })
+  days!: Weekday[];
   @ApiProperty({
     enum: ['RECIPE_PER_OCCURRENCE'],
     description:

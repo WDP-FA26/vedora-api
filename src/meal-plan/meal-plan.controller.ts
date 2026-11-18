@@ -40,6 +40,7 @@ import {
   PaginationQueryDto,
 } from '../common/pagination/index.js';
 import {
+  CopyMealWeekDto,
   CreateMealPlanChatThreadDto,
   GenerateMealDaysDto,
   MealPlanChatThreadDetailDto,
@@ -51,6 +52,7 @@ import {
   SaveMealDaysDto,
   UpdateMealPlanChatThreadDto,
 } from './dto/meal-plan.dto.js';
+import { RequiredWeekQueryDto, WeekQueryDto } from './dto/week-start.js';
 import { MealPlanService } from './meal-plan.service.js';
 import { MealPlannerChatHistoryService } from './meal-planner-chat-history.service.js';
 import { MealPlannerChatService } from './meal-planner-chat.service.js';
@@ -79,10 +81,46 @@ export class MealPlanController {
   }
 
   @Get()
-  @ApiOperation({ summary: 'Get your weekly timetable' })
+  @ApiOperation({
+    summary: 'Get the timetable of one week',
+    description:
+      'A week is its Monday as `weekStart` (`YYYY-MM-DD`); the current week when left out. A week that was never planned is empty: nothing is inherited from another week. The response says which days may still change (`days[].editable`), the current week, and how far ahead and back to browse (`maxWeekStart`, `minWeekStart`).',
+  })
   @ApiOkResponse({ type: MealPlanDto })
-  find(@Req() request: AuthenticatedRequest): Promise<MealPlanDto> {
-    return this.mealPlan.find(request.user.sub);
+  @ApiConflictResponse({
+    type: ErrorBodyDto,
+    description: '`MEAL_WEEK_OUT_OF_RANGE`: the week is too far ahead',
+  })
+  find(
+    @Req() request: AuthenticatedRequest,
+    @Query() query: WeekQueryDto,
+  ): Promise<MealPlanDto> {
+    return this.mealPlan.find(request.user.sub, query.weekStart);
+  }
+
+  @Post('copy')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Copy the dishes of one week onto another',
+    description:
+      'Copies onto the days of the target week that may still change; days before today are left as they are. Refused with `MEAL_WEEK_NOT_EMPTY` when the target already has a dish on those days, unless `overwrite` is true. All or nothing, checked like `PUT /meal-plan/days`. Returns the target week.',
+  })
+  @ApiOkResponse({ type: MealPlanDto })
+  @ApiConflictResponse({
+    type: ErrorBodyDto,
+    description:
+      '`MEAL_WEEK_NOT_EMPTY`, `MEAL_WEEK_OUT_OF_RANGE`, `MEAL_DAY_LOCKED`, `MEAL_PLAN_INVALID` or `MEAL_PLAN_CONFLICT`',
+  })
+  copy(
+    @Req() request: AuthenticatedRequest,
+    @Body() dto: CopyMealWeekDto,
+  ): Promise<MealPlanDto> {
+    return this.mealPlan.copyWeek(
+      request.user.sub,
+      dto.fromWeekStart,
+      dto.toWeekStart,
+      dto.overwrite ?? false,
+    );
   }
 
   @Post('preview')
@@ -97,7 +135,7 @@ export class MealPlanController {
     @Req() request: AuthenticatedRequest,
     @Body() dto: SaveMealDaysDto,
   ): Promise<MealPlanPreviewDto> {
-    return this.mealPlan.preview(request.user.sub, dto.days);
+    return this.mealPlan.preview(request.user.sub, dto.weekStart, dto.days);
   }
 
   @Post('generate')
@@ -117,39 +155,46 @@ export class MealPlanController {
 
   @Get('draft')
   @ApiOperation({
-    summary: 'Get the unsaved draft the assistant or generator is building',
+    summary:
+      'Get the unsaved draft of one week the assistant or generator is building',
     description:
-      'Same shape as `POST /meal-plan/preview` plus `ok`. `days` is empty when there is no draft. Drafts expire after 6 hours and are cleared for a day when you save it.',
+      'Same shape as `POST /meal-plan/preview` plus `ok`; each week has its own draft, and `weekStart` defaults to the current week. `days` is empty when there is no draft. Drafts expire after 6 hours and are cleared for a day when you save it.',
   })
   @ApiOkResponse({ type: MealPlanDraftDto })
-  draft(@Req() request: AuthenticatedRequest): Promise<MealPlanDraftDto> {
-    return this.mealPlan.getDraft(request.user.sub);
+  draft(
+    @Req() request: AuthenticatedRequest,
+    @Query() query: WeekQueryDto,
+  ): Promise<MealPlanDraftDto> {
+    return this.mealPlan.getDraft(request.user.sub, query.weekStart);
   }
 
   @Delete('draft')
   @HttpCode(HttpStatus.NO_CONTENT)
-  @ApiOperation({ summary: 'Throw away the unsaved draft' })
-  async discardDraft(@Req() request: AuthenticatedRequest): Promise<void> {
-    await this.mealPlan.discardDraft(request.user.sub);
+  @ApiOperation({ summary: 'Throw away the unsaved draft of one week' })
+  async discardDraft(
+    @Req() request: AuthenticatedRequest,
+    @Query() query: RequiredWeekQueryDto,
+  ): Promise<void> {
+    await this.mealPlan.discardDraft(request.user.sub, query.weekStart);
   }
 
   @Put('days')
   @ApiOperation({
-    summary: 'Replace the dishes of some days of your timetable',
+    summary: 'Replace the dishes of some days of one week',
     description:
-      'All or nothing. Refused when a day that gains a dish would hold an ingredient you avoid, or a dish that does not exist. Two incompatible ingredients on one day are only a warning: the plan is saved and the clash is listed in `problems` of the response.',
+      'All or nothing. `weekStart` is required. A day before today, or a week too far ahead, is refused (`MEAL_DAY_LOCKED`, `MEAL_WEEK_OUT_OF_RANGE`). Refused when a day that gains a dish would hold an ingredient you avoid, or a dish that does not exist. Two incompatible ingredients on one day are only a warning: the plan is saved and the clash is listed in `problems` of the response.',
   })
   @ApiOkResponse({ type: MealPlanDto })
   @ApiConflictResponse({
     type: ErrorBodyDto,
     description:
-      '`MEAL_PLAN_INVALID` with `AVOIDED_INGREDIENT` or `UNKNOWN_RECIPE` problems, or `MEAL_PLAN_CONFLICT`: preview again before retrying',
+      '`MEAL_PLAN_INVALID` with `AVOIDED_INGREDIENT` or `UNKNOWN_RECIPE` problems, `MEAL_PLAN_CONFLICT` (preview again before retrying), `MEAL_DAY_LOCKED` or `MEAL_WEEK_OUT_OF_RANGE`',
   })
   apply(
     @Req() request: AuthenticatedRequest,
     @Body() dto: SaveMealDaysDto,
   ): Promise<MealPlanDto> {
-    return this.mealPlan.apply(request.user.sub, dto.days);
+    return this.mealPlan.apply(request.user.sub, dto.weekStart, dto.days);
   }
 
   @Post('chat')
@@ -181,6 +226,7 @@ export class MealPlanController {
         request.user.sub,
         dto.messages,
         abort.signal,
+        dto.weekStart,
         dto.requestId,
         ...(dto.threadId ? [dto.threadId] : []),
       ),

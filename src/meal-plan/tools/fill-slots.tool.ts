@@ -102,13 +102,17 @@ export type FillSlotsOutput = DraftProposal & {
   allSlotsAlreadyFilled: boolean;
 };
 
-export function fillSlotsTool(mealPlan: MealPlanService, userId: string) {
+export function fillSlotsTool(
+  mealPlan: MealPlanService,
+  userId: string,
+  weekStart: string,
+) {
   return tool({
     description:
-      'Optional helper to fill many slots at once with an algorithm that respects avoided ingredients, cooking time, same-day clashes and meal variety (a dish never repeats within one meal across the week). Combine freely with editDraft in any order: pass onlyEmpty: true to fill empty slots around dishes you placed, or onlyEmpty: false (with optional pinned slots/recipeIds) to build or refresh a range.',
+      'Optional helper to fill many slots at once with an algorithm that respects avoided ingredients, cooking time, same-day clashes and meal variety (a dish never repeats within one meal across the week; days before today are skipped). Combine freely with editDraft in any order: pass onlyEmpty: true to fill empty slots around dishes you placed, or onlyEmpty: false (with optional pinned slots/recipeIds) to build or refresh a range.',
     inputSchema: input,
     execute: (request): Promise<FillSlotsOutput> =>
-      mealPlan.fillDraft(userId, request),
+      mealPlan.fillDraft(userId, { ...request, weekStart }),
     toModelOutput: ({ output }) => {
       if (output.filled === 0 && output.problems.length === 0) {
         return {

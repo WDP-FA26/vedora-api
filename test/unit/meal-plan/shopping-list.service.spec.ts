@@ -21,6 +21,10 @@ import {
 } from '../../support/mongo-test-db.js';
 
 const USER_ID = '4a1e32e4-e18e-4dd7-8b4a-246ef2113ff2';
+const WEEK = '2026-11-16';
+const NEXT_WEEK = '2026-11-23';
+// 00:30 on Monday 2026-11-16 in the app time zone, so every day is still ahead.
+const MONDAY_MORNING = new Date('2026-11-15T17:30:00Z');
 const OTHER_USER_ID = '4a1e32e4-e18e-4dd7-8b4a-246ef2113ff9';
 const TOFU_ID = 'a1a2d3e4-0000-4000-8000-000000000001';
 const OIL_ID = 'a1a2d3e4-0000-4000-8000-000000000002';
@@ -48,6 +52,7 @@ describe('ShoppingListService', () => {
     entries().create({
       _id: randomUUID(),
       userId,
+      weekStart: WEEK,
       day,
       section,
       recipeId,
@@ -55,6 +60,7 @@ describe('ShoppingListService', () => {
     });
 
   beforeAll(async () => {
+    vi.useFakeTimers({ toFake: ['Date'], now: MONDAY_MORNING });
     const moduleRef = await Test.createTestingModule({
       imports: [MongoModule.forTest(createTestMongoUrl('shopping_list'))],
       providers: [ShoppingListService],
@@ -67,8 +73,9 @@ describe('ShoppingListService', () => {
   });
 
   beforeEach(async () => {
+    vi.setSystemTime(MONDAY_MORNING);
     for (const collection of [
-      'meal_plan_entries',
+      'meal_plan_week_entries',
       'recipes',
       'ingredients',
       'users',
@@ -84,6 +91,7 @@ describe('ShoppingListService', () => {
   });
 
   afterAll(async () => {
+    vi.useRealTimers();
     await dropTestDatabase(app);
     await app.close();
   });
@@ -94,6 +102,7 @@ describe('ShoppingListService', () => {
     });
 
     expect(result).toEqual({
+      weekStart: WEEK,
       days: [Weekday.MON, Weekday.WED, Weekday.SUN],
       quantityBasis: 'RECIPE_PER_OCCURRENCE',
       items: [],
@@ -125,7 +134,13 @@ describe('ShoppingListService', () => {
     await addEntry(Weekday.MON, MealSection.LUNCH, RECIPE_1, 0);
     // Excluded day and excluded user
     await addEntry(Weekday.FRI, MealSection.LUNCH, RECIPE_2, 0);
-    await addEntry(Weekday.MON, MealSection.BREAKFAST, RECIPE_2, 0, OTHER_USER_ID);
+    await addEntry(
+      Weekday.MON,
+      MealSection.BREAKFAST,
+      RECIPE_2,
+      0,
+      OTHER_USER_ID,
+    );
 
     const result = await service.get(USER_ID, {
       days: [Weekday.MON, Weekday.TUE],
@@ -274,5 +289,96 @@ describe('ShoppingListService', () => {
     expect(
       result.items.find((item) => item.ingredientId === ORPHAN_ING_ID),
     ).toBeUndefined();
+  });
+  describe('weeks', () => {
+    const WEDNESDAY = new Date('2026-11-18T05:00:00Z');
+
+    const tofuRecipe = () =>
+      createRecipe(mongo, {
+        id: RECIPE_1,
+        title: 'Đậu hũ sốt cà',
+        servings: 2,
+        ingredients: [
+          { ingredientId: TOFU_ID, quantity: 1, unit: 'g', note: null },
+        ],
+      });
+
+    it('lists only the dishes of the week asked for', async () => {
+      await tofuRecipe();
+      await addEntry(Weekday.MON, MealSection.LUNCH, RECIPE_1);
+      await entries().create({
+        _id: randomUUID(),
+        userId: USER_ID,
+        weekStart: NEXT_WEEK,
+        day: Weekday.MON,
+        section: MealSection.LUNCH,
+        recipeId: RECIPE_1,
+        position: 0,
+      });
+
+      const thisWeek = await service.get(USER_ID, {
+        weekStart: WEEK,
+        days: [Weekday.MON],
+      });
+      const nextWeek = await service.get(USER_ID, {
+        weekStart: NEXT_WEEK,
+        days: [Weekday.MON],
+      });
+      const empty = await service.get(USER_ID, {
+        weekStart: '2026-11-30',
+        days: [Weekday.MON],
+      });
+
+      expect(thisWeek.items[0].knownQuantity).toBe('1.00');
+      expect(nextWeek.weekStart).toBe(NEXT_WEEK);
+      expect(nextWeek.items[0].knownQuantity).toBe('1.00');
+      expect(empty.items).toEqual([]);
+    });
+
+    it('defaults to the current week', async () => {
+      await tofuRecipe();
+      await addEntry(Weekday.MON, MealSection.LUNCH, RECIPE_1);
+
+      const result = await service.get(USER_ID, { days: [Weekday.MON] });
+
+      expect(result.weekStart).toBe(WEEK);
+      expect(result.items).toHaveLength(1);
+    });
+
+    it('leaves out days before today', async () => {
+      await tofuRecipe();
+      await addEntry(Weekday.MON, MealSection.LUNCH, RECIPE_1);
+      await addEntry(Weekday.THU, MealSection.LUNCH, RECIPE_1);
+      vi.setSystemTime(WEDNESDAY);
+
+      const result = await service.get(USER_ID, {
+        weekStart: WEEK,
+        days: [Weekday.MON, Weekday.THU],
+      });
+
+      expect(result.days).toEqual([Weekday.THU]);
+      expect(result.items[0].contributions.map(({ day }) => day)).toEqual([
+        Weekday.THU,
+      ]);
+    });
+
+    it('is empty for a week that is over', async () => {
+      await tofuRecipe();
+      await addEntry(Weekday.MON, MealSection.LUNCH, RECIPE_1);
+      vi.setSystemTime(new Date('2026-11-25T05:00:00Z'));
+
+      const result = await service.get(USER_ID, {
+        weekStart: WEEK,
+        days: [Weekday.MON],
+      });
+
+      expect(result).toMatchObject({ days: [], items: [] });
+    });
+
+    it('refuses a week too far ahead', async () => {
+      await expect(
+        service.get(USER_ID, { weekStart: '2026-12-21', days: [Weekday.MON] }),
+      ).rejects.toMatchObject({ code: 'MEAL_WEEK_OUT_OF_RANGE' });
+    });
   });
 });

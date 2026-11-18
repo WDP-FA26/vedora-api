@@ -93,6 +93,9 @@ Nhắn tin có thêm `MESSAGE_ID_CONFLICT`: `clientMessageId` đã được dùn
 | `RATING_CONFLICT` | Đánh giá bị xung đột khi ghi đồng thời; tải lại và thử lại | — |
 | `POST_NOT_REVIEWABLE` | Admin kiểm duyệt bài không ở trạng thái `PENDING_REVIEW` hoặc `REJECTED` | — |
 | `MEAL_PLAN_CONFLICT` | Thực đơn bị xung đột khi lưu đồng thời; tải lại và lưu lại | — |
+| `MEAL_DAY_LOCKED` | Thay đổi một ngày trước hôm nay (hoặc cả tuần đã qua) | `weekStart`, `days` (ngày bị khóa), `today` |
+| `MEAL_WEEK_OUT_OF_RANGE` | Tuần xa hơn 4 tuần sau tuần hiện tại | `weekStart`, `maxWeekStart` |
+| `MEAL_WEEK_NOT_EMPTY` | Sao chép vào tuần đã có món mà không đặt `overwrite` | `weekStart` |
 
 ### 413 / 415
 

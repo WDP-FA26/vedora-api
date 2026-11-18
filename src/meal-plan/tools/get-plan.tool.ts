@@ -5,15 +5,19 @@ import type { MealPlanService } from '../meal-plan.service.js';
 import { DAY_NAMES, SECTION_NAMES } from '../meal-planner.prompt.js';
 import { describeDraft } from './proposal-text.js';
 
-export function getPlanTool(mealPlan: MealPlanService, userId: string) {
+export function getPlanTool(
+  mealPlan: MealPlanService,
+  userId: string,
+  weekStart: string,
+) {
   return tool({
     description:
-      "Read the user's saved weekly plan and the unsaved draft built so far. Use it before editing when you need to know what is in a slot now, and after the user saved or dismissed something.",
+      "Read the user's saved plan of the week being planned and the unsaved draft built so far. Use it before editing when you need to know what is in a slot now, and after the user saved or dismissed something.",
     inputSchema: z.object({}),
     execute: async () => {
       const [plan, draft] = await Promise.all([
-        mealPlan.find(userId),
-        mealPlan.getDraft(userId),
+        mealPlan.find(userId, weekStart),
+        mealPlan.getDraft(userId, weekStart),
       ]);
       return { plan, draft };
     },

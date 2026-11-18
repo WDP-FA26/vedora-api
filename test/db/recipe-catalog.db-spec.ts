@@ -44,6 +44,10 @@ import {
   prepareTestDatabase,
 } from '../support/mongo-test-db.js';
 
+// 00:30 on Monday 2026-11-16 in the app time zone, so every day is still ahead.
+const WEEK = '2026-11-16';
+const MONDAY_MORNING = new Date('2026-11-15T17:30:00Z');
+
 describe('Recipe catalog with MongoDB', () => {
   let mongo: MongoService;
   let catalog: RecipeCatalogService;
@@ -93,6 +97,7 @@ describe('Recipe catalog with MongoDB', () => {
     });
 
   beforeAll(async () => {
+    vi.useFakeTimers({ toFake: ['Date'], now: MONDAY_MORNING });
     const moduleRef = await Test.createTestingModule({
       imports: [
         MongoModule.forTest(createTestMongoUrl('catalog')),
@@ -207,7 +212,7 @@ describe('Recipe catalog with MongoDB', () => {
       { $set: { avoidedIngredientIds: [], avoidedGroupIds: [] } },
     );
     await collections.incompatibility_rules.deleteMany({});
-    await collections.meal_plan_entries.deleteMany({});
+    await collections.meal_plan_week_entries.deleteMany({});
     await collections.recipes.updateMany(
       {},
       { $set: { postId: null, updatedAt: new Date('2026-10-12T00:00:00Z') } },
@@ -218,6 +223,7 @@ describe('Recipe catalog with MongoDB', () => {
   });
 
   afterAll(async () => {
+    vi.useRealTimers();
     if (app) await dropTestDatabase(app);
     if (app) await app.close();
   });
@@ -400,15 +406,15 @@ describe('Recipe catalog with MongoDB', () => {
       dinner: [],
       others: [],
     };
-    expect((await plan.preview(userId, [day])).problems).toEqual([]);
+    expect((await plan.preview(userId, WEEK, [day])).problems).toEqual([]);
     expect(await entriesModel().countDocuments()).toBe(0);
-    const saved = await plan.apply(userId, [day]);
+    const saved = await plan.apply(userId, WEEK, [day]);
     expect(saved.days[0].sections[1].recipes[0].id).toBe(tofuRecipeId);
     const invalid = { ...day, lunch: [tofuRecipeId, spinachRecipeId] };
-    expect((await plan.preview(userId, [invalid])).problems).toMatchObject([
-      { code: 'DAY_CONFLICT' },
-    ]);
-    const warned = await plan.apply(userId, [invalid]);
+    expect(
+      (await plan.preview(userId, WEEK, [invalid])).problems,
+    ).toMatchObject([{ code: 'DAY_CONFLICT' }]);
+    const warned = await plan.apply(userId, WEEK, [invalid]);
     expect(warned.problems).toMatchObject([{ code: 'DAY_CONFLICT' }]);
     expect(await entriesModel().countDocuments()).toBe(2);
   });
@@ -428,7 +434,7 @@ describe('Recipe catalog with MongoDB', () => {
     request(app.getHttpServer())
       .put('/api/v1/meal-plan/days')
       .set('Authorization', `Bearer ${token}`)
-      .send({ days });
+      .send({ weekStart: WEEK, days });
 
   const lunchIds = (body: MealPlanDto, day: Weekday) =>
     body.days
@@ -485,14 +491,14 @@ describe('Recipe catalog with MongoDB', () => {
       saveHttp([dayInput(Weekday.TUE, [tofuRecipeId])]),
     ]);
     expect(responses.map(({ status }) => status)).toEqual([200, 200]);
-    const saved = await plan.find(userId);
+    const saved = await plan.find(userId, WEEK);
     expect(lunchIds(saved, Weekday.MON)).toEqual([riceRecipeId]);
     expect(lunchIds(saved, Weekday.TUE)).toEqual([tofuRecipeId]);
     expect(await entriesModel().countDocuments()).toBe(2);
   });
 
   it('rolls back every requested day when one is invalid while another PUT succeeds', async () => {
-    await plan.apply(userId, [dayInput(Weekday.MON, [riceRecipeId])]);
+    await plan.apply(userId, WEEK, [dayInput(Weekday.MON, [riceRecipeId])]);
     await usersModel().updateOne(
       { _id: userId },
       { $set: { avoidedIngredientIds: [tofuId] } },
@@ -509,14 +515,14 @@ describe('Recipe catalog with MongoDB', () => {
       code: 'MEAL_PLAN_INVALID',
       problems: [{ recipeIds: [tofuRecipeId], recipes: ['Đậu hũ sốt cà'] }],
     });
-    const saved = await plan.find(userId);
+    const saved = await plan.find(userId, WEEK);
     expect(lunchIds(saved, Weekday.MON)).toEqual([riceRecipeId]);
     expect(lunchIds(saved, Weekday.TUE)).toEqual([]);
     expect(lunchIds(saved, Weekday.WED)).toEqual([spinachRecipeId]);
   });
 
   it('preserves removal-only repairs but checks existing dishes when a new one is added', async () => {
-    await plan.apply(userId, [
+    await plan.apply(userId, WEEK, [
       dayInput(Weekday.MON, [tofuRecipeId, riceRecipeId]),
     ]);
     await usersModel().updateOne(

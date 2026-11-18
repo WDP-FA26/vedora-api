@@ -42,7 +42,11 @@ const operation = z.discriminatedUnion('op', [
 
 export type EditDraftOutput = DraftProposal & { errors: string[] };
 
-export function editDraftTool(mealPlan: MealPlanService, userId: string) {
+export function editDraftTool(
+  mealPlan: MealPlanService,
+  userId: string,
+  weekStart: string,
+) {
   return tool({
     description:
       'Directly edit individual slots of the unsaved draft: set, add, remove, clear or move dishes (up to 60 operations in one call). If a change uses an unknown or avoided recipe, nothing is kept. If it causes a same-day ingredient clash, the draft stays saved so you can see the full day and fix whichever dish you choose. Nothing is saved to the permanent timetable until the user presses "Áp dụng".',
@@ -50,7 +54,7 @@ export function editDraftTool(mealPlan: MealPlanService, userId: string) {
       operations: z.array(operation).min(1).max(60),
     }),
     execute: (input): Promise<EditDraftOutput> =>
-      mealPlan.editDraft(userId, input.operations),
+      mealPlan.editDraft(userId, weekStart, input.operations),
     toModelOutput: ({ output }) => ({
       type: 'text',
       value: proposalFeedback(output, output.errors),

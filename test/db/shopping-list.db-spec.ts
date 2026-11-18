@@ -29,6 +29,10 @@ import {
   prepareTestDatabase,
 } from '../support/mongo-test-db.js';
 
+// 00:30 on Monday 2026-11-16 in the app time zone, so every day is still ahead.
+const WEEK = '2026-11-16';
+const MONDAY_MORNING = new Date('2026-11-15T17:30:00Z');
+
 describe('Shopping list with MongoDB', () => {
   let db: MongoService;
   let app: INestApplication<App>;
@@ -40,6 +44,7 @@ describe('Shopping list with MongoDB', () => {
   let otherIngredientId: string;
   let recipes: string[];
   beforeAll(async () => {
+    vi.useFakeTimers({ toFake: ['Date'], now: MONDAY_MORNING });
     const mod = await Test.createTestingModule({
       imports: [
         MongoModule.forTest(createTestMongoUrl('shopping')),
@@ -108,7 +113,7 @@ describe('Shopping list with MongoDB', () => {
     }
   });
   beforeEach(async () => {
-    await db.connection.collections.meal_plan_entries.deleteMany({});
+    await db.connection.collections.meal_plan_week_entries.deleteMany({});
     await db.connection
       .model<Recipe>('Recipe')
       .updateOne(
@@ -132,11 +137,13 @@ describe('Shopping list with MongoDB', () => {
       slots.map((slot) => ({
         _id: randomUUID(),
         ...slot,
+        weekStart: WEEK,
         userId: first,
         position: 0,
       })),
     );
     await plan({
+      weekStart: WEEK,
       userId: second,
       day: Weekday.MON,
       section: MealSection.LUNCH,
@@ -144,6 +151,7 @@ describe('Shopping list with MongoDB', () => {
     });
   });
   afterAll(async () => {
+    vi.useRealTimers();
     if (app) await dropTestDatabase(app);
     if (app) await app.close();
   });
@@ -191,6 +199,7 @@ describe('Shopping list with MongoDB', () => {
   });
   it('counts a repeated recipe independently on another weekday', async () => {
     await plan({
+      weekStart: WEEK,
       userId: first,
       day: Weekday.FRI,
       section: MealSection.OTHER,
@@ -274,6 +283,7 @@ describe('Shopping list with MongoDB', () => {
   it('does not mix a prior timetable with newer ingredient data', async () => {
     await entriesModel().deleteMany({ userId: first, day: Weekday.MON });
     await plan({
+      weekStart: WEEK,
       userId: first,
       day: Weekday.MON,
       section: MealSection.LUNCH,

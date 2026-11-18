@@ -1,7 +1,7 @@
 # Kho công thức và chọn món vào thực đơn
 
 Base URL: `/api/v1`. Kho công thức do admin quản lý; người dùng và guest được đọc.
-Không cần migration mới. Swagger mô tả đầy đủ request/response tại `/docs`.
+Swagger mô tả đầy đủ request/response tại `/docs`. Thực đơn lưu **theo từng tuần** (xem [Thực đơn theo tuần](#thực-đơn-theo-tuần)); dữ liệu thực đơn lặp lại cũ không được chuyển sang.
 
 ## API
 
@@ -9,11 +9,12 @@ Không cần migration mới. Swagger mô tả đầy đủ request/response t�
 | ------ | -------------------- | ---------------------------------------- | --------------------------------------------- |
 | GET    | `/recipes`           | Không; bắt buộc nếu `suitableForMe=true` | `{ items, meta }`                             |
 | GET    | `/recipes/:id`       | Không                                    | Chi tiết công thức                            |
-| GET    | `/meal-plan`         | Có                                       | Thực đơn đang lưu, đủ 7 ngày và 4 phần/ngày   |
+| GET    | `/meal-plan?weekStart=` | Có                                    | Thực đơn một tuần, đủ 7 ngày và 4 phần/ngày; mặc định tuần hiện tại |
+| POST   | `/meal-plan/copy`    | Có                                       | Sao chép món của một tuần sang tuần khác (không ghi đè nếu không có `overwrite`) |
 | POST   | `/meal-plan/preview` | Có                                       | Đề xuất, nội dung cũ và các vấn đề; không lưu |
 | POST   | `/meal-plan/generate` | Có                                      | Thuật toán (không AI) chọn món cho các ô được chọn; trả preview, không lưu |
-| GET    | `/meal-plan/draft`   | Có                                       | Bản nháp chưa lưu do trợ lý tạo, cùng dạng preview kèm `ok` (hết hạn sau 6 giờ) |
-| DELETE | `/meal-plan/draft`   | Có                                       | Xóa bản nháp chưa lưu (204)                   |
+| GET    | `/meal-plan/draft?weekStart=` | Có                              | Bản nháp chưa lưu của một tuần do trợ lý tạo, cùng dạng preview kèm `ok` (hết hạn sau 6 giờ) |
+| DELETE | `/meal-plan/draft?weekStart=` | Có (`weekStart` bắt buộc)       | Xóa bản nháp chưa lưu của tuần đó (204)       |
 | PUT    | `/meal-plan/days`    | Có                                       | Lưu các ngày được gửi và trả thực đơn mới     |
 | POST   | `/meal-plan/chat`    | Có                                       | Chat với trợ lý (SSE); truyền thêm `threadId` để tự lưu tin nhắn |
 | GET    | `/meal-plan/chat/threads` | Có                                  | Danh sách đoạn chat đã lưu (`{ items, meta }`, mới nhất trước) |
@@ -101,7 +102,8 @@ cho kết quả tuân theo ràng buộc. Body:
 
 | Trường | Bắt buộc | Ý nghĩa |
 | --- | --- | --- |
-| `days` | Có | Các thứ cần điền, ví dụ `["MON","TUE"]` |
+| `weekStart` | Có | Thứ Hai của tuần cần điền, `YYYY-MM-DD` |
+| `days` | Có | Các thứ cần điền, ví dụ `["MON","TUE"]`. Ngày trước hôm nay bị bỏ qua; không còn ngày nào thì `days` trả về rỗng |
 | `sections` | Có | Các bữa cần điền: `BREAKFAST`, `LUNCH`, `DINNER`, `OTHER` |
 | `onlyEmpty` | Có | `true` giữ nguyên ô đã có món; `false` thay món ở các ô được chọn |
 | `maxMinutes` | Không | 1–240; tổng sơ chế + nấu tối đa. Món chưa có thời gian bị loại khi có trường này |
@@ -161,13 +163,81 @@ Admin tải ảnh lên Cloudinary rồi gửi URL nhận được làm `imageUrl
 Công thức cũ đang dùng link HTTPS ngoài vẫn hợp lệ và hiển thị bình thường; API
 vẫn nhận mọi `imageUrl` HTTPS. Cloudinary chưa được cấu hình thì endpoint trả `503`.
 
+## Thực đơn theo tuần
+
+Mỗi tuần có thực đơn riêng, định danh bằng `weekStart`: **thứ Hai của tuần**, dạng
+`YYYY-MM-DD`, tính theo múi giờ của app (`timeZone` trong `GET /config/public`). Server
+quyết định tuần nào hợp lệ; FE không tự tính ngày hay đoán tuần được phép.
+
+### Quy tắc
+
+- **Tuần chưa lập thì rỗng.** Không có thực đơn mẫu hay kế thừa từ tuần khác. Muốn bắt đầu từ
+  tuần cũ, dùng `POST /meal-plan/copy`.
+- **Lên trước tối đa 4 tuần** sau tuần hiện tại (`maxWeekStart`). Xa hơn trả `409 MEAL_WEEK_OUT_OF_RANGE`
+  (cả khi đọc lẫn ghi). Xem lại các tuần đã qua thì được; `minWeekStart` là tuần sớm nhất nên cho
+  duyệt lùi (tuần đầu tiên có món, hoặc tuần hiện tại).
+- **Ngày trước hôm nay bị khóa**: không thêm, sửa hay xóa món (`409 MEAL_DAY_LOCKED`, `details.days` liệt kê
+  ngày bị khóa). Tuần đã qua chỉ đọc. Ngày tính hết lúc 00:00 theo múi giờ của app. Món đã lưu cho
+  một ngày trước khi ngày đó qua vẫn hiển thị để xem lại.
+- Tạo bằng thuật toán (`generate`) và trợ lý chat tự bỏ qua ngày bị khóa thay vì báo lỗi.
+- Bản nháp cũng theo tuần: mỗi tuần một bản nháp riêng, hết hạn sau 6 giờ. Lưu một tuần chỉ xóa nháp
+  của tuần đó.
+
+### Response `GET /meal-plan`
+
+```ts
+type MealPlan = {
+  weekStart: string;        // thứ Hai của tuần này
+  currentWeekStart: string; // thứ Hai của tuần chứa hôm nay
+  today: string;            // hôm nay, YYYY-MM-DD
+  minWeekStart: string;     // tuần sớm nhất nên cho xem lại
+  maxWeekStart: string;     // tuần xa nhất được lập
+  editable: boolean;        // false: cả tuần đã qua, không đổi được gì
+  days: {
+    day: 'MON' | 'TUE' | 'WED' | 'THU' | 'FRI' | 'SAT' | 'SUN';
+    date: string;           // ngày tháng của thứ này trong tuần
+    editable: boolean;      // false: trước hôm nay, chỉ đọc
+    sections: { section: string; recipes: Recipe[] }[];
+  }[];
+  problems: Problem[];      // chỉ xét các ngày còn sửa được
+};
+```
+
+Dùng `editable` để khóa kéo-thả và nút lưu; không tự so ngày ở phía FE. `weekStart` là
+tham số query tùy chọn (mặc định tuần hiện tại); `PUT /meal-plan/days`, `POST /meal-plan/preview`,
+`POST /meal-plan/generate` và `POST /meal-plan/chat` **bắt buộc** `weekStart` trong body.
+`DELETE /meal-plan/draft` bắt buộc `?weekStart=`.
+
+### Sao chép tuần: `POST /meal-plan/copy`
+
+```json
+{ "fromWeekStart": "2026-11-16", "toWeekStart": "2026-11-23", "overwrite": false }
+```
+
+Chép món của tuần nguồn sang các ngày **còn sửa được** của tuần đích, kiểm tra như `PUT /meal-plan/days`,
+tất cả hoặc không gì. Mặc định từ chối (`409 MEAL_WEEK_NOT_EMPTY`) khi tuần đích đã có món ở các ngày đó;
+`overwrite: true` thay thế (kể cả xóa món ở ngày nguồn trống). Tuần nguồn có thể là tuần đã qua.
+Trả thực đơn của tuần đích. Hai tuần giống nhau trả `400`. Món nguồn nay chứa nguyên liệu người dùng
+tránh thì `409 MEAL_PLAN_INVALID`; người dùng sửa món đó rồi sao chép lại.
+
+### Trợ lý chat
+
+Request mang `weekStart` của tuần đang mở. Trợ lý chỉ đọc và đề xuất cho tuần đó; khi người dùng nói
+"tuần sau", trợ lý bảo họ chuyển sang tuần ấy rồi hỏi lại. Output `fillSlots` và `editDraft` có `weekStart`;
+khi người dùng bấm **Áp dụng**, FE gửi `weekStart` của đề xuất đó (không phải tuần đang xem lúc bấm) tới
+`PUT /meal-plan/days`.
+
+### Danh sách đi chợ
+
+`GET /meal-plan/shopping-list?weekStart=` tính trên một tuần; xem [meal-plan-shopping-list.md](meal-plan-shopping-list.md).
+
 ## Chọn món, xem trước và lưu
 
-1. Đọc `/meal-plan` để lấy toàn bộ nội dung đang lưu.
+1. Đọc `/meal-plan?weekStart=` để lấy toàn bộ nội dung đang lưu của tuần đang xem.
 2. Tìm món bằng `/recipes`, xem hướng dẫn bằng `/recipes/:id`.
 3. Sửa ngày muốn thay đổi trên giao diện và gọi `/meal-plan/preview`.
 4. Hiển thị `problems`, nội dung cũ trong `previous` và món đề xuất trong `recipes`.
-5. Khi người dùng bấm **Áp dụng**, gửi cùng body tới `PUT /meal-plan/days`.
+5. Khi người dùng bấm **Áp dụng**, gửi cùng body (cùng `weekStart`) tới `PUT /meal-plan/days`.
 6. Nếu lưu thành công, dùng response để cập nhật thực đơn. Nếu nhận `409`, hiện
    `problems` mới vì hồ sơ/công thức/quy tắc có thể đã thay đổi sau khi xem trước.
 
@@ -177,6 +247,7 @@ phần đó; mỗi phần tối đa 5 món, không lặp ID trong một phần.
 
 ```json
 {
+  "weekStart": "2026-11-16",
   "days": [
     {
       "day": "MON",
@@ -189,13 +260,15 @@ phần đó; mỗi phần tối đa 5 món, không lặp ID trong một phần.
 }
 ```
 
-`day` nhận `MON`, `TUE`, `WED`, `THU`, `FRI`, `SAT`, `SUN`. Đây là lịch tuần lặp,
-không gắn ngày tháng. `others` chứa món ngoài ba bữa chính.
+`weekStart` là **bắt buộc**: thứ Hai của tuần, `YYYY-MM-DD`; thứ khác hoặc ngày không có thật trả `400`.
+`day` nhận `MON`, `TUE`, `WED`, `THU`, `FRI`, `SAT`, `SUN`; ngày tháng của từng thứ do server
+trả trong `days[].date`. `others` chứa món ngoài ba bữa chính.
 
 Response xem trước HTTP `200`:
 
 ```ts
 type Preview = {
+  weekStart: string; // tuần của đề xuất; lưu đúng tuần này
   days: {
     day: string;
     sections: {
@@ -256,7 +329,7 @@ FE tải lại thực đơn và preview trước khi thử lưu lại. Không d�
 | `400` | Query/body/UUID sai hoặc tham số không hỗ trợ             |
 | `401` | Token sai, thiếu token trên API thực đơn hoặc lọc cá nhân |
 | `404` | Công thức không tồn tại                                   |
-| `409` | `MEAL_PLAN_INVALID` kèm `details.problems`; `MEAL_PLAN_CONFLICT` cần tải lại và preview |
+| `409` | `MEAL_PLAN_INVALID` kèm `details.problems`; `MEAL_PLAN_CONFLICT` cần tải lại và preview; `MEAL_DAY_LOCKED`, `MEAL_WEEK_OUT_OF_RANGE`, `MEAL_WEEK_NOT_EMPTY` (xem [Thực đơn theo tuần](#thực-đơn-theo-tuần)) |
 
 Xác nhận hành vi FE hỏi ngày 19/10/2026:
 

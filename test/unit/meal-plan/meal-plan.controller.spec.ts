@@ -3,6 +3,7 @@ import type { Response } from 'express';
 import { EventEmitter } from 'node:events';
 import { type DeepMockProxy, mockDeep } from 'vitest-mock-extended';
 import type { AuthenticatedRequest } from '../../../src/auth-core/auth.types.js';
+import type { MealPlanDto } from '../../../src/meal-plan/dto/meal-plan.dto.js';
 import { MealPlanController } from '../../../src/meal-plan/meal-plan.controller.js';
 import type { MealPlanService } from '../../../src/meal-plan/meal-plan.service.js';
 import type { MealPlannerChatHistoryService } from '../../../src/meal-plan/meal-planner-chat-history.service.js';
@@ -21,6 +22,17 @@ vi.mock('ai', async (importOriginal) => {
     ...actual,
     pipeUIMessageStreamToResponse,
   };
+});
+
+const emptyPlan = (): MealPlanDto => ({
+  weekStart: '2026-11-16',
+  currentWeekStart: '2026-11-16',
+  today: '2026-11-16',
+  maxWeekStart: '2026-12-14',
+  minWeekStart: '2026-11-16',
+  editable: true,
+  days: [],
+  problems: [],
 });
 
 describe('MealPlanController', () => {
@@ -43,11 +55,16 @@ describe('MealPlanController', () => {
   });
 
   it('delegates find to MealPlanService.find for the caller', async () => {
-    const plan = { days: [], problems: [] };
+    const plan = { ...emptyPlan() };
     mealPlan.find.mockResolvedValue(plan);
 
-    await expect(controller.find(req)).resolves.toBe(plan);
-    expect(mealPlan.find).toHaveBeenCalledWith(userId);
+    await expect(
+      controller.find(req, { weekStart: '2026-11-23' }),
+    ).resolves.toBe(plan);
+    expect(mealPlan.find).toHaveBeenCalledWith(userId, '2026-11-23');
+
+    await controller.find(req, {});
+    expect(mealPlan.find).toHaveBeenLastCalledWith(userId, undefined);
   });
 
   it('delegates preview to MealPlanService.preview with dto.days', async () => {
@@ -60,11 +77,13 @@ describe('MealPlanController', () => {
         others: [],
       },
     ];
-    const preview = { days: [], problems: [] };
+    const preview = { weekStart: '2026-11-16', days: [], problems: [] };
     mealPlan.preview.mockResolvedValue(preview);
 
-    await expect(controller.preview(req, { days })).resolves.toBe(preview);
-    expect(mealPlan.preview).toHaveBeenCalledWith(userId, days);
+    await expect(
+      controller.preview(req, { weekStart: '2026-11-16', days }),
+    ).resolves.toBe(preview);
+    expect(mealPlan.preview).toHaveBeenCalledWith(userId, '2026-11-16', days);
   });
 
   it('delegates apply to MealPlanService.apply with dto.days', async () => {
@@ -77,32 +96,62 @@ describe('MealPlanController', () => {
         others: [],
       },
     ];
-    const saved = { days: [], problems: [] };
+    const saved = emptyPlan();
     mealPlan.apply.mockResolvedValue(saved);
 
-    await expect(controller.apply(req, { days })).resolves.toBe(saved);
-    expect(mealPlan.apply).toHaveBeenCalledWith(userId, days);
+    await expect(
+      controller.apply(req, { weekStart: '2026-11-16', days }),
+    ).resolves.toBe(saved);
+    expect(mealPlan.apply).toHaveBeenCalledWith(userId, '2026-11-16', days);
   });
 
   it('delegates generate, draft, and discardDraft to MealPlanService', async () => {
     const generateDto = {
+      weekStart: '2026-11-16',
       days: [Weekday.MON],
       sections: [MealSection.LUNCH],
       onlyEmpty: true,
     };
-    const preview = { days: [], problems: [] };
+    const preview = { weekStart: '2026-11-16', days: [], problems: [] };
     mealPlan.generate.mockResolvedValue(preview);
     await expect(controller.generate(req, generateDto)).resolves.toBe(preview);
     expect(mealPlan.generate).toHaveBeenCalledWith(userId, generateDto);
 
-    const draft = { days: [], problems: [], ok: false };
+    const draft = {
+      weekStart: '2026-11-16',
+      days: [],
+      problems: [],
+      ok: false,
+    };
     mealPlan.getDraft.mockResolvedValue(draft);
-    await expect(controller.draft(req)).resolves.toBe(draft);
-    expect(mealPlan.getDraft).toHaveBeenCalledWith(userId);
+    await expect(
+      controller.draft(req, { weekStart: '2026-11-16' }),
+    ).resolves.toBe(draft);
+    expect(mealPlan.getDraft).toHaveBeenCalledWith(userId, '2026-11-16');
 
     mealPlan.discardDraft.mockResolvedValue(undefined);
-    await expect(controller.discardDraft(req)).resolves.toBeUndefined();
-    expect(mealPlan.discardDraft).toHaveBeenCalledWith(userId);
+    await expect(
+      controller.discardDraft(req, { weekStart: '2026-11-16' }),
+    ).resolves.toBeUndefined();
+    expect(mealPlan.discardDraft).toHaveBeenCalledWith(userId, '2026-11-16');
+  });
+
+  it('delegates copy to MealPlanService.copyWeek, not overwriting by default', async () => {
+    const copied = emptyPlan();
+    mealPlan.copyWeek.mockResolvedValue(copied);
+
+    await expect(
+      controller.copy(req, {
+        fromWeekStart: '2026-11-16',
+        toWeekStart: '2026-11-23',
+      }),
+    ).resolves.toBe(copied);
+    expect(mealPlan.copyWeek).toHaveBeenCalledWith(
+      userId,
+      '2026-11-16',
+      '2026-11-23',
+      false,
+    );
   });
 
   it('streams chat responses and aborts when the HTTP response closes', async () => {
@@ -119,7 +168,12 @@ describe('MealPlanController', () => {
 
     await controller.chat(
       req,
-      { messages, requestId: 'req-1', threadId: 'thread-1' },
+      {
+        weekStart: '2026-11-16',
+        messages,
+        requestId: 'req-1',
+        threadId: 'thread-1',
+      },
       response,
     );
 
@@ -127,6 +181,7 @@ describe('MealPlanController', () => {
       userId,
       messages,
       expect.any(AbortSignal),
+      '2026-11-16',
       'req-1',
       'thread-1',
     );

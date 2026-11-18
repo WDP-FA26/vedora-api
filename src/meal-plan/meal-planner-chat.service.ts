@@ -78,6 +78,7 @@ export class MealPlannerChatService {
     userId: string,
     messages: PlannerMessageDto[],
     abortSignal: AbortSignal,
+    weekStart: string,
     requestId?: string,
     threadId?: string,
   ) {
@@ -134,12 +135,12 @@ export class MealPlannerChatService {
       }
 
       if (shouldDiscardPreviousDraft(messages)) {
-        await this.mealPlan.discardDraft(userId);
+        await this.mealPlan.discardDraft(userId, weekStart);
       }
       const [restrictions, plan, draft] = await Promise.all([
         this.dietary.find(userId),
-        this.mealPlan.find(userId),
-        this.mealPlan.getDraft(userId),
+        this.mealPlan.find(userId, weekStart),
+        this.mealPlan.getDraft(userId, weekStart),
       ]);
 
       const agent = new ToolLoopAgent({
@@ -150,9 +151,9 @@ export class MealPlannerChatService {
           searchKnowledge: searchKnowledgeTool(this.knowledge),
           searchRecipes: searchRecipesTool(this.mealPlan, userId),
           getRecipe: getRecipeTool(this.mealPlan, userId),
-          getPlan: getPlanTool(this.mealPlan, userId),
-          fillSlots: fillSlotsTool(this.mealPlan, userId),
-          editDraft: editDraftTool(this.mealPlan, userId),
+          getPlan: getPlanTool(this.mealPlan, userId, weekStart),
+          fillSlots: fillSlotsTool(this.mealPlan, userId, weekStart),
+          editDraft: editDraftTool(this.mealPlan, userId, weekStart),
         },
         stopWhen: isStepCount(MAX_STEPS),
         prepareStep: ({ stepNumber }) =>
