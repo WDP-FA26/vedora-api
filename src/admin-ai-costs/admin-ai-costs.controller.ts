@@ -1,3 +1,4 @@
+import { runtimeConfig } from '../config/runtime-config.js';
 import {
   Controller,
   Get,
@@ -54,7 +55,7 @@ export class AdminAiCostsController {
   @Header('Vary', 'Authorization')
   @ApiProduces('text/csv')
   @ApiOperation({
-    summary: 'CSV of up to 10000 matching attempts; narrow filters if exceeded',
+    summary: `CSV of up to ${runtimeConfig.ADMIN_EXPORT_MAX_ROWS} matching attempts; narrow filters if exceeded`,
   })
   async csv(@Query() query: AiCostQueryDto, @Res() response: Response) {
     const csv = await this.costs.csv(query);

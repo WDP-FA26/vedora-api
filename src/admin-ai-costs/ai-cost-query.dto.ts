@@ -1,3 +1,4 @@
+import { runtimeConfig } from '../config/runtime-config.js';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import {
   IsIn,
@@ -17,10 +18,12 @@ export class AiCostQueryDto extends DashboardQueryDto {
   @IsOptional()
   @IsIn(AI_COST_FEATURES)
   feature?: string;
-  @ApiPropertyOptional({ maxLength: 200 })
+  @ApiPropertyOptional({
+    maxLength: runtimeConfig.ADMIN_AI_COST_MODEL_MAX_LENGTH,
+  })
   @IsOptional()
   @IsString()
-  @MaxLength(200)
+  @MaxLength(runtimeConfig.ADMIN_AI_COST_MODEL_MAX_LENGTH)
   model?: string;
 }
 export class AiCostCallsQueryDto extends AiCostQueryDto {
@@ -29,13 +32,16 @@ export class AiCostCallsQueryDto extends AiCostQueryDto {
   @Type(() => Number)
   @IsInt()
   @Min(1)
-  @Max(100000)
+  @Max(runtimeConfig.ADMIN_PAGINATION_MAX_PAGE)
   page = 1;
-  @ApiPropertyOptional({ default: 50, maximum: 100 })
+  @ApiPropertyOptional({
+    default: runtimeConfig.AI_COST_PAGINATION_DEFAULT_LIMIT,
+    maximum: runtimeConfig.ADMIN_PAGINATION_MAX_LIMIT,
+  })
   @IsOptional()
   @Type(() => Number)
   @IsInt()
   @Min(1)
-  @Max(100)
-  limit = 50;
+  @Max(runtimeConfig.ADMIN_PAGINATION_MAX_LIMIT)
+  limit = runtimeConfig.AI_COST_PAGINATION_DEFAULT_LIMIT;
 }

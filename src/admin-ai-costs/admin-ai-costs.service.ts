@@ -1,3 +1,4 @@
+import { runtimeConfig } from '../config/runtime-config.js';
 import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { ConfigService } from '@nestjs/config';
@@ -141,7 +142,7 @@ export class AdminAiCostsService {
                     $dateToString: {
                       date: '$startedAt',
                       format: '%Y-%m-%d',
-                      timezone: 'Asia/Bangkok',
+                      timezone: runtimeConfig.APP_TIMEZONE,
                     },
                   },
                   ...metrics,
@@ -161,7 +162,7 @@ export class AdminAiCostsService {
                 },
               },
               { $sort: { knownSpendUsd: -1, '_id.model': 1 } },
-              { $limit: 100 },
+              { $limit: runtimeConfig.AI_COST_GROUP_LIMIT },
             ],
           },
         },
@@ -239,7 +240,10 @@ export class AdminAiCostsService {
               },
               { $project: { cost: 1 } },
             ],
-            expensive: [{ $sort: { cost: -1, _id: 1 } }, { $limit: 20 }],
+            expensive: [
+              { $sort: { cost: -1, _id: 1 } },
+              { $limit: runtimeConfig.AI_COST_TOP_TURNS_LIMIT },
+            ],
           },
         },
       ])
@@ -270,7 +274,7 @@ export class AdminAiCostsService {
         ..._id,
         ...publicMetrics(row),
       })),
-      groupsLimit: 100,
+      groupsLimit: runtimeConfig.AI_COST_GROUP_LIMIT,
       expensiveTurns: (turns?.expensive ?? []).map(({ _id, cost, ...row }) => ({
         turnId: _id,
         knownSpendUsd: cost.toString(),
@@ -326,12 +330,12 @@ export class AdminAiCostsService {
     const rows = await this.calls
       .find(this.filter(query).match)
       .sort({ startedAt: -1, _id: -1 })
-      .limit(10001)
+      .limit(runtimeConfig.ADMIN_EXPORT_MAX_ROWS + 1)
       .exec();
-    if (rows.length > 10000)
+    if (rows.length > runtimeConfig.ADMIN_EXPORT_MAX_ROWS)
       throw new InvalidInputException(
         'BAD_REQUEST',
-        'CSV exceeds 10000 calls; narrow the date/model/feature filter',
+        `CSV exceeds ${runtimeConfig.ADMIN_EXPORT_MAX_ROWS} calls; narrow the date/model/feature filter`,
       );
     const headers = [
       'id',
@@ -381,7 +385,8 @@ export class AdminAiCostsService {
       );
     if (
       row.status === 'PENDING' &&
-      Date.now() - row.startedAt.getTime() < 15 * 60_000
+      Date.now() - row.startedAt.getTime() <
+        runtimeConfig.AI_COST_RECONCILE_STALE_SECONDS * 1000
     )
       throw new StateConflictException(
         'CONFLICT',
@@ -395,7 +400,11 @@ export class AdminAiCostsService {
     try {
       ({ data } = await openrouter.generations.getGeneration(
         { id: row.generationId },
-        { signal: AbortSignal.timeout(10000) },
+        {
+          signal: AbortSignal.timeout(
+            runtimeConfig.AI_COST_RECONCILE_TIMEOUT_MS,
+          ),
+        },
       ));
     } catch {
       throw new FeatureUnavailableException(
