@@ -46,6 +46,12 @@ export class PaymentDto {
   @ApiProperty() invoiceNumber!: string;
   @ApiProperty() paymentCode!: string;
   @ApiProperty() createdAt!: string;
+  @ApiProperty({ description: 'Payment deadline, 30 minutes after creation' })
+  expiresAt!: string;
+  @ApiProperty({ description: 'Server time for countdown synchronization' })
+  serverTime!: string;
+  @ApiProperty({ enum: ['USER', 'EXPIRED'], nullable: true })
+  cancellationReason!: 'USER' | 'EXPIRED' | null;
   @ApiPropertyOptional({ type: String, nullable: true }) paidAt!: string | null;
   @ApiPropertyOptional({ type: String, nullable: true }) capturedAt!:
     string | null;

@@ -25,6 +25,11 @@ import { SePayProvider } from './sepay.provider.js';
 import { parseBankWebhook } from './sepay-payload.js';
 import { generatePaymentCode } from './payment-code.js';
 import {
+  expiredPaymentFilter,
+  paymentExpiresAt,
+  PAYMENT_LIFETIME_MS,
+} from './payment-expiration.js';
+import {
   effectivePlan,
   PAID_PLANS,
   PLAN_VERSION,
@@ -125,11 +130,15 @@ export class PaymentsService {
       invoiceNumber: intent.invoiceNumber,
       paymentCode: intent.paymentCode,
       createdAt: intent.createdAt.toISOString(),
+      expiresAt: paymentExpiresAt(intent).toISOString(),
+      serverTime: new Date().toISOString(),
+      cancellationReason: intent.cancellationReason ?? null,
       paidAt: intent.paidAt?.toISOString() ?? null,
       capturedAt: intent.capturedAt?.toISOString() ?? null,
       cancelledAt: intent.cancelledAt?.toISOString() ?? null,
       qr:
         intent.status === PaymentStatus.PENDING &&
+        paymentExpiresAt(intent).getTime() > Date.now() &&
         this.catalog().paymentsEnabled
           ? this.provider.qr(intent, intent.amount.toString())
           : null,
@@ -137,6 +146,7 @@ export class PaymentsService {
   }
 
   async overview(userId: string): Promise<BillingOverviewDto> {
+    await this.expirePending(userId);
     const now = new Date();
     const [period, pending, recent] = await Promise.all([
       this.subscriptions.period(userId, now),
@@ -172,6 +182,7 @@ export class PaymentsService {
   }
 
   async get(id: string, userId: string): Promise<PaymentDto> {
+    await this.expirePending(userId);
     const intent = await this.intents.findOne({ _id: id, userId }).exec();
     if (!intent)
       throw new ResourceNotFoundException('NOT_FOUND', 'Payment not found');
@@ -193,6 +204,14 @@ export class PaymentsService {
     const attemptCreate = () =>
       this.mongo.withTransaction(async (session) => {
         await this.lock(session, 'payer', userId);
+        const pending = await this.intents
+          .findOne({ activeIntentKey: userId })
+          .session(session)
+          .exec();
+        const expired =
+          pending && (await this.cancelExpired(pending, session, new Date()))
+            ? { userId, intentId: pending.id }
+            : undefined;
         const prior = await this.requests
           .findOne({ actorId: userId, requestKey: key })
           .session(session)
@@ -212,7 +231,7 @@ export class PaymentsService {
               'NOT_FOUND',
               'Payment not found',
             );
-          return priorIntent;
+          return { intent: priorIntent, expired };
         }
         const user = await this.users
           .findOne({ _id: userId })
@@ -256,6 +275,7 @@ export class PaymentsService {
             'Continue or cancel the pending payment before creating a different purchase',
           );
         if (!intent) {
+          const createdAt = new Date();
           const paymentCode = generatePaymentCode(
             this.config.get<string>('SEPAY_PAYMENT_CODE_PREFIX', 'VED'),
           );
@@ -281,6 +301,9 @@ export class PaymentsService {
                 paidAt: null,
                 capturedAt: null,
                 cancelledAt: null,
+                cancellationReason: null,
+                createdAt,
+                expiresAt: new Date(createdAt.getTime() + PAYMENT_LIFETIME_MS),
               },
             ],
             { session },
@@ -299,11 +322,13 @@ export class PaymentsService {
           ],
           { session },
         );
-        return intent;
+        return { intent, expired };
       });
     for (let attempt = 0; attempt < 5; attempt++) {
       try {
-        return this.serialize(await attemptCreate());
+        const result = await attemptCreate();
+        if (result.expired) await this.notifyCommitted(result.expired);
+        return this.serialize(result.intent);
       } catch (error) {
         const codeTaken =
           isUniqueViolation(error) && 'paymentCode' in (error.keyPattern ?? {});
@@ -319,6 +344,7 @@ export class PaymentsService {
   async cancel(id: string, userId: string): Promise<PaymentDto> {
     let changed = false;
     const intent = await this.mongo.withTransaction(async (session) => {
+      changed = false;
       await this.lock(session, 'payer', userId);
       const current = await this.intents
         .findOne({ _id: id, userId })
@@ -326,6 +352,10 @@ export class PaymentsService {
         .exec();
       if (!current)
         throw new ResourceNotFoundException('NOT_FOUND', 'Payment not found');
+      if (await this.cancelExpired(current, session, new Date())) {
+        changed = true;
+        return current;
+      }
       if (current.status === PaymentStatus.CANCELLED) return current;
       if (current.status !== PaymentStatus.PENDING)
         throw new StateConflictException(
@@ -341,6 +371,7 @@ export class PaymentsService {
               status: PaymentStatus.CANCELLED,
               activeIntentKey: null,
               cancelledAt: now,
+              cancellationReason: 'USER',
             },
           },
           { session, returnDocument: 'after' },
@@ -360,6 +391,7 @@ export class PaymentsService {
     const payloadHash = hash(event);
     let changed: PaymentChanged | undefined;
     await this.mongo.withTransaction(async (session) => {
+      changed = undefined;
       await this.lock(session, 'transaction', event.providerTransactionId);
       const record = async (outcome: string, intentId?: string) => {
         await this.receipts.create(
@@ -407,11 +439,16 @@ export class PaymentsService {
           used.id === intent.id ? 'DUPLICATE' : 'TRANSACTION_ALREADY_USED',
           intent.id,
         );
+      if (await this.cancelExpired(intent, session, new Date())) {
+        changed = { userId: intent.userId, intentId: intent.id };
+      }
       if (intent.status !== PaymentStatus.PENDING)
         return record(
           intent.status === PaymentStatus.SUCCEEDED
             ? 'PAYMENT_INTENT_ALREADY_SUCCEEDED'
-            : 'PAYMENT_CANCELLED',
+            : intent.cancellationReason === 'EXPIRED'
+              ? 'PAYMENT_EXPIRED'
+              : 'PAYMENT_CANCELLED',
           intent.id,
         );
       const user = await this.users
@@ -425,6 +462,11 @@ export class PaymentsService {
       )
         return record('ACCOUNT_UNAVAILABLE', intent.id);
       const capturedAt = new Date();
+      // The deadline can pass while checking account eligibility.
+      if (await this.cancelExpired(intent, session, capturedAt)) {
+        changed = { userId: intent.userId, intentId: intent.id };
+        return record('PAYMENT_EXPIRED', intent.id);
+      }
       const claimed = await this.intents
         .updateOne(
           { _id: intent.id, status: PaymentStatus.PENDING },
@@ -450,5 +492,68 @@ export class PaymentsService {
       changed = { userId: intent.userId, intentId: intent.id };
     });
     if (changed) await this.notifyCommitted(changed);
+  }
+
+  /** Bounded sweep; also called on owner reads so downtime cannot prolong a QR. */
+  async expirePending(userId?: string): Promise<number> {
+    const candidates = await this.intents
+      .find({
+        ...expiredPaymentFilter(new Date()),
+        ...(userId ? { userId } : {}),
+      })
+      .select('_id userId')
+      .limit(100)
+      .exec();
+    let count = 0;
+    for (const candidate of candidates) {
+      const expired = await this.mongo.withTransaction(async (session) => {
+        await this.lock(session, 'payer', candidate.userId);
+        const intent = await this.intents
+          .findById(candidate.id)
+          .session(session)
+          .exec();
+        return intent ? this.cancelExpired(intent, session, new Date()) : false;
+      });
+      if (expired) {
+        count++;
+        await this.notifyCommitted({
+          userId: candidate.userId,
+          intentId: candidate.id,
+        });
+      }
+    }
+    return count;
+  }
+
+  private async cancelExpired(
+    intent: Intent,
+    session: ClientSession,
+    now: Date,
+  ): Promise<boolean> {
+    if (
+      intent.status !== PaymentStatus.PENDING ||
+      paymentExpiresAt(intent).getTime() > now.getTime()
+    )
+      return false;
+    const fields = {
+      status: PaymentStatus.CANCELLED,
+      activeIntentKey: null,
+      cancelledAt: now,
+      cancellationReason: 'EXPIRED' as const,
+    };
+    const result = await this.intents
+      .updateOne(
+        { _id: intent.id, status: PaymentStatus.PENDING },
+        { $set: fields },
+        { session },
+      )
+      .exec();
+    if (result.modifiedCount !== 1)
+      throw new StateConflictException(
+        'CAPTURE_CONFLICT',
+        'Payment changed; retry',
+      );
+    Object.assign(intent, fields);
+    return true;
   }
 }
