@@ -181,3 +181,12 @@ export class ConversationReadDto {
   @ApiProperty({ minimum: 0 }) readSequence!: number;
   @ApiProperty({ minimum: 0 }) unreadCount!: number;
 }
+
+export class MessagingUnreadCountDto {
+  @ApiProperty({
+    minimum: 0,
+    description:
+      'All unread incoming messages across friends and requests, excluding privately deleted history',
+  })
+  unreadCount!: number;
+}

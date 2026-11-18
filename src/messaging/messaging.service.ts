@@ -34,6 +34,7 @@ import {
   MessagePageDto,
   MessagingInbox,
   MessagingContactDto,
+  MessagingUnreadCountDto,
   SendMessageDto,
   SendMessageResponseDto,
   SharePostDto,
@@ -106,6 +107,71 @@ export class MessagingService {
     private readonly events: MessagingEventsService,
     @InjectModel(Post.name) private readonly posts: Model<Post>,
   ) {}
+
+  async unreadCount(userId: string): Promise<MessagingUnreadCountDto> {
+    // Count across every conversation in one query, using the same read/deletion cutoffs as history.
+    const [result] = await this.conversations
+      .aggregate<{ total: number }>([
+        { $match: members(userId) },
+        {
+          $project: {
+            readThrough: {
+              $max: [
+                {
+                  $ifNull: [
+                    {
+                      $cond: [
+                        { $eq: ['$lowId', userId] },
+                        '$lowReadSequence',
+                        '$highReadSequence',
+                      ],
+                    },
+                    0,
+                  ],
+                },
+                {
+                  $ifNull: [
+                    {
+                      $cond: [
+                        { $eq: ['$lowId', userId] },
+                        '$lowDeletedThroughSequence',
+                        '$highDeletedThroughSequence',
+                      ],
+                    },
+                    0,
+                  ],
+                },
+              ],
+            },
+          },
+        },
+        {
+          $lookup: {
+            from: this.messages.collection.name,
+            let: { conversationId: '$_id', readThrough: '$readThrough' },
+            pipeline: [
+              {
+                $match: {
+                  recipientId: userId,
+                  $expr: {
+                    $and: [
+                      { $eq: ['$conversationId', '$$conversationId'] },
+                      { $gt: ['$sequence', '$$readThrough'] },
+                    ],
+                  },
+                },
+              },
+              { $count: 'count' },
+            ],
+            as: 'unread',
+          },
+        },
+        { $unwind: '$unread' },
+        { $group: { _id: null, total: { $sum: '$unread.count' } } },
+      ])
+      .exec();
+    return { unreadCount: result?.total ?? 0 };
+  }
 
   async contact(userId: string, peerId: string): Promise<MessagingContactDto> {
     if (userId === peerId)
