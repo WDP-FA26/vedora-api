@@ -5,6 +5,7 @@ import { type DeepMockProxy, mockDeep } from 'vitest-mock-extended';
 import type { AuthenticatedRequest } from '../../../src/auth-core/auth.types.js';
 import { MealPlanController } from '../../../src/meal-plan/meal-plan.controller.js';
 import type { MealPlanService } from '../../../src/meal-plan/meal-plan.service.js';
+import type { MealPlannerChatHistoryService } from '../../../src/meal-plan/meal-planner-chat-history.service.js';
 import type { MealPlannerChatService } from '../../../src/meal-plan/meal-planner-chat.service.js';
 import { MealSection, UserRole, Weekday } from '../../../src/mongo/models.js';
 
@@ -30,13 +31,15 @@ describe('MealPlanController', () => {
 
   let mealPlan: DeepMockProxy<MealPlanService>;
   let chatService: DeepMockProxy<MealPlannerChatService>;
+  let chatHistory: DeepMockProxy<MealPlannerChatHistoryService>;
   let controller: MealPlanController;
 
   beforeEach(() => {
     mealPlan = mockDeep<MealPlanService>();
     chatService = mockDeep<MealPlannerChatService>();
+    chatHistory = mockDeep<MealPlannerChatHistoryService>();
     pipeUIMessageStreamToResponse.mockClear();
-    controller = new MealPlanController(mealPlan, chatService);
+    controller = new MealPlanController(mealPlan, chatService, chatHistory);
   });
 
   it('delegates find to MealPlanService.find for the caller', async () => {
@@ -114,13 +117,18 @@ describe('MealPlanController', () => {
     const response = responseEmitter as unknown as Response;
     const messages = [{ role: 'user' as const, text: 'Lên thực đơn tuần' }];
 
-    await controller.chat(req, { messages, requestId: 'req-1' }, response);
+    await controller.chat(
+      req,
+      { messages, requestId: 'req-1', threadId: 'thread-1' },
+      response,
+    );
 
     expect(chatService.stream).toHaveBeenCalledWith(
       userId,
       messages,
       expect.any(AbortSignal),
       'req-1',
+      'thread-1',
     );
     expect(pipeUIMessageStreamToResponse).toHaveBeenCalledWith({
       response,
@@ -129,5 +137,69 @@ describe('MealPlanController', () => {
     expect(capturedSignal?.aborted).toBe(false);
     responseEmitter.emit('close');
     expect(capturedSignal?.aborted).toBe(true);
+  });
+
+  it('delegates chat thread endpoints to MealPlannerChatHistoryService', async () => {
+    const page = {
+      items: [],
+      meta: {
+        page: 1,
+        limit: 20,
+        totalItems: 0,
+        totalPages: 0,
+        hasNextPage: false,
+        hasPreviousPage: false,
+      },
+    };
+    const detail = {
+      id: 'thread-1',
+      title: 'Thực đơn chay',
+      messageCount: 0,
+      lastMessagePreview: null,
+      lastMessageAt: new Date(),
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      proposalStatuses: {},
+      messages: [],
+    };
+    chatHistory.listThreads.mockResolvedValue(page);
+    chatHistory.createThread.mockResolvedValue(detail);
+    chatHistory.getThread.mockResolvedValue(detail);
+    chatHistory.updateThread.mockResolvedValue(detail);
+    chatHistory.deleteThread.mockResolvedValue(undefined);
+
+    await expect(
+      controller.listChatThreads(req, { page: 1, limit: 20 }),
+    ).resolves.toBe(page);
+    expect(chatHistory.listThreads).toHaveBeenCalledWith(userId, {
+      page: 1,
+      limit: 20,
+    });
+
+    await expect(
+      controller.createChatThread(req, { title: 'Thực đơn chay' }),
+    ).resolves.toBe(detail);
+    expect(chatHistory.createThread).toHaveBeenCalledWith(userId, {
+      title: 'Thực đơn chay',
+    });
+
+    await expect(controller.getChatThread(req, 'thread-1')).resolves.toBe(
+      detail,
+    );
+    expect(chatHistory.getThread).toHaveBeenCalledWith(userId, 'thread-1');
+
+    await expect(
+      controller.updateChatThread(req, 'thread-1', {
+        proposalStatuses: { 'call-1': 'saved' },
+      }),
+    ).resolves.toBe(detail);
+    expect(chatHistory.updateThread).toHaveBeenCalledWith(userId, 'thread-1', {
+      proposalStatuses: { 'call-1': 'saved' },
+    });
+
+    await expect(
+      controller.deleteChatThread(req, 'thread-1'),
+    ).resolves.toBeUndefined();
+    expect(chatHistory.deleteThread).toHaveBeenCalledWith(userId, 'thread-1');
   });
 });

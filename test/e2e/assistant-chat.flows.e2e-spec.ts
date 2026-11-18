@@ -14,7 +14,7 @@ import {
 } from 'ai/test';
 import request from 'supertest';
 import { MODERATION_MODEL } from '../../src/ai/guardrails/guardrail.js';
-import type { AiRequest, User } from '../../src/mongo/models.js';
+import { type AiRequest, type User, UserRole } from '../../src/mongo/models.js';
 import { GuestSessionService } from '../../src/nutrition-chat/guest/guest-session.service.js';
 import { createE2eApp, type E2eApp } from '../support/e2e-app.js';
 import { createUser } from '../support/fixtures.js';
@@ -56,6 +56,7 @@ const failingChunks: StreamPart[] = [
 ];
 
 let nextChunks: StreamPart[] = replyChunks;
+let chunkQueue: StreamPart[][] | null = null;
 let chunkDelayInMs: number | null = null;
 
 const languageModel = new MockLanguageModelV4({
@@ -64,7 +65,9 @@ const languageModel = new MockLanguageModelV4({
       stream: simulateReadableStream({
         initialDelayInMs: null,
         chunkDelayInMs,
-        chunks: nextChunks,
+        chunks: chunkQueue?.length
+          ? (chunkQueue.shift() ?? replyChunks)
+          : nextChunks,
       }),
     }),
 });
@@ -124,6 +127,7 @@ describe('Assistant chat flows (e2e)', () => {
 
   beforeEach(() => {
     nextChunks = replyChunks;
+    chunkQueue = null;
     chunkDelayInMs = null;
   });
 
@@ -306,6 +310,385 @@ describe('Assistant chat flows (e2e)', () => {
     it('rejects a guest session token with 401', async () => {
       const guestToken = await e2e.app.get(GuestSessionService).issue();
       await chat(guestToken, { messages: userTurn('Xin chào') }).expect(401);
+    });
+  });
+
+  describe('meal planner chat history', () => {
+    const chat = (token: string, body: object) =>
+      request(server())
+        .post('/api/v1/meal-plan/chat')
+        .set('Authorization', `Bearer ${token}`)
+        .send(body);
+
+    it('persists normal turns, refused turns, and >10 messages in chronological order without loss', async () => {
+      const admin = await createUser(e2e.mongo, { role: UserRole.ADMIN });
+      const token = await e2e.sign(admin);
+      const threadId = randomUUID();
+
+      // 6 allowed turns -> 12 messages (exceeds MAX_PLANNER_MESSAGES = 10)
+      const contextWindow: { role: 'user' | 'assistant'; text: string }[] = [];
+      for (let turn = 1; turn <= 6; turn++) {
+        const userText = `Câu hỏi ${turn}`;
+        contextWindow.push({ role: 'user', text: userText });
+        const payload = contextWindow.slice(-10);
+        const res = await chat(token, {
+          threadId,
+          requestId: `u-${turn}`,
+          messages: payload,
+        }).expect(200);
+        expect(replyText(res.text)).toBe(REPLY);
+        contextWindow.push({ role: 'assistant', text: REPLY });
+      }
+
+      // Add a moderation-refused turn into the same thread
+      await chat(token, {
+        threadId,
+        requestId: 'u-refused',
+        messages: [...contextWindow.slice(-9), { role: 'user', text: FLAGGED }],
+      }).expect(200);
+
+      const listRes = await request(server())
+        .get('/api/v1/meal-plan/chat/threads')
+        .set('Authorization', `Bearer ${token}`)
+        .expect(200);
+      const listBody = listRes.body as {
+        items: { id: string; title: string; messageCount: number }[];
+      };
+      expect(listBody.items).toHaveLength(1);
+      expect(listBody.items[0]).toMatchObject({
+        id: threadId,
+        title: 'Câu hỏi 1',
+        messageCount: 14,
+      });
+
+      const detailRes = await request(server())
+        .get(`/api/v1/meal-plan/chat/threads/${threadId}`)
+        .set('Authorization', `Bearer ${token}`)
+        .expect(200);
+      const detail = detailRes.body as {
+        id: string;
+        messageCount: number;
+        proposalStatuses: Record<string, string>;
+        messages: {
+          id: string;
+          role: 'user' | 'assistant';
+          text: string;
+          metadata: { refused?: boolean } | null;
+        }[];
+      };
+      expect(detail.messageCount).toBe(14);
+      expect(detail.messages).toHaveLength(14);
+      expect(detail.messages[0]).toMatchObject({
+        id: 'u-1',
+        role: 'user',
+        text: 'Câu hỏi 1',
+      });
+      expect(detail.messages[12]).toMatchObject({
+        id: 'u-refused',
+        role: 'user',
+        text: FLAGGED,
+      });
+      expect(detail.messages[13]).toMatchObject({
+        role: 'assistant',
+        metadata: { refused: true },
+      });
+    });
+
+    it('updates proposalStatuses, syncs messages idempotently, isolates users, and deletes threads', async () => {
+      const owner = await signedUser();
+      const other = await signedUser();
+      const threadId = randomUUID();
+
+      await request(server())
+        .post('/api/v1/meal-plan/chat/threads')
+        .set('Authorization', `Bearer ${owner.token}`)
+        .send({ id: threadId, title: 'Đoạn chat thực đơn' })
+        .expect(201);
+
+      const patched = await request(server())
+        .patch(`/api/v1/meal-plan/chat/threads/${threadId}`)
+        .set('Authorization', `Bearer ${owner.token}`)
+        .send({
+          proposalStatuses: { 'call-1': 'saved' },
+          messages: [
+            { id: 'm1', role: 'user', text: 'Gợi ý món sáng' },
+            {
+              id: 'm2',
+              role: 'assistant',
+              text: 'Bún riêu chay nhé',
+              parts: [{ type: 'text', text: 'Bún riêu chay nhé' }],
+            },
+          ],
+        })
+        .expect(200);
+      expect(patched.body).toMatchObject({
+        id: threadId,
+        title: 'Đoạn chat thực đơn',
+        messageCount: 2,
+        proposalStatuses: { 'call-1': 'saved' },
+      });
+
+      // Cross-user isolation
+      await request(server())
+        .get(`/api/v1/meal-plan/chat/threads/${threadId}`)
+        .set('Authorization', `Bearer ${other.token}`)
+        .expect(404);
+      await request(server())
+        .patch(`/api/v1/meal-plan/chat/threads/${threadId}`)
+        .set('Authorization', `Bearer ${other.token}`)
+        .send({ title: 'Steal' })
+        .expect(404);
+      await request(server())
+        .delete(`/api/v1/meal-plan/chat/threads/${threadId}`)
+        .set('Authorization', `Bearer ${other.token}`)
+        .expect(404);
+
+      // Owner cannot stream into another user's thread either
+      await chat(other.token, {
+        threadId,
+        requestId: randomUUID(),
+        messages: userTurn('Xin chào'),
+      }).expect(404);
+
+      await request(server())
+        .delete(`/api/v1/meal-plan/chat/threads/${threadId}`)
+        .set('Authorization', `Bearer ${owner.token}`)
+        .expect(204);
+
+      await request(server())
+        .get(`/api/v1/meal-plan/chat/threads/${threadId}`)
+        .set('Authorization', `Bearer ${owner.token}`)
+        .expect(404);
+    });
+
+    it('persists tool-call parts alongside text replies in streamed assistant messages', async () => {
+      const { token } = await signedUser();
+      const threadId = randomUUID();
+      chunkQueue = [
+        [
+          {
+            type: 'tool-call',
+            toolCallId: 'call-get-plan-1',
+            toolName: 'getPlan',
+            input: '{}',
+          },
+          {
+            type: 'finish',
+            finishReason: { unified: 'tool-calls', raw: undefined },
+            usage,
+          },
+        ],
+        replyChunks,
+      ];
+
+      const res = await chat(token, {
+        threadId,
+        requestId: 'u-tool-1',
+        messages: userTurn('Xem thực đơn hiện tại'),
+      }).expect(200);
+      expect(replyText(res.text)).toBe(REPLY);
+
+      const detailRes = await request(server())
+        .get(`/api/v1/meal-plan/chat/threads/${threadId}`)
+        .set('Authorization', `Bearer ${token}`)
+        .expect(200);
+      const detail = detailRes.body as {
+        messageCount: number;
+        messages: {
+          id: string;
+          role: 'user' | 'assistant';
+          text: string;
+          parts: { type: string; toolCallId?: string; state?: string }[];
+        }[];
+      };
+      expect(detail.messageCount).toBe(2);
+      expect(detail.messages[0]).toMatchObject({
+        id: 'u-tool-1',
+        role: 'user',
+        text: 'Xem thực đơn hiện tại',
+      });
+      expect(detail.messages[1].role).toBe('assistant');
+      expect(detail.messages[1].text).toBe(REPLY);
+      expect(detail.messages[1].parts).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            type: 'tool-getPlan',
+            toolCallId: 'call-get-plan-1',
+            state: 'output-available',
+          }),
+          expect.objectContaining({
+            type: 'text',
+            text: REPLY,
+          }),
+        ]),
+      );
+    });
+
+    it('keeps the user turn and skips empty assistant messages when the model stream fails', async () => {
+      nextChunks = failingChunks;
+      const { token } = await signedUser();
+      const threadId = randomUUID();
+
+      await chat(token, {
+        threadId,
+        requestId: 'u-fail-1',
+        messages: userTurn('Câu hỏi khi lỗi'),
+      }).expect(200);
+
+      const detailRes = await request(server())
+        .get(`/api/v1/meal-plan/chat/threads/${threadId}`)
+        .set('Authorization', `Bearer ${token}`)
+        .expect(200);
+      const detail = detailRes.body as {
+        messageCount: number;
+        messages: { id: string; role: string; text: string }[];
+      };
+      expect(detail.messageCount).toBe(1);
+      expect(detail.messages).toHaveLength(1);
+      expect(detail.messages[0]).toMatchObject({
+        id: 'u-fail-1',
+        role: 'user',
+        text: 'Câu hỏi khi lỗi',
+      });
+    });
+
+    it('avoids duplicates when a synced message id overlaps with streaming and bumps thread ordering on new activity', async () => {
+      const { token } = await signedUser();
+      const threadA = randomUUID();
+      const threadB = randomUUID();
+
+      await request(server())
+        .patch(`/api/v1/meal-plan/chat/threads/${threadA}`)
+        .set('Authorization', `Bearer ${token}`)
+        .send({
+          messages: [{ id: 'u-sync-1', role: 'user', text: 'Tin đồng bộ' }],
+        })
+        .expect(200);
+
+      await new Promise((resolve) => setTimeout(resolve, 15));
+      await chat(token, {
+        threadId: threadB,
+        requestId: 'u-b-1',
+        messages: userTurn('Đoạn chat B'),
+      }).expect(200);
+
+      // Stream into threadA with the already-synced requestId: must not duplicate user message
+      await new Promise((resolve) => setTimeout(resolve, 15));
+      await chat(token, {
+        threadId: threadA,
+        requestId: 'u-sync-1',
+        messages: userTurn('Tin đồng bộ'),
+      }).expect(200);
+
+      const detailA = await request(server())
+        .get(`/api/v1/meal-plan/chat/threads/${threadA}`)
+        .set('Authorization', `Bearer ${token}`)
+        .expect(200);
+      const detailABody = detailA.body as {
+        messageCount: number;
+        messages: { id: string; role: string }[];
+      };
+      expect(detailABody.messageCount).toBe(2);
+      expect(detailABody.messages.map((m) => [m.id, m.role])).toEqual([
+        ['u-sync-1', 'user'],
+        [expect.any(String), 'assistant'],
+      ]);
+
+      const listRes = await request(server())
+        .get('/api/v1/meal-plan/chat/threads')
+        .set('Authorization', `Bearer ${token}`)
+        .expect(200);
+      const listBody = listRes.body as { items: { id: string }[] };
+      expect(listBody.items.map((item) => item.id)).toEqual([
+        threadA,
+        threadB,
+      ]);
+    });
+
+    it('handles empty list, out-of-range pagination, validation errors, 404s, and 401s on thread endpoints', async () => {
+      const { token } = await signedUser();
+      const missingId = randomUUID();
+
+      // Empty list for new user & out-of-range page
+      const emptyRes = await request(server())
+        .get('/api/v1/meal-plan/chat/threads')
+        .set('Authorization', `Bearer ${token}`)
+        .expect(200);
+      expect(emptyRes.body).toMatchObject({
+        items: [],
+        meta: { page: 1, totalItems: 0, totalPages: 0 },
+      });
+
+      const outOfRange = await request(server())
+        .get('/api/v1/meal-plan/chat/threads?page=99&limit=10')
+        .set('Authorization', `Bearer ${token}`)
+        .expect(200);
+      expect(outOfRange.body).toMatchObject({
+        items: [],
+        meta: { page: 99, limit: 10, totalItems: 0 },
+      });
+
+      // Invalid pagination & invalid UUID params & invalid proposal status
+      await request(server())
+        .get('/api/v1/meal-plan/chat/threads?page=0')
+        .set('Authorization', `Bearer ${token}`)
+        .expect(400);
+      await request(server())
+        .get('/api/v1/meal-plan/chat/threads?limit=51')
+        .set('Authorization', `Bearer ${token}`)
+        .expect(400);
+      await request(server())
+        .get('/api/v1/meal-plan/chat/threads/not-a-uuid')
+        .set('Authorization', `Bearer ${token}`)
+        .expect(400);
+      await request(server())
+        .patch('/api/v1/meal-plan/chat/threads/not-a-uuid')
+        .set('Authorization', `Bearer ${token}`)
+        .send({ title: 'Test' })
+        .expect(400);
+      await request(server())
+        .delete('/api/v1/meal-plan/chat/threads/not-a-uuid')
+        .set('Authorization', `Bearer ${token}`)
+        .expect(400);
+
+      const createdId = randomUUID();
+      await request(server())
+        .post('/api/v1/meal-plan/chat/threads')
+        .set('Authorization', `Bearer ${token}`)
+        .send({ id: createdId })
+        .expect(201);
+      await request(server())
+        .patch(`/api/v1/meal-plan/chat/threads/${createdId}`)
+        .set('Authorization', `Bearer ${token}`)
+        .send({ proposalStatuses: { 'call-1': 'invalid' } })
+        .expect(400);
+
+      // Non-existent thread UUID returns 404
+      await request(server())
+        .get(`/api/v1/meal-plan/chat/threads/${missingId}`)
+        .set('Authorization', `Bearer ${token}`)
+        .expect(404);
+      await request(server())
+        .delete(`/api/v1/meal-plan/chat/threads/${missingId}`)
+        .set('Authorization', `Bearer ${token}`)
+        .expect(404);
+
+      // Unauthenticated requests return 401
+      await request(server()).get('/api/v1/meal-plan/chat/threads').expect(401);
+      await request(server())
+        .post('/api/v1/meal-plan/chat/threads')
+        .send({})
+        .expect(401);
+      await request(server())
+        .get(`/api/v1/meal-plan/chat/threads/${createdId}`)
+        .expect(401);
+      await request(server())
+        .patch(`/api/v1/meal-plan/chat/threads/${createdId}`)
+        .send({ title: 'X' })
+        .expect(401);
+      await request(server())
+        .delete(`/api/v1/meal-plan/chat/threads/${createdId}`)
+        .expect(401);
     });
   });
 

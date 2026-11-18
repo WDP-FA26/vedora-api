@@ -35,7 +35,7 @@ export class NotificationDto {
     nullable: true,
     type: String,
     description:
-      'Moderation only: sexual, violence, hate, harassment, self_harm, illegal or spam',
+      'Moderation: sexual, violence, hate, harassment, self_harm, illegal or spam. REPORT_RESOLVED, REPORT_DISMISSED and POST_REMOVED: the report reason (SPAM, HARASSMENT, …); null on POST_REMOVED when nobody reported the post',
   })
   reason!: string | null;
 
@@ -50,7 +50,8 @@ export class NotificationDto {
   @ApiProperty({
     nullable: true,
     type: String,
-    description: "Moderation only: the admin's note",
+    description:
+      "Moderation: the admin's note. POST_REMOVED and REPORTED_POST_REMOVED: the removed post's blog title or opening words (the post is gone, so postId is null)",
   })
   note!: string | null;
 

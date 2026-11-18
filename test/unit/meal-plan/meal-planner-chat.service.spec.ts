@@ -15,6 +15,7 @@ import { FeatureUnavailableException } from '../../../src/common/exceptions/feat
 import { QuotaReachedException } from '../../../src/common/exceptions/quota-reached.exception.js';
 import { KnowledgeSearchService } from '../../../src/knowledge/retrieval/knowledge-search.service.js';
 import { MealPlanService } from '../../../src/meal-plan/meal-plan.service.js';
+import { MealPlannerChatHistoryService } from '../../../src/meal-plan/meal-planner-chat-history.service.js';
 import { MealPlannerChatService } from '../../../src/meal-plan/meal-planner-chat.service.js';
 import { ModerationSettingsService } from '../../../src/moderation/moderation-settings.service.js';
 import { AiFeature, MealSection, Weekday } from '../../../src/mongo/models.js';
@@ -127,16 +128,21 @@ describe('MealPlannerChatService', () => {
   let dietary: DeepMockProxy<DietaryService>;
   let knowledge: DeepMockProxy<KnowledgeSearchService>;
   let aiUsage: DeepMockProxy<AiUsageService>;
+  let history: DeepMockProxy<MealPlannerChatHistoryService>;
 
   beforeEach(() => {
     mealPlan = mockDeep<MealPlanService>();
     dietary = mockDeep<DietaryService>();
     knowledge = mockDeep<KnowledgeSearchService>();
     aiUsage = mockDeep<AiUsageService>();
+    history = mockDeep<MealPlannerChatHistoryService>();
 
     aiUsage.consume.mockResolvedValue(TICKET);
     aiUsage.complete.mockResolvedValue(undefined);
     aiUsage.refund.mockResolvedValue(undefined);
+    history.assertThreadAccess.mockResolvedValue(undefined);
+    history.recordUserTurn.mockResolvedValue(undefined);
+    history.recordAssistantMessage.mockResolvedValue(undefined);
 
     dietary.find.mockResolvedValue({
       ingredients: [],
@@ -192,6 +198,7 @@ describe('MealPlannerChatService', () => {
         { provide: DietaryService, useValue: dietary },
         { provide: KnowledgeSearchService, useValue: knowledge },
         { provide: AiUsageService, useValue: aiUsage },
+        { provide: MealPlannerChatHistoryService, useValue: history },
       ],
     })
       .overrideProvider(AiCostTransportService)
@@ -441,6 +448,77 @@ describe('MealPlannerChatService', () => {
           { role: 'assistant', text: 'Cháo yến mạch.' },
           { role: 'user', text: 'Còn bữa trưa?' },
         ],
+      }),
+    );
+  });
+
+  it('persists user turns and streamed or refused assistant messages into the provided thread', async () => {
+    const service = await createService();
+    const threadId = 'thread-uuid-1';
+
+    const okChunks = await convertReadableStreamToArray(
+      await service.stream(
+        USER_ID,
+        [{ role: 'user', text: 'Lên thực đơn ngày thứ Hai' }],
+        new AbortController().signal,
+        'req-user-1',
+        threadId,
+      ),
+    );
+
+    expect(history.assertThreadAccess).toHaveBeenCalledWith(USER_ID, threadId);
+    expect(history.recordUserTurn).toHaveBeenCalledWith(
+      USER_ID,
+      threadId,
+      [{ role: 'user', text: 'Lên thực đơn ngày thứ Hai' }],
+      'req-user-1',
+    );
+    expect(history.recordAssistantMessage).toHaveBeenCalledTimes(1);
+    const [savedUserId, savedThreadId, savedMessage] =
+      history.recordAssistantMessage.mock.calls[0];
+    expect(savedUserId).toBe(USER_ID);
+    expect(savedThreadId).toBe(threadId);
+    expect(savedMessage.role).toBe('assistant');
+    expect(savedMessage.parts).toContainEqual({
+      type: 'text',
+      text: 'Mình đã gợi ý thực đơn.',
+      state: 'done',
+    });
+    expect(okChunks[0]).toMatchObject({ type: 'start' });
+
+    history.recordUserTurn.mockClear();
+    history.recordAssistantMessage.mockClear();
+    verdict = 'off_topic';
+
+    const refusedChunks = await convertReadableStreamToArray(
+      await service.stream(
+        USER_ID,
+        [{ role: 'user', text: 'Viết code' }],
+        new AbortController().signal,
+        'req-user-2',
+        threadId,
+      ),
+    );
+
+    expect(history.recordUserTurn).toHaveBeenCalledWith(
+      USER_ID,
+      threadId,
+      [{ role: 'user', text: 'Viết code' }],
+      'req-user-2',
+    );
+    const startChunk = refusedChunks[0] as {
+      type: string;
+      messageId?: string;
+      messageMetadata?: { refused?: boolean };
+    };
+    expect(startChunk.messageMetadata).toEqual({ refused: true });
+    expect(history.recordAssistantMessage).toHaveBeenCalledWith(
+      USER_ID,
+      threadId,
+      expect.objectContaining({
+        id: startChunk.messageId,
+        role: 'assistant',
+        metadata: { refused: true },
       }),
     );
   });

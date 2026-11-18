@@ -15,6 +15,12 @@ Không cần migration mới. Swagger mô tả đầy đủ request/response t�
 | GET    | `/meal-plan/draft`   | Có                                       | Bản nháp chưa lưu do trợ lý tạo, cùng dạng preview kèm `ok` (hết hạn sau 6 giờ) |
 | DELETE | `/meal-plan/draft`   | Có                                       | Xóa bản nháp chưa lưu (204)                   |
 | PUT    | `/meal-plan/days`    | Có                                       | Lưu các ngày được gửi và trả thực đơn mới     |
+| POST   | `/meal-plan/chat`    | Có                                       | Chat với trợ lý (SSE); truyền thêm `threadId` để tự lưu tin nhắn |
+| GET    | `/meal-plan/chat/threads` | Có                                  | Danh sách đoạn chat đã lưu (`{ items, meta }`, mới nhất trước) |
+| POST   | `/meal-plan/chat/threads` | Có                                  | Tạo hoặc đảm bảo tồn tại đoạn chat (`id?`, `title?`) |
+| GET    | `/meal-plan/chat/threads/:threadId` | Có                        | Chi tiết đoạn chat kèm toàn bộ `messages` và `proposalStatuses` |
+| PATCH  | `/meal-plan/chat/threads/:threadId` | Có                        | Cập nhật `title`, `proposalStatuses` hoặc đồng bộ `messages` |
+| DELETE | `/meal-plan/chat/threads/:threadId` | Có                        | Xóa đoạn chat và toàn bộ tin nhắn thuộc đoạn chat (204) |
 
 Gửi `Authorization: Bearer <accessToken>` khi cần đăng nhập. Trên API đọc công
 thức, nếu gửi token sai/hết hạn hoặc tài khoản đã bị xóa, backend trả `401`;
@@ -123,6 +129,15 @@ Trợ lý chat dùng cùng thuật toán qua công cụ `fillSlots` (ghi vào b�
 (`set`, `add`, `remove`, `clear`, `move`). Output của `fillSlots` và `editDraft`
 có cùng dạng đề xuất (`part.type` là `tool-fillSlots` hoặc `tool-editDraft`,
 gồm `output.ok`, `output.days`, `output.problems`), nên FE hiển thị chúng như nhau.
+
+Khi gửi `threadId` (UUID v4) lên `POST /meal-plan/chat`, backend tự động lưu tin
+nhắn người dùng, các lượt bị từ chối bởi moderation (`metadata: { refused: true }`)
+và câu trả lời stream xong của trợ lý (đầy đủ `parts`, gồm text, tool trace,
+knowledge sources và proposal) vào đoạn chat đó. FE chỉ gửi tối đa 10 tin nhắn gần
+nhất trong `messages` để làm ngữ cảnh cho LLM; toàn bộ tin nhắn trước đó vẫn được
+giữ đầy đủ trong MongoDB và trả về qua `GET /meal-plan/chat/threads/:threadId`.
+`PATCH /meal-plan/chat/threads/:threadId` dùng để cập nhật `title`, `proposalStatuses`
+(`staged | saved | dismissed`) hoặc đồng bộ thêm tin nhắn theo `id` (idempotent).
  `imageUrl` là link HTTPS có
 thể bằng `null`. `post` chỉ có `{ id, author: { username, fullName } }` khi bài
 nguồn đã `PUBLISHED`; nếu bài đang xử lý, thất bại hoặc đã bị xóa thì `post=null`.

@@ -5,8 +5,13 @@ import {
   Get,
   HttpCode,
   HttpStatus,
+  Optional,
+  Param,
+  ParseUUIDPipe,
+  Patch,
   Post,
   Put,
+  Query,
   Req,
   Res,
   UseGuards,
@@ -14,6 +19,9 @@ import {
 import {
   ApiBearerAuth,
   ApiConflictResponse,
+  ApiCreatedResponse,
+  ApiNoContentResponse,
+  ApiNotFoundResponse,
   ApiOkResponse,
   ApiOperation,
   ApiServiceUnavailableResponse,
@@ -27,14 +35,24 @@ import type { AuthenticatedRequest } from '../auth-core/auth.types.js';
 import { JwtAuthGuard } from '../auth-core/jwt-auth.guard.js';
 import { UserThrottlerGuard } from '../auth-core/user-throttler.guard.js';
 import {
+  ApiPaginatedResponse,
+  type PaginatedResponseDto,
+  PaginationQueryDto,
+} from '../common/pagination/index.js';
+import {
+  CreateMealPlanChatThreadDto,
   GenerateMealDaysDto,
+  MealPlanChatThreadDetailDto,
+  MealPlanChatThreadSummaryDto,
   MealPlanDraftDto,
   MealPlanDto,
   MealPlanPreviewDto,
   MealPlannerChatDto,
   SaveMealDaysDto,
+  UpdateMealPlanChatThreadDto,
 } from './dto/meal-plan.dto.js';
 import { MealPlanService } from './meal-plan.service.js';
+import { MealPlannerChatHistoryService } from './meal-planner-chat-history.service.js';
 import { MealPlannerChatService } from './meal-planner-chat.service.js';
 import { ErrorBodyDto } from '../common/exceptions/error-body.dto.js';
 
@@ -50,7 +68,15 @@ export class MealPlanController {
   constructor(
     private readonly mealPlan: MealPlanService,
     private readonly chatService: MealPlannerChatService,
+    @Optional() private readonly chatHistory?: MealPlannerChatHistoryService,
   ) {}
+
+  private requireChatHistory(): MealPlannerChatHistoryService {
+    if (!this.chatHistory) {
+      throw new Error('MealPlannerChatHistoryService is not configured');
+    }
+    return this.chatHistory;
+  }
 
   @Get()
   @ApiOperation({ summary: 'Get your weekly timetable' })
@@ -156,7 +182,81 @@ export class MealPlanController {
         dto.messages,
         abort.signal,
         dto.requestId,
+        ...(dto.threadId ? [dto.threadId] : []),
       ),
     });
+  }
+
+  @Get('chat/threads')
+  @ApiOperation({ summary: 'List your meal planner chat threads, newest first' })
+  @ApiPaginatedResponse(MealPlanChatThreadSummaryDto)
+  listChatThreads(
+    @Req() request: AuthenticatedRequest,
+    @Query() query: PaginationQueryDto,
+  ): Promise<PaginatedResponseDto<MealPlanChatThreadSummaryDto>> {
+    return this.requireChatHistory().listThreads(request.user.sub, query);
+  }
+
+  @Post('chat/threads')
+  @ApiOperation({ summary: 'Create or ensure a meal planner chat thread' })
+  @ApiCreatedResponse({ type: MealPlanChatThreadDetailDto })
+  createChatThread(
+    @Req() request: AuthenticatedRequest,
+    @Body() dto: CreateMealPlanChatThreadDto,
+  ): Promise<MealPlanChatThreadDetailDto> {
+    return this.requireChatHistory().createThread(request.user.sub, dto);
+  }
+
+  @Get('chat/threads/:threadId')
+  @ApiOperation({
+    summary: 'Get a meal planner chat thread with all saved messages',
+  })
+  @ApiOkResponse({ type: MealPlanChatThreadDetailDto })
+  @ApiNotFoundResponse({
+    type: ErrorBodyDto,
+    description: 'Chat thread not found',
+  })
+  getChatThread(
+    @Req() request: AuthenticatedRequest,
+    @Param('threadId', new ParseUUIDPipe({ version: '4' })) threadId: string,
+  ): Promise<MealPlanChatThreadDetailDto> {
+    return this.requireChatHistory().getThread(request.user.sub, threadId);
+  }
+
+  @Patch('chat/threads/:threadId')
+  @ApiOperation({
+    summary:
+      'Update a chat thread title, proposal statuses, or sync messages',
+  })
+  @ApiOkResponse({ type: MealPlanChatThreadDetailDto })
+  @ApiNotFoundResponse({
+    type: ErrorBodyDto,
+    description: 'Chat thread not found',
+  })
+  updateChatThread(
+    @Req() request: AuthenticatedRequest,
+    @Param('threadId', new ParseUUIDPipe({ version: '4' })) threadId: string,
+    @Body() dto: UpdateMealPlanChatThreadDto,
+  ): Promise<MealPlanChatThreadDetailDto> {
+    return this.requireChatHistory().updateThread(
+      request.user.sub,
+      threadId,
+      dto,
+    );
+  }
+
+  @Delete('chat/threads/:threadId')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiOperation({ summary: 'Delete a meal planner chat thread and its messages' })
+  @ApiNoContentResponse({ description: 'Chat thread deleted' })
+  @ApiNotFoundResponse({
+    type: ErrorBodyDto,
+    description: 'Chat thread not found',
+  })
+  deleteChatThread(
+    @Req() request: AuthenticatedRequest,
+    @Param('threadId', new ParseUUIDPipe({ version: '4' })) threadId: string,
+  ): Promise<void> {
+    return this.requireChatHistory().deleteThread(request.user.sub, threadId);
   }
 }

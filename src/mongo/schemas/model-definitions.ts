@@ -51,9 +51,13 @@ import {
   VerificationRequestSchema,
 } from './verification.schema.js';
 import {
+  MealPlanChatMessageSchema,
+  MealPlanChatThreadSchema,
+} from './meal-plan-chat.schema.js';
+import {
+  MessagingEventSchema,
   ConversationSchema,
   DirectMessageSchema,
-  MessagingEventSchema,
 } from './messaging.schema.js';
 
 export const MODEL_DEFINITIONS = [
@@ -91,6 +95,8 @@ export const MODEL_DEFINITIONS = [
   { name: 'RecipeRating', schema: RecipeRatingSchema },
   { name: 'MealPlanEntry', schema: MealPlanEntrySchema },
   { name: 'MealPlanDraftSlot', schema: MealPlanDraftSlotSchema },
+  { name: 'MealPlanChatThread', schema: MealPlanChatThreadSchema },
+  { name: 'MealPlanChatMessage', schema: MealPlanChatMessageSchema },
   { name: 'PaymentIntent', schema: PaymentIntentSchema },
   { name: 'PaymentRequest', schema: PaymentRequestSchema },
   { name: 'PaymentWebhookReceipt', schema: PaymentWebhookReceiptSchema },
