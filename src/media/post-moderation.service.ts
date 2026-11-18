@@ -22,6 +22,7 @@ import {
   PostType,
 } from '../mongo/models.js';
 import { StorageService, StorageTarget } from '../storage/storage.service.js';
+import { type FrameSampling, videoFrameTimes } from './video-frame-times.js';
 
 const STATUS_BY_DECISION: Record<ContentAssessment['decision'], PostStatus> = {
   publish: PostStatus.PUBLISHED,
@@ -29,7 +30,11 @@ const STATUS_BY_DECISION: Record<ContentAssessment['decision'], PostStatus> = {
   reject: PostStatus.REJECTED,
 };
 
-const FRAME_COUNT = runtimeConfig.MODERATION_VIDEO_FRAME_COUNT;
+const FRAME_SAMPLING: FrameSampling = {
+  intervalSeconds: runtimeConfig.MODERATION_VIDEO_FRAME_INTERVAL_SECONDS,
+  minPerVideo: runtimeConfig.MODERATION_VIDEO_MIN_FRAMES,
+  maxPerPost: runtimeConfig.MODERATION_VIDEO_MAX_FRAMES,
+};
 const MAX_INLINE_IMAGES = runtimeConfig.MODERATION_MAX_INLINE_IMAGES;
 
 @Injectable()
@@ -291,14 +296,16 @@ export class PostModerationService implements OnModuleInit {
   }
 
   private async videoFrames(videos: MediaAsset[]): Promise<ContentPart[]> {
+    const times = videoFrameTimes(
+      videos.map((video) => video.durationSec ?? 0),
+      FRAME_SAMPLING,
+    );
     const frames: Promise<ContentPart>[] = [];
-    for (const video of videos) {
-      const duration = video.durationSec ?? 0;
-      for (let index = 0; index < FRAME_COUNT; index += 1) {
-        const seconds = (duration * (index + 0.5)) / FRAME_COUNT;
+    videos.forEach((video, index) => {
+      for (const seconds of times[index]) {
         frames.push(this.videoFrame(video.publicId, seconds));
       }
-    }
+    });
     return Promise.all(frames);
   }
 
