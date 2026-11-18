@@ -41,8 +41,7 @@ describe('MessagingService', () => {
   const conversations = () =>
     db.connection.model<Conversation>(Conversation.name);
   const messages = () => db.connection.model<DirectMessage>(DirectMessage.name);
-  const events = () =>
-    db.connection.model<MessagingEvent>(MessagingEvent.name);
+  const events = () => db.connection.model<MessagingEvent>(MessagingEvent.name);
 
   const follow = (follower: User, following: User) =>
     follows().create({ followerId: follower.id, followingId: following.id });
@@ -303,7 +302,7 @@ describe('MessagingService', () => {
         unreadCount: 1,
       });
 
-      // Mutual unfollow leaves requestDirection as null and box as requests.
+      // A request keeps its initiator after unfollow, so its recipient can still accept it.
       await unfollow(alice, carol);
       const afterUnfollow = await service.getConversation(
         carol.id,
@@ -311,7 +310,7 @@ describe('MessagingService', () => {
       );
       expect(afterUnfollow).toMatchObject({
         box: MessagingInbox.REQUESTS,
-        requestDirection: null,
+        requestDirection: 'incoming',
         canSend: false,
       });
 
@@ -336,10 +335,14 @@ describe('MessagingService', () => {
         clientMessageId: randomUUID(),
         body: 'm1',
       });
-      const m2 = await service.sendToConversation(alice.id, conv.conversationId, {
-        clientMessageId: randomUUID(),
-        body: 'm2',
-      });
+      const m2 = await service.sendToConversation(
+        alice.id,
+        conv.conversationId,
+        {
+          clientMessageId: randomUUID(),
+          body: 'm2',
+        },
+      );
       await service.sendToConversation(alice.id, conv.conversationId, {
         clientMessageId: randomUUID(),
         body: 'm3',
@@ -367,6 +370,303 @@ describe('MessagingService', () => {
     });
   });
 
+  describe('message request actions', () => {
+    const send = async () => {
+      await follow(alice, bob);
+      return service.sendToUser(alice.id, bob.id, {
+        clientMessageId: randomUUID(),
+        body: 'request',
+      });
+    };
+
+    it('accepts without following back and preserves both-way permission after every follow is removed', async () => {
+      const sent = await send();
+      await expect(
+        service.sendToConversation(bob.id, sent.conversationId, {
+          clientMessageId: randomUUID(),
+          body: 'too early',
+        }),
+      ).rejects.toMatchObject({ code: 'MESSAGE_FOLLOW_REQUIRED' });
+      expect(
+        await service.getConversation(bob.id, sent.conversationId),
+      ).toMatchObject({ canAcceptRequest: true, canDeleteRequest: true });
+      const accepted = await service.acceptRequest(bob.id, sent.conversationId);
+      expect(accepted).toMatchObject({
+        box: MessagingInbox.FRIENDS,
+        canSend: true,
+        followsPeer: false,
+        canAcceptRequest: false,
+        canDeleteRequest: false,
+      });
+      await unfollow(alice, bob);
+      expect(await follows().countDocuments()).toBe(0);
+      await service.sendToConversation(bob.id, sent.conversationId, {
+        clientMessageId: randomUUID(),
+        body: 'reply',
+      });
+      await service.sendToUser(alice.id, bob.id, {
+        clientMessageId: randomUUID(),
+        body: 'continued',
+      });
+      expect(await service.contact(bob.id, alice.id)).toMatchObject({
+        canSend: true,
+        box: MessagingInbox.FRIENDS,
+        followsPeer: false,
+      });
+      for (const user of [alice, bob]) {
+        expect(
+          (
+            await service.listConversations(user.id, {
+              box: MessagingInbox.FRIENDS,
+              limit: 1,
+            })
+          ).items.map((row) => row.id),
+        ).toEqual([sent.conversationId]);
+        expect(
+          (
+            await service.listConversations(user.id, {
+              box: MessagingInbox.REQUESTS,
+              limit: 1,
+            })
+          ).items,
+        ).toEqual([]);
+      }
+      await service.acceptRequest(bob.id, sent.conversationId);
+      expect(
+        await events().countDocuments({
+          type: MessagingEventType.REQUEST_ACCEPTED,
+        }),
+      ).toBe(1);
+    });
+
+    it('refuses sender self-acceptance/deletion and non-member or administrator access', async () => {
+      const sent = await send();
+      await unfollow(alice, bob);
+      await expect(
+        service.acceptRequest(alice.id, sent.conversationId),
+      ).rejects.toMatchObject({ code: 'MESSAGE_REQUEST_RECEIVER_REQUIRED' });
+      await expect(
+        service.deleteRequest(alice.id, sent.conversationId, sent.message.id),
+      ).rejects.toMatchObject({ code: 'MESSAGE_REQUEST_RECEIVER_REQUIRED' });
+      for (const user of [carol, admin]) {
+        await expect(
+          service.acceptRequest(user.id, sent.conversationId),
+        ).rejects.toBeInstanceOf(ResourceNotFoundException);
+        await expect(
+          service.deleteRequest(user.id, sent.conversationId, sent.message.id),
+        ).rejects.toBeInstanceOf(ResourceNotFoundException);
+      }
+      expect(
+        (await conversations().findById(sent.conversationId))?.acceptedAt,
+      ).toBeNull();
+    });
+
+    it('supports existing rows without initiator/acceptance/cutoff fields using their first message', async () => {
+      const sent = await send();
+      await conversations().updateOne(
+        { _id: sent.conversationId },
+        {
+          $unset: {
+            requestInitiatorId: 1,
+            acceptedAt: 1,
+            lowDeletedThroughSequence: 1,
+            highDeletedThroughSequence: 1,
+          },
+        },
+      );
+      await unfollow(alice, bob);
+      expect(
+        await service.getConversation(bob.id, sent.conversationId),
+      ).toMatchObject({ requestDirection: 'incoming', canAcceptRequest: true });
+      expect(
+        await service.acceptRequest(bob.id, sent.conversationId),
+      ).toMatchObject({ box: MessagingInbox.FRIENDS, canSend: true });
+    });
+
+    it.each([true, false])(
+      'deletes only the recipient history when the initiator is the lower participant: %s',
+      async (senderIsLow) => {
+        const pair = [alice, bob].sort((a, b) => a.id.localeCompare(b.id));
+        const sender = pair[senderIsLow ? 0 : 1],
+          receiver = pair[senderIsLow ? 1 : 0];
+        await follow(sender, receiver);
+        const sent = await service.sendToUser(sender.id, receiver.id, {
+          clientMessageId: randomUUID(),
+          body: 'private deletion',
+        });
+        expect(
+          await service.deleteRequest(
+            receiver.id,
+            sent.conversationId,
+            sent.message.id,
+          ),
+        ).toEqual({
+          conversationId: sent.conversationId,
+          deletedThroughSequence: 1,
+        });
+        expect(
+          (
+            await service.listConversations(receiver.id, {
+              box: MessagingInbox.REQUESTS,
+              limit: 20,
+            })
+          ).items,
+        ).toEqual([]);
+        await expect(
+          service.getConversation(receiver.id, sent.conversationId),
+        ).rejects.toBeInstanceOf(ResourceNotFoundException);
+        await expect(
+          service.listMessages(receiver.id, sent.conversationId, { limit: 20 }),
+        ).rejects.toBeInstanceOf(ResourceNotFoundException);
+        expect(await service.contact(receiver.id, sender.id)).toMatchObject({
+          conversationId: null,
+        });
+        expect(
+          (
+            await service.listMessages(sender.id, sent.conversationId, {
+              limit: 20,
+            })
+          ).items,
+        ).toHaveLength(1);
+        expect(
+          (await service.getConversation(sender.id, sent.conversationId))
+            .peerReadSequence,
+        ).toBe(0);
+        expect(await messages().countDocuments()).toBe(1);
+        expect(
+          await events().findOne({ type: MessagingEventType.REQUEST_DELETED }),
+        ).toMatchObject({ userIds: [receiver.id], messageId: null });
+      },
+    );
+
+    it('keeps messages newer than the delete marker, hides old cursors, and makes retries safe', async () => {
+      const old = await send();
+      const newer = await service.sendToConversation(
+        alice.id,
+        old.conversationId,
+        { clientMessageId: randomUUID(), body: 'new request' },
+      );
+      await service.deleteRequest(bob.id, old.conversationId, old.message.id);
+      expect(
+        (
+          await service.listMessages(bob.id, old.conversationId, { limit: 20 })
+        ).items.map((row) => row.id),
+      ).toEqual([newer.message.id]);
+      expect(
+        await service.getConversation(bob.id, old.conversationId),
+      ).toMatchObject({
+        unreadCount: 1,
+        canAcceptRequest: true,
+        myReadSequence: 1,
+      });
+      await service.deleteRequest(bob.id, old.conversationId, old.message.id);
+      expect(
+        await events().countDocuments({
+          type: MessagingEventType.REQUEST_DELETED,
+        }),
+      ).toBe(1);
+      await expect(
+        service.listMessages(bob.id, old.conversationId, {
+          limit: 20,
+          cursor: old.message.id,
+        }),
+      ).rejects.toMatchObject({ code: 'MESSAGE_CURSOR_INVALID' });
+      await expect(
+        service.markRead(bob.id, old.conversationId, old.message.id),
+      ).rejects.toBeInstanceOf(ResourceNotFoundException);
+      await expect(
+        service.deleteRequest(bob.id, old.conversationId, randomUUID()),
+      ).rejects.toBeInstanceOf(ResourceNotFoundException);
+    });
+
+    it('shows a new request after deletion without resurrecting old messages on a send retry', async () => {
+      const old = await send();
+      await service.deleteRequest(bob.id, old.conversationId, old.message.id);
+      await service.sendToUser(alice.id, bob.id, {
+        clientMessageId: old.message.clientMessageId,
+        body: old.message.body,
+      });
+      expect(
+        (
+          await service.listConversations(bob.id, {
+            box: MessagingInbox.REQUESTS,
+            limit: 20,
+          })
+        ).items,
+      ).toEqual([]);
+      const newer = await service.sendToConversation(
+        alice.id,
+        old.conversationId,
+        { clientMessageId: randomUUID(), body: 'another hello' },
+      );
+      expect(
+        (
+          await service.listConversations(bob.id, {
+            box: MessagingInbox.REQUESTS,
+            limit: 20,
+          })
+        ).items[0],
+      ).toMatchObject({
+        id: old.conversationId,
+        unreadCount: 1,
+        lastMessage: { id: newer.message.id },
+      });
+      await service.acceptRequest(bob.id, old.conversationId);
+      expect(
+        (
+          await service.listMessages(bob.id, old.conversationId, { limit: 20 })
+        ).items.map((row) => row.body),
+      ).toEqual(['another hello']);
+    });
+
+    it('does not let a stale delete hide an accepted conversation', async () => {
+      const sent = await send();
+      await service.acceptRequest(bob.id, sent.conversationId);
+      await expect(
+        service.deleteRequest(bob.id, sent.conversationId, sent.message.id),
+      ).rejects.toMatchObject({ code: 'MESSAGE_REQUEST_NOT_PENDING' });
+      expect(
+        (await service.getConversation(bob.id, sent.conversationId)).box,
+      ).toBe(MessagingInbox.FRIENDS);
+    });
+
+    it('serializes concurrent acceptance and deletion without hiding an accepted conversation', async () => {
+      const sent = await send();
+      await Promise.allSettled([
+        service.acceptRequest(bob.id, sent.conversationId),
+        service.deleteRequest(bob.id, sent.conversationId, sent.message.id),
+      ]);
+      const row = await conversations().findById(sent.conversationId).orFail();
+      const accepted = Boolean(row.acceptedAt);
+      const visible = (
+        await service.listConversations(bob.id, {
+          box: accepted ? MessagingInbox.FRIENDS : MessagingInbox.REQUESTS,
+          limit: 20,
+        })
+      ).items.length;
+      expect(visible).toBe(accepted ? 1 : 0);
+      expect(
+        (row.lowId === bob.id
+          ? row.lowDeletedThroughSequence
+          : row.highDeletedThroughSequence) > 0,
+      ).toBe(!accepted);
+    });
+
+    it('keeps account restrictions after acceptance and allows discarding an unavailable request', async () => {
+      const sent = await send();
+      await users().updateOne(
+        { _id: alice.id },
+        { $set: { status: AccountStatus.SUSPENDED } },
+      );
+      await expect(
+        service.acceptRequest(bob.id, sent.conversationId),
+      ).rejects.toBeInstanceOf(ResourceNotFoundException);
+      await expect(
+        service.deleteRequest(bob.id, sent.conversationId, sent.message.id),
+      ).resolves.toMatchObject({ deletedThroughSequence: 1 });
+    });
+  });
+
   describe('markRead', () => {
     it('advances read sequence monotonically, records event only when advancing, and ignores non-members or foreign messages', async () => {
       await follow(alice, bob);
@@ -375,16 +675,14 @@ describe('MessagingService', () => {
         clientMessageId: randomUUID(),
         body: '1',
       });
-      const m2 = await service.sendToConversation(
-        alice.id,
-        m1.conversationId,
-        { clientMessageId: randomUUID(), body: '2' },
-      );
-      const m3 = await service.sendToConversation(
-        alice.id,
-        m1.conversationId,
-        { clientMessageId: randomUUID(), body: '3' },
-      );
+      const m2 = await service.sendToConversation(alice.id, m1.conversationId, {
+        clientMessageId: randomUUID(),
+        body: '2',
+      });
+      const m3 = await service.sendToConversation(alice.id, m1.conversationId, {
+        clientMessageId: randomUUID(),
+        body: '3',
+      });
 
       const read2 = await service.markRead(
         bob.id,
