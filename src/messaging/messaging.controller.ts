@@ -2,6 +2,7 @@ import { runtimeConfig } from '../config/runtime-config.js';
 import {
   Body,
   Controller,
+  Delete,
   Get,
   Header,
   HttpCode,
@@ -45,6 +46,8 @@ import {
   ConversationPageDto,
   ConversationReadDto,
   ConversationsQueryDto,
+  DeleteMessageRequestDto,
+  DeletedMessageRequestDto,
   MessagePageDto,
   MessagingContactDto,
   ReadConversationDto,
@@ -202,8 +205,43 @@ export class MessagingController {
     return this.messaging.contact(request.user.sub, id);
   }
 
+  @Post('conversations/:id/accept')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary:
+      'Accept an incoming request; both participants can message without following',
+  })
+  @ApiOkResponse({ type: ConversationDto })
+  accept(
+    @Req() request: AuthenticatedRequest,
+    @Param('id', ParseUUIDPipe) id: string,
+  ): Promise<ConversationDto> {
+    return this.messaging.acceptRequest(request.user.sub, id);
+  }
+
+  @Delete('conversations/:id/request')
+  @ApiOperation({
+    summary:
+      'Hide an incoming request and its old history for yourself; newer messages remain visible',
+  })
+  @ApiOkResponse({ type: DeletedMessageRequestDto })
+  deleteRequest(
+    @Req() request: AuthenticatedRequest,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: DeleteMessageRequestDto,
+  ): Promise<DeletedMessageRequestDto> {
+    return this.messaging.deleteRequest(
+      request.user.sub,
+      id,
+      dto.throughMessageId,
+    );
+  }
+
   @Post('users/:userId/messages')
-  @ApiOperation({ summary: 'Send a message; sender must follow the recipient' })
+  @ApiOperation({
+    summary:
+      'Send a message when following the recipient or after request acceptance',
+  })
   @ApiCreatedResponse({ type: SendMessageResponseDto })
   sendToUser(
     @Req() request: AuthenticatedRequest,
@@ -216,7 +254,7 @@ export class MessagingController {
   @Post('conversations/:id/messages')
   @ApiOperation({
     summary:
-      'Send in your existing conversation; follow is rechecked on every send',
+      'Send in your existing conversation; account and follow/acceptance permission are rechecked on every send',
   })
   @ApiCreatedResponse({ type: SendMessageResponseDto })
   send(

@@ -232,8 +232,110 @@ describe('Direct messaging (HTTP + MongoDB + realtime)', () => {
     ['post', `/users/${randomUUID()}/messages`],
     ['post', `/conversations/${randomUUID()}/messages`],
     ['put', `/conversations/${randomUUID()}/read`],
+    ['post', `/conversations/${randomUUID()}/accept`],
+    ['delete', `/conversations/${randomUUID()}/request`],
   ] as const)('requires authentication for %s %s', async (method, path) => {
     await request(app.getHttpServer())[method](`${root}${path}`).expect(401);
+  });
+
+  it('accepts a request through HTTP, emits realtime to both participants and allows no-follow replies', async () => {
+    await follow(alice, bob);
+    const sent = (await send(alice, bob).expect(201))
+      .body as SendMessageResponseDto;
+    const a = await openStream(baseUrl, token(alice)),
+      b = await openStream(baseUrl, token(bob));
+    try {
+      await Promise.all([a.waitFor('stream.ready'), b.waitFor('stream.ready')]);
+      await request(app.getHttpServer())
+        .post(`${root}/conversations/${sent.conversationId}/accept`)
+        .auth(token(alice), { type: 'bearer' })
+        .expect(403);
+      await request(app.getHttpServer())
+        .post(`${root}/conversations/${sent.conversationId}/accept`)
+        .auth(token(carol), { type: 'bearer' })
+        .expect(404);
+      const response = await request(app.getHttpServer())
+        .post(`${root}/conversations/${sent.conversationId}/accept`)
+        .auth(token(bob), { type: 'bearer' })
+        .expect(200);
+      expect(response.body).toMatchObject({
+        box: 'friends',
+        canSend: true,
+        followsPeer: false,
+        canAcceptRequest: false,
+      });
+      await Promise.all([
+        a.waitFor('request.accepted'),
+        b.waitFor('request.accepted'),
+      ]);
+      await unfollow(alice, bob);
+      await send(bob, alice, 'accepted reply').expect(201);
+      await send(alice, bob, 'no follow needed').expect(201);
+      expect(
+        ((await inbox(bob).expect(200)).body as ConversationPageDto).items,
+      ).toHaveLength(1);
+      expect(
+        ((await inbox(bob, 'requests').expect(200)).body as ConversationPageDto)
+          .items,
+      ).toHaveLength(0);
+      await request(app.getHttpServer())
+        .delete(`${root}/conversations/${sent.conversationId}/request`)
+        .auth(token(bob), { type: 'bearer' })
+        .send({ throughMessageId: sent.message.id })
+        .expect(409);
+    } finally {
+      await Promise.all([a.close(), b.close()]);
+    }
+  });
+
+  it('deletes only the recipient request over HTTP and preserves messages arriving after its cutoff', async () => {
+    await follow(alice, bob);
+    const sent = (await send(alice, bob).expect(201))
+      .body as SendMessageResponseDto;
+    const a = await openStream(baseUrl, token(alice)),
+      b = await openStream(baseUrl, token(bob));
+    const remove = (user: User, body: unknown) =>
+      request(app.getHttpServer())
+        .delete(`${root}/conversations/${sent.conversationId}/request`)
+        .auth(token(user), { type: 'bearer' })
+        .send(body);
+    try {
+      await Promise.all([a.waitFor('stream.ready'), b.waitFor('stream.ready')]);
+      await remove(bob, {}).expect(400);
+      await remove(bob, { throughMessageId: 'not-a-uuid' }).expect(400);
+      await remove(alice, { throughMessageId: sent.message.id }).expect(403);
+      await remove(carol, { throughMessageId: sent.message.id }).expect(404);
+      expect(
+        (await remove(bob, { throughMessageId: sent.message.id }).expect(200))
+          .body,
+      ).toMatchObject({ deletedThroughSequence: 1 });
+      await b.waitFor('request.deleted');
+      expect(
+        a.frames.filter((frame) => frame.type === 'request.deleted'),
+      ).toHaveLength(0);
+      await detail(bob, sent.conversationId).expect(404);
+      expect(
+        (
+          (await history(alice, sent.conversationId).expect(200))
+            .body as MessagePageDto
+        ).items,
+      ).toHaveLength(1);
+      const newer = (await send(alice, bob, 'new invitation').expect(201))
+        .body as SendMessageResponseDto;
+      await remove(bob, { throughMessageId: sent.message.id }).expect(200);
+      expect(
+        (
+          (await history(bob, sent.conversationId).expect(200))
+            .body as MessagePageDto
+        ).items.map((item: { id: string }) => item.id),
+      ).toEqual([newer.message.id]);
+      expect(
+        ((await inbox(bob, 'requests').expect(200)).body as ConversationPageDto)
+          .items[0],
+      ).toMatchObject({ unreadCount: 1, canAcceptRequest: true });
+    } finally {
+      await Promise.all([a.close(), b.close()]);
+    }
   });
 
   it('requires the sender to follow first and creates no empty conversation on rejection', async () => {
@@ -350,7 +452,7 @@ describe('Direct messaging (HTTP + MongoDB + realtime)', () => {
     ).toMatchObject({
       box: 'requests',
       canSend: false,
-      requestDirection: 'incoming',
+      requestDirection: 'outgoing',
     });
     await unfollow(bob, alice);
     expect(
@@ -359,7 +461,7 @@ describe('Direct messaging (HTTP + MongoDB + realtime)', () => {
     ).toMatchObject({
       box: 'requests',
       canSend: false,
-      requestDirection: null,
+      requestDirection: 'outgoing',
     });
     expect(
       (

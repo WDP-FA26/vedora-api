@@ -8,6 +8,8 @@ export enum MessagingEventType {
   MESSAGE_CREATED = 'message.created',
   CONVERSATION_READ = 'conversation.read',
   RELATIONSHIP_CHANGED = 'relationship.changed',
+  REQUEST_ACCEPTED = 'request.accepted',
+  REQUEST_DELETED = 'request.deleted',
 }
 
 @Schema(collectionSchema('conversations'))
@@ -21,6 +23,19 @@ export class Conversation extends Identified {
 
   @Prop({ type: String, required: true })
   highId!: string;
+
+  @Prop({ type: String, default: null })
+  requestInitiatorId!: string | null;
+
+  @Prop({ type: Date, default: null })
+  acceptedAt!: Date | null;
+
+  /** Each participant hides only messages at or below their own cutoff. */
+  @Prop({ type: Number, default: 0, min: 0 })
+  lowDeletedThroughSequence!: number;
+
+  @Prop({ type: Number, default: 0, min: 0 })
+  highDeletedThroughSequence!: number;
 
   @Prop({ type: Number, required: true, default: 0, min: 0 })
   sequence!: number;

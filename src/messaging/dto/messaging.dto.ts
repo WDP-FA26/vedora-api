@@ -56,6 +56,21 @@ export class ReadConversationDto {
   messageId!: string;
 }
 
+export class DeleteMessageRequestDto {
+  @ApiProperty({
+    format: 'uuid',
+    description:
+      'Last message displayed when deleting; newer messages are preserved',
+  })
+  @IsUUID('4')
+  throughMessageId!: string;
+}
+
+export class DeletedMessageRequestDto {
+  @ApiProperty({ format: 'uuid' }) conversationId!: string;
+  @ApiProperty({ minimum: 0 }) deletedThroughSequence!: number;
+}
+
 export class MessageDto {
   @ApiProperty({ format: 'uuid' }) id!: string;
   @ApiProperty({ format: 'uuid' }) conversationId!: string;
@@ -105,6 +120,9 @@ export class ConversationDto {
   @ApiProperty() followsPeer!: boolean;
   @ApiProperty() peerFollowsYou!: boolean;
   @ApiProperty() canSend!: boolean;
+  @ApiProperty() canAcceptRequest!: boolean;
+  @ApiProperty() canDeleteRequest!: boolean;
+  @ApiProperty({ minimum: 0 }) deletedThroughSequence!: number;
   @ApiProperty({ type: ConversationPreviewDto, nullable: true })
   lastMessage!: ConversationPreviewDto | null;
   @ApiProperty({ minimum: 0 }) unreadCount!: number;
