@@ -28,6 +28,7 @@ import { MessagingEventsService } from '../../src/messaging/messaging-events.ser
 import { ProfilesModule } from '../../src/profiles/profiles.module.js';
 import { ModerationSettingsService } from '../../src/moderation/moderation-settings.service.js';
 import { StorageService } from '../../src/storage/storage.service.js';
+import { QdrantService } from '../../src/qdrant/qdrant.service.js';
 import type {
   ConversationDto,
   ConversationPageDto,
@@ -50,6 +51,8 @@ import {
       useValue: new ConfigService({ API_PREFIX: 'api/v1' }),
     },
     { provide: StorageService, useValue: { isConfigured: () => false } },
+    // Profiles now includes people search; these messaging flows never search or index profiles.
+    { provide: QdrantService, useValue: {} },
     {
       provide: ModerationSettingsService,
       useValue: {
@@ -57,7 +60,12 @@ import {
       },
     },
   ],
-  exports: [ConfigService, StorageService, ModerationSettingsService],
+  exports: [
+    ConfigService,
+    StorageService,
+    ModerationSettingsService,
+    QdrantService,
+  ],
 })
 class MessagingTestSupportModule {}
 
