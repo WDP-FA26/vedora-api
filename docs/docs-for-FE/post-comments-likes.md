@@ -73,8 +73,39 @@ GET /api/v1/posts/:postId/comments?limit=20&cursor=<nextCursor>
 - Cursor đã bị xóa hoặc thuộc bài khác: HTTP 400. Khi gặp trường hợp này, tải lại trang đầu.
 - Không gửi `page`; các trường query không khai báo bị từ chối.
 
-Phiên bản này là comment trực tiếp vào bài đăng, chưa có thread/reply-to-comment,
-media trong comment hoặc like comment. `parentId` không được nhận.
+Danh sách trên chỉ trả bình luận gốc. Phản hồi dùng luồng hai tầng:
+
+```http
+GET /api/v1/posts/:postId/comments/:commentId
+GET /api/v1/posts/:postId/comments/:rootId/replies?limit=20&cursor=<nextCursor>
+POST /api/v1/posts/:postId/comments/:targetId/replies
+Authorization: Bearer <accessToken>
+Content-Type: application/json
+
+{ "body": "Nội dung trả lời" }
+```
+
+- Hai GET đọc công khai bài đã xuất bản. POST cần đăng nhập, kiểm duyệt và giới hạn
+  độ dài như bình luận gốc. Body chỉ nhận `body`; không gửi `parentId`/`replyToId`.
+- Mọi comment trả thêm `parentId`, `replyToId`, `replyToAuthor`, `replyCount`.
+  Gốc có hai ID null; `replyCount` là tổng phản hồi hiện có trong luồng.
+- Reply có `parentId` trỏ bình luận gốc, `replyToId` trỏ chính comment được chọn,
+  `replyToAuthor` có cùng cấu trúc `author`. Trả lời một reply vẫn nằm dưới gốc.
+- Danh sách replies mới nhất trước, phân trang như comments. GET replies phải dùng
+  ID gốc; cursor khác luồng/bài trả 400, comment khác bài trả 404.
+- PATCH/DELETE comment hiện có áp dụng cả reply, giữ nguyên quyền sửa/xóa.
+- **Xóa gốc xóa toàn bộ replies và thông báo liên quan**. Xóa riêng reply giữ các
+  phản hồi khác; những reply trỏ tới nó có `replyToId`/`replyToAuthor` thành null.
+- `commentCount` của bài bao gồm gốc và tất cả replies. FE cập nhật tổng sau tạo/xóa;
+  sau xóa nên revalidate tổng từ bài vì người khác có thể vừa thêm phản hồi.
+- Người được trả lời nhận `COMMENT_REPLY`, trừ tự trả lời. Chủ bài nhận `COMMENT`
+  nếu là người thứ ba; không gửi trùng cùng người. `commentId` là ID reply mới.
+- FE thông báo mở `/posts/:postId?comment=:commentId#comments`. GET một comment giúp
+  mở đúng gốc/reply kể cả khi chúng nằm ngoài trang danh sách đã tải.
+- Dữ liệu cũ thiếu `parentId` được đọc như bình luận gốc, không cần backfill. Mongo
+  tự tạo index mới khi khởi động; các thao tác ghi dùng transaction trên replica set.
+
+Chưa có media trong comment hoặc like comment.
 
 Tạo comment không có khóa chống gửi trùng: frontend nên khóa nút gửi trong lúc request
 đang chạy. Nếu request bị timeout, tải lại danh sách trước khi quyết định gửi lại.
@@ -122,7 +153,7 @@ interface PostInteractionFields {
 `GET /posts` vẫn cho đọc công khai. Không gửi token: `isLiked` luôn false. Gửi token
 hợp lệ: `isLiked` đúng theo tài khoản đó. Token được gửi nhưng không hợp lệ/hết hạn hoặc
 tài khoản đã bị xóa: HTTP 401; frontend refresh token rồi tải lại.
-`GET /posts/:id` vẫn yêu cầu đăng nhập như trước.
+`GET /posts/:id` đọc công khai bài đã xuất bản, áp dụng cùng quy tắc token trên.
 
 Các số đếm được tính từ bản ghi hiện có, không lưu counter riêng. Khi xóa bài đăng,
 database tự xóa comment và like; khi xóa tài khoản, database xóa comment/like của tài

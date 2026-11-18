@@ -83,6 +83,10 @@ export class Post extends Identified {
   @Prop({ type: String, default: null })
   body!: string | null;
 
+  /** Serializes comment writes with post deletion without changing its public edit time. */
+  @Prop({ type: Number, default: 0 })
+  commentRevision!: number;
+
   @Prop({ type: BlogSchema, default: null })
   blog!: Blog | null;
 
@@ -132,6 +136,16 @@ export class PostComment extends Identified {
   @Prop({ type: String, required: true })
   authorId!: string;
 
+  @Prop({ type: String, default: null })
+  parentId!: string | null;
+
+  @Prop({ type: String, default: null })
+  replyToId!: string | null;
+
+  /** A write fence for concurrent replies and parent/target deletion. */
+  @Prop({ type: Number, default: 0 })
+  threadRevision!: number;
+
   @Prop({ type: String, required: true })
   body!: string;
 
@@ -145,6 +159,14 @@ export class PostComment extends Identified {
 export const PostCommentSchema = SchemaFactory.createForClass(PostComment);
 PostCommentSchema.index({ postId: 1, createdAt: 1, _id: 1 });
 PostCommentSchema.index({ authorId: 1 });
+PostCommentSchema.index({ postId: 1, parentId: 1, createdAt: -1, _id: -1 });
+PostCommentSchema.index({ parentId: 1 });
+PostCommentSchema.index({ replyToId: 1 });
+cascadeOnDelete(PostCommentSchema, [
+  { model: 'PostComment', field: 'parentId', action: 'delete' },
+  { model: 'PostComment', field: 'replyToId', action: 'unset' },
+  { model: 'Notification', field: 'commentId', action: 'delete' },
+]);
 
 @Schema(collectionSchema('post_likes', 'created'))
 export class PostLike extends Identified {

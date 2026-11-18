@@ -1,7 +1,10 @@
 import { ContentModerationService } from '../../moderation/content-moderation.service.js';
 import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import type { Model } from 'mongoose';
+import type { ClientSession, Model } from 'mongoose';
+import { MongoService } from '../../mongo/mongo.service.js';
+import { withUserLocks } from '../../mongo/with-user-locks.js';
+import { assertAccountActive } from '../../auth-core/account-access.js';
 import type { AuthenticatedUser } from '../../auth-core/auth.types.js';
 import {
   afterCursor,
@@ -35,10 +38,26 @@ import { AccessDeniedException } from '../../common/exceptions/access-denied.exc
 import { InvalidInputException } from '../../common/exceptions/invalid-input.exception.js';
 import { ResourceNotFoundException } from '../../common/exceptions/resource-not-found.exception.js';
 
-function toCommentDto(comment: PostComment, author: User): CommentResponseDto {
+function toCommentDto(
+  comment: PostComment,
+  author: User,
+  replyCount = 0,
+  replyToAuthor: User | null = null,
+): CommentResponseDto {
   return {
     id: comment.id,
     postId: comment.postId,
+    parentId: comment.parentId ?? null,
+    replyToId: comment.replyToId ?? null,
+    replyToAuthor: replyToAuthor
+      ? {
+          id: replyToAuthor.id,
+          username: replyToAuthor.username,
+          fullName: replyToAuthor.fullName,
+          avatarUrl: replyToAuthor.avatarUrl,
+        }
+      : null,
+    replyCount,
     body: comment.body,
     createdAt: comment.createdAt,
     updatedAt: comment.updatedAt,
@@ -65,6 +84,7 @@ export class PostInteractionsService {
     @InjectModel(PostBookmark.name)
     private readonly bookmarks: Model<PostBookmark>,
     @InjectModel(User.name) private readonly users: Model<User>,
+    private readonly mongo: MongoService,
   ) {}
 
   async listComments(
@@ -72,10 +92,44 @@ export class PostInteractionsService {
     query: CursorPaginationQueryDto,
   ): Promise<CommentPageDto> {
     await this.requirePublishedPost(postId);
-    const filter: Record<string, unknown> = { postId };
+    return this.commentPage({ postId, parentId: null }, query);
+  }
+
+  async getComment(
+    postId: string,
+    commentId: string,
+  ): Promise<CommentResponseDto> {
+    await this.requirePublishedPost(postId);
+    const row = await this.requireComment(postId, commentId);
+    const [result] = await this.hydrateComments([row]);
+    if (!result)
+      throw new ResourceNotFoundException('NOT_FOUND', 'Comment not found');
+    return result;
+  }
+
+  async listReplies(
+    postId: string,
+    parentId: string,
+    query: CursorPaginationQueryDto,
+  ): Promise<CommentPageDto> {
+    await this.requirePublishedPost(postId);
+    const parent = await this.requireComment(postId, parentId);
+    if (parent.parentId)
+      throw new InvalidInputException(
+        'BAD_REQUEST',
+        'Load replies using the root comment ID',
+      );
+    return this.commentPage({ postId, parentId }, query);
+  }
+
+  private async commentPage(
+    scope: { postId: string; parentId: string | null },
+    query: CursorPaginationQueryDto,
+  ): Promise<CommentPageDto> {
+    const filter: Record<string, unknown> = { ...scope };
     if (query.cursor) {
       const cursor = await this.comments
-        .findOne({ ...filter, _id: query.cursor })
+        .findOne({ ...scope, _id: query.cursor })
         .exec();
       if (!cursor)
         throw new InvalidInputException(
@@ -93,19 +147,7 @@ export class PostInteractionsService {
       .limit(query.limit + 1)
       .exec();
     const page = createCursorPaginatedResponse(rows, query.limit);
-    const authors = await this.users
-      .find({
-        _id: { $in: [...new Set(rows.map(({ authorId }) => authorId))] },
-      })
-      .exec();
-    const authorById = new Map(authors.map((author) => [author.id, author]));
-    return {
-      ...page,
-      items: page.items.flatMap((comment) => {
-        const author = authorById.get(comment.authorId);
-        return author ? [toCommentDto(comment, author)] : [];
-      }),
-    };
+    return { ...page, items: await this.hydrateComments(page.items) };
   }
 
   async createComment(
@@ -113,23 +155,88 @@ export class PostInteractionsService {
     authorId: string,
     dto: CommentBodyDto,
   ): Promise<CommentResponseDto> {
-    const post = await this.requirePublishedPost(postId);
+    await this.requirePublishedPost(postId);
     await this.contentModeration.requireAllowed([
       { kind: 'text', text: dto.body },
     ]);
-    const comment = await this.comments.create({
-      postId,
-      authorId,
-      body: dto.body,
-    });
+    const result = await withUserLocks(
+      this.mongo,
+      [authorId],
+      async (session) => {
+        await this.requireActiveAuthor(authorId, session);
+        const post = await this.beginCommentWrite(postId, session);
+        const [created] = await this.comments.create(
+          [{ postId, authorId, body: dto.body }],
+          { session },
+        );
+        const [comment] = await this.hydrateComments([created], session);
+        return { post, comment };
+      },
+    );
     await this.notifications.notify({
-      recipientId: post.authorId,
+      recipientId: result.post.authorId,
       actorId: authorId,
       type: NotificationType.COMMENT,
       postId,
-      commentId: comment.id,
+      commentId: result.comment.id,
     });
-    return this.loadComment(comment.id);
+    return result.comment;
+  }
+
+  async createReply(
+    postId: string,
+    targetId: string,
+    authorId: string,
+    dto: CommentBodyDto,
+  ): Promise<CommentResponseDto> {
+    await this.requirePublishedPost(postId);
+    await this.requireComment(postId, targetId);
+    await this.contentModeration.requireAllowed([
+      { kind: 'text', text: dto.body },
+    ]);
+    const result = await withUserLocks(
+      this.mongo,
+      [authorId],
+      async (session) => {
+        await this.requireActiveAuthor(authorId, session);
+        const post = await this.beginCommentWrite(postId, session);
+        const target = await this.requireComment(postId, targetId, session);
+        const parentId = target.parentId ?? target.id;
+        await this.requireComment(postId, parentId, session);
+        // These writes conflict with deletion of the root or selected reply, including account cascades.
+        await this.comments.updateMany(
+          { _id: { $in: [...new Set([parentId, targetId])] }, postId },
+          { $inc: { threadRevision: 1 } },
+          { session, timestamps: false },
+        );
+        const [created] = await this.comments.create(
+          [{ postId, authorId, body: dto.body, parentId, replyToId: targetId }],
+          { session },
+        );
+        const [comment] = await this.hydrateComments([created], session);
+        return { post, targetAuthorId: target.authorId, comment };
+      },
+    );
+    if (result.targetAuthorId !== authorId)
+      await this.notifications.notify({
+        recipientId: result.targetAuthorId,
+        actorId: authorId,
+        type: NotificationType.COMMENT_REPLY,
+        postId,
+        commentId: result.comment.id,
+      });
+    if (
+      result.post.authorId !== authorId &&
+      result.post.authorId !== result.targetAuthorId
+    )
+      await this.notifications.notify({
+        recipientId: result.post.authorId,
+        actorId: authorId,
+        type: NotificationType.COMMENT,
+        postId,
+        commentId: result.comment.id,
+      });
+    return result.comment;
   }
 
   async updateComment(
@@ -139,8 +246,8 @@ export class PostInteractionsService {
     dto: CommentBodyDto,
   ): Promise<CommentResponseDto> {
     await this.requirePublishedPost(postId);
-    const comment = await this.requireComment(postId, commentId);
-    if (comment.authorId !== actor.sub)
+    const original = await this.requireComment(postId, commentId);
+    if (original.authorId !== actor.sub)
       throw new AccessDeniedException(
         'FORBIDDEN',
         'Only the author can edit this comment',
@@ -148,16 +255,21 @@ export class PostInteractionsService {
     await this.contentModeration.requireAllowed([
       { kind: 'text', text: dto.body },
     ]);
-    const updated = await this.comments
-      .findOneAndUpdate(
-        { _id: commentId, postId, authorId: actor.sub },
-        { $set: { body: dto.body } },
-        { returnDocument: 'after' },
-      )
-      .exec();
-    if (!updated)
-      throw new ResourceNotFoundException('NOT_FOUND', 'Comment not found');
-    return this.loadComment(commentId);
+    return withUserLocks(this.mongo, [actor.sub], async (session) => {
+      await this.requireActiveAuthor(actor.sub, session);
+      await this.beginCommentWrite(postId, session);
+      const updated = await this.comments
+        .findOneAndUpdate(
+          { _id: commentId, postId, authorId: actor.sub },
+          { $set: { body: dto.body } },
+          { returnDocument: 'after', session },
+        )
+        .exec();
+      if (!updated)
+        throw new ResourceNotFoundException('NOT_FOUND', 'Comment not found');
+      const [comment] = await this.hydrateComments([updated], session);
+      return comment;
+    });
   }
 
   async removeComment(
@@ -165,19 +277,107 @@ export class PostInteractionsService {
     commentId: string,
     actor: AuthenticatedUser,
   ): Promise<void> {
-    const post = await this.requirePublishedPost(postId);
-    const comment = await this.requireComment(postId, commentId);
-    if (
-      comment.authorId !== actor.sub &&
-      post.authorId !== actor.sub &&
-      actor.role !== UserRole.ADMIN
-    ) {
-      throw new AccessDeniedException(
-        'FORBIDDEN',
-        'You cannot delete this comment',
+    await withUserLocks(this.mongo, [actor.sub], async (session) => {
+      const currentActor = await this.requireActiveAuthor(actor.sub, session);
+      const post = await this.beginCommentWrite(postId, session);
+      const comment = await this.requireComment(postId, commentId, session);
+      if (
+        comment.authorId !== actor.sub &&
+        post.authorId !== actor.sub &&
+        currentActor.role !== UserRole.ADMIN
+      )
+        throw new AccessDeniedException(
+          'FORBIDDEN',
+          'You cannot delete this comment',
+        );
+      // The schema cascades root children and notifications and clears surviving reply-to pointers.
+      await this.comments
+        .deleteOne({ _id: commentId, postId }, { session })
+        .exec();
+    });
+  }
+
+  private async requireActiveAuthor(
+    id: string,
+    session: ClientSession,
+  ): Promise<User> {
+    const author = await this.users.findById(id).session(session).exec();
+    if (!author)
+      throw new ResourceNotFoundException(
+        'NOT_FOUND',
+        'Account no longer exists',
       );
-    }
-    await this.comments.deleteOne({ _id: commentId, postId }).exec();
+    assertAccountActive(author.status);
+    return author;
+  }
+
+  private async beginCommentWrite(
+    postId: string,
+    session: ClientSession,
+  ): Promise<Post> {
+    const post = await this.posts
+      .findOneAndUpdate(
+        { _id: postId, status: PostStatus.PUBLISHED },
+        { $inc: { commentRevision: 1 } },
+        { returnDocument: 'after', session, timestamps: false },
+      )
+      .exec();
+    if (!post)
+      throw new ResourceNotFoundException('NOT_FOUND', 'Post not found');
+    return post;
+  }
+
+  private async hydrateComments(
+    rows: PostComment[],
+    session?: ClientSession,
+  ): Promise<CommentResponseDto[]> {
+    if (!rows.length) return [];
+    const targets = await this.comments
+      .find({
+        _id: {
+          $in: rows.flatMap((row) => (row.replyToId ? [row.replyToId] : [])),
+        },
+        postId: { $in: [...new Set(rows.map((row) => row.postId))] },
+      })
+      .session(session ?? null)
+      .exec();
+    const targetById = new Map(targets.map((row) => [row.id, row]));
+    const authors = await this.users
+      .find({
+        _id: {
+          $in: [...new Set([...rows, ...targets].map((row) => row.authorId))],
+        },
+      })
+      .session(session ?? null)
+      .exec();
+    const authorById = new Map(authors.map((row) => [row.id, row]));
+    const counts = await this.comments
+      .aggregate<{ _id: string; count: number }>([
+        {
+          $match: {
+            parentId: {
+              $in: rows.filter((row) => !row.parentId).map((row) => row.id),
+            },
+          },
+        },
+        { $group: { _id: '$parentId', count: { $sum: 1 } } },
+      ])
+      .session(session ?? null)
+      .exec();
+    const countById = new Map(counts.map((row) => [row._id, row.count]));
+    return rows.flatMap((row) => {
+      const author = authorById.get(row.authorId);
+      if (!author) return [];
+      const target = row.replyToId ? targetById.get(row.replyToId) : null;
+      return [
+        toCommentDto(
+          row,
+          author,
+          countById.get(row.id) ?? 0,
+          target ? (authorById.get(target.authorId) ?? null) : null,
+        ),
+      ];
+    });
   }
 
   async setLike(
@@ -256,16 +456,6 @@ export class PostInteractionsService {
     return { postId, isBookmarked };
   }
 
-  private async loadComment(id: string): Promise<CommentResponseDto> {
-    const comment = await this.comments.findOne({ _id: id }).exec();
-    if (!comment)
-      throw new ResourceNotFoundException('NOT_FOUND', 'Comment not found');
-    const author = await this.users.findOne({ _id: comment.authorId }).exec();
-    if (!author)
-      throw new ResourceNotFoundException('NOT_FOUND', 'Comment not found');
-    return toCommentDto(comment, author);
-  }
-
   private async requirePublishedPost(postId: string) {
     const post = await this.posts
       .findOne({ _id: postId, status: PostStatus.PUBLISHED })
@@ -276,10 +466,14 @@ export class PostInteractionsService {
     return post;
   }
 
-  private async requireComment(postId: string, commentId: string) {
+  private async requireComment(
+    postId: string,
+    commentId: string,
+    session?: ClientSession,
+  ) {
     const comment = await this.comments
       .findOne({ _id: commentId, postId })
-      .select('authorId')
+      .session(session ?? null)
       .exec();
     if (!comment)
       throw new ResourceNotFoundException('NOT_FOUND', 'Comment not found');

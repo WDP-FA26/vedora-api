@@ -73,6 +73,48 @@ export class PostInteractionsController {
     return this.interactions.createComment(postId, request.user.sub, dto);
   }
 
+  @Get('comments/:commentId')
+  @ApiOperation({ summary: 'Read a comment or reply on a published post' })
+  @ApiOkResponse({ type: CommentResponseDto })
+  getComment(
+    @Param('postId', ParseUUIDPipe) postId: string,
+    @Param('commentId', ParseUUIDPipe) commentId: string,
+  ): Promise<CommentResponseDto> {
+    return this.interactions.getComment(postId, commentId);
+  }
+
+  @Get('comments/:commentId/replies')
+  @ApiOperation({ summary: 'List replies under a root comment, newest first' })
+  @ApiOkResponse({ type: CommentPageDto })
+  listReplies(
+    @Param('postId', ParseUUIDPipe) postId: string,
+    @Param('commentId', ParseUUIDPipe) commentId: string,
+    @Query() query: CursorPaginationQueryDto,
+  ): Promise<CommentPageDto> {
+    return this.interactions.listReplies(postId, commentId, query);
+  }
+
+  @Post('comments/:commentId/replies')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'Reply to a comment; replies to replies stay under the same root',
+  })
+  @ApiCreatedResponse({ type: CommentResponseDto })
+  createReply(
+    @Param('postId', ParseUUIDPipe) postId: string,
+    @Param('commentId', ParseUUIDPipe) commentId: string,
+    @Req() request: AuthenticatedRequest,
+    @Body() dto: CommentBodyDto,
+  ): Promise<CommentResponseDto> {
+    return this.interactions.createReply(
+      postId,
+      commentId,
+      request.user.sub,
+      dto,
+    );
+  }
+
   @Patch('comments/:commentId')
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()

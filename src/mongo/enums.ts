@@ -32,6 +32,7 @@ export enum UserAccountAction {
 export enum NotificationType {
   LIKE = 'LIKE',
   COMMENT = 'COMMENT',
+  COMMENT_REPLY = 'COMMENT_REPLY',
   REPOST = 'REPOST',
   FOLLOW = 'FOLLOW',
   POST_PENDING_REVIEW = 'POST_PENDING_REVIEW',
