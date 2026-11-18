@@ -14,7 +14,7 @@ import type {
 export function searchRecipesTool(mealPlan: MealPlanService, userId: string) {
   return tool({
     description:
-      "List Vedora recipes this user can eat (recipes with an ingredient they avoid are already left out). Without a query it returns the catalog; with one it matches titles, descriptions and ingredient names in Vietnamese, e.g. 'đậu hũ' or 'canh'. If a query finds nothing, call it again without one. Returns each recipe's id, title, tag, total minutes, ingredients and description.",
+      "List Vedora recipes. Recipes the user can eat come first; a recipe with an ingredient they avoid is still listed, marked AVOIDED with those ingredients, so you can answer questions about it, but never plan it. Without a query it returns the catalog; with one it matches titles, descriptions and ingredient names in Vietnamese, e.g. 'đậu hũ' or 'canh'. If a query finds nothing, call it again without one. Returns each recipe's id, title, tag, total minutes, ingredients and description.",
     inputSchema: z.object({
       query: z
         .string()
@@ -54,10 +54,24 @@ export function searchRecipesTool(mealPlan: MealPlanService, userId: string) {
 function lines(recipes: RecipeSuggestion[]): string {
   if (recipes.length === 0) return 'No recipes found.';
   return recipes
-    .map(({ id, title, tag, minutes, ingredients, description }) => {
-      const base = `${id} | ${title} | ${tag ?? 'chưa phân loại'} | ${minutes === null ? '?' : minutes} phút | ${ingredients.join(', ')}`;
-      const note = description?.trim();
-      return note ? `${base} | ${note}` : base;
-    })
+    .map(
+      ({
+        id,
+        title,
+        tag,
+        minutes,
+        ingredients,
+        description,
+        avoidedIngredients,
+      }) => {
+        let line = `${id} | ${title} | ${tag ?? 'chưa phân loại'} | ${minutes === null ? '?' : minutes} phút | ${ingredients.join(', ')}`;
+        const note = description?.trim();
+        if (note) line += ` | ${note}`;
+        if (avoidedIngredients.length > 0) {
+          line += ` | AVOIDED: ${avoidedIngredients.join(', ')}`;
+        }
+        return line;
+      },
+    )
     .join('\n');
 }

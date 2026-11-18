@@ -73,6 +73,8 @@ export interface RecipeSuggestion {
   minutes: number | null;
   ingredients: string[];
   description?: string | null;
+  /** Ingredients the user avoids. The recipe can be discussed but never planned. */
+  avoidedIngredients: string[];
 }
 
 export interface RecipeInstructions {
@@ -88,6 +90,8 @@ export interface RecipeInstructions {
     note: string | null;
   }[];
   steps: string[];
+  /** Ingredients the user avoids. The recipe can be discussed but never planned. */
+  avoidedIngredients: string[];
 }
 
 export type MealPlanPreview = MealPlanPreviewDto;
@@ -783,10 +787,6 @@ export class MealPlanService {
 
     const matching: RecipeRow[] = [];
     for (const recipe of rows) {
-      const hasAvoided = recipe.ingredients.some(({ ingredientId }) =>
-        avoided.has(ingredientId),
-      );
-      if (hasAvoided) continue;
       if (filters.tag !== undefined && recipe.tag !== filters.tag) continue;
       if (
         allowedTags !== null &&
@@ -807,11 +807,13 @@ export class MealPlanService {
     const conflicts = await this.rules.findConflictsForEach(
       matching.map(ingredientIds),
     );
-    const suggestions: RecipeSuggestion[] = [];
+    // Recipes with an avoided ingredient stay searchable, so the assistant can
+    // answer questions about them, but come after the ones the user can eat.
+    const edible: RecipeSuggestion[] = [];
+    const flagged: RecipeSuggestion[] = [];
     matching.forEach((recipe, index) => {
       if (conflicts[index].length > 0) return;
-      if (suggestions.length === MAX_SUGGESTIONS) return;
-      suggestions.push({
+      const suggestion: RecipeSuggestion = {
         id: recipe.id,
         title: recipe.title,
         tag: recipe.tag,
@@ -820,12 +822,15 @@ export class MealPlanService {
           ({ ingredient }) => ingredient.name,
         ),
         description: recipe.description,
-      });
+        avoidedIngredients: avoidedNames(recipe, avoided),
+      };
+      if (suggestion.avoidedIngredients.length > 0) flagged.push(suggestion);
+      else edible.push(suggestion);
     });
-    return suggestions;
+    return [...edible, ...flagged].slice(0, MAX_SUGGESTIONS);
   }
 
-  /** Full recipe for one id; null when it is missing or has an ingredient the user avoids. */
+  /** Full recipe for one id, null when it is missing. Avoided ingredients are flagged, not hidden. */
   async recipeInstructions(
     userId: string,
     recipeId: string,
@@ -834,10 +839,6 @@ export class MealPlanService {
     if (!row) return null;
     const [recipe] = await this.recipeRows([row]);
     const avoided = await this.dietary.avoidedIngredientIds(userId);
-    const hasAvoided = recipe.ingredients.some(({ ingredientId }) =>
-      avoided.has(ingredientId),
-    );
-    if (hasAvoided) return null;
     const hasTime = recipe.prepMinutes !== null || recipe.cookMinutes !== null;
     return {
       id: recipe.id,
@@ -856,6 +857,7 @@ export class MealPlanService {
         }),
       ),
       steps: recipe.steps,
+      avoidedIngredients: avoidedNames(recipe, avoided),
     };
   }
 
@@ -1055,4 +1057,16 @@ function toRecipeDto(recipe: RecipeRow): MealRecipeDto {
       }),
     ),
   };
+}
+
+/** Names of the recipe's ingredients that the user avoids, in recipe order. */
+function avoidedNames(
+  recipe: RecipeRow,
+  avoided: ReadonlySet<string>,
+): string[] {
+  const names: string[] = [];
+  for (const { ingredientId, ingredient } of recipe.ingredients) {
+    if (avoided.has(ingredientId)) names.push(ingredient.name);
+  }
+  return names;
 }

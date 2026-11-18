@@ -230,6 +230,43 @@ describe('MealPlanService', () => {
     ]);
   });
 
+  it('shows an avoided recipe to the assistant but keeps it out of the draft', async () => {
+    await users().updateOne(
+      { _id: USER_ID },
+      { $set: { avoidedIngredientIds: [TOFU_ID] } },
+    );
+
+    const recipe = await service.recipeInstructions(USER_ID, TOFU_RECIPE);
+    expect(recipe).toMatchObject({
+      id: TOFU_RECIPE,
+      avoidedIngredients: ['Đậu hũ'],
+    });
+
+    const attempt = await service.editDraft(USER_ID, WEEK, [
+      {
+        op: 'set',
+        day: Weekday.WED,
+        section: MealSection.DINNER,
+        recipeIds: [TOFU_RECIPE],
+      },
+    ]);
+    expect(attempt.ok).toBe(false);
+    expect(attempt.problems[0]?.code).toBe('AVOIDED_INGREDIENT');
+    expect((await service.getDraft(USER_ID, WEEK)).days).toEqual([]);
+
+    const filled = await service.fillDraft(USER_ID, {
+      weekStart: WEEK,
+      days: [Weekday.WED],
+      sections: [MealSection.DINNER],
+      onlyEmpty: false,
+      candidateIds: [TOFU_RECIPE],
+    });
+    const planned = filled.days.flatMap(({ sections }) =>
+      sections.flatMap(({ recipes }) => recipes.map(({ id }) => id)),
+    );
+    expect(planned).not.toContain(TOFU_RECIPE);
+  });
+
   it('lets a dish be removed from a day that already clashes', async () => {
     await saved(Weekday.MON, MealSection.LUNCH, TOFU_RECIPE);
     await saved(Weekday.MON, MealSection.DINNER, SPINACH_RECIPE);
@@ -408,7 +445,7 @@ describe('MealPlanService', () => {
     ).rejects.toBeInstanceOf(ResourceNotFoundException);
   });
 
-  it('returns safe suggestions filtered by dietary profile, internal conflicts, and search query', async () => {
+  it('flags avoided recipes after the safe ones and filters internal conflicts and search query', async () => {
     const groupId = 'b1a2d3e4-0000-4000-8000-000000000001';
     await groups().create({
       _id: groupId,
@@ -452,7 +489,14 @@ describe('MealPlanService', () => {
     expect(allSafe.map((r) => r.id)).toEqual(
       expect.arrayContaining([RICE_RECIPE, noTimeRecipeId]),
     );
-    expect(allSafe.map((r) => r.id)).not.toContain(TOFU_RECIPE);
+    // Still searchable so the assistant can talk about it, but flagged and last.
+    expect(allSafe.at(-1)).toMatchObject({
+      id: TOFU_RECIPE,
+      avoidedIngredients: ['Đậu hũ'],
+    });
+    expect(allSafe.filter((r) => r.avoidedIngredients.length > 0)).toHaveLength(
+      1,
+    );
     expect(allSafe.map((r) => r.id)).not.toContain(conflictRecipeId);
     expect(allSafe.find((r) => r.id === noTimeRecipeId)?.minutes).toBeNull();
     expect(allSafe.find((r) => r.id === RICE_RECIPE)?.minutes).toBe(15);
