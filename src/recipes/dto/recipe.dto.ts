@@ -1,4 +1,5 @@
 import { SignedUploadDto } from '../../media/dto/media-response.dto.js';
+import { RecipeTag } from '../../mongo/models.js';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Transform, Type } from 'class-transformer';
 import {
@@ -6,6 +7,7 @@ import {
   ArrayMinSize,
   ArrayUnique,
   IsArray,
+  IsEnum,
   IsInt,
   IsNumber,
   IsOptional,
@@ -89,6 +91,16 @@ export class SaveRecipeDto {
   @MaxLength(MAX_IMAGE_URL_LENGTH)
   imageUrl?: string;
 
+  @ApiPropertyOptional({
+    enum: RecipeTag,
+    nullable: true,
+    description:
+      'Kind of dish, shown as an icon in the meal planner; omit or send null for the default icon',
+  })
+  @IsOptional()
+  @IsEnum(RecipeTag)
+  tag?: RecipeTag | null;
+
   @ApiProperty({ minimum: 1, maximum: 100 })
   @IsInt()
   @Min(1)
@@ -169,6 +181,8 @@ export class RecipeDto {
   @ApiProperty() title!: string;
   @ApiProperty({ nullable: true, type: String, format: 'uri' })
   imageUrl!: string | null;
+  @ApiProperty({ enum: RecipeTag, nullable: true })
+  tag!: RecipeTag | null;
   @ApiProperty() servings!: number;
   @ApiProperty({ nullable: true, type: Number }) prepMinutes!: number | null;
   @ApiProperty({ nullable: true, type: Number }) cookMinutes!: number | null;

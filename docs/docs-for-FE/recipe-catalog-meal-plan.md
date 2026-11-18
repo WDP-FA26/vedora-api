@@ -11,6 +11,7 @@ Không cần migration mới. Swagger mô tả đầy đủ request/response t�
 | GET    | `/recipes/:id`       | Không                                    | Chi tiết công thức                            |
 | GET    | `/meal-plan`         | Có                                       | Thực đơn đang lưu, đủ 7 ngày và 4 phần/ngày   |
 | POST   | `/meal-plan/preview` | Có                                       | Đề xuất, nội dung cũ và các vấn đề; không lưu |
+| POST   | `/meal-plan/generate` | Có                                      | Thuật toán (không AI) chọn món cho các ô được chọn; trả preview, không lưu |
 | PUT    | `/meal-plan/days`    | Có                                       | Lưu các ngày được gửi và trả thực đơn mới     |
 
 Gửi `Authorization: Bearer <accessToken>` khi cần đăng nhập. Trên API đọc công
@@ -50,7 +51,7 @@ cùng ngày. Luôn xem trước và kiểm tra lại khi lưu. Nguyên liệu y�
 phải điều kiện bắt buộc. Kết quả cá nhân có `Cache-Control: private, no-store`;
 FE cần cache theo tài khoản và xóa cache khi đổi tài khoản/hồ sơ ăn uống.
 
-Các item gồm `id`, `title`, `imageUrl`, `servings`, `prepMinutes`, `cookMinutes`,
+Các item gồm `id`, `title`, `imageUrl`, `tag`, `servings`, `prepMinutes`, `cookMinutes`,
 `totalMinutes`, `ingredientCount`, `conflictCount`, `conflicts`, `post`, `updatedAt`.
 `meta` dùng [hợp đồng phân trang chung](pagination.md).
 
@@ -76,7 +77,47 @@ type RecipeDetails = {
 };
 ```
 
-Nguyên liệu và bước nấu giữ thứ tự do admin nhập. `imageUrl` là link HTTPS có
+`tag` (tùy chọn khi `POST`/`PUT /admin/recipes`) phân loại món để lịch thực đơn
+chọn biểu tượng: `SOUP`, `SALAD`, `RICE`, `NOODLES`, `STIR_FRY`, `BREAD`,
+`DESSERT`, `DRINK`, `SNACK`. Bỏ qua hoặc gửi `null` là món chưa phân loại; response
+trả `tag: null` và FE tự dùng biểu tượng mặc định. `PUT` thay toàn bộ, nên không
+gửi `tag` sẽ xóa tag cũ. Giá trị ngoài danh sách trả `400`. `tag` cũng có trong
+mỗi món của `GET /meal-plan`, và trong `recipes`/`previous` của bản xem trước.
+
+Nguyên liệu và bước nấu giữ thứ tự do admin nhập.
+
+## Chọn món bằng thuật toán
+
+`POST /meal-plan/generate` chọn mỗi ô một món, không gọi AI nên trả lời nhanh và
+cho kết quả tuân theo ràng buộc. Body:
+
+| Trường | Bắt buộc | Ý nghĩa |
+| --- | --- | --- |
+| `days` | Có | Các thứ cần điền, ví dụ `["MON","TUE"]` |
+| `sections` | Có | Các bữa cần điền: `BREAKFAST`, `LUNCH`, `DINNER`, `OTHER` |
+| `onlyEmpty` | Có | `true` giữ nguyên ô đã có món; `false` thay món ở các ô được chọn |
+| `maxMinutes` | Không | 1–240; tổng sơ chế + nấu tối đa. Món chưa có thời gian bị loại khi có trường này |
+| `query` | Không | Tối đa 100 ký tự; tên món hoặc nguyên liệu muốn ưu tiên, chỉ cộng điểm, không bắt buộc |
+| `exclude` | Không | Tối đa 10 từ (mỗi từ ≤ 100 ký tự) mà tên món hoặc nguyên liệu không được chứa, ví dụ `["chiên"]`; bắt buộc, khác `query` |
+| `tags` | Không | Chỉ chọn món có một trong các `tag` này; món chưa có `tag` bị loại, và khi đặt trường này thì không xét `tag` hợp bữa |
+| `perSection` | Không | 1–6, mặc định 1; số món cho mỗi ô được điền |
+
+Món được xếp hạng theo: `tag` hợp với bữa (ví dụ `BREAD` cho bữa sáng, `DRINK` chỉ
+hợp phần Khác), nguyên liệu người dùng thích, khớp `query`; món đã xuất hiện trong
+tuần bị trừ điểm. Món chứa nguyên liệu người dùng không ăn, món tự xung đột và
+món gây xung đột nguyên liệu với các món khác cùng ngày đều bị loại. Món chưa có
+`tag` không được cộng hay trừ điểm theo bữa.
+
+Response giống `POST /meal-plan/preview`: chỉ gồm các ngày có thay đổi, mỗi ngày đủ
+bốn phần kèm `previous`. `days` rỗng khi không có món nào phù hợp. Kết quả dùng
+`PUT /meal-plan/days` để lưu. Mỗi lần gọi có thể ra kết quả khác nhau.
+
+Trợ lý chat dùng cùng thuật toán qua công cụ `generateMealPlan`: khi người dùng
+viết yêu cầu riêng (ví dụ "bữa tối nhẹ, tránh món chiên"), trợ lý đặt tham số,
+gọi công cụ rồi chỉnh từng ô bằng `proposeMealPlan`. Output của hai công cụ có
+cùng dạng (`part.type` là `tool-generateMealPlan` hoặc `tool-proposeMealPlan`,
+`output.ok`, `output.days`), nên FE hiển thị chúng như nhau.
+ `imageUrl` là link HTTPS có
 thể bằng `null`. `post` chỉ có `{ id, author: { username, fullName } }` khi bài
 nguồn đã `PUBLISHED`; nếu bài đang xử lý, thất bại hoặc đã bị xóa thì `post=null`.
 Response không trả dữ liệu đăng nhập, người tạo admin hay hồ sơ ăn uống.

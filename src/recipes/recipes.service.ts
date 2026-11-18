@@ -91,6 +91,7 @@ function toData(dto: SaveRecipeDto) {
     title: dto.title,
     description: dto.description || null,
     imageUrl: dto.imageUrl || null,
+    tag: dto.tag ?? null,
     servings: dto.servings,
     prepMinutes: dto.prepMinutes ?? null,
     cookMinutes: dto.cookMinutes ?? null,

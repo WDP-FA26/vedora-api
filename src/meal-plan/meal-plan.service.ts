@@ -10,6 +10,7 @@ import {
   MealSection,
   Recipe,
   RecipeIngredient,
+  RecipeTag,
   User,
   Weekday,
 } from '../mongo/models.js';
@@ -19,12 +20,18 @@ import { IncompatibilityRulesService } from '../recipes/incompatibility-rules.se
 import {
   MEAL_SECTIONS,
   MealPlanDto,
+  GenerateMealDaysDto,
   MealPlanProblemDto,
   MealPlanPreviewDto,
   MealRecipeDto,
   SaveMealDayDto,
   WEEKDAYS,
 } from './dto/meal-plan.dto.js';
+import {
+  generateMealDays,
+  type GeneratorCandidate,
+  type SlotRecipeIds,
+} from './meal-plan-generator.js';
 import { ResourceNotFoundException } from '../common/exceptions/resource-not-found.exception.js';
 import { StateConflictException } from '../common/exceptions/state-conflict.exception.js';
 
@@ -33,13 +40,34 @@ type RecipeRow = Omit<Recipe, 'ingredients'> & {
 };
 type DaySections = Record<MealSection, RecipeRow[]>;
 type Week = Map<Weekday, DaySections>;
-type RecipeRef = { id: string; title: string };
+type RecipeRef = { id: string; title: string; tag: RecipeTag | null };
+
+export interface SuggestionFilters {
+  tag?: RecipeTag;
+  maxMinutes?: number;
+}
 
 export interface RecipeSuggestion {
   id: string;
   title: string;
+  tag: RecipeTag | null;
   minutes: number | null;
   ingredients: string[];
+}
+
+export interface RecipeInstructions {
+  id: string;
+  title: string;
+  description: string | null;
+  servings: number;
+  minutes: number | null;
+  ingredients: {
+    name: string;
+    quantity: number | null;
+    unit: string | null;
+    note: string | null;
+  }[];
+  steps: string[];
 }
 
 export type MealPlanPreview = MealPlanPreviewDto;
@@ -56,7 +84,11 @@ const emptyDay = (): DaySections => ({
 const dishes = (day: DaySections | undefined): RecipeRow[] =>
   day ? MEAL_SECTIONS.flatMap((section) => day[section]) : [];
 
-const toRef = ({ id, title }: RecipeRow): RecipeRef => ({ id, title });
+const toRef = ({ id, title, tag }: RecipeRow): RecipeRef => ({
+  id,
+  title,
+  tag,
+});
 
 @Injectable()
 export class MealPlanService {
@@ -163,6 +195,100 @@ export class MealPlanService {
     };
   }
 
+  /**
+   * Picks dishes for the requested slots without an LLM and returns them as a
+   * checked preview, like `preview`. Nothing is saved.
+   */
+  async generate(
+    userId: string,
+    dto: GenerateMealDaysDto,
+  ): Promise<MealPlanPreview> {
+    const [avoided, restrictions, saved] = await Promise.all([
+      this.dietary.avoidedIngredientIds(userId),
+      this.dietary.find(userId),
+      this.saved(userId),
+    ]);
+    const liked = new Set(restrictions.liked.map(({ id }) => id));
+    const text = dto.query?.trim().toLowerCase() ?? '';
+    const excluded = (dto.exclude ?? [])
+      .map((word) => word.trim().toLowerCase())
+      .filter((word) => word !== '');
+    const tags = dto.tags && dto.tags.length > 0 ? dto.tags : null;
+
+    const rows = await this.recipeRows(
+      await this.recipes.find().sort({ title: 1 }).exec(),
+    );
+    const eligible: RecipeRow[] = [];
+    for (const recipe of rows) {
+      const hasAvoided = recipe.ingredients.some(({ ingredientId }) =>
+        avoided.has(ingredientId),
+      );
+      if (hasAvoided) continue;
+      if (tags && (recipe.tag === null || !tags.includes(recipe.tag))) continue;
+      if (excluded.some((word) => matchesText(recipe, word))) continue;
+      if (dto.maxMinutes !== undefined) {
+        const minutes = totalMinutes(recipe);
+        if (minutes === null || minutes > dto.maxMinutes) continue;
+      }
+      eligible.push(recipe);
+    }
+    const ownConflicts = await this.rules.findConflictsForEach(
+      eligible.map(ingredientIds),
+    );
+    const candidates: GeneratorCandidate[] = [];
+    eligible.forEach((recipe, index) => {
+      if (ownConflicts[index].length > 0) return;
+      candidates.push({
+        id: recipe.id,
+        title: recipe.title,
+        tag: recipe.tag,
+        minutes: totalMinutes(recipe),
+        ingredientIds: ingredientIds(recipe),
+        likedCount: recipe.ingredients.filter(({ ingredientId }) =>
+          liked.has(ingredientId),
+        ).length,
+        matchesQuery: text !== '' && matchesText(recipe, text),
+      });
+    });
+
+    const savedIds = new Map<Weekday, SlotRecipeIds>();
+    for (const [day, sections] of saved) {
+      savedIds.set(day, {
+        BREAKFAST: sections.BREAKFAST.map(({ id }) => id),
+        LUNCH: sections.LUNCH.map(({ id }) => id),
+        DINNER: sections.DINNER.map(({ id }) => id),
+        OTHER: sections.OTHER.map(({ id }) => id),
+      });
+    }
+
+    const generated = await generateMealDays({
+      candidates,
+      saved: savedIds,
+      days: dto.days,
+      sections: dto.sections,
+      onlyEmpty: dto.onlyEmpty,
+      perSection: dto.perSection ?? 1,
+      ignoreFit: tags !== null,
+      areCompatible: async (sets) => {
+        const conflicts = await this.rules.findConflictsForEach(sets);
+        return conflicts.map((found) => found.length === 0);
+      },
+      random: Math.random,
+    });
+    if (generated.length === 0) return { days: [], problems: [] };
+
+    return this.preview(
+      userId,
+      generated.map(({ day, BREAKFAST, LUNCH, DINNER, OTHER }) => ({
+        day,
+        breakfast: BREAKFAST,
+        lunch: LUNCH,
+        dinner: DINNER,
+        others: OTHER,
+      })),
+    );
+  }
+
   async apply(userId: string, days: SaveMealDayDto[]): Promise<MealPlanDto> {
     const preview = await this.preview(userId, days);
     if (preview.problems.length > 0) {
@@ -221,46 +347,82 @@ export class MealPlanService {
   async suggestions(
     userId: string,
     query: string | undefined,
+    filters: SuggestionFilters = {},
   ): Promise<RecipeSuggestion[]> {
     const avoided = await this.dietary.avoidedIngredientIds(userId);
-    const text = query?.trim().toLowerCase();
-    const includesText = (value: string | null) =>
-      !!text && !!value?.toLowerCase().includes(text);
-    const recipes = (
-      await this.recipeRows(await this.recipes.find().sort({ title: 1 }).exec())
-    )
-      .filter(({ ingredients }) =>
-        ingredients.every(({ ingredientId }) => !avoided.has(ingredientId)),
-      )
-      .filter(
-        (recipe) =>
-          !text ||
-          includesText(recipe.title) ||
-          includesText(recipe.description) ||
-          recipe.ingredients.some(
-            ({ ingredient }) =>
-              includesText(ingredient.name) ||
-              ingredient.aliases.includes(text),
-          ),
-      )
-      .slice(0, MAX_SUGGESTIONS * 2);
-    const conflicts = await this.rules.findConflictsForEach(
-      recipes.map(ingredientIds),
+    const text = query?.trim().toLowerCase() ?? '';
+    const rows = await this.recipeRows(
+      await this.recipes.find().sort({ title: 1 }).exec(),
     );
-    return recipes
-      .filter((_, index) => conflicts[index].length === 0)
-      .slice(0, MAX_SUGGESTIONS)
-      .map((recipe) => ({
+
+    const matching: RecipeRow[] = [];
+    for (const recipe of rows) {
+      const hasAvoided = recipe.ingredients.some(({ ingredientId }) =>
+        avoided.has(ingredientId),
+      );
+      if (hasAvoided) continue;
+      if (filters.tag !== undefined && recipe.tag !== filters.tag) continue;
+      if (filters.maxMinutes !== undefined) {
+        const minutes = totalMinutes(recipe);
+        if (minutes === null || minutes > filters.maxMinutes) continue;
+      }
+      if (text !== '' && !matchesText(recipe, text, true)) continue;
+      matching.push(recipe);
+      if (matching.length === MAX_SUGGESTIONS * 2) break;
+    }
+
+    const conflicts = await this.rules.findConflictsForEach(
+      matching.map(ingredientIds),
+    );
+    const suggestions: RecipeSuggestion[] = [];
+    matching.forEach((recipe, index) => {
+      if (conflicts[index].length > 0) return;
+      if (suggestions.length === MAX_SUGGESTIONS) return;
+      suggestions.push({
         id: recipe.id,
         title: recipe.title,
-        minutes:
-          recipe.prepMinutes === null && recipe.cookMinutes === null
-            ? null
-            : (recipe.prepMinutes ?? 0) + (recipe.cookMinutes ?? 0),
+        tag: recipe.tag,
+        minutes: totalMinutes(recipe),
         ingredients: recipe.ingredients.map(
           ({ ingredient }) => ingredient.name,
         ),
-      }));
+      });
+    });
+    return suggestions;
+  }
+
+  /** Full recipe for one id; null when it is missing or has an ingredient the user avoids. */
+  async recipeInstructions(
+    userId: string,
+    recipeId: string,
+  ): Promise<RecipeInstructions | null> {
+    const row = await this.recipes.findOne({ _id: recipeId }).exec();
+    if (!row) return null;
+    const [recipe] = await this.recipeRows([row]);
+    const avoided = await this.dietary.avoidedIngredientIds(userId);
+    const hasAvoided = recipe.ingredients.some(({ ingredientId }) =>
+      avoided.has(ingredientId),
+    );
+    if (hasAvoided) return null;
+    const hasTime = recipe.prepMinutes !== null || recipe.cookMinutes !== null;
+    return {
+      id: recipe.id,
+      title: recipe.title,
+      description: recipe.description,
+      servings: recipe.servings,
+      minutes: hasTime
+        ? (recipe.prepMinutes ?? 0) + (recipe.cookMinutes ?? 0)
+        : null,
+      ingredients: recipe.ingredients.map(
+        ({ ingredient, quantity, unit, note }) => ({
+          name: ingredient.name,
+          quantity,
+          unit,
+          note,
+        }),
+      ),
+      steps: recipe.steps,
+    };
   }
 
   private async saved(userId: string): Promise<Week> {
@@ -380,6 +542,27 @@ export class MealPlanService {
   }
 }
 
+function totalMinutes(recipe: RecipeRow): number | null {
+  if (recipe.prepMinutes === null && recipe.cookMinutes === null) return null;
+  return (recipe.prepMinutes ?? 0) + (recipe.cookMinutes ?? 0);
+}
+
+function matchesText(
+  recipe: RecipeRow,
+  text: string,
+  includeDescription = false,
+): boolean {
+  if (recipe.title.toLowerCase().includes(text)) return true;
+  if (includeDescription && recipe.description?.toLowerCase().includes(text)) {
+    return true;
+  }
+  return recipe.ingredients.some(
+    ({ ingredient }) =>
+      ingredient.name.toLowerCase().includes(text) ||
+      ingredient.aliases.includes(text),
+  );
+}
+
 const ingredientIds = (recipe: RecipeRow) =>
   recipe.ingredients.map(({ ingredientId }) => ingredientId);
 
@@ -388,6 +571,7 @@ function toRecipeDto(recipe: RecipeRow): MealRecipeDto {
     id: recipe.id,
     title: recipe.title,
     imageUrl: recipe.imageUrl,
+    tag: recipe.tag,
     servings: recipe.servings,
     prepMinutes: recipe.prepMinutes,
     cookMinutes: recipe.cookMinutes,

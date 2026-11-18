@@ -26,6 +26,7 @@ import type { AuthenticatedRequest } from '../auth-core/auth.types.js';
 import { JwtAuthGuard } from '../auth-core/jwt-auth.guard.js';
 import { UserThrottlerGuard } from '../auth-core/user-throttler.guard.js';
 import {
+  GenerateMealDaysDto,
   MealPlanDto,
   MealPlanPreviewDto,
   MealPlannerChatDto,
@@ -71,6 +72,21 @@ export class MealPlanController {
     return this.mealPlan.preview(request.user.sub, dto.days);
   }
 
+  @Post('generate')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Pick dishes for chosen slots with an algorithm, without saving',
+    description:
+      'No AI: dishes are ranked by tag fit, liked ingredients and the optional `query`, repeats are avoided, and avoided ingredients, over-long dishes and same-day conflicts are left out. Returns the same checked preview as `POST /meal-plan/preview` (only days that change, each with all four sections); save it with `PUT /meal-plan/days`. `days` is empty when no dish fits.',
+  })
+  @ApiOkResponse({ type: MealPlanPreviewDto })
+  generate(
+    @Req() request: AuthenticatedRequest,
+    @Body() dto: GenerateMealDaysDto,
+  ): Promise<MealPlanPreviewDto> {
+    return this.mealPlan.generate(request.user.sub, dto);
+  }
+
   @Put('days')
   @ApiOperation({
     summary: 'Replace the dishes of some days of your timetable',
@@ -95,7 +111,7 @@ export class MealPlanController {
   @ApiOperation({
     summary: 'Talk to the assistant: meal planning and nutrition questions',
     description:
-      'Streams the reply as an AI SDK UI message stream (SSE) for `useChat`. Its `proposeMealPlan` tool output is a checked proposal; save it with `PUT /meal-plan/days`.',
+      'Streams the reply as an AI SDK UI message stream (SSE) for `useChat`. Its `proposeMealPlan` and `generateMealPlan` (the algorithm behind `POST /meal-plan/generate`) tool outputs are checked proposals with the same shape; save one with `PUT /meal-plan/days`.',
   })
   @ApiTooManyRequestsResponse({
     type: ErrorBodyDto,

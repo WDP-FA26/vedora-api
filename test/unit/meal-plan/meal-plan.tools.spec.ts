@@ -1,8 +1,10 @@
 import { type DeepMockProxy, mockDeep } from 'vitest-mock-extended';
 import type { MealPlanService } from '../../../src/meal-plan/meal-plan.service.js';
+import { generateMealPlanTool } from '../../../src/meal-plan/tools/generate-meal-plan.tool.js';
+import { getRecipeTool } from '../../../src/meal-plan/tools/get-recipe.tool.js';
 import { proposeMealPlanTool } from '../../../src/meal-plan/tools/propose-meal-plan.tool.js';
 import { searchRecipesTool } from '../../../src/meal-plan/tools/search-recipes.tool.js';
-import { Weekday } from '../../../src/mongo/models.js';
+import { MealSection, RecipeTag, Weekday } from '../../../src/mongo/models.js';
 
 type ExecOptions = Parameters<
   NonNullable<ReturnType<typeof searchRecipesTool>['execute']>
@@ -22,6 +24,53 @@ describe('Meal planner AI tools', () => {
     mealPlan = mockDeep<MealPlanService>();
   });
 
+  describe('getRecipeTool', () => {
+    it('formats ingredients and steps for the model', async () => {
+      const toolDef = getRecipeTool(mealPlan, userId);
+      const recipe = {
+        id: 'rec-1',
+        title: 'Đậu hũ sốt cà',
+        description: null,
+        servings: 2,
+        minutes: 15,
+        ingredients: [
+          { name: 'Đậu hũ', quantity: 2, unit: 'miếng', note: null },
+          { name: 'Hành lá', quantity: null, unit: null, note: 'thái nhỏ' },
+        ],
+        steps: ['Chiên đậu', 'Sốt cà'],
+      };
+      mealPlan.recipeInstructions.mockResolvedValue(recipe);
+
+      const output = await toolDef.execute?.(
+        { recipeId: 'rec-1' },
+        execOptions,
+      );
+      expect(mealPlan.recipeInstructions).toHaveBeenCalledWith(userId, 'rec-1');
+      expect(output).toEqual(recipe);
+
+      const modelOut = await toolDef.toModelOutput?.({
+        input: { recipeId: 'rec-1' },
+        toolCallId: 'call-1',
+        output: recipe,
+      });
+      expect(modelOut).toEqual({
+        type: 'text',
+        value:
+          'Đậu hũ sốt cà\n2 khẩu phần | 15 phút\nNguyên liệu:\n- Đậu hũ: 2 miếng\n- Hành lá (thái nhỏ)\nCách làm:\n1. Chiên đậu\n2. Sốt cà',
+      });
+    });
+
+    it('says when the recipe is not available', async () => {
+      const toolDef = getRecipeTool(mealPlan, userId);
+      const modelOut = await toolDef.toModelOutput?.({
+        input: { recipeId: 'x' },
+        toolCallId: 'call-1',
+        output: null,
+      });
+      expect(modelOut).toEqual({ type: 'text', value: 'Recipe not found.' });
+    });
+  });
+
   describe('searchRecipesTool', () => {
     it('delegates to mealPlan.suggestions and formats recipes with and without minutes', async () => {
       const toolDef = searchRecipesTool(mealPlan, userId);
@@ -29,20 +78,28 @@ describe('Meal planner AI tools', () => {
         {
           id: 'rec-1',
           title: 'Đậu hũ sốt cà',
+          tag: RecipeTag.STIR_FRY,
           minutes: 15,
           ingredients: ['Đậu hũ', 'Cà chua'],
         },
         {
           id: 'rec-2',
           title: 'Canh nấm',
+          tag: null,
           minutes: null,
           ingredients: ['Nấm'],
         },
       ];
       mealPlan.suggestions.mockResolvedValue(suggestions);
 
-      const output = await toolDef.execute?.({ query: 'đậu hũ' }, execOptions);
-      expect(mealPlan.suggestions).toHaveBeenCalledWith(userId, 'đậu hũ');
+      const output = await toolDef.execute?.(
+        { query: 'đậu hũ', tag: RecipeTag.STIR_FRY, maxMinutes: 30 },
+        execOptions,
+      );
+      expect(mealPlan.suggestions).toHaveBeenCalledWith(userId, 'đậu hũ', {
+        tag: RecipeTag.STIR_FRY,
+        maxMinutes: 30,
+      });
       expect(output).toEqual(suggestions);
 
       const modelOut = await toolDef.toModelOutput?.({
@@ -53,7 +110,7 @@ describe('Meal planner AI tools', () => {
       expect(modelOut).toEqual({
         type: 'text',
         value:
-          'rec-1 | Đậu hũ sốt cà | 15 phút | Đậu hũ, Cà chua\nrec-2 | Canh nấm | ? phút | Nấm',
+          'rec-1 | Đậu hũ sốt cà | STIR_FRY | 15 phút | Đậu hũ, Cà chua\nrec-2 | Canh nấm | chưa phân loại | ? phút | Nấm',
       });
     });
 
@@ -62,7 +119,10 @@ describe('Meal planner AI tools', () => {
       mealPlan.suggestions.mockResolvedValue([]);
 
       const output = await toolDef.execute?.({}, execOptions);
-      expect(mealPlan.suggestions).toHaveBeenCalledWith(userId, undefined);
+      expect(mealPlan.suggestions).toHaveBeenCalledWith(userId, undefined, {
+        tag: undefined,
+        maxMinutes: undefined,
+      });
       if (!Array.isArray(output)) throw new Error('expected array output');
 
       const modelOut = await toolDef.toModelOutput?.({
@@ -174,6 +234,57 @@ describe('Meal planner AI tools', () => {
           '- Thứ Năm: A and B must not be eaten on the same day (incompatible); they come from: Món A, Món B.',
         ].join('\n'),
       });
+    });
+  });
+  describe('generateMealPlanTool', () => {
+    const request = {
+      days: [Weekday.MON],
+      sections: [MealSection.LUNCH],
+      onlyEmpty: true,
+      maxMinutes: 30,
+    };
+    const section = (recipes: { id: string; title: string; tag: null }[]) => ({
+      section: MealSection.LUNCH,
+      recipes,
+      previous: [],
+    });
+
+    it('passes the request to the generator and marks a clean result ok', async () => {
+      const toolDef = generateMealPlanTool(mealPlan, userId);
+      const preview = {
+        days: [
+          {
+            day: Weekday.MON,
+            sections: [
+              section([{ id: 'rec-1', title: 'Cơm gạo lứt', tag: null }]),
+            ],
+          },
+        ],
+        problems: [],
+      };
+      mealPlan.generate.mockResolvedValue(preview);
+
+      const output = await toolDef.execute?.(request, execOptions);
+      expect(mealPlan.generate).toHaveBeenCalledWith(userId, request);
+      expect(output).toEqual({ ...preview, ok: true });
+
+      const modelOut = await toolDef.toModelOutput?.({
+        input: request,
+        toolCallId: 'call-1',
+        output: { ...preview, ok: true },
+      });
+      expect(modelOut).toEqual({
+        type: 'text',
+        value: expect.stringContaining('Cơm gạo lứt (id rec-1)') as unknown,
+      });
+    });
+
+    it('is not ok when nothing fits, so no card is shown', async () => {
+      const toolDef = generateMealPlanTool(mealPlan, userId);
+      mealPlan.generate.mockResolvedValue({ days: [], problems: [] });
+
+      const output = await toolDef.execute?.(request, execOptions);
+      expect(output).toEqual({ days: [], problems: [], ok: false });
     });
   });
 });

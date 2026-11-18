@@ -1,5 +1,6 @@
 import { tool } from 'ai';
 import { z } from 'zod';
+import { RecipeTag } from '../../mongo/models.js';
 import type {
   MealPlanService,
   RecipeSuggestion,
@@ -15,8 +16,20 @@ export function searchRecipesTool(mealPlan: MealPlanService, userId: string) {
         .max(100)
         .optional()
         .describe('A Vietnamese dish or ingredient name, with accents'),
+      tag: z
+        .enum(RecipeTag)
+        .optional()
+        .describe('Only dishes of this type, e.g. SOUP or DRINK'),
+      maxMinutes: z
+        .number()
+        .int()
+        .min(1)
+        .max(240)
+        .optional()
+        .describe('Only dishes whose prep plus cook time is at most this'),
     }),
-    execute: ({ query }) => mealPlan.suggestions(userId, query),
+    execute: ({ query, tag, maxMinutes }) =>
+      mealPlan.suggestions(userId, query, { tag, maxMinutes }),
     toModelOutput: ({ output }) => ({ type: 'text', value: lines(output) }),
   });
 }
@@ -25,8 +38,8 @@ function lines(recipes: RecipeSuggestion[]): string {
   if (recipes.length === 0) return 'No recipes found.';
   return recipes
     .map(
-      ({ id, title, minutes, ingredients }) =>
-        `${id} | ${title} | ${minutes === null ? '?' : minutes} phút | ${ingredients.join(', ')}`,
+      ({ id, title, tag, minutes, ingredients }) =>
+        `${id} | ${title} | ${tag ?? 'chưa phân loại'} | ${minutes === null ? '?' : minutes} phút | ${ingredients.join(', ')}`,
     )
     .join('\n');
 }

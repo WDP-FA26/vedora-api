@@ -210,7 +210,8 @@ describe('MealPlannerChatService', () => {
       ),
     ).rejects.toSatisfy(
       (err: unknown) =>
-        err instanceof QuotaReachedException && err.code === 'AI_QUOTA_EXCEEDED',
+        err instanceof QuotaReachedException &&
+        err.code === 'AI_QUOTA_EXCEEDED',
     );
     expect(aiUsage.consume).toHaveBeenCalledWith(
       USER_ID,
@@ -294,6 +295,8 @@ describe('MealPlannerChatService', () => {
     expect(model.doStreamCalls[0].tools?.map((t) => t.name)).toEqual([
       'searchKnowledge',
       'searchRecipes',
+      'getRecipe',
+      'generateMealPlan',
       'proposeMealPlan',
     ]);
     expect(aiUsage.complete).toHaveBeenCalledWith(TICKET);
@@ -315,7 +318,7 @@ describe('MealPlannerChatService', () => {
   });
 
   it('forces an answer on the final step (MAX_STEPS - 1)', async () => {
-    steps = Array.from({ length: 7 }, () => searchRecipesChunk);
+    steps = Array.from({ length: 9 }, () => searchRecipesChunk);
     mealPlan.suggestions.mockResolvedValue([]);
     const service = await createService();
 
@@ -327,9 +330,9 @@ describe('MealPlannerChatService', () => {
       ),
     );
 
-    expect(mealPlan.suggestions).toHaveBeenCalledTimes(7);
-    expect(model.doStreamCalls).toHaveLength(8);
-    expect(model.doStreamCalls[7].toolChoice).toEqual({ type: 'none' });
+    expect(mealPlan.suggestions).toHaveBeenCalledTimes(9);
+    expect(model.doStreamCalls).toHaveLength(10);
+    expect(model.doStreamCalls[9].toolChoice).toEqual({ type: 'none' });
   });
 
   it('refunds the ticket and emits error code when the model stream errors', async () => {

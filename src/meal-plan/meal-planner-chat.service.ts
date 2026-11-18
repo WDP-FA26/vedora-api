@@ -24,6 +24,8 @@ import type { PlannerMessageDto } from './dto/meal-plan.dto.js';
 import { MealPlanService } from './meal-plan.service.js';
 import { plannerInstructions } from './meal-planner.prompt.js';
 import { PLANNER_REFUSALS } from './meal-planner.refusals.js';
+import { generateMealPlanTool } from './tools/generate-meal-plan.tool.js';
+import { getRecipeTool } from './tools/get-recipe.tool.js';
 import { proposeMealPlanTool } from './tools/propose-meal-plan.tool.js';
 import { searchRecipesTool } from './tools/search-recipes.tool.js';
 import { FeatureUnavailableException } from '../common/exceptions/feature-unavailable.exception.js';
@@ -32,7 +34,7 @@ import { AiUsageService } from '../subscriptions/ai-usage.service.js';
 import { quotaStream } from '../subscriptions/quota-stream.js';
 import { QuotaReachedException } from '../common/exceptions/quota-reached.exception.js';
 
-const MAX_STEPS = 8;
+const MAX_STEPS = 10;
 const SEARCH_TIMEOUT_MS = 5000;
 
 @Injectable()
@@ -101,6 +103,8 @@ export class MealPlannerChatService {
         tools: {
           searchKnowledge: searchKnowledgeTool(this.knowledge),
           searchRecipes: searchRecipesTool(this.mealPlan, userId),
+          getRecipe: getRecipeTool(this.mealPlan, userId),
+          generateMealPlan: generateMealPlanTool(this.mealPlan, userId),
           proposeMealPlan: proposeMealPlanTool(this.mealPlan, userId),
         },
         stopWhen: isStepCount(MAX_STEPS),

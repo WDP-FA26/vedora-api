@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
-import { MealSection, Weekday } from '../enums.js';
+import { MealSection, RecipeTag, Weekday } from '../enums.js';
 import { cascadeOnDelete, collectionSchema } from './common.js';
 import { Identified } from './identified.js';
 
@@ -146,6 +146,9 @@ export class Recipe extends Identified {
 
   @Prop({ type: String, default: null })
   imageUrl!: string | null;
+
+  @Prop({ type: String, enum: Object.values(RecipeTag), default: null })
+  tag!: RecipeTag | null;
 
   @Prop({ type: Number, required: true })
   servings!: number;
