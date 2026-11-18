@@ -8,13 +8,15 @@
     "file": "config/prompts/meal-planner.md",
     "source": "meal-plan/meal-planner.prompt.ts",
     "sha256": "0fde39af970877b1115317ef8d7e6ad2dcb09637de5bf752b17a09a14d5d9309",
-    "upstreamSha256": "e3c87e60be4de1c6cc28c599e5229a09488bee4df3a434d8fee95adfb944e3a4",
-    "upstreamCommit": "b6d221715fc61166f82e16b88d5add0b87047319"
+    "upstreamSha256": "c9ad884ec40287bb22c55ccb8305cca6489f67d26a44b9677bc31c5736f70842",
+    "upstreamCommit": "e94efb56885155b31f62d099b3e293c38703f10f"
   },
   {
     "file": "config/prompts/blog-assistant.md",
     "source": "posts/blogs/ai/blog-assistant.prompt.ts",
-    "sha256": "7abc208947b0830d52c5b5241605ca9d8b51797483efce5756e6b775525b3ec1"
+    "sha256": "7abc208947b0830d52c5b5241605ca9d8b51797483efce5756e6b775525b3ec1",
+    "upstreamSha256": "47b30960f4722d295d1d2f28cc7d542aff073c666e93fe76fc1f4f032343af77",
+    "upstreamCommit": "a8f4953212cd6a150f88f6fc214a686ecc94059e"
   },
   {
     "file": "config/policies/nutrition.json",
