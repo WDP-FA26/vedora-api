@@ -161,6 +161,10 @@ export async function generateMealDays(
       while (pickedIds.length < input.perSection) {
         const sameMeal = idsInMeal(week, section, day);
         for (const id of pickedIds) sameMeal.add(id);
+        // Replacing a slot means the user wants something new. Its old dish
+        // was just un-counted, so it would otherwise rank as the least used
+        // dish and come straight back; keep it only as a last resort.
+        for (const id of replaced) sameMeal.add(id);
         const picked = await pickDish(
           input,
           byId,

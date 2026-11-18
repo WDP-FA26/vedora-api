@@ -70,6 +70,7 @@ describe('PostRelationsService', () => {
     const author = await createUser(db, {
       username: 'chef.an',
       fullName: 'Chef An',
+      isProfessional: true,
     });
     const viewer = await createUser(db, { username: 'viewer.binh' });
     const recipe1 = await createRecipe(db, {
@@ -136,7 +137,12 @@ describe('PostRelationsService', () => {
 
     const shortRel = hydratedWithViewer.get(shortPost.id);
     expect(shortRel).toMatchObject({
-      author: { id: author.id, username: 'chef.an', fullName: 'Chef An' },
+      author: {
+        id: author.id,
+        username: 'chef.an',
+        fullName: 'Chef An',
+        isProfessional: true,
+      },
       blog: null,
       commentCount: 1,
       likeCount: 1,

@@ -41,6 +41,7 @@ describe('Meal planner AI tools', () => {
           { name: 'Hành lá', quantity: null, unit: null, note: 'thái nhỏ' },
         ],
         steps: ['Chiên đậu', 'Sốt cà'],
+        avoidedIngredients: [],
       };
       mealPlan.recipeInstructions.mockResolvedValue(recipe);
 
@@ -60,6 +61,31 @@ describe('Meal planner AI tools', () => {
         type: 'text',
         value:
           'Đậu hũ sốt cà\n2 khẩu phần | 15 phút\nNguyên liệu:\n- Đậu hũ: 2 miếng\n- Hành lá (thái nhỏ)\nCách làm:\n1. Chiên đậu\n2. Sốt cà',
+      });
+    });
+
+    it('warns first when the recipe has an ingredient the user avoids', async () => {
+      const toolDef = getRecipeTool(mealPlan, userId);
+      const modelOut = await toolDef.toModelOutput?.({
+        input: { recipeId: 'rec-1' },
+        toolCallId: 'call-1',
+        output: {
+          id: 'rec-1',
+          title: 'Trà chanh dây',
+          description: null,
+          servings: 1,
+          minutes: 5,
+          ingredients: [
+            { name: 'Chanh dây', quantity: 1, unit: 'quả', note: null },
+          ],
+          steps: ['Pha trà'],
+          avoidedIngredients: ['Chanh dây'],
+        },
+      });
+      expect(modelOut).toEqual({
+        type: 'text',
+        value:
+          'Trà chanh dây\nAVOIDED: the user avoids Chanh dây. Warn them before anything else, and never put this recipe in their plan.\n1 khẩu phần | 5 phút\nNguyên liệu:\n- Chanh dây: 1 quả\nCách làm:\n1. Pha trà',
       });
     });
 
@@ -85,6 +111,7 @@ describe('Meal planner AI tools', () => {
           minutes: 15,
           ingredients: ['Đậu hũ', 'Cà chua'],
           description: 'Món mặn đậm đà',
+          avoidedIngredients: [],
         },
         {
           id: 'rec-2',
@@ -93,6 +120,7 @@ describe('Meal planner AI tools', () => {
           minutes: null,
           ingredients: ['Nấm'],
           description: null,
+          avoidedIngredients: ['Nấm'],
         },
       ];
       mealPlan.suggestions.mockResolvedValue(suggestions);
@@ -123,7 +151,7 @@ describe('Meal planner AI tools', () => {
       expect(modelOut).toEqual({
         type: 'text',
         value:
-          'rec-1 | Đậu hũ sốt cà | STIR_FRY | 15 phút | Đậu hũ, Cà chua | Món mặn đậm đà\nrec-2 | Canh nấm | chưa phân loại | ? phút | Nấm',
+          'rec-1 | Đậu hũ sốt cà | STIR_FRY | 15 phút | Đậu hũ, Cà chua | Món mặn đậm đà\nrec-2 | Canh nấm | chưa phân loại | ? phút | Nấm | AVOIDED: Nấm',
       });
     });
 

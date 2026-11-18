@@ -1,0 +1,187 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1310" height="990" viewBox="0 0 1310 990" font-family="'Google Sans', Roboto, 'Helvetica Neue', Arial, sans-serif">
+  <title>Vedora blog writing assistant</title>
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#202124"/>
+    </marker>
+    <marker id="arrow-light" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M1,1 L9,5 L1,9" fill="none" stroke="#202124" stroke-width="1.5"/>
+    </marker>
+    <filter id="shadow" x="-10%" y="-10%" width="120%" height="140%">
+      <feDropShadow dx="0" dy="2" stdDeviation="3" flood-color="#000" flood-opacity="0.16"/>
+    </filter>
+    <symbol id="people" viewBox="0 0 32 24">
+      <circle cx="11" cy="7" r="5" fill="#202124"/>
+      <path d="M1,23 C1,16 6,13 11,13 C16,13 21,16 21,23 z" fill="#202124"/>
+      <circle cx="23" cy="8" r="4" fill="#202124"/>
+      <path d="M19,14 C21,13 23,13 24,13 C28,13 31,16 31,22 L23,22 C23,19 22,16 19,14 z" fill="#202124"/>
+    </symbol>
+    <symbol id="person-key" viewBox="0 0 32 24">
+      <circle cx="11" cy="7" r="5" fill="#202124"/>
+      <path d="M1,23 C1,16 6,13 11,13 C16,13 21,16 21,23 z" fill="#202124"/>
+      <circle cx="25" cy="9" r="4" fill="none" stroke="#202124" stroke-width="2.2"/>
+      <path d="M25,13 V22 M25,18 H28 M25,21 H28" stroke="#202124" stroke-width="2.2"/>
+    </symbol>
+    <symbol id="db" viewBox="0 0 24 28">
+      <ellipse cx="12" cy="5" rx="10" ry="4" fill="none" stroke="#202124" stroke-width="2"/>
+      <path d="M2,5 V23 C2,25.5 6.5,27 12,27 C17.5,27 22,25.5 22,23 V5" fill="none" stroke="#202124" stroke-width="2"/>
+      <path d="M2,11 C2,13.5 6.5,15 12,15 C17.5,15 22,13.5 22,11 M2,17 C2,19.5 6.5,21 12,21 C17.5,21 22,19.5 22,17" fill="none" stroke="#202124" stroke-width="2"/>
+    </symbol>
+  </defs>
+
+  <style>
+    .t { fill: #202124; font-size: 14px; }
+    .b { font-weight: 700; }
+    .h { font-size: 16px; font-weight: 700; fill: #202124; }
+    .s { font-size: 12px; fill: #3C4043; }
+    .xs { font-size: 11px; fill: #5F6368; }
+    .m { font-family: 'Roboto Mono', 'DejaVu Sans Mono', monospace; }
+    .lbl { font-size: 12px; fill: #202124; }
+    .c { text-anchor: middle; }
+    .e { text-anchor: end; }
+    .box { fill: #FFFFFF; stroke: #5F6368; stroke-width: 1.2; }
+    .line { fill: none; stroke: #202124; stroke-width: 2; }
+    .thin { fill: none; stroke: #202124; stroke-width: 1.2; }
+    .dash { stroke-dasharray: 5 4; }
+    .step circle { fill: #137333; }
+    .step text { fill: #FFFFFF; font-size: 13px; font-weight: 700; text-anchor: middle; }
+    .member { fill: #E6F4EA; stroke: #137333; stroke-width: 1.5; }
+    .group { fill: #E8F0FE; stroke: #1A73E8; stroke-width: 1.2; stroke-dasharray: 6 4; }
+  </style>
+
+  <rect width="1310" height="990" fill="#FFFFFF"/>
+
+  <!-- ============ Users ============ -->
+  <rect x="350" y="20" width="240" height="52" rx="6" class="box"/>
+  <use href="#person-key" x="372" y="34" width="32" height="24"/>
+  <text x="416" y="51" class="t b" style="font-size:15px">Signed-in members</text>
+
+  <!-- ============ Platform ============ -->
+  <rect x="16" y="120" width="1024" height="852" rx="8" fill="#4285F4"/>
+  <text x="44" y="154" font-size="22" font-weight="500" fill="#FFFFFF">Vedora platform</text>
+  <rect x="28" y="166" width="1000" height="794" rx="4" fill="#FFFFFF"/>
+
+  <!-- Frontend -->
+  <rect x="40" y="180" width="780" height="126" rx="6" fill="#F8F9FA" stroke="#DADCE0"/>
+  <text x="56" y="202" class="t b">Frontend · Next.js</text>
+  <rect x="330" y="222" width="280" height="46" rx="6" class="member"/>
+  <text x="470" y="250" class="t b c">Blog editor</text>
+  <rect x="650" y="190" width="160" height="108" rx="6" class="group"/>
+  <text x="662" y="208" class="lbl b">Editor tools</text>
+  <text x="662" y="226" class="lbl m" style="font-size:11px">replaceSelection</text>
+  <text x="662" y="242" class="lbl m" style="font-size:11px">replaceText</text>
+  <text x="662" y="258" class="lbl m" style="font-size:11px">insertMarkdown</text>
+  <text x="662" y="274" class="lbl m" style="font-size:11px">setTitle</text>
+  <text x="662" y="290" class="lbl m" style="font-size:11px">insertImage</text>
+
+  <!-- Step 1: prompt -->
+  <path d="M470,72 V220" class="line" marker-end="url(#arrow)"/>
+  <g class="step"><circle cx="448" cy="96" r="11"/><text x="448" y="101">1</text></g>
+  <text x="490" y="101" class="lbl">Prompt</text>
+
+  <!-- ============ Backend ============ -->
+  <rect x="40" y="342" width="780" height="528" rx="4" fill="#CEEAD6" fill-opacity="0.55" stroke="#9AA0A6" filter="url(#shadow)"/>
+  <text x="140" y="366" class="h">Backend API · NestJS</text>
+
+  <!-- Step 2: request -->
+  <path d="M470,268 V382" class="line" marker-end="url(#arrow)"/>
+  <g class="step"><circle cx="448" cy="322" r="11"/><text x="448" y="327">2</text></g>
+  <text x="490" y="327" class="lbl m">POST /blogs/ai/chat</text>
+
+  <!-- Access -->
+  <rect x="320" y="384" width="300" height="44" rx="6" class="member"/>
+  <text x="470" y="411" class="t b c">Member auth &amp; AI quota</text>
+  <path d="M470,428 V464" class="line" marker-end="url(#arrow)"/>
+
+  <!-- Moderation + canned refusal -->
+  <rect x="370" y="466" width="200" height="44" rx="6" fill="#FFFFFF" stroke="#E37400" stroke-width="2"/>
+  <text x="470" y="493" class="t b c">Moderation</text>
+  <path d="M370,488 H236" class="line" marker-end="url(#arrow)"/>
+  <text x="303" y="480" class="xs c">blocked</text>
+  <rect x="150" y="466" width="84" height="44" rx="6" fill="#FFFFFF" stroke="#C5221F" stroke-width="1.5"/>
+  <text x="192" y="485" class="lbl b c">Canned</text>
+  <text x="192" y="501" class="lbl b c">refusal</text>
+
+  <!-- Step 3: allowed -->
+  <path d="M470,510 V546" class="line" marker-end="url(#arrow)"/>
+  <g class="step"><circle cx="448" cy="528" r="10"/><text x="448" y="533">3</text></g>
+  <text x="484" y="533" class="lbl">allow</text>
+
+  <!-- Prompt context (name alone is ambiguous) -->
+  <rect x="320" y="548" width="300" height="44" rx="6" class="box"/>
+  <text x="470" y="566" class="t b c">Prompt context</text>
+  <text x="470" y="583" class="s c">draft + selection + linked recipes</text>
+  <path d="M470,592 V628" class="line" marker-end="url(#arrow)"/>
+
+  <!-- LLM -->
+  <rect x="320" y="630" width="300" height="56" rx="10" fill="#FFFFFF" stroke="#1A73E8" stroke-width="2.5" filter="url(#shadow)"/>
+  <text x="470" y="654" class="h c">LLM Model</text>
+  <text x="470" y="674" class="s c">blog writing assistant</text>
+
+  <!-- Step 5: response stream -->
+  <path d="M320,658 H120 V245 H328" class="line" marker-end="url(#arrow)"/>
+  <path d="M150,488 H120" class="line"/>
+  <circle cx="120" cy="488" r="4" fill="#202124"/>
+  <g class="step"><circle cx="98" cy="580" r="11"/><text x="98" y="585">5</text></g>
+  <text x="136" y="585" class="lbl">Response stream</text>
+
+  <!-- Editor tool loop (runs in the browser) -->
+  <path d="M620,658 H760 V300" class="line" marker-end="url(#arrow)"/>
+  <text x="752" y="452" class="xs e">editor</text>
+  <text x="752" y="466" class="xs e">tool calls</text>
+  <path d="M700,298 V396 H622" class="line" marker-end="url(#arrow)"/>
+  <text x="692" y="376" class="xs e">tool results</text>
+  <path d="M620,416 H660 V570 H622" class="thin dash" marker-end="url(#arrow-light)"/>
+  <text x="652" y="540" class="xs e">skips moderation</text>
+
+  <!-- Step 4: server tool calls -->
+  <path d="M470,686 V710" class="line"/>
+  <path d="M470,710 H250 V732" class="line" marker-end="url(#arrow)"/>
+  <path d="M470,710 V732" class="line" marker-end="url(#arrow)"/>
+  <path d="M470,710 H690 V732" class="line" marker-end="url(#arrow)"/>
+  <g class="step"><circle cx="448" cy="698" r="10"/><text x="448" y="703">4</text></g>
+  <text x="484" y="703" class="lbl">Tool calls / results</text>
+
+  <!-- Server tools -->
+  <rect x="155" y="734" width="190" height="44" rx="6" class="box"/>
+  <text x="250" y="761" class="t b m c">searchKnowledge</text>
+  <rect x="375" y="734" width="190" height="44" rx="6" class="box"/>
+  <text x="470" y="761" class="t b m c">generateImage</text>
+  <rect x="595" y="734" width="190" height="44" rx="6" class="box"/>
+  <text x="690" y="761" class="t b m c">editImage</text>
+
+  <!-- Modules the tools call -->
+  <path d="M250,778 V804" class="line" marker-end="url(#arrow)"/>
+  <path d="M470,778 V804" class="line" marker-end="url(#arrow)"/>
+  <path d="M690,778 V804" class="line" marker-end="url(#arrow)"/>
+  <rect x="135" y="806" width="230" height="44" rx="6" class="group"/>
+  <text x="250" y="833" class="t b c">KnowledgeSearchService</text>
+  <rect x="375" y="806" width="410" height="44" rx="6" class="group"/>
+  <text x="580" y="833" class="t b c">BlogImageGeneratorService</text>
+
+  <!-- ============ Data ============ -->
+  <path d="M250,850 V898" class="line" marker-end="url(#arrow)"/>
+  <rect x="170" y="900" width="160" height="44" rx="6" class="box"/>
+  <use href="#db" x="206" y="909" width="20" height="24"/>
+  <text x="236" y="927" class="t b">Qdrant</text>
+  <path d="M580,850 V898" class="line" marker-end="url(#arrow)"/>
+  <text x="590" y="880" class="xs">store / read image</text>
+  <rect x="500" y="900" width="160" height="44" rx="6" class="box"/>
+  <use href="#db" x="530" y="910" width="20" height="24"/>
+  <text x="560" y="927" class="t b">RustFS</text>
+
+  <!-- ============ Model runtime (external) ============ -->
+  <path d="M820,520 H1078" class="line" marker-end="url(#arrow)"/>
+  <text x="950" y="510" class="lbl c">Inference requests</text>
+  <path d="M1080,600 H822" class="line" marker-end="url(#arrow)"/>
+  <text x="950" y="590" class="lbl c">Responses</text>
+  <text x="1080" y="418" class="t b">Model runtime:</text>
+  <rect x="1080" y="430" width="210" height="222" rx="6" class="box"/>
+  <text x="1098" y="460" font-size="18" font-weight="700" fill="#202124">OpenRouter</text>
+  <line x1="1098" y1="474" x2="1272" y2="474" stroke="#DADCE0"/>
+  <text x="1098" y="505" class="t b">Chat LLM</text>
+  <text x="1098" y="537" class="t b">Moderation</text>
+  <text x="1098" y="569" class="t b">Embeddings</text>
+  <text x="1098" y="601" class="t b">Reranker</text>
+  <text x="1098" y="633" class="t b">Image generation</text>
+</svg>

@@ -116,6 +116,7 @@ export function parseRuntimeSettings(
   atMost('KNOWLEDGE_CANDIDATE_LIMIT', 'KNOWLEDGE_PREFETCH_LIMIT');
   atMost('KNOWLEDGE_MIN_IMAGE_PX', 'KNOWLEDGE_MAX_IMAGE_PX');
   atMost('MODERATION_IMAGE_MIN_SIDE_PX', 'MODERATION_IMAGE_MAX_SIDE_PX');
+  atMost('MODERATION_VIDEO_MIN_FRAMES', 'MODERATION_VIDEO_MAX_FRAMES');
   if (number('AUTH_BCRYPT_ROUNDS') < 4 || number('AUTH_BCRYPT_ROUNDS') > 16)
     errors.push('AUTH_BCRYPT_ROUNDS must be between 4 and 16');
   if (number('AUTH_OTP_LENGTH') < 4 || number('AUTH_OTP_LENGTH') > 10)

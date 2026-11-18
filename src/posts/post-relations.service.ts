@@ -14,7 +14,10 @@ import {
 import type { BlogSummaryDto } from './dto/blog-summary.dto.js';
 
 export interface PostRelations {
-  author: Pick<User, 'id' | 'username' | 'fullName' | 'avatarUrl'>;
+  author: Pick<
+    User,
+    'id' | 'username' | 'fullName' | 'avatarUrl' | 'isProfessional'
+  >;
   media: MediaAsset[];
   blog: BlogSummaryDto | null;
   commentCount: number;
@@ -62,7 +65,7 @@ export class PostRelationsService {
     ] = await Promise.all([
       this.users
         .find({ _id: { $in: [...new Set(posts.map((p) => p.authorId))] } })
-        .select('username fullName avatarUrl')
+        .select('username fullName avatarUrl isProfessional')
         .exec(),
       this.media.find(inPosts).sort({ position: 1 }).exec(),
       this.blogSummaries(posts),
@@ -91,6 +94,7 @@ export class PostRelationsService {
           username: author.username,
           fullName: author.fullName,
           avatarUrl: author.avatarUrl,
+          isProfessional: author.isProfessional,
         },
         media: media.filter((item) => item.postId === post.id),
         blog: blogs.get(post.id) ?? null,

@@ -873,8 +873,8 @@
   },
   {
     "file": "media/post-moderation.service.ts",
-    "constant": "FRAME_COUNT",
-    "env": "MODERATION_VIDEO_FRAME_COUNT",
+    "constant": "FRAME_SAMPLING.minPerVideo",
+    "env": "MODERATION_VIDEO_MIN_FRAMES",
     "original": 4,
     "default": 4,
     "multiplier": 1

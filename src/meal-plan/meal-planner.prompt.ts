@@ -131,7 +131,7 @@ export function plannerInstructions(
 
 ${plannerCalendar(plan)}
 
-Thực phẩm người dùng không ăn (searchRecipes đã loại sẵn các món chứa chúng): ${
+Thực phẩm người dùng không ăn (searchRecipes và getRecipe vẫn trả món chứa chúng, đánh dấu AVOIDED): ${
     avoided.length > 0 ? avoided.join(', ') : 'chưa khai báo gì'
   }.
 Nguyên liệu người dùng thích: ${

@@ -85,10 +85,7 @@ export class MealPlanChatMessage extends Identified {
 
 export const MealPlanChatMessageSchema =
   SchemaFactory.createForClass(MealPlanChatMessage);
-MealPlanChatMessageSchema.index(
-  { threadId: 1, sequence: 1 },
-  { unique: true },
-);
+MealPlanChatMessageSchema.index({ threadId: 1, sequence: 1 }, { unique: true });
 MealPlanChatMessageSchema.index(
   { threadId: 1, messageId: 1 },
   { unique: true },

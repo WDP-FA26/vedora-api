@@ -419,7 +419,7 @@ export class MessagingService {
       .exec();
     const authors = await this.users
       .find({ _id: { $in: [...new Set(posts.map((post) => post.authorId))] } })
-      .select('username fullName avatarUrl')
+      .select('username fullName avatarUrl isProfessional')
       .session(session)
       .exec();
     const byAuthor = new Map(authors.map((author) => [author.id, author]));
@@ -444,6 +444,7 @@ export class MessagingService {
                 username: author.username,
                 fullName: author.fullName,
                 avatarUrl: author.avatarUrl,
+                isProfessional: author.isProfessional,
               },
             }
           : null,
