@@ -1,7 +1,8 @@
+import { runtimeConfig } from '../config/runtime-config.js';
 import { runFfmpeg } from '../common/ffmpeg/ffmpeg.js';
 
-const MAX_SIDE_PX = 1280;
-const MIN_SIDE_PX = 288;
+const MAX_SIDE_PX = runtimeConfig.MODERATION_IMAGE_MAX_SIDE_PX;
+const MIN_SIDE_PX = runtimeConfig.MODERATION_IMAGE_MIN_SIDE_PX;
 
 export async function toJevJpeg(source: Buffer): Promise<Buffer> {
   const filter = [
