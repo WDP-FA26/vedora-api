@@ -1,3 +1,4 @@
+import { runtimeConfig } from '../../config/runtime-config.js';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Transform } from 'class-transformer';
 import {
@@ -16,8 +17,8 @@ export class UpdateUserDto {
   })
   @IsOptional()
   @IsString()
-  @MinLength(3)
-  @MaxLength(30)
+  @MinLength(runtimeConfig.AUTH_USERNAME_MIN_LENGTH)
+  @MaxLength(runtimeConfig.AUTH_USERNAME_MAX_LENGTH)
   @Matches(/^[a-z0-9._-]+$/)
   username?: string;
 
@@ -29,6 +30,6 @@ export class UpdateUserDto {
   @IsOptional()
   @IsString()
   @MinLength(1)
-  @MaxLength(100)
+  @MaxLength(runtimeConfig.AUTH_FULL_NAME_MAX_LENGTH)
   fullName?: string;
 }

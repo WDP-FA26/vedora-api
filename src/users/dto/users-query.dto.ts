@@ -1,3 +1,4 @@
+import { runtimeConfig } from '../../config/runtime-config.js';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { AccountStatus } from '../../mongo/models.js';
 import { Transform } from 'class-transformer';
@@ -11,7 +12,7 @@ export class UsersQueryDto extends PaginationQueryDto {
     typeof value === 'string' ? value.trim() : value,
   )
   @IsString()
-  @MaxLength(100)
+  @MaxLength(runtimeConfig.USERS_SEARCH_MAX_LENGTH)
   q?: string;
 
   @ApiPropertyOptional({ enum: AccountStatus })

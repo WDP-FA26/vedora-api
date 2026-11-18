@@ -1,3 +1,4 @@
+import { runtimeConfig } from '../config/runtime-config.js';
 import { createHash, randomInt, timingSafeEqual } from 'node:crypto';
 import type { Model } from 'mongoose';
 import {
@@ -6,13 +7,15 @@ import {
 } from '../mongo/models.js';
 import { isUniqueViolation } from '../mongo/errors.js';
 
-export const CODE_TTL_MS = 10 * 60 * 1000;
-export const RESEND_COOLDOWN_MS = 120 * 1000;
-export const MAX_RESENDS = 3;
-export const RESEND_WINDOW_MS = 60 * 60 * 1000;
-export const MAX_ATTEMPTS = 5;
-const MAX_GUESSES_PER_EMAIL = 15;
-const GUESS_WINDOW_MS = 24 * 60 * 60 * 1000;
+export const CODE_TTL_MS = runtimeConfig.AUTH_OTP_TTL_SECONDS * 1000;
+export const RESEND_COOLDOWN_MS =
+  runtimeConfig.AUTH_OTP_RESEND_COOLDOWN_SECONDS * 1000;
+export const MAX_RESENDS = runtimeConfig.AUTH_OTP_MAX_RESENDS;
+export const RESEND_WINDOW_MS =
+  runtimeConfig.AUTH_OTP_RESEND_WINDOW_SECONDS * 1000;
+export const MAX_ATTEMPTS = runtimeConfig.AUTH_OTP_MAX_ATTEMPTS;
+const MAX_GUESSES_PER_EMAIL = runtimeConfig.AUTH_OTP_MAX_GUESSES_PER_EMAIL;
+const GUESS_WINDOW_MS = runtimeConfig.AUTH_OTP_GUESS_WINDOW_SECONDS * 1000;
 
 export type SendResult = 'sent' | 'cooldown' | 'limit';
 
@@ -28,7 +31,9 @@ export const codeKey = (userId: string, purpose: OneTimeCodePurpose) => ({
 });
 
 export function generateCode(): string {
-  return randomInt(0, 1_000_000).toString().padStart(6, '0');
+  return randomInt(0, 10 ** runtimeConfig.AUTH_OTP_LENGTH)
+    .toString()
+    .padStart(runtimeConfig.AUTH_OTP_LENGTH, '0');
 }
 
 export function hashCode(scope: string, code: string): string {
