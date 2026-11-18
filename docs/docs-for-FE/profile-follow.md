@@ -74,6 +74,10 @@ vì tác giả cần poll bài đang xử lý; feed công khai dùng `GET /posts
 `author` của mỗi bài có thêm `avatarUrl: string | null` để hiển thị ảnh tác giả
 trên feed.
 
+Mọi object tác giả (`author` của bài và bình luận, `replyToAuthor`, `actor` của
+thông báo, `reporter`, tác giả bài được chia sẻ trong tin nhắn) có thêm
+`isProfessional: boolean` để hiển thị tick xanh của chuyên gia đã xác minh.
+
 ## Followers và following
 
 | Method | Endpoint                                         | Auth  | Kết quả       |

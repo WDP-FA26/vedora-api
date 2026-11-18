@@ -59,6 +59,7 @@ function toDto({
           username: actor.username,
           fullName: actor.fullName,
           avatarUrl: actor.avatarUrl,
+          isProfessional: actor.isProfessional,
         }
       : null,
     postId: notification.postId,

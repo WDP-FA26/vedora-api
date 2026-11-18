@@ -55,6 +55,7 @@ function toCommentDto(
           username: replyToAuthor.username,
           fullName: replyToAuthor.fullName,
           avatarUrl: replyToAuthor.avatarUrl,
+          isProfessional: replyToAuthor.isProfessional,
         }
       : null,
     replyCount,
@@ -66,6 +67,7 @@ function toCommentDto(
       username: author.username,
       fullName: author.fullName,
       avatarUrl: author.avatarUrl,
+      isProfessional: author.isProfessional,
     },
   };
 }

@@ -33,6 +33,7 @@ const toAuthor = (user: User) => ({
   username: user.username,
   fullName: user.fullName,
   avatarUrl: user.avatarUrl,
+  isProfessional: user.isProfessional,
 });
 
 function toReportDto(report: PostReport): PostReportDto {
