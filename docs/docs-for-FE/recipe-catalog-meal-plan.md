@@ -158,7 +158,7 @@ vẫn nhận mọi `imageUrl` HTTPS. Cloudinary chưa được cấu hình thì 
 
 Hai API nhận cùng body. Mỗi ngày được gửi **thay thế toàn bộ ngày đó**, nên phải
 gửi đủ bốn phần, bao gồm món muốn giữ. Ngày không gửi giữ nguyên. Mảng rỗng xóa
-phần đó; mỗi phần tối đa 6 món, không lặp ID trong một phần.
+phần đó; mỗi phần tối đa 5 món, không lặp ID trong một phần.
 
 ```json
 {

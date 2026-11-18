@@ -24,7 +24,7 @@ import { LastMessageFromUser } from '../../ai/guardrails/conversation-state.js';
 
 export const WEEKDAYS = Object.values(Weekday);
 export const MEAL_SECTIONS = Object.values(MealSection);
-export const MAX_DISHES_PER_SECTION = 6;
+export const MAX_DISHES_PER_SECTION = 5;
 
 const DishIds = (description: string) =>
   applyDecorators(

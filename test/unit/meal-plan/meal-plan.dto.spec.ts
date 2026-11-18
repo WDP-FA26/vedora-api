@@ -109,7 +109,7 @@ describe('MealPlan & ShoppingList DTOs', () => {
       ).not.toHaveLength(0);
     });
 
-    it('rejects duplicate recipe IDs, invalid UUIDs, or > 6 dishes in a section', async () => {
+    it('rejects duplicate recipe IDs, invalid UUIDs, or > 5 dishes in a section', async () => {
       expect(
         await validate(
           plainToInstance(SaveMealDaysDto, {
