@@ -29,6 +29,8 @@ import { MongoModule } from '../../../../src/mongo/mongo.module.js';
 import { MongoService } from '../../../../src/mongo/mongo.service.js';
 import { AdminPostsService } from '../../../../src/posts/admin/admin-posts.service.js';
 import { PostRelationsService } from '../../../../src/posts/post-relations.service.js';
+import { PostReportsService } from '../../../../src/posts/interactions/post-reports.service.js';
+import { PostsService } from '../../../../src/posts/posts.service.js';
 
 describe('AdminPostsService', () => {
   let app: INestApplication;
@@ -36,11 +38,15 @@ describe('AdminPostsService', () => {
   let service: AdminPostsService;
   let mediaService: DeepMockProxy<MediaService>;
   let postModeration: DeepMockProxy<PostModerationService>;
+  let postsService: DeepMockProxy<PostsService>;
+  let reports: DeepMockProxy<PostReportsService>;
   let post: Post;
 
   beforeAll(async () => {
     mediaService = mockDeep<MediaService>();
     postModeration = mockDeep<PostModerationService>();
+    postsService = mockDeep<PostsService>();
+    reports = mockDeep<PostReportsService>();
     mediaService.toResponse.mockImplementation((item) => ({
       id: item.id,
       type: item.type,
@@ -70,6 +76,8 @@ describe('AdminPostsService', () => {
           provide: PostModerationService,
           useValue: postModeration,
         },
+        { provide: PostsService, useValue: postsService },
+        { provide: PostReportsService, useValue: reports },
       ],
     }).compile();
     app = moduleRef.createNestApplication();
@@ -187,5 +195,32 @@ describe('AdminPostsService', () => {
       'REJECT',
       'Policy violation',
     );
+  });
+
+  it('reads who to notify before deleting a post, then notifies them', async () => {
+    const notice = {
+      authorId: 'author',
+      reporterIds: ['reporter'],
+      reason: null,
+      excerpt: 'Soup',
+    };
+    const order: string[] = [];
+    reports.removalNotice.mockImplementation(() => {
+      order.push('notice');
+      return Promise.resolve(notice);
+    });
+    postsService.removeAsAdmin.mockImplementation(() => {
+      order.push('delete');
+      return Promise.resolve();
+    });
+    reports.announceRemoval.mockImplementation(() => {
+      order.push('announce');
+      return Promise.resolve();
+    });
+
+    await service.remove(post.id, 'admin');
+
+    expect(order).toEqual(['notice', 'delete', 'announce']);
+    expect(reports.announceRemoval).toHaveBeenCalledWith(notice, 'admin');
   });
 });

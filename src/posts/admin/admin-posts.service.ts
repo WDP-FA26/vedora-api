@@ -18,6 +18,8 @@ import { PostModerationService } from '../../media/post-moderation.service.js';
 import { StateConflictException } from '../../common/exceptions/state-conflict.exception.js';
 import { PostRelationsService } from '../post-relations.service.js';
 import { ResourceNotFoundException } from '../../common/exceptions/resource-not-found.exception.js';
+import { PostReportsService } from '../interactions/post-reports.service.js';
+import { PostsService } from '../posts.service.js';
 
 @Injectable()
 export class AdminPostsService {
@@ -25,8 +27,17 @@ export class AdminPostsService {
     private readonly mediaService: MediaService,
     private readonly relations: PostRelationsService,
     private readonly postModeration: PostModerationService,
+    private readonly postsService: PostsService,
+    private readonly reports: PostReportsService,
     @InjectModel(Post.name) private readonly posts: Model<Post>,
   ) {}
+
+  /** Deletes a post and tells its author and reporters. */
+  async remove(id: string, adminId: string): Promise<void> {
+    const notice = await this.reports.removalNotice(id);
+    await this.postsService.removeAsAdmin(id);
+    if (notice) await this.reports.announceRemoval(notice, adminId);
+  }
 
   async findAll(
     query: AdminPostsQueryDto,
