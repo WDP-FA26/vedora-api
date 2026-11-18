@@ -53,6 +53,7 @@ import {
   ReadConversationDto,
   SendMessageDto,
   SendMessageResponseDto,
+  SharePostDto,
 } from './dto/messaging.dto.js';
 import {
   MessagingEventsService,
@@ -278,5 +279,31 @@ export class MessagingController {
     @Body() dto: ReadConversationDto,
   ): Promise<ConversationReadDto> {
     return this.messaging.markRead(request.user.sub, id, dto.messageId);
+  }
+
+  @Post('users/:userId/shared-posts')
+  @ApiOperation({
+    summary: 'Share a published post or blog with a permitted recipient',
+  })
+  @ApiCreatedResponse({ type: SendMessageResponseDto })
+  shareToUser(
+    @Req() request: AuthenticatedRequest,
+    @Param('userId', ParseUUIDPipe) id: string,
+    @Body() dto: SharePostDto,
+  ): Promise<SendMessageResponseDto> {
+    return this.messaging.sharePostToUser(request.user.sub, id, dto);
+  }
+
+  @Post('conversations/:id/shared-posts')
+  @ApiOperation({
+    summary: 'Share a published post or blog in an existing conversation',
+  })
+  @ApiCreatedResponse({ type: SendMessageResponseDto })
+  shareToConversation(
+    @Req() request: AuthenticatedRequest,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: SharePostDto,
+  ): Promise<SendMessageResponseDto> {
+    return this.messaging.sharePostToConversation(request.user.sub, id, dto);
   }
 }
