@@ -1,0 +1,3 @@
+# Prompt text must retain the exact original line endings on Windows and Linux.
+config/prompts/*.md text eol=lf
+config/policies/*.json text eol=lf
