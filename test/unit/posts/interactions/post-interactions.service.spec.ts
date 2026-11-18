@@ -119,10 +119,16 @@ describe('PostInteractionsService', () => {
         body: 'Bình luận 2',
       });
       await commentsModel
-        .updateOne({ _id: c1.id }, { $set: { createdAt: new Date('2026-01-01T00:00:00Z') } })
+        .updateOne(
+          { _id: c1.id },
+          { $set: { createdAt: new Date('2026-01-01T00:00:00Z') } },
+        )
         .exec();
       await commentsModel
-        .updateOne({ _id: c2.id }, { $set: { createdAt: new Date('2026-01-02T00:00:00Z') } })
+        .updateOne(
+          { _id: c2.id },
+          { $set: { createdAt: new Date('2026-01-02T00:00:00Z') } },
+        )
         .exec();
 
       const page1 = await service.listComments(post.id, { limit: 1 });
@@ -211,7 +217,11 @@ describe('PostInteractionsService', () => {
         service.updateComment(
           post.id,
           otherComment.id,
-          { sub: commenter.id, username: commenter.username, role: UserRole.USER },
+          {
+            sub: commenter.id,
+            username: commenter.username,
+            role: UserRole.USER,
+          },
           { body: 'Edit' },
         ),
       ).rejects.toBeInstanceOf(ResourceNotFoundException);
@@ -228,14 +238,245 @@ describe('PostInteractionsService', () => {
     });
   });
 
+  describe('reply threads', () => {
+    const actor = (user: User) => ({
+      sub: user.id,
+      username: user.username,
+      role: user.role,
+    });
+
+    it('flattens replies, addresses the selected author, counts roots, and preserves post timestamps', async () => {
+      const root = await service.createComment(post.id, commenter.id, {
+        body: 'Root',
+      });
+      notifications.notify.mockClear();
+      const first = await service.createReply(post.id, root.id, admin.id, {
+        body: 'First',
+      });
+      expect(first).toMatchObject({
+        parentId: root.id,
+        replyToId: root.id,
+        replyCount: 0,
+        replyToAuthor: { id: commenter.id },
+      });
+      expect(notifications.notify).toHaveBeenCalledWith({
+        recipientId: commenter.id,
+        actorId: admin.id,
+        type: NotificationType.COMMENT_REPLY,
+        postId: post.id,
+        commentId: first.id,
+      });
+      expect(notifications.notify).toHaveBeenCalledWith({
+        recipientId: author.id,
+        actorId: admin.id,
+        type: NotificationType.COMMENT,
+        postId: post.id,
+        commentId: first.id,
+      });
+      const second = await service.createReply(
+        post.id,
+        first.id,
+        commenter.id,
+        { body: 'Second' },
+      );
+      expect(second).toMatchObject({
+        parentId: root.id,
+        replyToId: first.id,
+        replyToAuthor: { id: admin.id },
+      });
+      const roots = await service.listComments(post.id, { limit: 10 });
+      expect(roots.items).toHaveLength(1);
+      expect(roots.items[0]).toMatchObject({
+        id: root.id,
+        parentId: null,
+        replyCount: 2,
+      });
+      const replies = await service.listReplies(post.id, root.id, { limit: 1 });
+      expect(replies.items.map((row) => row.id)).toEqual([second.id]);
+      expect(
+        (
+          await service.listReplies(post.id, root.id, {
+            limit: 1,
+            cursor: replies.nextCursor!,
+          })
+        ).items.map((row) => row.id),
+      ).toEqual([first.id]);
+      expect(await service.getComment(post.id, second.id)).toMatchObject({
+        id: second.id,
+        parentId: root.id,
+      });
+      const savedPost = await db.connection
+        .model<Post>(Post.name)
+        .findById(post.id)
+        .orFail();
+      expect(savedPost.updatedAt).toEqual(post.updatedAt);
+    });
+
+    it('skips self notifications and avoids duplicate notifications to the post author', async () => {
+      const root = await service.createComment(post.id, author.id, {
+        body: 'Root',
+      });
+      notifications.notify.mockClear();
+      await service.createReply(post.id, root.id, commenter.id, {
+        body: 'Reply',
+      });
+      expect(notifications.notify).toHaveBeenCalledTimes(1);
+      expect(notifications.notify).toHaveBeenCalledWith(
+        expect.objectContaining({
+          recipientId: author.id,
+          type: NotificationType.COMMENT_REPLY,
+        }),
+      );
+      notifications.notify.mockClear();
+      await service.createReply(post.id, root.id, author.id, { body: 'Self' });
+      expect(notifications.notify).not.toHaveBeenCalled();
+    });
+
+    it('rejects cross-post and cross-thread cursors before moderation and rejects moderation without writes', async () => {
+      const root = await service.createComment(post.id, commenter.id, {
+        body: 'Root',
+      });
+      const otherRoot = await service.createComment(post.id, commenter.id, {
+        body: 'Other',
+      });
+      const reply = await service.createReply(post.id, root.id, admin.id, {
+        body: 'Reply',
+      });
+      await expect(
+        service.listReplies(post.id, reply.id, { limit: 10 }),
+      ).rejects.toBeInstanceOf(InvalidInputException);
+      await expect(
+        service.listReplies(post.id, otherRoot.id, {
+          limit: 10,
+          cursor: reply.id,
+        }),
+      ).rejects.toBeInstanceOf(InvalidInputException);
+      await expect(
+        service.listComments(post.id, { limit: 10, cursor: reply.id }),
+      ).rejects.toBeInstanceOf(InvalidInputException);
+      const otherPost = await createPost(db, { authorId: author.id });
+      contentModeration.requireAllowed.mockClear();
+      await expect(
+        service.createReply(otherPost.id, root.id, author.id, {
+          body: 'Wrong scope',
+        }),
+      ).rejects.toBeInstanceOf(ResourceNotFoundException);
+      expect(contentModeration.requireAllowed).not.toHaveBeenCalled();
+      contentModeration.requireAllowed.mockRejectedValueOnce(
+        new Error('CONTENT_REJECTED'),
+      );
+      await expect(
+        service.createReply(post.id, root.id, author.id, { body: 'Bad' }),
+      ).rejects.toThrow('CONTENT_REJECTED');
+      expect(await commentsModel.countDocuments({ parentId: root.id })).toBe(1);
+    });
+
+    it('keeps sibling replies when a reply is deleted and cascades roots and notifications atomically', async () => {
+      const root = await service.createComment(post.id, commenter.id, {
+        body: 'Root',
+      });
+      const first = await service.createReply(post.id, root.id, admin.id, {
+        body: 'First',
+      });
+      const second = await service.createReply(post.id, first.id, author.id, {
+        body: 'Second',
+      });
+      await expect(
+        service.updateComment(post.id, first.id, actor(commenter), {
+          body: 'Unauthorized',
+        }),
+      ).rejects.toBeInstanceOf(AccessDeniedException);
+      await expect(
+        service.updateComment(post.id, first.id, actor(admin), {
+          body: 'Edited',
+        }),
+      ).resolves.toMatchObject({ body: 'Edited', parentId: root.id });
+      await service.removeComment(post.id, first.id, actor(admin));
+      expect(await service.getComment(post.id, second.id)).toMatchObject({
+        replyToId: null,
+        replyToAuthor: null,
+        parentId: root.id,
+      });
+      const notes = db.connection.model('Notification');
+      await notes.create({
+        recipientId: commenter.id,
+        actorId: author.id,
+        type: NotificationType.COMMENT_REPLY,
+        postId: post.id,
+        commentId: second.id,
+      });
+      await service.removeComment(post.id, root.id, actor(commenter));
+      expect(await commentsModel.countDocuments({ postId: post.id })).toBe(0);
+      expect(await notes.countDocuments({ commentId: second.id })).toBe(0);
+    });
+
+    it.each(['root', 'post', 'account'] as const)(
+      'prevents orphan replies when the %s disappears during moderation',
+      async (kind) => {
+        const rootAuthor = await createUser(db);
+        const root = await service.createComment(post.id, rootAuthor.id, {
+          body: 'Root',
+        });
+        contentModeration.requireAllowed.mockImplementationOnce(async () => {
+          if (kind === 'root')
+            await service.removeComment(post.id, root.id, actor(rootAuthor));
+          if (kind === 'post')
+            await db.withTransaction((session) =>
+              db.connection
+                .model(Post.name)
+                .deleteOne({ _id: post.id }, { session })
+                .exec(),
+            );
+          if (kind === 'account')
+            await db.withTransaction((session) =>
+              db.connection
+                .model('User')
+                .deleteOne({ _id: rootAuthor.id }, { session })
+                .exec(),
+            );
+        });
+        await expect(
+          service.createReply(post.id, root.id, admin.id, { body: 'Too late' }),
+        ).rejects.toBeInstanceOf(ResourceNotFoundException);
+        expect(await commentsModel.countDocuments({ parentId: root.id })).toBe(
+          0,
+        );
+      },
+    );
+
+    it('serializes simultaneous replies against root deletion without orphaning children', async () => {
+      const root = await service.createComment(post.id, commenter.id, {
+        body: 'Root',
+      });
+      const results = await Promise.allSettled([
+        ...Array.from({ length: 3 }, () =>
+          service.createReply(post.id, root.id, admin.id, {
+            body: 'Concurrent',
+          }),
+        ),
+        service.removeComment(post.id, root.id, actor(commenter)),
+      ]);
+      expect(results.at(-1)?.status).toBe('fulfilled');
+      for (const result of results
+        .slice(0, -1)
+        .filter((item) => item.status === 'rejected'))
+        expect(result.reason).toBeInstanceOf(ResourceNotFoundException);
+      expect(await commentsModel.countDocuments({ postId: post.id })).toBe(0);
+    });
+  });
+
   describe('likes, reposts, and bookmarks', () => {
     it('handles idempotent like/unlike and notifies only once', async () => {
-      await expect(service.setLike(post.id, commenter.id, true)).resolves.toEqual({
+      await expect(
+        service.setLike(post.id, commenter.id, true),
+      ).resolves.toEqual({
         postId: post.id,
         isLiked: true,
         likeCount: 1,
       });
-      await expect(service.setLike(post.id, commenter.id, true)).resolves.toEqual({
+      await expect(
+        service.setLike(post.id, commenter.id, true),
+      ).resolves.toEqual({
         postId: post.id,
         isLiked: true,
         likeCount: 1,
@@ -321,7 +562,10 @@ describe('PostInteractionsService', () => {
         service.setBookmark(post.id, commenter.id, false),
       ).resolves.toEqual({ postId: post.id, isBookmarked: false });
       expect(
-        await bookmarksModel.countDocuments({ postId: post.id, userId: commenter.id }),
+        await bookmarksModel.countDocuments({
+          postId: post.id,
+          userId: commenter.id,
+        }),
       ).toBe(0);
     });
   });
