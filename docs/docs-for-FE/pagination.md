@@ -123,6 +123,12 @@ Endpoint bài đăng chỉ trả bài đã `PUBLISHED`, sắp xếp theo `publis
 `id DESC`. Response cursor không có `meta`, `totalItems` hoặc `totalPages`.
 Không gửi `page` cho `/posts`; query không hợp lệ trả HTTP 400.
 
+`GET /posts/bookmarks` và `GET /posts/reposted-by/:userId` phân trang theo thời điểm
+lưu/đăng lại và bỏ qua bài không còn `PUBLISHED`, nên một trang có thể ít hơn `limit`
+bài (kể cả rỗng) trong khi `nextCursor` vẫn khác `null`. `nextCursor` là id bài của dòng
+cuối, có thể là bài bị ẩn không có trong `items`. Chỉ dựa vào `nextCursor` để biết còn
+trang.
+
 ## 3. Quy ước cho GET danh sách mới
 
 - API dạng bảng cần tổng số trang: dùng `page`/`limit` và `{ items, meta }`.

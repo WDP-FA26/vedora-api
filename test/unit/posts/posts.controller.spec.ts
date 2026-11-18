@@ -5,7 +5,10 @@ import type {
   OptionalAuthenticatedRequest,
 } from '../../../src/auth-core/auth.types.js';
 import { PostType, UserRole } from '../../../src/mongo/models.js';
-import type { PostPageDto, PostResponseDto } from '../../../src/posts/dto/post-response.dto.js';
+import type {
+  PostPageDto,
+  PostResponseDto,
+} from '../../../src/posts/dto/post-response.dto.js';
 import type { PostViewsService } from '../../../src/posts/post-views.service.js';
 import type { PostsQueryService } from '../../../src/posts/posts-query.service.js';
 import { PostsController } from '../../../src/posts/posts.controller.js';
@@ -51,7 +54,9 @@ describe('PostsController', () => {
     controller.recordViews(reqWithIp, { postIds: [postId] });
     expect(views.record).toHaveBeenCalledWith(userId, [postId]);
 
-    const anonWithIp = { ip: '203.0.113.10' } as OptionalAuthenticatedRequest & {
+    const anonWithIp = {
+      ip: '203.0.113.10',
+    } as OptionalAuthenticatedRequest & {
       ip?: string;
     };
     controller.recordViews(anonWithIp, { postIds: [postId] });
@@ -92,12 +97,39 @@ describe('PostsController', () => {
     await expect(
       controller.listBookmarks({ limit: 20 }, authReq),
     ).resolves.toBe(page);
-    expect(postsQuery.listBookmarks).toHaveBeenCalledWith(userId, { limit: 20 });
+    expect(postsQuery.listBookmarks).toHaveBeenCalledWith(userId, {
+      limit: 20,
+    });
 
     await expect(
       controller.listFollowing({ limit: 20 }, authReq),
     ).resolves.toBe(page);
-    expect(postsQuery.listFollowing).toHaveBeenCalledWith(userId, { limit: 20 });
+    expect(postsQuery.listFollowing).toHaveBeenCalledWith(userId, {
+      limit: 20,
+    });
+  });
+
+  it('delegates listReposts with the optional viewer', async () => {
+    const page = { items: [], nextCursor: null } as PostPageDto;
+    postsQuery.listReposts.mockResolvedValue(page);
+
+    await expect(
+      controller.listReposts(userId, { limit: 20 }, anonReq),
+    ).resolves.toBe(page);
+    expect(postsQuery.listReposts).toHaveBeenCalledWith(
+      userId,
+      { limit: 20 },
+      undefined,
+    );
+
+    await expect(
+      controller.listReposts(userId, { limit: 20 }, optAuthReq),
+    ).resolves.toBe(page);
+    expect(postsQuery.listReposts).toHaveBeenLastCalledWith(
+      userId,
+      { limit: 20 },
+      optAuthReq.user?.sub,
+    );
   });
 
   it('findOne sets Cache-Control only when authenticated', async () => {

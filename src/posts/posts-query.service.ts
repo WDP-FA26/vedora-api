@@ -15,8 +15,10 @@ import {
   Follow,
   Post,
   PostBookmark,
+  PostRepost,
   PostStatus,
   PostType,
+  User,
 } from '../mongo/models.js';
 import {
   MAX_FEED_RESULTS,
@@ -46,7 +48,10 @@ export class PostsQueryService {
     @InjectModel(MediaAsset.name) private readonly media: Model<MediaAsset>,
     @InjectModel(PostBookmark.name)
     private readonly bookmarks: Model<PostBookmark>,
+    @InjectModel(PostRepost.name)
+    private readonly reposts: Model<PostRepost>,
     @InjectModel(Follow.name) private readonly follows: Model<Follow>,
+    @InjectModel(User.name) private readonly users: Model<User>,
   ) {}
 
   async search(
@@ -167,20 +172,77 @@ export class PostsQueryService {
       .sort({ createdAt: -1, _id: -1 })
       .limit(query.limit + 1)
       .exec();
+    return this.pageOfPublished(rows, query.limit, userId);
+  }
+
+  /**
+   * Turns `limit + 1` bookmark/repost rows, newest first, into a page of the
+   * posts they point at that are still published. Whether another page exists
+   * is decided from the rows before filtering, so a hidden post in the
+   * lookahead slot never ends paging early; the page may hold fewer than
+   * `limit` posts instead. The cursor is the last row's post id.
+   */
+  private async pageOfPublished(
+    rows: readonly { postId: string }[],
+    limit: number,
+    viewerId?: string,
+  ): Promise<PostPageDto> {
+    const hasMore = rows.length > limit;
+    const pageRows = rows.slice(0, limit);
     const posts = await this.posts
-      .find({ _id: { $in: rows.map(({ postId }) => postId) } })
+      .find({
+        _id: { $in: pageRows.map(({ postId }) => postId) },
+        status: PostStatus.PUBLISHED,
+      })
       .exec();
-    const postById = new Map(posts.map((post) => [post.id, post]));
-    const page = createCursorPaginatedResponse(
-      rows
-        .flatMap(({ postId }) => postById.get(postId) ?? [])
-        .filter(({ status }) => status === PostStatus.PUBLISHED),
-      query.limit,
-    );
+    const responses = await this.toResponses(posts, viewerId);
+    const responseById = new Map(responses.map((post) => [post.id, post]));
+    const items: PostResponseDto[] = [];
+    for (const { postId } of pageRows) {
+      const response = responseById.get(postId);
+      if (response) items.push(response);
+    }
+    const lastRow = pageRows.at(-1);
     return {
-      items: await this.toResponses(page.items, userId),
-      nextCursor: page.nextCursor,
+      items,
+      nextCursor: hasMore && lastRow ? lastRow.postId : null,
     };
+  }
+
+  /**
+   * Published posts that `userId` reposted, most recently reposted first.
+   * 404 unless the profile is public, like `GET /profiles/:id`.
+   */
+  async listReposts(
+    userId: string,
+    query: CursorPaginationQueryDto,
+    viewerId?: string,
+  ): Promise<PostPageDto> {
+    const user = await this.users
+      .findOne({ _id: userId })
+      .select('emailVerifiedAt')
+      .exec();
+    if (!user?.emailVerifiedAt) {
+      throw new ResourceNotFoundException('NOT_FOUND', 'Profile not found');
+    }
+
+    const filter: Record<string, unknown> = { userId };
+    if (query.cursor) {
+      const cursor = await this.reposts
+        .findOne({ userId, postId: query.cursor })
+        .exec();
+      if (!cursor) return { items: [], nextCursor: null };
+      Object.assign(
+        filter,
+        afterCursor('createdAt', { value: cursor.createdAt, id: cursor.id }),
+      );
+    }
+    const rows = await this.reposts
+      .find(filter)
+      .sort({ createdAt: -1, _id: -1 })
+      .limit(query.limit + 1)
+      .exec();
+    return this.pageOfPublished(rows, query.limit, viewerId);
   }
 
   async listFollowing(

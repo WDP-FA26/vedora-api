@@ -70,6 +70,7 @@ describe('Post comments and likes (e2e)', () => {
     for (const collection of [
       'post_comments',
       'post_likes',
+      'post_reposts',
       'post_bookmarks',
     ] as const) {
       await e2e.mongo.connection.collections[collection].deleteMany({});
@@ -387,6 +388,42 @@ describe('Post comments and likes (e2e)', () => {
       .auth(otherToken, { type: 'bearer' })
       .expect(200);
     expect((others.body as PostPageDto).items).toEqual([]);
+  });
+
+  it('lists a user’s reposts publicly, with the viewer’s own state', async () => {
+    const reposted = `/api/v1/posts/reposted-by/${user.id}`;
+    await request(server())
+      .put(`${posts()}/repost`)
+      .auth(token, { type: 'bearer' })
+      .expect(200);
+
+    const asGuest = await request(server()).get(reposted).expect(200);
+    expect(asGuest.body).toMatchObject({
+      items: [{ id: post.id, isReposted: false, repostCount: 1 }],
+      nextCursor: null,
+    });
+    const asReposter = await request(server())
+      .get(reposted)
+      .auth(token, { type: 'bearer' })
+      .expect(200);
+    expect(asReposter.body).toMatchObject({
+      items: [{ id: post.id, isReposted: true }],
+    });
+
+    await postsModel()
+      .updateOne({ _id: post.id }, { $set: { status: PostStatus.PROCESSING } })
+      .exec();
+    const unpublished = await request(server()).get(reposted).expect(200);
+    expect((unpublished.body as PostPageDto).items).toEqual([]);
+  });
+
+  it('returns 404 for an unknown profile and 400 for a malformed id', async () => {
+    await request(server())
+      .get(`/api/v1/posts/reposted-by/${randomUUID()}`)
+      .expect(404);
+    await request(server())
+      .get('/api/v1/posts/reposted-by/not-a-uuid')
+      .expect(400);
   });
 
   it('returns personalized counts for the authenticated feed and post detail', async () => {

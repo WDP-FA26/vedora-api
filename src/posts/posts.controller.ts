@@ -158,6 +158,23 @@ export class PostsController {
     return this.postsQuery.listFollowing(request.user.sub, query);
   }
 
+  @Get('reposted-by/:userId')
+  @UseGuards(OptionalJwtAuthGuard)
+  @ApiOperation({
+    summary: "A user's reposts, most recently reposted first",
+    description:
+      'Public read of the published posts a user reposted; `nextCursor` is the last returned post id. A page may hold fewer than `limit` items when a reposted post was unpublished. 404 when the profile does not exist. Send a Bearer token to receive your own isLiked/isReposted/isBookmarked state.',
+    security: [{}, { bearer: [] }],
+  })
+  @ApiOkResponse({ type: PostPageDto })
+  listReposts(
+    @Param('userId', ParseUUIDPipe) userId: string,
+    @Query() query: CursorPaginationQueryDto,
+    @Req() request: OptionalAuthenticatedRequest,
+  ): Promise<PostPageDto> {
+    return this.postsQuery.listReposts(userId, query, request.user?.sub);
+  }
+
   @Get(':id')
   @UseGuards(OptionalJwtAuthGuard)
   @ApiOperation({

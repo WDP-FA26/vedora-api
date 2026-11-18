@@ -68,7 +68,8 @@ Phạm vi: chỉ `vedora-api`. 5 subagent Opus phân tích luồng nghiệp vụ
 - Test: "keeps a document REJECTED when an interrupted indexing run finishes after the rejection"
 - Điều kiện: lượt index chạy quá 15 phút (PDF nhiều ảnh, 1 batch 60 giây mỗi 8 ảnh). Sửa: như H3.
 
-### M7. Danh sách bài đã lưu dừng phân trang sớm
+### M7. Danh sách bài đã lưu dừng phân trang sớm — đã sửa 2026-11-19
+- Đã sửa: `nextCursor` tính từ các dòng bookmark trước khi lọc (`pageOfPublished`, dùng chung với `GET /posts/reposted-by/:userId`); trang có thể ít hơn `limit` bài.
 - Vị trí: `src/posts/query/posts-query.service.ts:165-179` (`listBookmarks`)
 - Test: "keeps paging past a saved post that is now held for review", "fills a page with saved posts that are still public"
 - Thực tế: với A (public), B (bị ẩn), C (public), `limit=1` trả `[A]` và `nextCursor: null`, C không tới được. Cause: lọc published sau khi đã lấy `limit+1` dòng.
