@@ -34,6 +34,7 @@ import type { PaymentDto } from '../../src/payments/payment.dto.js';
 import { PaymentEventsService } from '../../src/payments/payment-events.service.js';
 import { PaymentStreamController } from '../../src/payments/payment-stream.controller.js';
 import * as paymentCodes from '../../src/payments/payment-code.js';
+import { PaymentMaintenanceService } from '../../src/payments/payment-maintenance.service.js';
 import { createUser, deleteWithCascade } from '../support/fixtures.js';
 import {
   createTestMongoUrl,
@@ -852,6 +853,206 @@ describe('SePay payments with MongoDB and HTTP', () => {
     expect(publish).toHaveBeenCalledOnce();
     expect(await captures({ _id: payment.id })).toBe(1);
   });
+  describe('30-minute payment deadline', () => {
+    afterEach(() => vi.useRealTimers());
+
+    async function age(payment: PaymentDto) {
+      await intents().updateOne(
+        { _id: payment.id },
+        { $set: { expiresAt: new Date(Date.now() - 1000) } },
+      );
+    }
+
+    it('anchors the deadline to creation and never extends it when reusing a pending order or key', async () => {
+      const user = await makeUser(),
+        key = randomUUID();
+      const first = await create(user, 'PLUS', key);
+      expect(Date.parse(first.expiresAt) - Date.parse(first.createdAt)).toBe(
+        30 * 60 * 1000,
+      );
+      expect(Math.abs(Date.parse(first.serverTime) - Date.now())).toBeLessThan(
+        5000,
+      );
+      const reused = await create(user);
+      const replayed = await create(user, 'PLUS', key);
+      expect(reused.id).toBe(first.id);
+      expect(reused.expiresAt).toBe(first.expiresAt);
+      expect(replayed.expiresAt).toBe(first.expiresAt);
+    });
+
+    it('keeps the QR immediately before the deadline and cancels exactly at the deadline', async () => {
+      const user = await makeUser(),
+        first = await create(user);
+      vi.useFakeTimers({ toFake: ['Date'] });
+      vi.setSystemTime(new Date(Date.parse(first.expiresAt) - 1));
+      expect((await service.get(first.id, user.id)).qr).not.toBeNull();
+      vi.setSystemTime(new Date(first.expiresAt));
+      const expired = await service.get(first.id, user.id);
+      expect(expired).toMatchObject({
+        status: 'CANCELLED',
+        cancellationReason: 'EXPIRED',
+        qr: null,
+        expiresAt: first.expiresAt,
+      });
+      expect(expired.cancelledAt).toBe(first.expiresAt);
+      expect((await intents().findById(first.id))!.activeIntentKey).toBeNull();
+    });
+
+    it('expires unattended orders through maintenance and publishes once even with simultaneous sweeps', async () => {
+      const user = await makeUser(),
+        first = await create(user);
+      await age(first);
+      const publish = vi
+        .spyOn(app.get(PaymentEventsService), 'publish')
+        .mockResolvedValue();
+      const maintenance = new PaymentMaintenanceService(service);
+      await Promise.all([
+        maintenance.expireOrders(),
+        maintenance.expireOrders(),
+      ]);
+      expect((await intents().findById(first.id))!.status).toBe('CANCELLED');
+      expect(
+        publish.mock.calls.filter(([change]) => change.intentId === first.id),
+      ).toHaveLength(1);
+      expect(await service.expirePending(user.id)).toBe(0);
+    });
+
+    it('clears expired pending orders on billing reads', async () => {
+      const user = await makeUser(),
+        first = await create(user);
+      await age(first);
+      const overview = await service.overview(user.id);
+      expect(overview.pendingPayment).toBeNull();
+      expect(overview.recentPayments[0]).toMatchObject({
+        id: first.id,
+        status: 'CANCELLED',
+        cancellationReason: 'EXPIRED',
+      });
+      expect(overview.membership.planCode).toBe('FREE');
+    });
+
+    it('can buy another plan immediately after expiry without waiting for maintenance', async () => {
+      const user = await makeUser(),
+        first = await create(user);
+      await age(first);
+      const next = await create(user, 'PRO');
+      expect(next.id).not.toBe(first.id);
+      expect(next.status).toBe('PENDING');
+      expect((await intents().findById(first.id))!.cancellationReason).toBe(
+        'EXPIRED',
+      );
+      expect(
+        await intents().countDocuments({ userId: user.id, status: 'PENDING' }),
+      ).toBe(1);
+    });
+
+    it('replaying the original key returns the cancelled order rather than silently creating a purchase', async () => {
+      const user = await makeUser(),
+        key = randomUUID(),
+        first = await create(user, 'PLUS', key);
+      await age(first);
+      const replayed = await create(user, 'PLUS', key);
+      expect(replayed).toMatchObject({
+        id: first.id,
+        status: 'CANCELLED',
+        cancellationReason: 'EXPIRED',
+        qr: null,
+      });
+      expect(await intents().countDocuments({ userId: user.id })).toBe(1);
+    });
+
+    it('applies the original creation deadline to legacy orders without expiresAt', async () => {
+      const user = await makeUser(),
+        first = await create(user);
+      const createdAt = new Date(Date.now() - 31 * 60 * 1000);
+      await intents().collection.updateOne(
+        { _id: first.id },
+        { $unset: { expiresAt: '' }, $set: { createdAt } },
+      );
+      const expired = await service.get(first.id, user.id);
+      expect(expired.status).toBe('CANCELLED');
+      expect(expired.expiresAt).toBe(
+        new Date(createdAt.getTime() + 30 * 60 * 1000).toISOString(),
+      );
+    });
+
+    it('records late transfers for reconciliation without granting a subscription, including retries', async () => {
+      const user = await makeUser(),
+        first = await create(user),
+        body = event(first);
+      await age(first);
+      await callback(body).expect(200);
+      await callback(body).expect(200);
+      expect((await service.get(first.id, user.id)).cancellationReason).toBe(
+        'EXPIRED',
+      );
+      expect(await captures({ userId: user.id })).toBe(0);
+      expect((await service.overview(user.id)).membership.planCode).toBe(
+        'FREE',
+      );
+      const outcomes = await receipts().find({ intentId: first.id }).exec();
+      expect(outcomes.map((row) => row.outcome)).toEqual([
+        'PAYMENT_EXPIRED',
+        'PAYMENT_EXPIRED',
+      ]);
+    });
+
+    it('allows capture before the deadline and never expires the successful order later', async () => {
+      const user = await makeUser(),
+        first = await create(user);
+      vi.useFakeTimers({ toFake: ['Date'] });
+      vi.setSystemTime(new Date(Date.parse(first.expiresAt) - 1000));
+      await callback(event(first)).expect(200);
+      vi.setSystemTime(new Date(Date.parse(first.expiresAt) + 1000));
+      expect(await service.expirePending(user.id)).toBe(0);
+      expect((await service.get(first.id, user.id)).status).toBe('SUCCEEDED');
+      expect((await service.overview(user.id)).membership.planCode).toBe(
+        'PLUS',
+      );
+    });
+
+    it('rejects a webhook exactly at expiry even when the sweep races it', async () => {
+      const user = await makeUser(),
+        first = await create(user);
+      vi.useFakeTimers({ toFake: ['Date'] });
+      vi.setSystemTime(new Date(first.expiresAt));
+      await Promise.all([
+        callback(event(first)).expect(200),
+        service.expirePending(user.id),
+      ]);
+      expect((await service.get(first.id, user.id)).status).toBe('CANCELLED');
+      expect(await captures({ userId: user.id })).toBe(0);
+      expect((await receipts().findOne({ intentId: first.id }))!.outcome).toBe(
+        'PAYMENT_EXPIRED',
+      );
+    });
+
+    it('distinguishes manual cancellation from expiration and preserves it after the deadline', async () => {
+      const user = await makeUser(),
+        first = await create(user);
+      const cancelled = await service.cancel(first.id, user.id);
+      expect(cancelled.cancellationReason).toBe('USER');
+      await age(first);
+      expect(await service.expirePending(user.id)).toBe(0);
+      expect((await service.get(first.id, user.id)).cancelledAt).toBe(
+        cancelled.cancelledAt,
+      );
+      expect((await service.get(first.id, user.id)).cancellationReason).toBe(
+        'USER',
+      );
+    });
+
+    it('keeps expiry authoritative when the user cancel action arrives after the deadline', async () => {
+      const user = await makeUser(),
+        first = await create(user);
+      await age(first);
+      expect(await service.cancel(first.id, user.id)).toMatchObject({
+        status: 'CANCELLED',
+        cancellationReason: 'EXPIRED',
+      });
+    });
+  });
+
   it('restricts sanitized receipt reconciliation to admins', async () => {
     const user = await makeUser(),
       admin = await makeUser('ADMIN');
