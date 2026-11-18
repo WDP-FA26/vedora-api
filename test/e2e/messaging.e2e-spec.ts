@@ -236,6 +236,7 @@ describe('Direct messaging (HTTP + MongoDB + realtime)', () => {
 
   it.each([
     ['get', '/conversations'],
+    ['get', '/unread-count'],
     ['get', '/events'],
     ['get', `/conversations/${randomUUID()}`],
     ['get', `/conversations/${randomUUID()}/messages`],
@@ -910,6 +911,43 @@ describe('Direct messaging (HTTP + MongoDB + realtime)', () => {
       properties: {
         items: { items: { $ref: '#/components/schemas/MessageDto' } },
       },
+    });
+  });
+
+  describe('unread count badge', () => {
+    const unread = (user: User) =>
+      request(app.getHttpServer())
+        .get(`${root}/unread-count`)
+        .auth(token(user), { type: 'bearer' });
+
+    it('returns private totals and refreshes after reading from another session and deleting requests', async () => {
+      const empty = await unread(bob).expect(200);
+      expect(empty.body).toEqual({ unreadCount: 0 });
+      expect(empty.headers['cache-control']).toContain('no-store');
+      expect(empty.headers['vary']).toContain('Authorization');
+      await follow(alice, bob);
+      const sent = await send(alice, bob).expect(201);
+      const result = sent.body as SendMessageResponseDto;
+      expect((await unread(bob).expect(200)).body).toEqual({ unreadCount: 1 });
+      expect((await unread(alice).expect(200)).body).toEqual({
+        unreadCount: 0,
+      });
+      expect((await unread(carol).expect(200)).body).toEqual({
+        unreadCount: 0,
+      });
+      await read(bob, result.conversationId, result.message.id).expect(200);
+      expect((await unread(bob).expect(200)).body).toEqual({ unreadCount: 0 });
+      const second = await send(alice, bob, 'Next').expect(201);
+      const secondMessage = second.body as SendMessageResponseDto;
+      expect((await unread(bob).expect(200)).body).toEqual({ unreadCount: 1 });
+      await request(app.getHttpServer())
+        .delete(`${root}/conversations/${result.conversationId}/request`)
+        .auth(token(bob), { type: 'bearer' })
+        .send({ throughMessageId: secondMessage.message.id })
+        .expect(200);
+      expect((await unread(bob).expect(200)).body).toEqual({ unreadCount: 0 });
+      await send(alice, bob, 'New request').expect(201);
+      expect((await unread(bob).expect(200)).body).toEqual({ unreadCount: 1 });
     });
   });
 
