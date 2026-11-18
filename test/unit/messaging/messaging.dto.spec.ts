@@ -7,11 +7,35 @@ import {
   MessagingInbox,
   ReadConversationDto,
   SendMessageDto,
+  SharePostDto,
 } from '../../../src/messaging/dto/messaging.dto.js';
 
 const validUuid = '00000000-0000-4000-8000-000000000001';
 
 describe('messaging DTOs', () => {
+  it('requires UUID v4 post and retry IDs for shared posts and rejects forged metadata', async () => {
+    await expect(
+      validate(
+        plainToInstance(SharePostDto, {
+          postId: validUuid,
+          clientMessageId: validUuid,
+        }),
+      ),
+    ).resolves.toHaveLength(0);
+    for (const payload of [
+      {},
+      { postId: 'bad', clientMessageId: validUuid },
+      { postId: validUuid },
+      { postId: validUuid, clientMessageId: validUuid, title: 'Forged' },
+    ]) {
+      await expect(
+        validate(plainToInstance(SharePostDto, payload), {
+          whitelist: true,
+          forbidNonWhitelisted: true,
+        }),
+      ).resolves.not.toHaveLength(0);
+    }
+  });
   describe('ConversationsQueryDto', () => {
     it('defaults box to FRIENDS and limit to 20', async () => {
       const dto = plainToInstance(ConversationsQueryDto, {});
@@ -71,13 +95,13 @@ describe('messaging DTOs', () => {
   describe('ReadConversationDto', () => {
     it('requires a UUID v4 messageId', async () => {
       await expect(
-        validate(plainToInstance(ReadConversationDto, { messageId: validUuid })),
+        validate(
+          plainToInstance(ReadConversationDto, { messageId: validUuid }),
+        ),
       ).resolves.toHaveLength(0);
 
       await expect(
-        validate(
-          plainToInstance(ReadConversationDto, { messageId: 'bad-id' }),
-        ),
+        validate(plainToInstance(ReadConversationDto, { messageId: 'bad-id' })),
       ).resolves.not.toHaveLength(0);
     });
   });

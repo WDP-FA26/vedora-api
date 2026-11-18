@@ -1,16 +1,16 @@
 # Nhắn tin riêng realtime
 
-Đã triển khai backend và frontend tại `/home/messages`. Đây là chat văn bản 1:1, tối đa 2.000 ký tự sau khi trim. Các ID đều là UUID v4. Chưa có nhóm, file đính kèm, sửa/xóa tin hoặc trạng thái đang nhập.
+Đã triển khai backend và frontend tại `/home/messages`. Chat 1:1 hỗ trợ văn bản tối đa 2.000 ký tự sau khi trim và chia sẻ post/blog qua thẻ bài viết. Các ID đều là UUID v4. Chưa có nhóm, file đính kèm, sửa/xóa tin hoặc trạng thái đang nhập.
 
 ## Quy tắc theo dõi và chấp nhận lời mời
 
-| Quan hệ giữa A và B | A gửi cho B | B gửi cho A | Hộp thư |
-| --- | --- | --- | --- |
-| Không ai theo dõi ai | Không | Không | Chưa có cuộc trò chuyện mới |
-| A theo dõi B, lời mời chưa được chấp nhận | Có | Chấp nhận lời mời để trả lời, không cần follow lại | `requests` ở cả hai phía |
-| A và B theo dõi nhau | Có | Có | `friends` ở cả hai phía |
-| B đã chấp nhận lời mời của A | Có, kể cả khi unfollow | Có, không cần follow A | `friends` ở cả hai phía |
-| Bỏ theo dõi khi chưa từng chấp nhận | Chỉ phía còn theo dõi được gửi | Có thể chấp nhận lời mời đến để trả lời | Về `requests` nếu không còn follow hai chiều |
+| Quan hệ giữa A và B                       | A gửi cho B                    | B gửi cho A                                        | Hộp thư                                      |
+| ----------------------------------------- | ------------------------------ | -------------------------------------------------- | -------------------------------------------- |
+| Không ai theo dõi ai                      | Không                          | Không                                              | Chưa có cuộc trò chuyện mới                  |
+| A theo dõi B, lời mời chưa được chấp nhận | Có                             | Chấp nhận lời mời để trả lời, không cần follow lại | `requests` ở cả hai phía                     |
+| A và B theo dõi nhau                      | Có                             | Có                                                 | `friends` ở cả hai phía                      |
+| B đã chấp nhận lời mời của A              | Có, kể cả khi unfollow         | Có, không cần follow A                             | `friends` ở cả hai phía                      |
+| Bỏ theo dõi khi chưa từng chấp nhận       | Chỉ phía còn theo dõi được gửi | Có thể chấp nhận lời mời đến để trả lời            | Về `requests` nếu không còn follow hai chiều |
 
 Người nhận có hai thao tác **Xóa** và **Chấp nhận**. Chấp nhận lưu quyền trò chuyện độc lập với Follow, chuyển sang `friends` ở cả hai phía và không tạo quan hệ theo dõi. Hộp thư lạ vẫn chứa cả lời nhắn đến và lời nhắn đã gửi. Người mở đầu không thể tự chấp nhận lời mời của mình. Hướng lời mời dựa vào người gửi tin đầu tiên, không bị đảo hoặc mất khi unfollow. Các conversation cũ chưa có thông tin người mở đầu được suy ra từ tin đầu tiên, không cần migration/backfill trước khi chạy.
 
@@ -22,20 +22,79 @@ Tất cả endpoint yêu cầu `Authorization: Bearer <accessToken>` và tài kh
 
 Các đường dẫn bên dưới có prefix `/api/v1`.
 
-| Method | Endpoint | Mục đích |
-| --- | --- | --- |
-| GET | `/messaging/users/:userId` | Lấy người nhận, quyền gửi và `conversationId` hiện có; không tạo cuộc trò chuyện rỗng |
-| GET | `/messaging/conversations?box=friends&limit=20&cursor=…` | Hộp thư bạn bè; `box=requests` cho tin nhắn lạ |
-| GET | `/messaging/conversations/:id` | Chi tiết cuộc trò chuyện, quan hệ và trạng thái đọc hiện tại |
-| GET | `/messaging/conversations/:id/messages?limit=30&cursor=…` | Lịch sử tin nhắn, mới nhất trước |
-| POST | `/messaging/users/:userId/messages` | Gửi tin đầu tiên hoặc gửi vào cuộc trò chuyện đã có của cặp user |
-| POST | `/messaging/conversations/:id/messages` | Gửi vào cuộc trò chuyện hiện có |
-| PUT | `/messaging/conversations/:id/read` | Tăng vị trí đã đọc của chính người gọi |
-| POST | `/messaging/conversations/:id/accept` | Người nhận chấp nhận lời mời, trả Conversation `200` |
-| DELETE | `/messaging/conversations/:id/request` | Ẩn lời mời/lịch sử cũ ở phía người nhận, trả `200` |
-| GET | `/messaging/events` | SSE riêng tư cho user đang đăng nhập |
+| Method | Endpoint                                                  | Mục đích                                                                              |
+| ------ | --------------------------------------------------------- | ------------------------------------------------------------------------------------- |
+| GET    | `/messaging/users/:userId`                                | Lấy người nhận, quyền gửi và `conversationId` hiện có; không tạo cuộc trò chuyện rỗng |
+| GET    | `/messaging/conversations?box=friends&limit=20&cursor=…`  | Hộp thư bạn bè; `box=requests` cho tin nhắn lạ                                        |
+| GET    | `/messaging/conversations/:id`                            | Chi tiết cuộc trò chuyện, quan hệ và trạng thái đọc hiện tại                          |
+| GET    | `/messaging/conversations/:id/messages?limit=30&cursor=…` | Lịch sử tin nhắn, mới nhất trước                                                      |
+| POST   | `/messaging/users/:userId/messages`                       | Gửi tin đầu tiên hoặc gửi vào cuộc trò chuyện đã có của cặp user                      |
+| POST   | `/messaging/conversations/:id/messages`                   | Gửi vào cuộc trò chuyện hiện có                                                       |
+| POST   | `/messaging/users/:userId/shared-posts`                   | Chia sẻ bài vào cuộc trò chuyện của cặp user, tạo nếu chưa có                         |
+| POST   | `/messaging/conversations/:id/shared-posts`               | Chia sẻ bài vào cuộc trò chuyện hiện có                                               |
+| PUT    | `/messaging/conversations/:id/read`                       | Tăng vị trí đã đọc của chính người gọi                                                |
+| POST   | `/messaging/conversations/:id/accept`                     | Người nhận chấp nhận lời mời, trả Conversation `200`                                  |
+| DELETE | `/messaging/conversations/:id/request`                    | Ẩn lời mời/lịch sử cũ ở phía người nhận, trả `200`                                    |
+| GET    | `/messaging/events`                                       | SSE riêng tư cho user đang đăng nhập                                                  |
 
 Các GET JSON và SSE dùng `Cache-Control: private, no-store`.
+
+### Chia sẻ bài viết qua tin nhắn
+
+Hai POST `shared-posts` nhận đúng hai trường:
+
+```json
+{
+  "clientMessageId": "6d1184dc-e2d8-4143-993c-7a0199025135",
+  "postId": "11111111-1111-4111-8111-111111111111"
+}
+```
+
+- Chỉ chia sẻ post/blog `PUBLISHED`. Bài bị xóa/ẩn/chưa xuất bản trả
+  `404 SHARED_POST_UNAVAILABLE`, kể cả bài của chính người gửi.
+- Cùng quyền nhắn tin hiện có: theo dõi người nhận hoặc conversation đã được chấp
+  nhận. Kiểm tra trạng thái tài khoản, thành viên, và quyền gửi lại trong transaction.
+  Người ngoài không đọc/gửi vào conversation của người khác, kể cả admin.
+- Không nhận body, title, author hay preview từ client; metadata giả bị từ chối 400.
+- Trả `201 { conversationId, message }` như gửi văn bản. `message` có thêm
+  `sharedPostId: string | null` và `sharedPost: SharedPost | null`:
+
+```ts
+interface SharedPost {
+  id: string;
+  type: 'POST' | 'BLOG';
+  title: string | null;
+  excerpt: string;
+  imageUrl: string | null;
+  author: {
+    id: string;
+    username: string;
+    fullName: string;
+    avatarUrl: string | null;
+  };
+}
+```
+
+- `excerpt` giới hạn theo `BLOG_EXCERPT_MAX_LENGTH` hiện có. Blog có title/cover;
+  post có phần đầu nội dung. Hiển thị như text, không render HTML/Markdown.
+- Database chỉ lưu `sharedPostId` và câu mô tả chung trong `body`, không lưu snapshot
+  nội dung. GET lịch sử và response retry hydrate từ bài công khai hiện tại theo batch.
+  Bài bị gỡ/ẩn hoặc thiếu tác giả trả `sharedPost=null`, vẫn giữ tin nhắn và ID tham
+  chiếu. FE hiện “Bài viết không còn khả dụng” khi tải lại lịch sử, không mở link.
+- Tin văn bản cũ có hai field null. Không cần migration/backfill. Không cascade xóa
+  tin nhắn khi xóa bài; cascade khi xóa người tham gia vẫn giữ hành vi hiện có.
+- Dùng cùng không gian idempotency `(conversation, sender, clientMessageId)` với
+  tin văn bản. Retry đúng bài giữ nguyên message/sequence, không thêm unread/outbox;
+  đổi bài hoặc đổi loại nội dung với cùng ID trả `409 MESSAGE_ID_CONFLICT`.
+  Retry tin đã gửi vẫn thành công khi bài sau đó bị gỡ (preview null), nhưng vẫn
+  phải có quyền nhắn tin và tài khoản hoạt động.
+- Share làm tăng unread, hỗ trợ read receipt và phát `message.created` qua outbox
+  như tin văn bản. SSE chỉ chứa ID để invalidate cache, không chứa nội dung bài.
+- FE nút Chia sẻ mở hai lựa chọn: gửi tin nhắn hoặc sao chép liên kết. Người nhận
+  gồm các cuộc trò chuyện (cả lời mời) và người đang theo dõi, có phân trang/lọc tên.
+  Người chưa có quyền gửi bị vô hiệu hóa; BE là nơi kiểm tra cuối cùng.
+
+Triển khai BE trước FE. Không thêm biến môi trường hay gọi provider AI cho tính năng này.
 
 ### Mở chat từ hồ sơ
 
@@ -115,21 +174,32 @@ Inbox được lọc theo `box` trước khi phân trang và sắp theo hoạt �
 
 ```ts
 type Conversation = {
-  id: string
-  peer: { id: string; username: string; fullName: string; avatarUrl: string | null; isProfessional: boolean }
-  box: 'friends' | 'requests'
-  requestDirection: 'incoming' | 'outgoing' | null
-  followsPeer: boolean
-  peerFollowsYou: boolean
-  canSend: boolean
-  canAcceptRequest: boolean
-  canDeleteRequest: boolean
-  deletedThroughSequence: number
-  lastMessage: { id: string; senderId: string; body: string; createdAt: string } | null
-  unreadCount: number
-  myReadSequence: number
-  peerReadSequence: number
-}
+  id: string;
+  peer: {
+    id: string;
+    username: string;
+    fullName: string;
+    avatarUrl: string | null;
+    isProfessional: boolean;
+  };
+  box: 'friends' | 'requests';
+  requestDirection: 'incoming' | 'outgoing' | null;
+  followsPeer: boolean;
+  peerFollowsYou: boolean;
+  canSend: boolean;
+  canAcceptRequest: boolean;
+  canDeleteRequest: boolean;
+  deletedThroughSequence: number;
+  lastMessage: {
+    id: string;
+    senderId: string;
+    body: string;
+    createdAt: string;
+  } | null;
+  unreadCount: number;
+  myReadSequence: number;
+  peerReadSequence: number;
+};
 ```
 
 `requestDirection` là `incoming` với người nhận của cuộc trò chuyện chưa chấp nhận, `outgoing` với người mở đầu, `null` khi ở mục bạn bè. Hướng này được giữ sau unfollow. Sau gửi tin, đổi Follow hoặc xử lý request, FE tải lại inbox từ trang đầu để bỏ cursor cũ. Cursor inbox chuyển hộp thư trả `400 MESSAGE_CURSOR_INVALID`; cursor không thuộc người gọi hoặc request đã ẩn hoàn toàn ở phía mình trả `404`. FE loại bỏ tin có `sequence <= deletedThroughSequence` khỏi cả cache lịch sử cũ và tin đã xác nhận cục bộ.
@@ -141,7 +211,11 @@ Lịch sử sắp `sequence DESC`, không phụ thuộc thời gian máy client.
 `PUT /messaging/conversations/:id/read` nhận `{ "messageId": "<UUID v4 của tin đã hiển thị>" }`, trả:
 
 ```json
-{ "conversationId": "eb96ee73-c9ba-486c-b9ca-33d06d135489", "readSequence": 1, "unreadCount": 0 }
+{
+  "conversationId": "eb96ee73-c9ba-486c-b9ca-33d06d135489",
+  "readSequence": 1,
+  "unreadCount": 0
+}
 ```
 
 Vị trí đọc chỉ tăng, không lùi. BE yêu cầu tin thực sự thuộc cuộc trò chuyện; không nhận sequence tùy ý. `unreadCount` chỉ tính tin đến sau vị trí đọc của chính mình. GET không tự đánh dấu đã đọc. FE hiện chỉ đánh dấu khi cuộc trò chuyện đang hiển thị, tab có focus và người dùng ở cuối lịch sử. Tin mình gửi có `sequence <= peerReadSequence` hiển thị “Đã xem”.
@@ -150,17 +224,17 @@ Vị trí đọc chỉ tăng, không lùi. BE yêu cầu tin thực sự thuộc
 
 Client gửi tin qua POST và nhận thay đổi qua SSE. Dùng `fetchEventSource` với header Bearer; không đặt token trong URL. Một kết nối dùng chung cho layout `/home`, kể cả khi người dùng đang xem trang khác.
 
-| Event | Payload | Cách xử lý |
-| --- | --- | --- |
-| `stream.ready` | `{}` | Đã kết nối change stream; đồng bộ lại inbox, chi tiết và lịch sử |
-| `stream.unavailable` | `{}` | Bật polling GET trong lúc chờ khôi phục |
-| `message.created` | Metadata bên dưới | Tải lại inbox, chi tiết và lịch sử chat liên quan |
-| `conversation.read` | Metadata bên dưới | Tải lại unread và vị trí đã đọc |
-| `relationship.changed` | Metadata bên dưới, các field có thể null | Tải lại quyền gửi, inbox từ trang đầu và thông tin contact |
-| `request.accepted` | Metadata với `conversationId` | Cả hai phía tải lại inbox/contact; cuộc trò chuyện chuyển sang bạn bè |
-| `request.deleted` | Metadata với `conversationId`, chỉ gửi cho người xóa | Bỏ cache lịch sử cũ, reset inbox và đóng thread đã xóa |
-| `ping` | `{ "connected": true }` hoặc `false` | Heartbeat mỗi 15 giây; phản ánh tình trạng change stream |
-| `session.expired` | `{}` | Ngắt stream, refresh phiên hoặc đăng nhập lại |
+| Event                  | Payload                                              | Cách xử lý                                                            |
+| ---------------------- | ---------------------------------------------------- | --------------------------------------------------------------------- |
+| `stream.ready`         | `{}`                                                 | Đã kết nối change stream; đồng bộ lại inbox, chi tiết và lịch sử      |
+| `stream.unavailable`   | `{}`                                                 | Bật polling GET trong lúc chờ khôi phục                               |
+| `message.created`      | Metadata bên dưới                                    | Tải lại inbox, chi tiết và lịch sử chat liên quan                     |
+| `conversation.read`    | Metadata bên dưới                                    | Tải lại unread và vị trí đã đọc                                       |
+| `relationship.changed` | Metadata bên dưới, các field có thể null             | Tải lại quyền gửi, inbox từ trang đầu và thông tin contact            |
+| `request.accepted`     | Metadata với `conversationId`                        | Cả hai phía tải lại inbox/contact; cuộc trò chuyện chuyển sang bạn bè |
+| `request.deleted`      | Metadata với `conversationId`, chỉ gửi cho người xóa | Bỏ cache lịch sử cũ, reset inbox và đóng thread đã xóa                |
+| `ping`                 | `{ "connected": true }` hoặc `false`                 | Heartbeat mỗi 15 giây; phản ánh tình trạng change stream              |
+| `session.expired`      | `{}`                                                 | Ngắt stream, refresh phiên hoặc đăng nhập lại                         |
 
 Metadata của event nghiệp vụ:
 
@@ -199,18 +273,18 @@ Mongoose đăng ký collection/index khi khởi động; không có Prisma migra
 
 ## Mã lỗi và kiểm thử
 
-| HTTP | Code | FE xử lý |
-| --- | --- | --- |
-| 400 | `VALIDATION_FAILED` | Tin rỗng/quá dài, UUID hoặc limit sai |
-| 400 | `SELF_MESSAGE_NOT_ALLOWED` | Không nhắn cho chính mình |
-| 400 | `MESSAGE_CURSOR_INVALID` | Bỏ cursor, tải lại trang đầu |
-| 401 | `UNAUTHORIZED`, `ACCOUNT_SUSPENDED`, `ACCOUNT_NOT_ACTIVE` | Refresh phiên/đăng nhập lại |
-| 403 | `MESSAGE_FOLLOW_REQUIRED` | Cần Follow để bắt đầu lời nhắn hoặc chấp nhận lời mời đến để trả lời |
-| 403 | `MESSAGE_REQUEST_RECEIVER_REQUIRED` | Chỉ người nhận được xử lý lời mời, không tự chấp nhận lời mời gửi đi |
-| 404 | `NOT_FOUND` | Người nhận không khả dụng hoặc chat/tin không thuộc người gọi |
-| 409 | `MESSAGE_ID_CONFLICT` | UUID đã dùng cho nội dung khác; không retry mù |
-| 409 | `MESSAGE_REQUEST_NOT_PENDING` | Không xóa cuộc trò chuyện đã chấp nhận/đã là bạn bè; tải lại trạng thái |
-| 409 | `CONFLICT` | Xung đột ghi đồng thời còn tồn tại sau retry; giữ nội dung để thử lại |
+| HTTP | Code                                                      | FE xử lý                                                                |
+| ---- | --------------------------------------------------------- | ----------------------------------------------------------------------- |
+| 400  | `VALIDATION_FAILED`                                       | Tin rỗng/quá dài, UUID hoặc limit sai                                   |
+| 400  | `SELF_MESSAGE_NOT_ALLOWED`                                | Không nhắn cho chính mình                                               |
+| 400  | `MESSAGE_CURSOR_INVALID`                                  | Bỏ cursor, tải lại trang đầu                                            |
+| 401  | `UNAUTHORIZED`, `ACCOUNT_SUSPENDED`, `ACCOUNT_NOT_ACTIVE` | Refresh phiên/đăng nhập lại                                             |
+| 403  | `MESSAGE_FOLLOW_REQUIRED`                                 | Cần Follow để bắt đầu lời nhắn hoặc chấp nhận lời mời đến để trả lời    |
+| 403  | `MESSAGE_REQUEST_RECEIVER_REQUIRED`                       | Chỉ người nhận được xử lý lời mời, không tự chấp nhận lời mời gửi đi    |
+| 404  | `NOT_FOUND`                                               | Người nhận không khả dụng hoặc chat/tin không thuộc người gọi           |
+| 409  | `MESSAGE_ID_CONFLICT`                                     | UUID đã dùng cho nội dung khác; không retry mù                          |
+| 409  | `MESSAGE_REQUEST_NOT_PENDING`                             | Không xóa cuộc trò chuyện đã chấp nhận/đã là bạn bè; tải lại trạng thái |
+| 409  | `CONFLICT`                                                | Xung đột ghi đồng thời còn tồn tại sau retry; giữ nội dung để thử lại   |
 
 Chạy `npm run test:e2e -- test/e2e/messaging.e2e-spec.ts test/e2e/messaging-notifications.flows.e2e-spec.ts` với MongoDB local replica set. Suite dùng database ngẫu nhiên, tạo index và tự xóa database sau test. Bao phủ phân loại inbox, quyền admin/user, giới hạn nội dung, cursor, đồng thời, idempotency, unread, follow/unfollow, xử lý lời mời, xóa tài khoản, stream riêng tư, nhiều instance và JWT hết hạn/đình chỉ. Test không ghi vào database ứng dụng.
 

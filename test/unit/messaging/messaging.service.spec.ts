@@ -15,12 +15,15 @@ import {
   Follow,
   MessagingEvent,
   MessagingEventType,
+  Post,
+  PostStatus,
+  PostType,
   type User,
   UserRole,
 } from '../../../src/mongo/models.js';
 import { MongoModule } from '../../../src/mongo/mongo.module.js';
 import { MongoService } from '../../../src/mongo/mongo.service.js';
-import { createUser } from '../../support/fixtures.js';
+import { createPost, createUser } from '../../support/fixtures.js';
 import {
   createTestMongoUrl,
   dropTestDatabase,
@@ -86,6 +89,185 @@ describe('MessagingService', () => {
       await dropTestDatabase(app);
       await app.close();
     }
+  });
+
+  describe('shared posts', () => {
+    it('shares a public post through the existing message pipeline and hydrates history', async () => {
+      await follow(alice, bob);
+      const post = await createPost(db, {
+        authorId: carol.id,
+        body: 'A public recipe',
+      });
+      const clientMessageId = randomUUID();
+      const result = await service.sharePostToUser(alice.id, bob.id, {
+        postId: post.id,
+        clientMessageId,
+      });
+      expect(result.message).toMatchObject({
+        sharedPostId: post.id,
+        sequence: 1,
+        sharedPost: {
+          id: post.id,
+          type: PostType.POST,
+          title: null,
+          excerpt: 'A public recipe',
+          author: { id: carol.id },
+        },
+      });
+      expect(
+        await messages().countDocuments({
+          conversationId: result.conversationId,
+        }),
+      ).toBe(1);
+      expect(
+        await events().countDocuments({
+          conversationId: result.conversationId,
+          type: MessagingEventType.MESSAGE_CREATED,
+        }),
+      ).toBe(1);
+      expect(
+        (
+          await service.listMessages(bob.id, result.conversationId, {
+            limit: 10,
+          })
+        ).items[0],
+      ).toMatchObject({ sharedPostId: post.id, sharedPost: { id: post.id } });
+      expect(
+        (await service.getConversation(bob.id, result.conversationId))
+          .unreadCount,
+      ).toBe(1);
+      const stored = await messages()
+        .findById(result.message.id)
+        .lean()
+        .orFail();
+      expect(stored).not.toHaveProperty('sharedPost');
+      expect(stored.body).not.toContain('A public recipe');
+    });
+
+    it('supports blogs and accepted requests without following', async () => {
+      await follow(alice, bob);
+      const original = await service.sendToUser(alice.id, bob.id, {
+        body: 'Hello',
+        clientMessageId: randomUUID(),
+      });
+      await service.acceptRequest(bob.id, original.conversationId);
+      await unfollow(alice, bob);
+      const blog = await createPost(db, {
+        authorId: carol.id,
+        type: PostType.BLOG,
+        blog: {
+          title: 'Cooking blog',
+          excerpt: 'Plain excerpt',
+          content: 'Private draft details never copied',
+          coverImageUrl: 'https://example.test/cover.png',
+          recipeIds: [],
+        },
+      });
+      const shared = await service.sharePostToConversation(
+        bob.id,
+        original.conversationId,
+        { postId: blog.id, clientMessageId: randomUUID() },
+      );
+      expect(shared.message.sharedPost).toMatchObject({
+        type: PostType.BLOG,
+        title: 'Cooking blog',
+        excerpt: 'Plain excerpt',
+        imageUrl: 'https://example.test/cover.png',
+      });
+      expect(JSON.stringify(shared.message)).not.toContain(
+        'Private draft details never copied',
+      );
+    });
+
+    it('deduplicates simultaneous retries and rejects reuse with different content', async () => {
+      await follow(alice, bob);
+      const one = await createPost(db, { authorId: carol.id });
+      const two = await createPost(db, { authorId: carol.id });
+      const dto = { postId: one.id, clientMessageId: randomUUID() };
+      const result = await Promise.all(
+        Array.from({ length: 4 }, () =>
+          service.sharePostToUser(alice.id, bob.id, dto),
+        ),
+      );
+      expect(new Set(result.map((row) => row.message.id)).size).toBe(1);
+      expect(await messages().countDocuments({})).toBe(1);
+      expect(
+        await events().countDocuments({
+          type: MessagingEventType.MESSAGE_CREATED,
+        }),
+      ).toBe(1);
+      await expect(
+        service.sharePostToUser(alice.id, bob.id, { ...dto, postId: two.id }),
+      ).rejects.toBeInstanceOf(StateConflictException);
+      await expect(
+        service.sendToUser(alice.id, bob.id, {
+          body: result[0].message.body,
+          clientMessageId: dto.clientMessageId,
+        }),
+      ).rejects.toBeInstanceOf(StateConflictException);
+    });
+
+    it('rejects missing, unpublished, or unauthorized shares without creating messages or outbox events', async () => {
+      const hidden = await createPost(db, {
+        authorId: alice.id,
+        status: PostStatus.DRAFT,
+      });
+      const published = await createPost(db, { authorId: alice.id });
+      await expect(
+        service.sharePostToUser(alice.id, bob.id, {
+          postId: published.id,
+          clientMessageId: randomUUID(),
+        }),
+      ).rejects.toBeInstanceOf(AccessDeniedException);
+      await follow(alice, bob);
+      for (const postId of [randomUUID(), hidden.id]) {
+        await expect(
+          service.sharePostToUser(alice.id, bob.id, {
+            postId,
+            clientMessageId: randomUUID(),
+          }),
+        ).rejects.toMatchObject({ code: 'SHARED_POST_UNAVAILABLE' });
+      }
+      expect(await conversations().countDocuments({})).toBe(0);
+      expect(await messages().countDocuments({})).toBe(0);
+      expect(await events().countDocuments({})).toBe(0);
+    });
+
+    it('keeps history but strips previews after unpublishing or deleting a shared post, including retries', async () => {
+      await follow(alice, bob);
+      const post = await createPost(db, {
+        authorId: carol.id,
+        body: 'Sensitive after removal',
+      });
+      const dto = { postId: post.id, clientMessageId: randomUUID() };
+      const shared = await service.sharePostToUser(alice.id, bob.id, dto);
+      await db.connection
+        .model<Post>(Post.name)
+        .updateOne({ _id: post.id }, { $set: { status: PostStatus.REJECTED } });
+      const hidden = await service.listMessages(bob.id, shared.conversationId, {
+        limit: 10,
+      });
+      expect(hidden.items[0]).toMatchObject({
+        sharedPostId: post.id,
+        sharedPost: null,
+      });
+      expect(JSON.stringify(hidden)).not.toContain('Sensitive after removal');
+      await db.withTransaction((session) =>
+        db.connection
+          .model(Post.name)
+          .deleteOne({ _id: post.id }, { session })
+          .exec(),
+      );
+      const retry = await service.sharePostToUser(alice.id, bob.id, dto);
+      expect(retry.message).toMatchObject({
+        id: shared.message.id,
+        sharedPost: null,
+      });
+      expect(await messages().countDocuments({})).toBe(1);
+      await expect(
+        service.sharePostToConversation(carol.id, shared.conversationId, dto),
+      ).rejects.toBeInstanceOf(ResourceNotFoundException);
+    });
   });
 
   describe('contact', () => {

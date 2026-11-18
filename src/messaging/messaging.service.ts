@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { runtimeConfig } from '../config/runtime-config.js';
 import { InjectModel } from '@nestjs/mongoose';
 import type { ClientSession, Model, QueryFilter } from 'mongoose';
 import { assertAccountActive } from '../auth-core/account-access.js';
@@ -17,6 +18,8 @@ import {
   DirectMessage,
   Follow,
   MessagingEventType,
+  Post,
+  PostStatus,
   User,
 } from '../mongo/models.js';
 import { MongoService } from '../mongo/mongo.service.js';
@@ -33,6 +36,8 @@ import {
   MessagingContactDto,
   SendMessageDto,
   SendMessageResponseDto,
+  SharePostDto,
+  SharedPostDto,
 } from './dto/messaging.dto.js';
 import { MessagingEventsService } from './messaging-events.service.js';
 
@@ -70,7 +75,10 @@ const myReadSequence = (conversation: Conversation, userId: string) =>
       : conversation.highReadSequence,
   );
 
-function messageDto(message: DirectMessage): MessageDto {
+function messageDto(
+  message: DirectMessage,
+  sharedPost: SharedPostDto | null = null,
+): MessageDto {
   return {
     id: message.id,
     conversationId: message.conversationId,
@@ -79,6 +87,8 @@ function messageDto(message: DirectMessage): MessageDto {
     clientMessageId: message.clientMessageId,
     sequence: message.sequence,
     body: message.body,
+    sharedPostId: message.sharedPostId ?? null,
+    sharedPost,
     createdAt: message.createdAt,
   };
 }
@@ -94,6 +104,7 @@ export class MessagingService {
     @InjectModel(DirectMessage.name)
     private readonly messages: Model<DirectMessage>,
     private readonly events: MessagingEventsService,
+    @InjectModel(Post.name) private readonly posts: Model<Post>,
   ) {}
 
   async contact(userId: string, peerId: string): Promise<MessagingContactDto> {
@@ -146,6 +157,7 @@ export class MessagingService {
     recipientId: string,
     dto: SendMessageDto,
     expectedConversationId?: string,
+    sharedPostId?: string,
   ): Promise<SendMessageResponseDto> {
     if (senderId === recipientId) {
       throw new InvalidInputException(
@@ -206,16 +218,30 @@ export class MessagingService {
           .session(session)
           .exec();
         if (previous) {
-          if (previous.body !== dto.body) {
+          if (
+            previous.body !== dto.body ||
+            (previous.sharedPostId ?? null) !== (sharedPostId ?? null)
+          ) {
             throw new StateConflictException(
               'MESSAGE_ID_CONFLICT',
-              'This clientMessageId was already used for different text',
+              'This clientMessageId was already used for different content',
             );
           }
           return {
             conversationId: conversation.id,
-            message: messageDto(previous),
+            message: (await this.hydrateMessages([previous], session))[0],
           };
+        }
+        if (
+          sharedPostId &&
+          !(await this.posts
+            .exists({ _id: sharedPostId, status: PostStatus.PUBLISHED })
+            .session(session))
+        ) {
+          throw new ResourceNotFoundException(
+            'SHARED_POST_UNAVAILABLE',
+            'This post is no longer available to share',
+          );
         }
         const sequence = conversation.sequence + 1;
         const [message] = await this.messages.create(
@@ -227,6 +253,7 @@ export class MessagingService {
               sequence,
               clientMessageId: dto.clientMessageId,
               body: dto.body,
+              sharedPostId: sharedPostId ?? null,
             },
           ],
           { session },
@@ -263,7 +290,7 @@ export class MessagingService {
         );
         return {
           conversationId: conversation.id,
-          message: messageDto(message),
+          message: (await this.hydrateMessages([message], session))[0],
         };
       },
     );
@@ -277,6 +304,85 @@ export class MessagingService {
     const conversation = await this.requireConversation(userId, id);
     // Rechecks membership, account and permission inside the transaction.
     return this.sendToUser(userId, peerIdOf(conversation, userId), dto, id);
+  }
+
+  async sharePostToUser(
+    senderId: string,
+    recipientId: string,
+    dto: SharePostDto,
+  ): Promise<SendMessageResponseDto> {
+    return this.sendToUser(
+      senderId,
+      recipientId,
+      { clientMessageId: dto.clientMessageId, body: 'Đã chia sẻ một bài viết' },
+      undefined,
+      dto.postId,
+    );
+  }
+
+  async sharePostToConversation(
+    userId: string,
+    id: string,
+    dto: SharePostDto,
+  ): Promise<SendMessageResponseDto> {
+    const conversation = await this.requireConversation(userId, id);
+    return this.sendToUser(
+      userId,
+      peerIdOf(conversation, userId),
+      { clientMessageId: dto.clientMessageId, body: 'Đã chia sẻ một bài viết' },
+      id,
+      dto.postId,
+    );
+  }
+
+  /** Resolve public content on every read; never persist a snapshot of removed content in chat. */
+  private async hydrateMessages(
+    rows: DirectMessage[],
+    session: ClientSession,
+  ): Promise<MessageDto[]> {
+    const ids = [
+      ...new Set(
+        rows.flatMap((row) => (row.sharedPostId ? [row.sharedPostId] : [])),
+      ),
+    ];
+    if (!ids.length) return rows.map((row) => messageDto(row));
+    const posts = await this.posts
+      .find({ _id: { $in: ids }, status: PostStatus.PUBLISHED })
+      .select('type body authorId blog.title blog.excerpt blog.coverImageUrl')
+      .session(session)
+      .exec();
+    const authors = await this.users
+      .find({ _id: { $in: [...new Set(posts.map((post) => post.authorId))] } })
+      .select('username fullName avatarUrl')
+      .session(session)
+      .exec();
+    const byAuthor = new Map(authors.map((author) => [author.id, author]));
+    const byPost = new Map(posts.map((post) => [post.id, post]));
+    return rows.map((row) => {
+      const post = row.sharedPostId ? byPost.get(row.sharedPostId) : null;
+      const author = post ? byAuthor.get(post.authorId) : null;
+      return messageDto(
+        row,
+        post && author
+          ? {
+              id: post.id,
+              type: post.type,
+              title: post.blog?.title ?? null,
+              excerpt: (post.blog?.excerpt ?? post.body ?? '').slice(
+                0,
+                runtimeConfig.BLOG_EXCERPT_MAX_LENGTH,
+              ),
+              imageUrl: post.blog?.coverImageUrl ?? null,
+              author: {
+                id: author.id,
+                username: author.username,
+                fullName: author.fullName,
+                avatarUrl: author.avatarUrl,
+              },
+            }
+          : null,
+      );
+    });
   }
 
   async listConversations(
@@ -398,7 +504,10 @@ export class MessagingService {
         .session(session)
         .exec();
       const page = createCursorPaginatedResponse(rows, query.limit);
-      return { ...page, items: page.items.map(messageDto) };
+      return {
+        ...page,
+        items: await this.hydrateMessages(page.items, session),
+      };
     });
   }
 

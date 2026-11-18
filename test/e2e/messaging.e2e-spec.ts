@@ -18,6 +18,8 @@ import {
   DirectMessage,
   MessagingEvent,
   MessagingEventType,
+  Post,
+  PostStatus,
   User,
   UserRole,
 } from '../../src/mongo/models.js';
@@ -26,6 +28,7 @@ import { MessagingEventsService } from '../../src/messaging/messaging-events.ser
 import { ProfilesModule } from '../../src/profiles/profiles.module.js';
 import { ModerationSettingsService } from '../../src/moderation/moderation-settings.service.js';
 import { StorageService } from '../../src/storage/storage.service.js';
+import { QdrantService } from '../../src/qdrant/qdrant.service.js';
 import type {
   ConversationDto,
   ConversationPageDto,
@@ -33,7 +36,7 @@ import type {
   MessagePageDto,
   SendMessageResponseDto,
 } from '../../src/messaging/dto/messaging.dto.js';
-import { createUser } from '../support/fixtures.js';
+import { createPost, createUser } from '../support/fixtures.js';
 import {
   createTestMongoUrl,
   dropTestDatabase,
@@ -48,6 +51,8 @@ import {
       useValue: new ConfigService({ API_PREFIX: 'api/v1' }),
     },
     { provide: StorageService, useValue: { isConfigured: () => false } },
+    // Profiles now includes people search; these messaging flows never search or index profiles.
+    { provide: QdrantService, useValue: {} },
     {
       provide: ModerationSettingsService,
       useValue: {
@@ -55,7 +60,12 @@ import {
       },
     },
   ],
-  exports: [ConfigService, StorageService, ModerationSettingsService],
+  exports: [
+    ConfigService,
+    StorageService,
+    ModerationSettingsService,
+    QdrantService,
+  ],
 })
 class MessagingTestSupportModule {}
 
@@ -231,6 +241,8 @@ describe('Direct messaging (HTTP + MongoDB + realtime)', () => {
     ['get', `/conversations/${randomUUID()}/messages`],
     ['post', `/users/${randomUUID()}/messages`],
     ['post', `/conversations/${randomUUID()}/messages`],
+    ['post', `/users/${randomUUID()}/shared-posts`],
+    ['post', `/conversations/${randomUUID()}/shared-posts`],
     ['put', `/conversations/${randomUUID()}/read`],
     ['post', `/conversations/${randomUUID()}/accept`],
     ['delete', `/conversations/${randomUUID()}/request`],
@@ -898,6 +910,161 @@ describe('Direct messaging (HTTP + MongoDB + realtime)', () => {
       properties: {
         items: { items: { $ref: '#/components/schemas/MessageDto' } },
       },
+    });
+  });
+
+  describe('sharing posts', () => {
+    it('shares once, updates the inbox and read receipts, and streams private invalidations', async () => {
+      await follow(alice, bob);
+      const post = await createPost(db, {
+        authorId: carol.id,
+        body: 'A shared public post',
+      });
+      const dto = { postId: post.id, clientMessageId: randomUUID() };
+      const stream = await openStream(baseUrl, token(bob));
+      try {
+        await stream.waitFor('stream.ready');
+        const first = await request(app.getHttpServer())
+          .post(`${root}/users/${bob.id}/shared-posts`)
+          .auth(token(alice), { type: 'bearer' })
+          .send(dto)
+          .expect(201);
+        const result = first.body as SendMessageResponseDto;
+        expect(result.message).toMatchObject({
+          sharedPostId: post.id,
+          sharedPost: { id: post.id, excerpt: 'A shared public post' },
+        });
+        const retry = await request(app.getHttpServer())
+          .post(`${root}/conversations/${result.conversationId}/shared-posts`)
+          .auth(token(alice), { type: 'bearer' })
+          .send(dto)
+          .expect(201);
+        expect((retry.body as SendMessageResponseDto).message.id).toBe(
+          result.message.id,
+        );
+        await stream.waitFor('message.created');
+        const signal = stream.frames.find(
+          (frame) => frame.type === 'message.created',
+        );
+        expect(signal?.data).toMatchObject({
+          conversationId: result.conversationId,
+          messageId: result.message.id,
+        });
+        expect(JSON.stringify(signal)).not.toContain('A shared public post');
+        const listed = await history(bob, result.conversationId).expect(200);
+        expect((listed.body as MessagePageDto).items[0]).toMatchObject({
+          sharedPostId: post.id,
+          sharedPost: { id: post.id },
+        });
+        const unread = await detail(bob, result.conversationId).expect(200);
+        expect((unread.body as ConversationDto).unreadCount).toBe(1);
+        const seen = await read(
+          bob,
+          result.conversationId,
+          result.message.id,
+        ).expect(200);
+        expect((seen.body as ConversationReadDto).unreadCount).toBe(0);
+        expect(
+          await messages().countDocuments({
+            conversationId: result.conversationId,
+          }),
+        ).toBe(1);
+        await request(app.getHttpServer())
+          .post(`${root}/conversations/${result.conversationId}/shared-posts`)
+          .auth(token(carol), { type: 'bearer' })
+          .send(dto)
+          .expect(404);
+        await request(app.getHttpServer())
+          .post(`${root}/users/${bob.id}/shared-posts`)
+          .auth(token(alice), { type: 'bearer' })
+          .send({ ...dto, postId: randomUUID() })
+          .expect(409);
+      } finally {
+        await stream.close();
+      }
+    });
+
+    it('rejects invalid input, hidden posts, and missing messaging permission without side effects', async () => {
+      const draft = await createPost(db, {
+        authorId: alice.id,
+        status: PostStatus.DRAFT,
+      });
+      const path = `${root}/users/${bob.id}/shared-posts`;
+      await request(app.getHttpServer())
+        .post(path)
+        .auth(token(alice), { type: 'bearer' })
+        .send({ postId: draft.id, clientMessageId: randomUUID() })
+        .expect(403);
+      await follow(alice, bob);
+      for (const payload of [
+        {},
+        { postId: 'bad', clientMessageId: randomUUID() },
+        {
+          postId: draft.id,
+          clientMessageId: randomUUID(),
+          sharedPost: { excerpt: 'Forged' },
+        },
+      ]) {
+        await request(app.getHttpServer())
+          .post(path)
+          .auth(token(alice), { type: 'bearer' })
+          .send(payload)
+          .expect(400);
+      }
+      for (const postId of [draft.id, randomUUID()]) {
+        const response = await request(app.getHttpServer())
+          .post(path)
+          .auth(token(alice), { type: 'bearer' })
+          .send({ postId, clientMessageId: randomUUID() })
+          .expect(404);
+        expect(response.body).toMatchObject({
+          code: 'SHARED_POST_UNAVAILABLE',
+        });
+      }
+      expect(await conversations().countDocuments({})).toBe(0);
+      expect(await messages().countDocuments({})).toBe(0);
+      expect(
+        await events().countDocuments({
+          type: MessagingEventType.MESSAGE_CREATED,
+        }),
+      ).toBe(0);
+    });
+
+    it('removes preview content from history after moderation or post deletion', async () => {
+      await follow(alice, bob);
+      const post = await createPost(db, {
+        authorId: carol.id,
+        body: 'No stale public content',
+      });
+      const dto = { postId: post.id, clientMessageId: randomUUID() };
+      const response = await request(app.getHttpServer())
+        .post(`${root}/users/${bob.id}/shared-posts`)
+        .auth(token(alice), { type: 'bearer' })
+        .send(dto)
+        .expect(201);
+      const result = response.body as SendMessageResponseDto;
+      await db.connection
+        .model<Post>(Post.name)
+        .updateOne({ _id: post.id }, { $set: { status: PostStatus.REJECTED } });
+      const hidden = await history(bob, result.conversationId).expect(200);
+      expect((hidden.body as MessagePageDto).items[0]).toMatchObject({
+        sharedPostId: post.id,
+        sharedPost: null,
+      });
+      expect(JSON.stringify(hidden.body)).not.toContain(post.body);
+      await db.withTransaction((session) =>
+        db.connection
+          .model(Post.name)
+          .deleteOne({ _id: post.id }, { session })
+          .exec(),
+      );
+      const gone = await history(bob, result.conversationId).expect(200);
+      expect((gone.body as MessagePageDto).items[0].sharedPost).toBeNull();
+      expect(
+        await messages().countDocuments({
+          conversationId: result.conversationId,
+        }),
+      ).toBe(1);
     });
   });
 });
