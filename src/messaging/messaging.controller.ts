@@ -50,6 +50,7 @@ import {
   DeletedMessageRequestDto,
   MessagePageDto,
   MessagingContactDto,
+  MessagingUnreadCountDto,
   ReadConversationDto,
   SendMessageDto,
   SendMessageResponseDto,
@@ -72,6 +73,19 @@ export class MessagingController {
     private readonly jwt: JwtService,
     @InjectModel(User.name) private readonly users: Model<User>,
   ) {}
+
+  @Get('unread-count')
+  @Header('Cache-Control', 'private, no-store')
+  @Header('Vary', 'Authorization')
+  @ApiOperation({
+    summary: 'Count all your unread incoming messages across both inboxes',
+  })
+  @ApiOkResponse({ type: MessagingUnreadCountDto })
+  unreadCount(
+    @Req() request: AuthenticatedRequest,
+  ): Promise<MessagingUnreadCountDto> {
+    return this.messaging.unreadCount(request.user.sub);
+  }
 
   @Sse('events')
   @Header('Cache-Control', 'private, no-store')
