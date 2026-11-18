@@ -2,18 +2,19 @@
 
 Đã triển khai backend và frontend tại `/home/messages`. Đây là chat văn bản 1:1, tối đa 2.000 ký tự sau khi trim. Các ID đều là UUID v4. Chưa có nhóm, file đính kèm, sửa/xóa tin hoặc trạng thái đang nhập.
 
-## Quy tắc theo dõi
+## Quy tắc theo dõi và chấp nhận lời mời
 
 | Quan hệ giữa A và B | A gửi cho B | B gửi cho A | Hộp thư |
 | --- | --- | --- | --- |
 | Không ai theo dõi ai | Không | Không | Chưa có cuộc trò chuyện mới |
-| A theo dõi B | Có | Phải theo dõi A trước | `requests` ở cả hai phía |
+| A theo dõi B, lời mời chưa được chấp nhận | Có | Chấp nhận lời mời để trả lời, không cần follow lại | `requests` ở cả hai phía |
 | A và B theo dõi nhau | Có | Có | `friends` ở cả hai phía |
-| Một phía bỏ theo dõi sau khi đã chat | Chỉ phía còn theo dõi được gửi | Áp dụng cùng quy tắc | Chuyển về `requests`, giữ lịch sử |
+| B đã chấp nhận lời mời của A | Có, kể cả khi unfollow | Có, không cần follow A | `friends` ở cả hai phía |
+| Bỏ theo dõi khi chưa từng chấp nhận | Chỉ phía còn theo dõi được gửi | Có thể chấp nhận lời mời đến để trả lời | Về `requests` nếu không còn follow hai chiều |
 
-Không có bước chấp nhận lời nhắn riêng. Người nhận theo dõi lại là đủ để trở thành bạn bè và trả lời. Hộp thư lạ chứa cả lời nhắn đến và lời nhắn đã gửi. Khi cả hai bỏ theo dõi, cuộc trò chuyện cũ vẫn nằm ở `requests`, cả hai không được gửi tiếp.
+Người nhận có hai thao tác **Xóa** và **Chấp nhận**. Chấp nhận lưu quyền trò chuyện độc lập với Follow, chuyển sang `friends` ở cả hai phía và không tạo quan hệ theo dõi. Hộp thư lạ vẫn chứa cả lời nhắn đến và lời nhắn đã gửi. Người mở đầu không thể tự chấp nhận lời mời của mình. Hướng lời mời dựa vào người gửi tin đầu tiên, không bị đảo hoặc mất khi unfollow. Các conversation cũ chưa có thông tin người mở đầu được suy ra từ tin đầu tiên, không cần migration/backfill trước khi chạy.
 
-`canSend`, `followsPeer`, `peerFollowsYou` và `box` được tính theo quan hệ hiện tại. FE dùng `canSend` để hiển thị composer; BE kiểm tra lại mỗi lần gửi. Tài khoản người nhận bị đình chỉ không nhận tin mới; lịch sử cũ vẫn được giữ. Xóa hẳn một tài khoản sẽ xóa các cuộc trò chuyện, tin nhắn và sự kiện liên quan.
+`canSend` và `box` xét cả trạng thái chấp nhận và Follow; `followsPeer`/`peerFollowsYou` vẫn phản ánh Follow thật. FE dùng `canAcceptRequest`/`canDeleteRequest` do BE trả để hiện hai nút. BE kiểm tra quyền, thành viên và trạng thái tài khoản trong transaction. Tài khoản bị đình chỉ không thể gửi/nhận tin mới dù conversation đã được chấp nhận. Xóa hẳn tài khoản vẫn dọn conversation/message/outbox theo cơ chế có sẵn.
 
 Tất cả endpoint yêu cầu `Authorization: Bearer <accessToken>` và tài khoản đang hoạt động. Chỉ hai người tham gia được đọc/gửi/đánh dấu đã đọc. Admin không có quyền đọc cuộc trò chuyện của người khác; trường hợp này trả `404 NOT_FOUND`.
 
@@ -30,6 +31,8 @@ Các đường dẫn bên dưới có prefix `/api/v1`.
 | POST | `/messaging/users/:userId/messages` | Gửi tin đầu tiên hoặc gửi vào cuộc trò chuyện đã có của cặp user |
 | POST | `/messaging/conversations/:id/messages` | Gửi vào cuộc trò chuyện hiện có |
 | PUT | `/messaging/conversations/:id/read` | Tăng vị trí đã đọc của chính người gọi |
+| POST | `/messaging/conversations/:id/accept` | Người nhận chấp nhận lời mời, trả Conversation `200` |
+| DELETE | `/messaging/conversations/:id/request` | Ẩn lời mời/lịch sử cũ ở phía người nhận, trả `200` |
 | GET | `/messaging/events` | SSE riêng tư cho user đang đăng nhập |
 
 Các GET JSON và SSE dùng `Cache-Control: private, no-store`.
@@ -55,7 +58,7 @@ Gọi `GET /messaging/users/:userId`:
 }
 ```
 
-Nếu `conversationId` có giá trị, tải lịch sử hiện có. Nếu `canSend=false` và chưa theo dõi, hiển thị nút theo dõi (`PUT /profiles/:userId/follow`). Không tạo chat chỉ vì người dùng mở trang hồ sơ.
+Nếu `conversationId` có giá trị, tải conversation/lịch sử để lấy quyền xử lý lời mời. Với request đến, hiển thị Xóa/Chấp nhận thay vì bắt follow lại. Chỉ gợi ý Follow khi người dùng cần khởi tạo lời nhắn và chưa có quyền từ việc chấp nhận. Không tạo chat chỉ vì mở hồ sơ. Request đã xóa hoàn toàn ở phía người nhận trả `conversationId=null` tại contact và `404` khi đọc trực tiếp ID cũ; nếu có tin mới, ID đó xuất hiện lại nhưng chỉ đọc được phần lịch sử mới.
 
 ### Gửi và retry
 
@@ -86,7 +89,21 @@ Response `201`:
 }
 ```
 
-FE tạo `crypto.randomUUID()` cho mỗi tin mới. Khi request mất mạng hoặc mất phản hồi sau khi server đã ghi, giữ lại nội dung và **dùng lại UUID đó với cùng nội dung**. BE trả lại cùng tin nhắn, không tăng sequence, không tạo thêm unread/event. Dùng lại UUID với nội dung khác trả `409 MESSAGE_ID_CONFLICT`. Chỉnh nội dung là một lần gửi mới với UUID mới. Quyền theo dõi vẫn được kiểm tra lại khi retry.
+FE tạo `crypto.randomUUID()` cho mỗi tin mới. Khi request mất mạng hoặc mất phản hồi sau khi server đã ghi, giữ lại nội dung và **dùng lại UUID đó với cùng nội dung**. BE trả lại cùng tin nhắn, không tăng sequence, không tạo thêm unread/event. Dùng lại UUID với nội dung khác trả `409 MESSAGE_ID_CONFLICT`. Chỉnh nội dung là một lần gửi mới với UUID mới. Quyền gửi từ Follow hoặc chấp nhận và trạng thái tài khoản vẫn được kiểm tra lại khi retry.
+
+### Chấp nhận hoặc xóa lời mời đến
+
+`POST /messaging/conversations/:id/accept` không cần body. Response là Conversation với `box=friends`, `canSend=true`, `canAcceptRequest=false`, `canDeleteRequest=false` nếu peer còn ACTIVE. Retry sau khi đã chấp nhận không tạo thêm event. Chấp nhận không ghi Follow và vẫn có hiệu lực khi unfollow.
+
+`DELETE /messaging/conversations/:id/request` nhận body:
+
+```json
+{ "throughMessageId": "d06868ca-59cb-483f-ac14-59db9cfc4f4f" }
+```
+
+FE truyền ID tin mới nhất **đã hiển thị trong lịch sử**, không tự chọn tin mới chưa tải/hiển thị. Response `{ conversationId, deletedThroughSequence }` ghi cutoff chỉ cho người nhận. Lịch sử phía người gửi giữ nguyên và dữ liệu message không bị xóa toàn cục. Request biến mất nếu không còn tin sau cutoff; tin mới sau đó xuất hiện lại trong `requests` với lịch sử mới và unread tương ứng. Retry cùng marker không ẩn nhầm tin mới hơn. Cursor/tin nằm trước cutoff không còn đọc hoặc mark-read được ở phía người đã xóa.
+
+Chỉ người nhận của request được xử lý lần đầu. Người gửi không thể tự chấp nhận/xóa ở phía người kia; admin hoặc người ngoài trả `404`. Không xóa request đã chấp nhận hoặc đã là bạn bè: `409 MESSAGE_REQUEST_NOT_PENDING`. Các thao tác dùng cùng transaction/user locks với gửi tin và thay đổi tài khoản. Xóa không tạo read receipt hoặc tự đánh dấu đã xem ở phía người gửi.
 
 Không tự hiển thị tin như đã gửi trước khi có xác nhận từ API. Gộp response POST và GET theo `message.id` để tránh trùng. Server bảo đảm một cuộc trò chuyện cho một cặp người dùng, kể cả khi hai bên gửi đồng thời.
 
@@ -105,6 +122,9 @@ type Conversation = {
   followsPeer: boolean
   peerFollowsYou: boolean
   canSend: boolean
+  canAcceptRequest: boolean
+  canDeleteRequest: boolean
+  deletedThroughSequence: number
   lastMessage: { id: string; senderId: string; body: string; createdAt: string } | null
   unreadCount: number
   myReadSequence: number
@@ -112,7 +132,7 @@ type Conversation = {
 }
 ```
 
-`requestDirection` là `incoming` khi chỉ người kia theo dõi mình, `outgoing` khi chỉ mình theo dõi họ, `null` khi đã là bạn bè hoặc cả hai đã bỏ theo dõi. Sau sự kiện gửi tin hoặc thay đổi theo dõi, FE tải lại inbox từ trang đầu để tránh dùng cursor của thứ tự/hộp thư cũ. Cursor inbox chuyển sang hộp thư khác trả `400 MESSAGE_CURSOR_INVALID`; cursor không thuộc người gọi trả `404`.
+`requestDirection` là `incoming` với người nhận của cuộc trò chuyện chưa chấp nhận, `outgoing` với người mở đầu, `null` khi ở mục bạn bè. Hướng này được giữ sau unfollow. Sau gửi tin, đổi Follow hoặc xử lý request, FE tải lại inbox từ trang đầu để bỏ cursor cũ. Cursor inbox chuyển hộp thư trả `400 MESSAGE_CURSOR_INVALID`; cursor không thuộc người gọi hoặc request đã ẩn hoàn toàn ở phía mình trả `404`. FE loại bỏ tin có `sequence <= deletedThroughSequence` khỏi cả cache lịch sử cũ và tin đã xác nhận cục bộ.
 
 Lịch sử sắp `sequence DESC`, không phụ thuộc thời gian máy client. FE gộp các trang, loại trùng theo ID rồi hiển thị `sequence ASC`. Cursor là ID của tin cuối trang; cursor của cuộc trò chuyện khác hoặc không còn tồn tại trả `400 MESSAGE_CURSOR_INVALID`.
 
@@ -137,6 +157,8 @@ Client gửi tin qua POST và nhận thay đổi qua SSE. Dùng `fetchEventSourc
 | `message.created` | Metadata bên dưới | Tải lại inbox, chi tiết và lịch sử chat liên quan |
 | `conversation.read` | Metadata bên dưới | Tải lại unread và vị trí đã đọc |
 | `relationship.changed` | Metadata bên dưới, các field có thể null | Tải lại quyền gửi, inbox từ trang đầu và thông tin contact |
+| `request.accepted` | Metadata với `conversationId` | Cả hai phía tải lại inbox/contact; cuộc trò chuyện chuyển sang bạn bè |
+| `request.deleted` | Metadata với `conversationId`, chỉ gửi cho người xóa | Bỏ cache lịch sử cũ, reset inbox và đóng thread đã xóa |
 | `ping` | `{ "connected": true }` hoặc `false` | Heartbeat mỗi 15 giây; phản ánh tình trạng change stream |
 | `session.expired` | `{}` | Ngắt stream, refresh phiên hoặc đăng nhập lại |
 
@@ -162,7 +184,7 @@ Không cần thêm biến môi trường hoặc dependency. Dùng MongoDB replic
 - `conversations`: một cặp thành viên duy nhất, sequence và vị trí đọc riêng của mỗi phía, preview cuối.
 - `direct_messages`: unique `(conversationId, sequence)` và `(conversationId, senderId, clientMessageId)`.
 - `messaging_events`: outbox được ghi trong cùng transaction với gửi/đọc/theo dõi. MongoDB change stream phát các event đã commit cho các instance API. TTL 7 ngày chỉ áp dụng cho outbox, không xóa tin nhắn.
-- Thay đổi theo dõi, gửi và đọc dùng cùng thứ tự khóa user với quản trị tài khoản để tránh race khi gửi/unfollow/xóa account đồng thời.
+- Thay đổi theo dõi, gửi, đọc, chấp nhận và xóa lời mời dùng cùng thứ tự khóa user với quản trị tài khoản để tránh race khi thao tác đồng thời.
 
 Mongoose đăng ký collection/index khi khởi động; không có Prisma migration. Reverse proxy cần cho phép SSE chạy lâu và không buffer response (`X-Accel-Buffering: no` đã được đặt ở API).
 
@@ -183,9 +205,13 @@ Mongoose đăng ký collection/index khi khởi động; không có Prisma migra
 | 400 | `SELF_MESSAGE_NOT_ALLOWED` | Không nhắn cho chính mình |
 | 400 | `MESSAGE_CURSOR_INVALID` | Bỏ cursor, tải lại trang đầu |
 | 401 | `UNAUTHORIZED`, `ACCOUNT_SUSPENDED`, `ACCOUNT_NOT_ACTIVE` | Refresh phiên/đăng nhập lại |
-| 403 | `MESSAGE_FOLLOW_REQUIRED` | Yêu cầu theo dõi trước khi gửi |
+| 403 | `MESSAGE_FOLLOW_REQUIRED` | Cần Follow để bắt đầu lời nhắn hoặc chấp nhận lời mời đến để trả lời |
+| 403 | `MESSAGE_REQUEST_RECEIVER_REQUIRED` | Chỉ người nhận được xử lý lời mời, không tự chấp nhận lời mời gửi đi |
 | 404 | `NOT_FOUND` | Người nhận không khả dụng hoặc chat/tin không thuộc người gọi |
 | 409 | `MESSAGE_ID_CONFLICT` | UUID đã dùng cho nội dung khác; không retry mù |
+| 409 | `MESSAGE_REQUEST_NOT_PENDING` | Không xóa cuộc trò chuyện đã chấp nhận/đã là bạn bè; tải lại trạng thái |
 | 409 | `CONFLICT` | Xung đột ghi đồng thời còn tồn tại sau retry; giữ nội dung để thử lại |
 
-Chạy `npm run test:e2e -- test/messaging.e2e-spec.ts` với MongoDB local replica set. Suite dùng database ngẫu nhiên, tạo index và tự xóa database sau test. Bao phủ phân loại inbox, quyền admin/user, giới hạn nội dung, cursor, đồng thời, idempotency, unread, follow/unfollow, xóa tài khoản, stream riêng tư, nhiều instance và JWT hết hạn/đình chỉ. Test không ghi vào database ứng dụng.
+Chạy `npm run test:e2e -- test/e2e/messaging.e2e-spec.ts test/e2e/messaging-notifications.flows.e2e-spec.ts` với MongoDB local replica set. Suite dùng database ngẫu nhiên, tạo index và tự xóa database sau test. Bao phủ phân loại inbox, quyền admin/user, giới hạn nội dung, cursor, đồng thời, idempotency, unread, follow/unfollow, xử lý lời mời, xóa tài khoản, stream riêng tư, nhiều instance và JWT hết hạn/đình chỉ. Test không ghi vào database ứng dụng.
+
+Follow-up Xóa/Chấp nhận đã qua 37 unit tests của messaging, 83 E2E HTTP/MongoDB/SSE, build và ESLint. Production Docker image build và API smoke cũng đạt: quyền chỉ người nhận, không tạo Follow, gửi hai chiều sau unfollow, xóa riêng phía người nhận, tin mới xuất hiện lại, retry marker không xóa tin mới, cursor/read cũ bị từ chối. FE có 18 browser tests riêng với mock API. Không có thay đổi env hoặc migration bắt buộc; chưa merge/deploy khi ghi nhận kiểm tra này.
