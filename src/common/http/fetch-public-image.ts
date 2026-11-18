@@ -1,8 +1,9 @@
+import { runtimeConfig } from '../../config/runtime-config.js';
 import { lookup } from 'node:dns/promises';
 import { isIP } from 'node:net';
 
-const FETCH_TIMEOUT_MS = 10_000;
-const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
+const FETCH_TIMEOUT_MS = runtimeConfig.PUBLIC_IMAGE_FETCH_TIMEOUT_MS;
+const MAX_IMAGE_BYTES = runtimeConfig.PUBLIC_IMAGE_MAX_MB * 1048576;
 
 export class UnsafeImageUrlError extends Error {}
 

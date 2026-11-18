@@ -1,7 +1,8 @@
+import { runtimeConfig } from '../../config/runtime-config.js';
 import { spawn } from 'node:child_process';
 import ffmpegStatic from 'ffmpeg-static';
 
-const DEFAULT_TIMEOUT_MS = 30_000;
+const DEFAULT_TIMEOUT_MS = runtimeConfig.FFMPEG_DEFAULT_TIMEOUT_MS;
 
 function ffmpegPath(): string {
   const bundled = typeof ffmpegStatic === 'string' ? ffmpegStatic : null;
