@@ -1,3 +1,4 @@
+import { runtimeConfig } from '../config/runtime-config.js';
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import {
@@ -58,7 +59,7 @@ interface StorageClients {
   presigner: S3Client;
 }
 
-export const UPLOAD_TTL_SECONDS = 60 * 60;
+export const UPLOAD_TTL_SECONDS = runtimeConfig.STORAGE_UPLOAD_TTL_SECONDS;
 
 @Injectable()
 export class StorageService implements OnModuleInit {
@@ -97,7 +98,10 @@ export class StorageService implements OnModuleInit {
         forcePathStyle: true,
         credentials: { accessKeyId, secretAccessKey },
         requestChecksumCalculation: 'WHEN_REQUIRED',
-        requestHandler: { connectionTimeout: 3000, requestTimeout: 10_000 },
+        requestHandler: {
+          connectionTimeout: runtimeConfig.STORAGE_CONNECTION_TIMEOUT_MS,
+          requestTimeout: runtimeConfig.STORAGE_REQUEST_TIMEOUT_MS,
+        },
       });
     const configured =
       endpoint &&
