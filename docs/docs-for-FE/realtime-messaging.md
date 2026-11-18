@@ -1,5 +1,24 @@
 # Nhắn tin riêng realtime
 
+## Badge tổng tin nhắn chưa đọc
+
+`GET /api/v1/messaging/unread-count` yêu cầu Bearer token, trả `{ "unreadCount": 5 }`.
+Đây là số **tin nhắn đến chưa đọc**, gồm Bạn bè và Tin nhắn lạ, không phải số
+cuộc trò chuyện. Tổng tính từ mọi conversation của người gọi; không cộng riêng
+trang đầu vì có thể bỏ sót cuộc trò chuyện chưa tải.
+
+Tin tự gửi, tin có sequence không vượt vị trí đã đọc hoặc mốc xóa riêng của người
+nhận không được tính. Chấp nhận lời mời không tự xóa số chưa đọc; tin mới sau khi
+xóa lời mời được tính lại bình thường. Số đếm không lưu riêng nên không cần backfill.
+
+FE hiện badge trên mục Tin nhắn ở sidebar, thanh đáy mobile và menu mobile: 0 ẩn,
+trên 99 hiển thị `99+`, nhãn trợ năng giữ tổng thật. SSE `message.created`,
+`conversation.read`, `request.deleted`, reconnect và hành động đọc/xóa tại máy hiện
+tại đều tải lại tổng. Khi stream mất kết nối dùng GET mỗi 5 giây; dữ liệu riêng tư
+không cache dùng chung (`private, no-store`, `Vary: Authorization`). Không thêm env.
+
+## Luồng nhắn tin
+
 Đã triển khai backend và frontend tại `/home/messages`. Chat 1:1 hỗ trợ văn bản tối đa 2.000 ký tự sau khi trim và chia sẻ post/blog qua thẻ bài viết. Các ID đều là UUID v4. Chưa có nhóm, file đính kèm, sửa/xóa tin hoặc trạng thái đang nhập.
 
 ## Quy tắc theo dõi và chấp nhận lời mời
