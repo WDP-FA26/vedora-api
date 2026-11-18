@@ -2,6 +2,7 @@ import 'reflect-metadata';
 import { plainToInstance } from 'class-transformer';
 import { validate } from 'class-validator';
 import {
+  GenerateMealDaysDto,
   MAX_DISHES_PER_SECTION,
   MealPlannerChatDto,
   SaveMealDayDto,
@@ -9,7 +10,7 @@ import {
   WEEKDAYS,
 } from '../../../src/meal-plan/dto/meal-plan.dto.js';
 import { ShoppingListQueryDto } from '../../../src/meal-plan/dto/shopping-list.dto.js';
-import { Weekday } from '../../../src/mongo/models.js';
+import { MealSection, Weekday } from '../../../src/mongo/models.js';
 
 const uuid1 = 'd1a2d3e4-0000-4000-8000-000000000001';
 const uuid2 = 'd1a2d3e4-0000-4000-8000-000000000002';
@@ -211,6 +212,56 @@ describe('MealPlan & ShoppingList DTOs', () => {
           }),
         ),
       ).not.toHaveLength(0);
+    });
+  });
+
+  describe('GenerateMealDaysDto', () => {
+    it('accepts candidateIds, avoidIds, and pinned slots with optional recipeIds', async () => {
+      const dto = plainToInstance(GenerateMealDaysDto, {
+        days: [Weekday.MON, Weekday.WED],
+        sections: [MealSection.LUNCH, MealSection.DINNER],
+        onlyEmpty: false,
+        candidateIds: [uuid1],
+        avoidIds: [uuid2],
+        pinned: [
+          { day: Weekday.WED, section: MealSection.LUNCH, recipeIds: [uuid1] },
+        ],
+      });
+      expect(await validate(dto)).toHaveLength(0);
+    });
+
+    it('rejects invalid UUIDs or too many recipeIds in pinned slots', async () => {
+      const invalidUuid = plainToInstance(GenerateMealDaysDto, {
+        days: [Weekday.MON],
+        sections: [MealSection.LUNCH],
+        onlyEmpty: false,
+        pinned: [
+          {
+            day: Weekday.MON,
+            section: MealSection.LUNCH,
+            recipeIds: ['not-a-uuid'],
+          },
+        ],
+      });
+      expect(await validate(invalidUuid)).not.toHaveLength(0);
+
+      const tooManyIds = Array.from(
+        { length: MAX_DISHES_PER_SECTION + 1 },
+        (_, i) => `d1a2d3e4-0000-4000-8000-00000000001${i}`,
+      );
+      const tooMany = plainToInstance(GenerateMealDaysDto, {
+        days: [Weekday.MON],
+        sections: [MealSection.LUNCH],
+        onlyEmpty: false,
+        pinned: [
+          {
+            day: Weekday.MON,
+            section: MealSection.LUNCH,
+            recipeIds: tooManyIds,
+          },
+        ],
+      });
+      expect(await validate(tooMany)).not.toHaveLength(0);
     });
   });
 });

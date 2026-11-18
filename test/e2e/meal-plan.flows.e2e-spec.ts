@@ -229,17 +229,20 @@ describe('Meal plan and shopping list flows (e2e)', () => {
       ).toBe(0);
     });
 
-    it('refuses a new dish that clashes with a dish already saved in another section of that day', async () => {
+    it('saves a new dish that clashes with a dish already saved in the same meal and warns', async () => {
       const { token } = await signedUser();
       await putDays(token, [dayBody('SAT', { lunch: [tofuDish.id] })]).expect(
         200,
       );
       const response = await putDays(token, [
-        dayBody('SAT', { lunch: [tofuDish.id], dinner: [honeyDish.id] }),
-      ]).expect(409);
-      const body = response.body as ErrorBody;
-      expect(body.code).toBe('MEAL_PLAN_INVALID');
-      expect(body.details?.problems).toEqual([
+        dayBody('SAT', { lunch: [tofuDish.id, honeyDish.id] }),
+      ]).expect(200);
+      const plan = response.body as MealPlanDto;
+      expect(sectionIds(plan, 'SAT', 'LUNCH')).toEqual([
+        tofuDish.id,
+        honeyDish.id,
+      ]);
+      expect(plan.problems).toEqual([
         expect.objectContaining({
           code: 'DAY_CONFLICT',
           day: 'SAT',
@@ -251,7 +254,15 @@ describe('Meal plan and shopping list flows (e2e)', () => {
       ]);
     });
 
-    it('allows moving dishes between sections of a day that already clashes', async () => {
+    it('does not report a clash between dishes of two meals on one day', async () => {
+      const { token } = await signedUser();
+      const response = await putDays(token, [
+        dayBody('SAT', { lunch: [tofuDish.id], dinner: [honeyDish.id] }),
+      ]).expect(200);
+      expect((response.body as MealPlanDto).problems).toEqual([]);
+    });
+
+    it('lets the user fix a clashing meal by moving a dish to another meal', async () => {
       const { user, token } = await signedUser();
       await model<MealPlanEntry>('MealPlanEntry').insertMany([
         {
@@ -266,17 +277,17 @@ describe('Meal plan and shopping list flows (e2e)', () => {
           _id: randomUUID(),
           userId: user.id,
           day: 'SUN',
-          section: 'DINNER',
+          section: 'LUNCH',
           recipeId: honeyDish.id,
-          position: 0,
+          position: 1,
         },
       ]);
       const response = await putDays(token, [
-        dayBody('SUN', { breakfast: [honeyDish.id], dinner: [tofuDish.id] }),
+        dayBody('SUN', { breakfast: [honeyDish.id], lunch: [tofuDish.id] }),
       ]).expect(200);
       const plan = response.body as MealPlanDto;
       expect(sectionIds(plan, 'SUN', 'BREAKFAST')).toEqual([honeyDish.id]);
-      expect(plan.problems.map(({ code }) => code)).toEqual(['DAY_CONFLICT']);
+      expect(plan.problems).toEqual([]);
     });
 
     it('refuses a dish with an ingredient avoided through a group', async () => {

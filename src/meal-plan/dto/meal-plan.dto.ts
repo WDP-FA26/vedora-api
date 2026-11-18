@@ -82,6 +82,32 @@ export const MAX_GENERATE_MINUTES = 240;
 export const MAX_GENERATE_QUERY_LENGTH = 100;
 export const MAX_GENERATE_EXCLUDES = 10;
 
+export const MAX_GENERATE_IDS = 200;
+
+export class SlotRefDto {
+  @ApiProperty({ enum: Weekday })
+  @IsEnum(Weekday)
+  day!: Weekday;
+
+  @ApiProperty({ enum: MealSection })
+  @IsEnum(MealSection)
+  section!: MealSection;
+
+  @ApiPropertyOptional({
+    type: [String],
+    format: 'uuid',
+    maxItems: MAX_DISHES_PER_SECTION,
+    description:
+      'Optional recipes to place in this pinned slot before filling the rest',
+  })
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(MAX_DISHES_PER_SECTION)
+  @ArrayUnique()
+  @IsUUID('4', { each: true })
+  recipeIds?: string[];
+}
+
 export class GenerateMealDaysDto {
   @ApiProperty({
     enum: Weekday,
@@ -169,6 +195,43 @@ export class GenerateMealDaysDto {
   @Min(1)
   @Max(MAX_DISHES_PER_SECTION)
   perSection?: number;
+
+  @ApiPropertyOptional({
+    type: [String],
+    format: 'uuid',
+    maxItems: MAX_GENERATE_IDS,
+    description:
+      'Only choose from these recipes, e.g. a shortlist built from a search. Still subject to every other rule',
+  })
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(MAX_GENERATE_IDS)
+  @ArrayUnique()
+  @IsUUID('4', { each: true })
+  candidateIds?: string[];
+
+  @ApiPropertyOptional({
+    type: [String],
+    format: 'uuid',
+    maxItems: MAX_GENERATE_IDS,
+    description: 'Never choose these recipes',
+  })
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(MAX_GENERATE_IDS)
+  @ArrayUnique()
+  @IsUUID('4', { each: true })
+  avoidIds?: string[];
+
+  @ApiPropertyOptional({
+    type: [SlotRefDto],
+    description: 'Slots to leave exactly as they are, whatever else is set',
+  })
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => SlotRefDto)
+  pinned?: SlotRefDto[];
 }
 
 export class MealIngredientDto {
@@ -275,6 +338,19 @@ export class MealPlanPreviewDto {
   @ApiProperty({ type: [MealPlanPreviewDayDto] })
   days!: MealPlanPreviewDayDto[];
   @ApiProperty({ type: [MealPlanProblemDto] }) problems!: MealPlanProblemDto[];
+}
+
+export class MealPlanDraftDto extends MealPlanPreviewDto {
+  @ApiProperty({
+    description:
+      'true when the draft has changes and passes every check, so it can be shown and saved',
+  })
+  ok!: boolean;
+}
+
+export class GenerateMealResultDto extends MealPlanDraftDto {
+  @ApiProperty({ description: 'Slots this call filled or changed' })
+  filled!: number;
 }
 
 const MAX_PLANNER_MESSAGES = 10;

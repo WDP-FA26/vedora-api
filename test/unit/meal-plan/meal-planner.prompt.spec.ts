@@ -47,6 +47,7 @@ describe('meal-planner prompt & refusals', () => {
       id: 'rec-1',
       title: 'Đậu hũ sốt cà',
       imageUrl: null,
+      tag: null,
       servings: 2,
       prepMinutes: 10,
       cookMinutes: 10,
@@ -57,6 +58,7 @@ describe('meal-planner prompt & refusals', () => {
       id: 'rec-2',
       title: 'Sữa đậu nành',
       imageUrl: null,
+      tag: null,
       servings: 1,
       prepMinutes: 5,
       cookMinutes: null,
@@ -70,6 +72,35 @@ describe('meal-planner prompt & refusals', () => {
     expect(output).toContain('Nguyên liệu người dùng thích: Đậu hũ.');
     expect(output).toContain(
       `- ${DAY_NAMES.MON}: ${SECTION_NAMES.LUNCH}: Đậu hũ sốt cà (id rec-1); ${SECTION_NAMES.OTHER}: Sữa đậu nành (id rec-2)`,
+    );
+  });
+
+  it('includes unsaved draft changes when provided', () => {
+    const restrictions: DietaryRestrictionsDto = {
+      ingredients: [],
+      groups: [],
+      liked: [],
+    };
+    const output = plannerInstructions(restrictions, emptyPlan(), {
+      ok: true,
+      problems: [],
+      days: [
+        {
+          day: Weekday.WED,
+          sections: [
+            {
+              section: MealSection.LUNCH,
+              recipes: [{ id: 'rec-pho', title: 'Phở chay', tag: null }],
+              previous: [],
+            },
+          ],
+        },
+      ],
+    });
+
+    expect(output).toContain('Bản nháp đang đề xuất (chưa lưu):');
+    expect(output).toContain(
+      `- ${DAY_NAMES.WED}: ${SECTION_NAMES.LUNCH}: Phở chay (id rec-pho)`,
     );
   });
 

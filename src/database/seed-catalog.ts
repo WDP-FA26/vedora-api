@@ -2,11 +2,12 @@ import { randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { z } from 'zod';
-import type {
-  Ingredient,
-  IngredientGroup,
-  IncompatibilityRule,
-  Recipe,
+import {
+  type Ingredient,
+  type IngredientGroup,
+  type IncompatibilityRule,
+  type Recipe,
+  RecipeTag,
 } from '../mongo/models.js';
 import type { MongoService } from '../mongo/mongo.service.js';
 
@@ -39,6 +40,7 @@ const seedDataSchema = z.object({
     z.object({
       title: z.string(),
       description: z.string(),
+      tag: z.enum(RecipeTag).optional(),
       servings: z.number(),
       prepMinutes: z.number(),
       cookMinutes: z.number(),
@@ -147,26 +149,39 @@ export async function seedCatalog(
   let recipes = 0;
   let photos = 0;
   for (const { ingredients, ...recipe } of data.recipes) {
+    const mappedIngredients = ingredients.map((item) => ({
+      ingredientId: ingredientId(item.name),
+      quantity: item.quantity ?? null,
+      unit: item.unit ?? null,
+      note: item.note ?? null,
+    }));
     const existing = await recipesModel.findOne({ title: recipe.title });
     if (existing) {
+      const updates: Partial<Pick<Recipe, 'imageUrl' | 'tag' | 'ingredients'>> =
+        {};
       if (recipe.imageUrl && !existing.imageUrl) {
-        await recipesModel.updateOne(
-          { _id: existing.id },
-          { $set: { imageUrl: recipe.imageUrl } },
-        );
+        updates.imageUrl = recipe.imageUrl;
         photos++;
+      }
+      if (recipe.tag && !existing.tag) {
+        updates.tag = recipe.tag;
+      }
+      if (
+        (!existing.ingredients || existing.ingredients.length === 0) &&
+        mappedIngredients.length > 0
+      ) {
+        updates.ingredients = mappedIngredients;
+      }
+      if (Object.keys(updates).length > 0) {
+        await recipesModel.updateOne({ _id: existing.id }, { $set: updates });
       }
       continue;
     }
     await recipesModel.create({
       _id: randomUUID(),
       ...recipe,
-      ingredients: ingredients.map((item) => ({
-        ingredientId: ingredientId(item.name),
-        quantity: item.quantity ?? null,
-        unit: item.unit ?? null,
-        note: item.note ?? null,
-      })),
+      tag: recipe.tag ?? null,
+      ingredients: mappedIngredients,
     });
     recipes++;
   }

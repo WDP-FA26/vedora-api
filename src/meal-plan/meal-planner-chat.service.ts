@@ -24,9 +24,10 @@ import type { PlannerMessageDto } from './dto/meal-plan.dto.js';
 import { MealPlanService } from './meal-plan.service.js';
 import { plannerInstructions } from './meal-planner.prompt.js';
 import { PLANNER_REFUSALS } from './meal-planner.refusals.js';
-import { generateMealPlanTool } from './tools/generate-meal-plan.tool.js';
+import { editDraftTool } from './tools/edit-draft.tool.js';
+import { fillSlotsTool } from './tools/fill-slots.tool.js';
+import { getPlanTool } from './tools/get-plan.tool.js';
 import { getRecipeTool } from './tools/get-recipe.tool.js';
-import { proposeMealPlanTool } from './tools/propose-meal-plan.tool.js';
 import { searchRecipesTool } from './tools/search-recipes.tool.js';
 import { FeatureUnavailableException } from '../common/exceptions/feature-unavailable.exception.js';
 import { AiFeature } from '../mongo/models.js';
@@ -36,6 +37,24 @@ import { QuotaReachedException } from '../common/exceptions/quota-reached.except
 
 const MAX_STEPS = 10;
 const SEARCH_TIMEOUT_MS = 5000;
+
+function shouldDiscardPreviousDraft(
+  messages: readonly PlannerMessageDto[],
+): boolean {
+  if (messages.length === 1) return true;
+  let latestProposalNote: string | null = null;
+  for (const message of messages) {
+    if (message.role !== 'assistant') continue;
+    const matches = message.text.match(/\[Đề xuất \([^)]+\):[^\]]*\]/g);
+    if (matches && matches.length > 0) {
+      latestProposalNote = matches.at(-1) ?? null;
+    }
+  }
+  return (
+    latestProposalNote !== null &&
+    latestProposalNote.includes('người dùng đã bỏ qua')
+  );
+}
 
 @Injectable()
 export class MealPlannerChatService {
@@ -92,20 +111,26 @@ export class MealPlannerChatService {
         return cannedReply(PLANNER_REFUSALS[verdict]);
       }
 
-      const [restrictions, plan] = await Promise.all([
+      if (shouldDiscardPreviousDraft(messages)) {
+        await this.mealPlan.discardDraft(userId);
+      }
+      const [restrictions, plan, draft] = await Promise.all([
         this.dietary.find(userId),
         this.mealPlan.find(userId),
+        this.mealPlan.getDraft(userId),
       ]);
+
       const agent = new ToolLoopAgent({
         model: this.model,
-        instructions: plannerInstructions(restrictions, plan),
+        instructions: plannerInstructions(restrictions, plan, draft),
         maxOutputTokens: 4000,
         tools: {
           searchKnowledge: searchKnowledgeTool(this.knowledge),
           searchRecipes: searchRecipesTool(this.mealPlan, userId),
           getRecipe: getRecipeTool(this.mealPlan, userId),
-          generateMealPlan: generateMealPlanTool(this.mealPlan, userId),
-          proposeMealPlan: proposeMealPlanTool(this.mealPlan, userId),
+          getPlan: getPlanTool(this.mealPlan, userId),
+          fillSlots: fillSlotsTool(this.mealPlan, userId),
+          editDraft: editDraftTool(this.mealPlan, userId),
         },
         stopWhen: isStepCount(MAX_STEPS),
         prepareStep: ({ stepNumber }) =>

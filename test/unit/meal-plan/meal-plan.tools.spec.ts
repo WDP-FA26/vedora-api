@@ -1,8 +1,9 @@
 import { type DeepMockProxy, mockDeep } from 'vitest-mock-extended';
 import type { MealPlanService } from '../../../src/meal-plan/meal-plan.service.js';
-import { generateMealPlanTool } from '../../../src/meal-plan/tools/generate-meal-plan.tool.js';
+import { editDraftTool } from '../../../src/meal-plan/tools/edit-draft.tool.js';
+import { fillSlotsTool } from '../../../src/meal-plan/tools/fill-slots.tool.js';
+import { getPlanTool } from '../../../src/meal-plan/tools/get-plan.tool.js';
 import { getRecipeTool } from '../../../src/meal-plan/tools/get-recipe.tool.js';
-import { proposeMealPlanTool } from '../../../src/meal-plan/tools/propose-meal-plan.tool.js';
 import { searchRecipesTool } from '../../../src/meal-plan/tools/search-recipes.tool.js';
 import { MealSection, RecipeTag, Weekday } from '../../../src/mongo/models.js';
 
@@ -18,6 +19,7 @@ const execOptions: ExecOptions = {
 
 describe('Meal planner AI tools', () => {
   const userId = '4a1e32e4-e18e-4dd7-8b4a-246ef2113ff2';
+  const recipe1 = 'd1a2d3e4-0000-4000-8000-000000000001';
   let mealPlan: DeepMockProxy<MealPlanService>;
 
   beforeEach(() => {
@@ -81,6 +83,7 @@ describe('Meal planner AI tools', () => {
           tag: RecipeTag.STIR_FRY,
           minutes: 15,
           ingredients: ['Đậu hũ', 'Cà chua'],
+          description: 'Món mặn đậm đà',
         },
         {
           id: 'rec-2',
@@ -88,16 +91,25 @@ describe('Meal planner AI tools', () => {
           tag: null,
           minutes: null,
           ingredients: ['Nấm'],
+          description: null,
         },
       ];
       mealPlan.suggestions.mockResolvedValue(suggestions);
 
       const output = await toolDef.execute?.(
-        { query: 'đậu hũ', tag: RecipeTag.STIR_FRY, maxMinutes: 30 },
+        {
+          query: 'đậu hũ',
+          tag: RecipeTag.STIR_FRY,
+          tags: [RecipeTag.STIR_FRY, RecipeTag.SOUP],
+          exclude: ['chiên'],
+          maxMinutes: 30,
+        },
         execOptions,
       );
       expect(mealPlan.suggestions).toHaveBeenCalledWith(userId, 'đậu hũ', {
         tag: RecipeTag.STIR_FRY,
+        tags: [RecipeTag.STIR_FRY, RecipeTag.SOUP],
+        exclude: ['chiên'],
         maxMinutes: 30,
       });
       expect(output).toEqual(suggestions);
@@ -110,7 +122,7 @@ describe('Meal planner AI tools', () => {
       expect(modelOut).toEqual({
         type: 'text',
         value:
-          'rec-1 | Đậu hũ sốt cà | STIR_FRY | 15 phút | Đậu hũ, Cà chua\nrec-2 | Canh nấm | chưa phân loại | ? phút | Nấm',
+          'rec-1 | Đậu hũ sốt cà | STIR_FRY | 15 phút | Đậu hũ, Cà chua | Món mặn đậm đà\nrec-2 | Canh nấm | chưa phân loại | ? phút | Nấm',
       });
     });
 
@@ -121,6 +133,8 @@ describe('Meal planner AI tools', () => {
       const output = await toolDef.execute?.({}, execOptions);
       expect(mealPlan.suggestions).toHaveBeenCalledWith(userId, undefined, {
         tag: undefined,
+        tags: undefined,
+        exclude: undefined,
         maxMinutes: undefined,
       });
       if (!Array.isArray(output)) throw new Error('expected array output');
@@ -137,44 +151,224 @@ describe('Meal planner AI tools', () => {
     });
   });
 
-  describe('proposeMealPlanTool', () => {
-    const daysInput = [
-      {
-        day: Weekday.MON,
-        breakfast: [],
-        lunch: ['d1a2d3e4-0000-4000-8000-000000000001'],
-        dinner: [],
-        others: [],
-      },
-    ];
+  describe('getPlanTool', () => {
+    it('formats the saved weekly plan and unsaved draft changes', async () => {
+      const toolDef = getPlanTool(mealPlan, userId);
+      const savedPlan = {
+        days: Object.values(Weekday).map((day) => ({
+          day,
+          sections: Object.values(MealSection).map((section) => ({
+            section,
+            recipes:
+              day === Weekday.MON && section === MealSection.LUNCH
+                ? [
+                    {
+                      id: recipe1,
+                      title: 'Cơm gạo lứt',
+                      imageUrl: null,
+                      tag: RecipeTag.RICE,
+                      servings: 1,
+                      prepMinutes: 10,
+                      cookMinutes: 15,
+                      ingredients: [],
+                      steps: ['Nấu'],
+                    },
+                  ]
+                : [],
+          })),
+        })),
+        problems: [],
+      };
+      const draft = {
+        days: [
+          {
+            day: Weekday.WED,
+            sections: [
+              {
+                section: MealSection.LUNCH,
+                recipes: [
+                  { id: 'rec-pho', title: 'Phở chay', tag: RecipeTag.NOODLES },
+                ],
+                previous: [],
+              },
+            ],
+          },
+        ],
+        problems: [],
+        ok: true,
+      };
+      mealPlan.find.mockResolvedValue(savedPlan);
+      mealPlan.getDraft.mockResolvedValue(draft);
 
-    it('returns ok=true and tells model the proposal is shown when there are no problems', async () => {
-      const toolDef = proposeMealPlanTool(mealPlan, userId);
-      const preview = { days: [], problems: [] };
-      mealPlan.preview.mockResolvedValue(preview);
-
-      const output = await toolDef.execute?.({ days: daysInput }, execOptions);
-      expect(mealPlan.preview).toHaveBeenCalledWith(userId, daysInput);
-      expect(output).toEqual({ ...preview, ok: true });
+      const output = await toolDef.execute?.({}, execOptions);
+      expect(mealPlan.find).toHaveBeenCalledWith(userId);
+      expect(mealPlan.getDraft).toHaveBeenCalledWith(userId);
+      expect(output).toEqual({ plan: savedPlan, draft });
 
       if (!output || Symbol.asyncIterator in output) {
-        throw new Error('expected proposal output');
+        throw new Error('expected plan output');
       }
       const modelOut = await toolDef.toModelOutput?.({
-        input: { days: daysInput },
+        input: {},
         toolCallId: 'call-1',
         output,
       });
       expect(modelOut).toEqual({
         type: 'text',
-        value:
-          'The proposal is on screen, not saved. Ask the user to press "Áp dụng" or say what to change.',
+        value: expect.stringContaining(
+          `- Thứ Hai: trưa: Cơm gạo lứt (id ${recipe1})`,
+        ) as unknown,
+      });
+      expect(modelOut).toEqual({
+        type: 'text',
+        value: expect.stringContaining(
+          '- Thứ Tư: trưa: Phở chay (id rec-pho)',
+        ) as unknown,
+      });
+    });
+  });
+
+  describe('fillSlotsTool', () => {
+    const request = {
+      days: [Weekday.MON],
+      sections: [MealSection.LUNCH],
+      onlyEmpty: true,
+      maxMinutes: 30,
+    };
+    const section = (recipes: { id: string; title: string; tag: null }[]) => ({
+      section: MealSection.LUNCH,
+      recipes,
+      previous: [],
+    });
+
+    it('passes the request to fillDraft and summarizes the draft', async () => {
+      const toolDef = fillSlotsTool(mealPlan, userId);
+      const result = {
+        days: [
+          {
+            day: Weekday.MON,
+            sections: [
+              section([{ id: 'rec-1', title: 'Cơm gạo lứt', tag: null }]),
+            ],
+          },
+        ],
+        problems: [],
+        ok: true,
+        filled: 1,
+        allSlotsAlreadyFilled: false,
+      };
+      mealPlan.fillDraft.mockResolvedValue(result);
+
+      const output = await toolDef.execute?.(request, execOptions);
+      expect(mealPlan.fillDraft).toHaveBeenCalledWith(userId, request);
+      expect(output).toEqual(result);
+
+      const modelOut = await toolDef.toModelOutput?.({
+        input: request,
+        toolCallId: 'call-1',
+        output: result,
+      });
+      expect(modelOut).toEqual({
+        type: 'text',
+        value: expect.stringContaining('Cơm gạo lứt (id rec-1)') as unknown,
       });
     });
 
-    it('returns ok=false and formats all problem types for the model when invalid', async () => {
-      const toolDef = proposeMealPlanTool(mealPlan, userId);
-      const preview = {
+    it('reports when slots are already filled or when no dish matches', async () => {
+      const toolDef = fillSlotsTool(mealPlan, userId);
+
+      const alreadyFilled = {
+        days: [],
+        problems: [],
+        ok: false,
+        filled: 0,
+        allSlotsAlreadyFilled: true,
+      };
+      expect(
+        await toolDef.toModelOutput?.({
+          input: request,
+          toolCallId: 'call-1',
+          output: alreadyFilled,
+        }),
+      ).toEqual({
+        type: 'text',
+        value:
+          'Every requested slot already has a dish. To replace existing dishes, call fillSlots again with onlyEmpty: false (and use pinned for any slot you want to keep).',
+      });
+
+      const noneFit = {
+        days: [],
+        problems: [],
+        ok: false,
+        filled: 0,
+        allSlotsAlreadyFilled: false,
+      };
+      expect(
+        await toolDef.toModelOutput?.({
+          input: request,
+          toolCallId: 'call-1',
+          output: noneFit,
+        }),
+      ).toEqual({
+        type: 'text',
+        value:
+          'No dish fits these requests, so nothing changed. Relax the filters or omit candidateIds.',
+      });
+    });
+  });
+
+  describe('editDraftTool', () => {
+    const operations = [
+      {
+        op: 'set' as const,
+        day: Weekday.MON,
+        section: MealSection.LUNCH,
+        recipeIds: [recipe1],
+      },
+    ];
+
+    it('applies operations and shows unsaved draft feedback when valid', async () => {
+      const toolDef = editDraftTool(mealPlan, userId);
+      const result = {
+        days: [
+          {
+            day: Weekday.MON,
+            sections: [
+              {
+                section: MealSection.LUNCH,
+                recipes: [{ id: recipe1, title: 'Phở chay', tag: null }],
+                previous: [],
+              },
+            ],
+          },
+        ],
+        problems: [],
+        ok: true,
+        errors: [],
+      };
+      mealPlan.editDraft.mockResolvedValue(result);
+
+      const output = await toolDef.execute?.({ operations }, execOptions);
+      expect(mealPlan.editDraft).toHaveBeenCalledWith(userId, operations);
+      expect(output).toEqual(result);
+
+      if (!output || Symbol.asyncIterator in output) {
+        throw new Error('expected draft output');
+      }
+      const modelOut = await toolDef.toModelOutput?.({
+        input: { operations },
+        toolCallId: 'call-1',
+        output,
+      });
+      expect(modelOut).toEqual({
+        type: 'text',
+        value: expect.stringContaining('Phở chay (id ') as unknown,
+      });
+    });
+
+    it('formats all problem types and unapplied operation errors when invalid', async () => {
+      const toolDef = editDraftTool(mealPlan, userId);
+      const result = {
         days: [],
         problems: [
           {
@@ -210,81 +404,32 @@ describe('Meal planner AI tools', () => {
             reason: null,
           },
         ],
+        ok: false,
+        errors: ['move: MON LUNCH is full'],
       };
-      mealPlan.preview.mockResolvedValue(preview);
+      mealPlan.editDraft.mockResolvedValue(result);
 
-      const output = await toolDef.execute?.({ days: daysInput }, execOptions);
-      expect(output).toEqual({ ...preview, ok: false });
-
+      const output = await toolDef.execute?.({ operations }, execOptions);
       if (!output || Symbol.asyncIterator in output) {
-        throw new Error('expected proposal output');
+        throw new Error('expected draft output');
       }
       const modelOut = await toolDef.toModelOutput?.({
-        input: { days: daysInput },
+        input: { operations },
         toolCallId: 'call-1',
         output,
       });
       expect(modelOut).toEqual({
         type: 'text',
         value: [
-          'Not shown. Fix these and call again:',
-          '- Thứ Hai: a recipeId does not exist; use ids from searchRecipes.',
+          'Nothing was kept. Fix these and call again:',
+          '- Thứ Hai: a recipe id does not exist; use ids from searchRecipes.',
           '- Thứ Ba: "Canh hành" has Hành, which the user does not eat.',
-          '- Thứ Tư: Đậu hũ and Rau bina must not be eaten on the same day (Oxalat cản canxi); they come from: Đậu hũ, Rau bina.',
-          '- Thứ Năm: A and B must not be eaten on the same day (incompatible); they come from: Món A, Món B.',
+          '- Thứ Tư: Đậu hũ and Rau bina must not be eaten in the same meal (Oxalat cản canxi); they come from: Đậu hũ, Rau bina.',
+          '- Thứ Năm: A and B must not be eaten in the same meal (incompatible); they come from: Món A, Món B.',
+          'Not applied:',
+          '- move: MON LUNCH is full',
         ].join('\n'),
       });
-    });
-  });
-  describe('generateMealPlanTool', () => {
-    const request = {
-      days: [Weekday.MON],
-      sections: [MealSection.LUNCH],
-      onlyEmpty: true,
-      maxMinutes: 30,
-    };
-    const section = (recipes: { id: string; title: string; tag: null }[]) => ({
-      section: MealSection.LUNCH,
-      recipes,
-      previous: [],
-    });
-
-    it('passes the request to the generator and marks a clean result ok', async () => {
-      const toolDef = generateMealPlanTool(mealPlan, userId);
-      const preview = {
-        days: [
-          {
-            day: Weekday.MON,
-            sections: [
-              section([{ id: 'rec-1', title: 'Cơm gạo lứt', tag: null }]),
-            ],
-          },
-        ],
-        problems: [],
-      };
-      mealPlan.generate.mockResolvedValue(preview);
-
-      const output = await toolDef.execute?.(request, execOptions);
-      expect(mealPlan.generate).toHaveBeenCalledWith(userId, request);
-      expect(output).toEqual({ ...preview, ok: true });
-
-      const modelOut = await toolDef.toModelOutput?.({
-        input: request,
-        toolCallId: 'call-1',
-        output: { ...preview, ok: true },
-      });
-      expect(modelOut).toEqual({
-        type: 'text',
-        value: expect.stringContaining('Cơm gạo lứt (id rec-1)') as unknown,
-      });
-    });
-
-    it('is not ok when nothing fits, so no card is shown', async () => {
-      const toolDef = generateMealPlanTool(mealPlan, userId);
-      mealPlan.generate.mockResolvedValue({ days: [], problems: [] });
-
-      const output = await toolDef.execute?.(request, execOptions);
-      expect(output).toEqual({ days: [], problems: [], ok: false });
     });
   });
 });

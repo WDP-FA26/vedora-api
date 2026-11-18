@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   HttpCode,
   HttpStatus,
@@ -27,6 +28,7 @@ import { JwtAuthGuard } from '../auth-core/jwt-auth.guard.js';
 import { UserThrottlerGuard } from '../auth-core/user-throttler.guard.js';
 import {
   GenerateMealDaysDto,
+  MealPlanDraftDto,
   MealPlanDto,
   MealPlanPreviewDto,
   MealPlannerChatDto,
@@ -77,7 +79,7 @@ export class MealPlanController {
   @ApiOperation({
     summary: 'Pick dishes for chosen slots with an algorithm, without saving',
     description:
-      'No AI: dishes are ranked by tag fit, liked ingredients and the optional `query`, repeats are avoided, and avoided ingredients, over-long dishes and same-day conflicts are left out. Returns the same checked preview as `POST /meal-plan/preview` (only days that change, each with all four sections); save it with `PUT /meal-plan/days`. `days` is empty when no dish fits.',
+      'No AI: dishes are ranked by tag fit, liked ingredients and the optional `query`; a dish is not repeated within one meal across the week but may appear in different meals. Avoided ingredients, over-long dishes and same-day clashes are left out. Returns the same checked preview as `POST /meal-plan/preview` (only days that change, each with all four sections); save it with `PUT /meal-plan/days`. `days` is empty when no dish fits.',
   })
   @ApiOkResponse({ type: MealPlanPreviewDto })
   generate(
@@ -87,17 +89,35 @@ export class MealPlanController {
     return this.mealPlan.generate(request.user.sub, dto);
   }
 
+  @Get('draft')
+  @ApiOperation({
+    summary: 'Get the unsaved draft the assistant or generator is building',
+    description:
+      'Same shape as `POST /meal-plan/preview` plus `ok`. `days` is empty when there is no draft. Drafts expire after 6 hours and are cleared for a day when you save it.',
+  })
+  @ApiOkResponse({ type: MealPlanDraftDto })
+  draft(@Req() request: AuthenticatedRequest): Promise<MealPlanDraftDto> {
+    return this.mealPlan.getDraft(request.user.sub);
+  }
+
+  @Delete('draft')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiOperation({ summary: 'Throw away the unsaved draft' })
+  async discardDraft(@Req() request: AuthenticatedRequest): Promise<void> {
+    await this.mealPlan.discardDraft(request.user.sub);
+  }
+
   @Put('days')
   @ApiOperation({
     summary: 'Replace the dishes of some days of your timetable',
     description:
-      'All or nothing. Refused when a day that gains a dish would hold an ingredient you avoid or two incompatible ingredients.',
+      'All or nothing. Refused when a day that gains a dish would hold an ingredient you avoid, or a dish that does not exist. Two incompatible ingredients on one day are only a warning: the plan is saved and the clash is listed in `problems` of the response.',
   })
   @ApiOkResponse({ type: MealPlanDto })
   @ApiConflictResponse({
     type: ErrorBodyDto,
     description:
-      '`MEAL_PLAN_INVALID` with problems, or `MEAL_PLAN_CONFLICT`: preview again before retrying',
+      '`MEAL_PLAN_INVALID` with `AVOIDED_INGREDIENT` or `UNKNOWN_RECIPE` problems, or `MEAL_PLAN_CONFLICT`: preview again before retrying',
   })
   apply(
     @Req() request: AuthenticatedRequest,
@@ -111,7 +131,7 @@ export class MealPlanController {
   @ApiOperation({
     summary: 'Talk to the assistant: meal planning and nutrition questions',
     description:
-      'Streams the reply as an AI SDK UI message stream (SSE) for `useChat`. Its `proposeMealPlan` and `generateMealPlan` (the algorithm behind `POST /meal-plan/generate`) tool outputs are checked proposals with the same shape; save one with `PUT /meal-plan/days`.',
+      'Streams the reply as an AI SDK UI message stream (SSE) for `useChat`. Its `fillSlots` and `editDraft` tool outputs are checked proposals with the same shape (`days`, `problems`, `ok`); save one with `PUT /meal-plan/days`.',
   })
   @ApiTooManyRequestsResponse({
     type: ErrorBodyDto,

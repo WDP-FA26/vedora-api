@@ -108,6 +108,7 @@ cascadeOnDelete(UserSchema, [
   { model: 'RecipeFavorite', field: 'userId', action: 'delete' },
   { model: 'RecipeRating', field: 'userId', action: 'delete' },
   { model: 'MealPlanEntry', field: 'userId', action: 'delete' },
+  { model: 'MealPlanDraftSlot', field: 'userId', action: 'delete' },
   { model: 'AiUsage', field: 'userId', action: 'delete' },
   { model: 'ProfileImageUpload', field: 'ownerId', action: 'unset' },
   { model: 'PostReport', field: 'reviewedById', action: 'unset' },

@@ -5,11 +5,14 @@ import { mongo } from 'mongoose';
 import { InvalidInputException } from '../../../src/common/exceptions/invalid-input.exception.js';
 import { StateConflictException } from '../../../src/common/exceptions/state-conflict.exception.js';
 import {
+  AccountStatus,
   AiFeature,
   AiRequest,
   BillingPlan,
   PaymentIntent,
   PaymentStatus,
+  User,
+  UserRole,
 } from '../../../src/mongo/models.js';
 import { MongoModule } from '../../../src/mongo/mongo.module.js';
 import { MongoService } from '../../../src/mongo/mongo.service.js';
@@ -37,6 +40,7 @@ describe('AiUsageService', () => {
 
   const requests = () => db.connection.model<AiRequest>(AiRequest.name);
   const intents = () => db.connection.model<PaymentIntent>(PaymentIntent.name);
+  const users = () => db.connection.model<User>(User.name);
 
   async function seedPaid(
     plan: BillingPlan = BillingPlan.PLUS,
@@ -88,6 +92,7 @@ describe('AiUsageService', () => {
     vi.restoreAllMocks();
     await requests().deleteMany({});
     await intents().deleteMany({});
+    await users().deleteMany({});
   });
 
   afterAll(async () => {
@@ -158,8 +163,12 @@ describe('AiUsageService', () => {
       period: 'DAY',
     });
 
-    expect(await usage.consume(USER_ID, AiFeature.BLOG_IMAGE, {}, NOW)).toBeNull();
-    expect(await usage.summary(USER_ID, AiFeature.BLOG_IMAGE, NOW)).toMatchObject({
+    expect(
+      await usage.consume(USER_ID, AiFeature.BLOG_IMAGE, {}, NOW),
+    ).toBeNull();
+    expect(
+      await usage.summary(USER_ID, AiFeature.BLOG_IMAGE, NOW),
+    ).toMatchObject({
       used: 0,
       limit: 0,
       remaining: 0,
@@ -180,12 +189,16 @@ describe('AiUsageService', () => {
         status: 'COMPLETED',
       })),
     );
-    expect(await usage.summary(USER_ID, AiFeature.BLOG_CHAT, NOW)).toMatchObject({
+    expect(
+      await usage.summary(USER_ID, AiFeature.BLOG_CHAT, NOW),
+    ).toMatchObject({
       used: 7,
       limit: 5,
       remaining: 0,
     });
-    expect(await usage.consume(USER_ID, AiFeature.BLOG_CHAT, {}, NOW)).toBeNull();
+    expect(
+      await usage.consume(USER_ID, AiFeature.BLOG_CHAT, {}, NOW),
+    ).toBeNull();
   });
 
   it('handles paid CYCLE summaries, independent image quota, and default now/context', async () => {
@@ -407,9 +420,9 @@ describe('AiUsageService', () => {
     )) as UsageTicket;
 
     await usage.refund(first);
-    expect(
-      (await usage.summary(USER_ID, AiFeature.BLOG_CHAT, NOW)).used,
-    ).toBe(0);
+    expect((await usage.summary(USER_ID, AiFeature.BLOG_CHAT, NOW)).used).toBe(
+      0,
+    );
 
     const retried = (await usage.consume(
       USER_ID,
@@ -419,9 +432,9 @@ describe('AiUsageService', () => {
     )) as UsageTicket;
     expect(retried.id).toBe(first.id);
     await usage.complete(retried);
-    expect(
-      (await usage.summary(USER_ID, AiFeature.BLOG_CHAT, NOW)).used,
-    ).toBe(1);
+    expect((await usage.summary(USER_ID, AiFeature.BLOG_CHAT, NOW)).used).toBe(
+      1,
+    );
   });
 
   it('retries unique violations up to 5 times and throws CONFLICT on exhaustion, while rethrowing non-unique errors', async () => {
@@ -434,15 +447,57 @@ describe('AiUsageService', () => {
       .mockRejectedValue(duplicateError);
 
     await expect(
-      usage.consume(USER_ID, AiFeature.BLOG_CHAT, { requestId: 'dup-test' }, NOW),
+      usage.consume(
+        USER_ID,
+        AiFeature.BLOG_CHAT,
+        { requestId: 'dup-test' },
+        NOW,
+      ),
     ).rejects.toThrow(StateConflictException);
     expect(txSpy).toHaveBeenCalledTimes(5);
 
     txSpy.mockReset();
     txSpy.mockRejectedValueOnce(new Error('unexpected db failure'));
     await expect(
-      usage.consume(USER_ID, AiFeature.BLOG_CHAT, { requestId: 'err-test' }, NOW),
+      usage.consume(
+        USER_ID,
+        AiFeature.BLOG_CHAT,
+        { requestId: 'err-test' },
+        NOW,
+      ),
     ).rejects.toThrow('unexpected db failure');
     expect(txSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it('allows unlimited AI text and image usage for ADMIN users on FREE plan', async () => {
+    const adminId = randomUUID();
+    await users().create({
+      _id: adminId,
+      username: 'ai.admin',
+      fullName: 'AI Admin',
+      email: 'ai.admin@vedora.local',
+      role: UserRole.ADMIN,
+      status: AccountStatus.ACTIVE,
+    });
+
+    for (let i = 0; i < 6; i++) {
+      const ticket = await usage.consume(
+        adminId,
+        AiFeature.MEAL_PLAN_CHAT,
+        {},
+        NOW,
+      );
+      expect(ticket).not.toBeNull();
+      await usage.complete(ticket as UsageTicket);
+    }
+
+    const imageTicket = await usage.consume(
+      adminId,
+      AiFeature.BLOG_IMAGE,
+      {},
+      NOW,
+    );
+    expect(imageTicket).not.toBeNull();
+    await usage.complete(imageTicket as UsageTicket);
   });
 });

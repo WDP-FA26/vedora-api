@@ -2,7 +2,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import type { Model } from 'mongoose';
-import { AiFeature, AiRequest } from '../mongo/models.js';
+import { AiFeature, AiRequest, User, UserRole } from '../mongo/models.js';
 import { MongoService } from '../mongo/mongo.service.js';
 import { lockDocument } from '../mongo/document-lock.js';
 import { isUniqueViolation } from '../mongo/errors.js';
@@ -41,6 +41,7 @@ export interface AiUsageSummary {
 export class AiUsageService {
   constructor(
     @InjectModel(AiRequest.name) private readonly requests: Model<AiRequest>,
+    @InjectModel(User.name) private readonly users: Model<User>,
     private readonly subscriptions: SubscriptionsService,
     private readonly mongo: MongoService,
   ) {}
@@ -161,15 +162,22 @@ export class AiUsageService {
             );
           }
           if (!row?.charged) {
-            const limit =
-              feature === AiFeature.BLOG_IMAGE
-                ? period.imageLimit
-                : period.textLimit;
-            const used = await this.requests
-              .countDocuments(this.countFilter(userId, period, feature, now))
-              .session(session)
-              .exec();
-            if (used >= limit) return null;
+            const isAdmin =
+              (await this.users
+                .exists({ _id: userId, role: UserRole.ADMIN })
+                .session(session)
+                .exec()) !== null;
+            if (!isAdmin) {
+              const limit =
+                feature === AiFeature.BLOG_IMAGE
+                  ? period.imageLimit
+                  : period.textLimit;
+              const used = await this.requests
+                .countDocuments(this.countFilter(userId, period, feature, now))
+                .session(session)
+                .exec();
+              if (used >= limit) return null;
+            }
           }
           if (!row)
             row = new this.requests({
