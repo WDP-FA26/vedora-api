@@ -1,3 +1,4 @@
+import { runtimeConfig } from '../config/runtime-config.js';
 import { createOpenRouter } from '@openrouter/ai-sdk-provider';
 import {
   type EmbeddingModel,
@@ -13,7 +14,7 @@ export const DEFAULT_CONTENT_MODERATION_MODEL = 'google/gemini-decision-1';
 export const DEFAULT_EMBEDDING_MODEL = 'google/gemini-embedding-2';
 export const DEFAULT_IMAGE_MODEL = 'qwen/qwen-image-2.1-turbo';
 
-const EMBEDDING_BATCH_SIZE = 64;
+const EMBEDDING_BATCH_SIZE = runtimeConfig.AI_EMBEDDING_BATCH_SIZE;
 
 export function chatModel({
   apiKey,
@@ -26,7 +27,11 @@ export function chatModel({
   reasoningEffort?: ReasoningEffort;
   fetch?: typeof fetch;
 }): LanguageModel {
-  return createOpenRouter({ apiKey, fetch: customFetch })(modelId, {
+  return createOpenRouter({
+    apiKey,
+    fetch: customFetch,
+    baseURL: runtimeConfig.OPENROUTER_API_BASE_URL,
+  })(modelId, {
     reasoning: { effort: reasoningEffort, exclude: true },
   });
 }
@@ -43,12 +48,13 @@ export function embeddingModel({
   fetch?: typeof fetch;
 }): EmbeddingModel {
   return wrapEmbeddingModel({
-    model: createOpenRouter({ apiKey, fetch: customFetch }).textEmbeddingModel(
-      modelId,
-      {
-        extraBody: { dimensions, encoding_format: 'float' },
-      },
-    ),
+    model: createOpenRouter({
+      apiKey,
+      fetch: customFetch,
+      baseURL: runtimeConfig.OPENROUTER_API_BASE_URL,
+    }).textEmbeddingModel(modelId, {
+      extraBody: { dimensions, encoding_format: 'float' },
+    }),
     middleware: {
       overrideMaxEmbeddingsPerCall: () => EMBEDDING_BATCH_SIZE,
     },
@@ -64,5 +70,9 @@ export function imageModel({
   modelId: string;
   fetch?: typeof fetch;
 }): ImageModel {
-  return createOpenRouter({ apiKey, fetch: customFetch }).imageModel(modelId);
+  return createOpenRouter({
+    apiKey,
+    fetch: customFetch,
+    baseURL: runtimeConfig.OPENROUTER_API_BASE_URL,
+  }).imageModel(modelId);
 }

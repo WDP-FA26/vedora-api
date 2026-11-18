@@ -1,3 +1,4 @@
+import { runtimeConfig } from '../../config/runtime-config.js';
 /** Only allowlisted billing metadata survives; never persist prompts, headers or outputs. */
 export function metadataText(value: unknown): string | null {
   return typeof value === 'string' &&
@@ -86,7 +87,10 @@ export class CostResponseParser {
     const text = this.decoder.decode(bytes, { stream: true });
     if (!this.sse) {
       if (this.oversized) return;
-      if (this.buffer.length + text.length > 16 * 1024 * 1024) {
+      if (
+        this.buffer.length + text.length >
+        runtimeConfig.AI_COST_JSON_MAX_CHARS
+      ) {
         this.buffer = '';
         this.oversized = true;
         return;
@@ -96,7 +100,7 @@ export class CostResponseParser {
     }
     for (const fragment of text.split(/(?<=\n)/)) {
       if (!this.skippingLine) this.buffer += fragment;
-      if (this.buffer.length > 1024 * 1024) {
+      if (this.buffer.length > runtimeConfig.AI_COST_SSE_LINE_MAX_CHARS) {
         this.buffer = '';
         this.skippingLine = true;
       }
