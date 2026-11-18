@@ -1,10 +1,11 @@
+import { runtimeConfig } from '../../config/runtime-config.js';
 import { ApiProperty } from '@nestjs/swagger';
 import { FollowSuggestionReason } from '../../mongo/models.js';
 import { Type } from 'class-transformer';
 import { IsInt, IsOptional, Max, Min } from 'class-validator';
 import { ProfileSummaryDto } from './profile.dto.js';
 
-export const MAX_SUGGESTIONS = 20;
+export const MAX_SUGGESTIONS = runtimeConfig.FOLLOW_SUGGESTION_MAX_RESULTS;
 
 export class FollowSuggestionQueryDto {
   @Type(() => Number)
