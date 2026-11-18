@@ -144,6 +144,14 @@ Refresh token là token opaque, chỉ hash SHA-256 được lưu trong database.
 `POST /auth/refresh`, token cũ bị thu hồi và một refresh token mới được phát. Nếu token
 cũ bị dùng lại, toàn bộ token family sẽ bị thu hồi và client phải đăng nhập lại.
 
+Ngoại lệ: trong `REFRESH_TOKEN_REUSE_GRACE_SECONDS` giây (mặc định 30, tối đa 60) sau khi
+xoay, gửi lại token vừa bị xoay sẽ nhận lại **đúng** refresh token mới đã phát (kèm access
+token mới), không bị coi là dùng lại. Điều này xử lý các request refresh chạy song song và
+response bị mất trên đường về trình duyệt. Chỉ token liền trước được hưởng ân hạn: khi token
+mới đã xoay tiếp, hoặc token bị thu hồi do đăng xuất, gửi lại vẫn thu hồi cả family. Lý do thu
+hồi được lưu ở `refresh_tokens.revokedReason` (`ROTATED`, `LOGOUT`, `REVOKED`,
+`REUSE_DETECTED`, `EXPIRED`); mỗi lần phát hiện dùng lại được ghi log `warn`.
+
 ```bash
 curl -X POST http://localhost:3000/api/v1/auth/refresh \
   -H "Content-Type: application/json" \

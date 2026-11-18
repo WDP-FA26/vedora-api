@@ -72,6 +72,13 @@ export class EnvironmentVariables {
   @Max(31536000)
   REFRESH_TOKEN_TTL = 2592000;
 
+  /** Seconds a just-rotated refresh token may be sent again (parallel or retried refreshes). */
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  @Max(60)
+  REFRESH_TOKEN_REUSE_GRACE_SECONDS = 30;
+
   @IsString()
   GOOGLE_CLIENT_ID = '';
 

@@ -4,7 +4,11 @@ import { Test } from '@nestjs/testing';
 import { createHash } from 'node:crypto';
 import { RefreshTokensService } from '../../../src/auth/refresh-tokens.service.js';
 import { UnauthenticatedException } from '../../../src/common/exceptions/unauthenticated.exception.js';
-import { AccountStatus, RefreshToken, User } from '../../../src/mongo/models.js';
+import {
+  AccountStatus,
+  RefreshToken,
+  User,
+} from '../../../src/mongo/models.js';
 import { MongoModule } from '../../../src/mongo/mongo.module.js';
 import { MongoService } from '../../../src/mongo/mongo.service.js';
 import { createUser } from '../../support/fixtures.js';
@@ -15,6 +19,7 @@ import {
 } from '../../support/mongo-test-db.js';
 
 const TTL_SECONDS = 3600;
+const GRACE_SECONDS = 30;
 const sha256 = (value: string) =>
   createHash('sha256').update(value).digest('hex');
 
@@ -25,6 +30,16 @@ describe('RefreshTokensService', () => {
 
   const tokens = () => db.connection.model<RefreshToken>(RefreshToken.name);
   const users = () => db.connection.model<User>(User.name);
+  const tokenDoc = (token: string) =>
+    tokens()
+      .findOne({ tokenHash: sha256(token) })
+      .exec();
+  /** Moves a rotation back in time, past the reuse grace period. */
+  const ageRotation = (token: string, seconds: number) =>
+    tokens().updateOne(
+      { tokenHash: sha256(token) },
+      { $set: { revokedAt: new Date(Date.now() - seconds * 1000) } },
+    );
 
   beforeAll(async () => {
     const moduleRef = await Test.createTestingModule({
@@ -33,7 +48,11 @@ describe('RefreshTokensService', () => {
         RefreshTokensService,
         {
           provide: ConfigService,
-          useValue: new ConfigService({ REFRESH_TOKEN_TTL: TTL_SECONDS }),
+          useValue: new ConfigService({
+            REFRESH_TOKEN_TTL: TTL_SECONDS,
+            REFRESH_TOKEN_REUSE_GRACE_SECONDS: GRACE_SECONDS,
+            JWT_SECRET: 'refresh-token-test-secret-of-32-chars-or-more',
+          }),
         },
       ],
     }).compile();
@@ -122,6 +141,7 @@ describe('RefreshTokensService', () => {
         .findOne({ tokenHash: sha256(second.token) })
         .exec();
       expect(oldDoc?.revokedAt).toBeInstanceOf(Date);
+      expect(oldDoc?.revokedReason).toBe('ROTATED');
       expect(newDoc?.familyId).toBe(firstDoc?.familyId);
       expect(newDoc?.revokedAt).toBeNull();
     });
@@ -164,6 +184,7 @@ describe('RefreshTokensService', () => {
         .findOne({ tokenHash: sha256(rotated.token) })
         .exec();
       expect(expiredDoc?.revokedAt).toBeInstanceOf(Date);
+      expect(expiredDoc?.revokedReason).toBe('EXPIRED');
       expect(stillActive?.revokedAt).toBeNull();
     });
 
@@ -172,6 +193,7 @@ describe('RefreshTokensService', () => {
       const first = await service.issue(user.id);
       const second = await service.rotate(first.token);
       const otherSession = await service.issue(user.id);
+      await ageRotation(first.token, GRACE_SECONDS + 1);
 
       await expect(service.rotate(first.token)).rejects.toMatchObject({
         statusCode: 401,
@@ -185,31 +207,81 @@ describe('RefreshTokensService', () => {
         .findOne({ tokenHash: sha256(otherSession.token) })
         .exec();
       expect(secondDoc?.revokedAt).toBeInstanceOf(Date);
+      expect(secondDoc?.revokedReason).toBe('REUSE_DETECTED');
       expect(otherDoc?.revokedAt).toBeNull();
     });
 
-    it('revokes the family when two concurrent rotations race on the same token', async () => {
+    it('gives concurrent rotations of one token the same replacement', async () => {
       const user = await createUser(db);
       const issued = await service.issue(user.id);
 
-      const results = await Promise.allSettled([
+      const results = await Promise.all([
+        service.rotate(issued.token),
         service.rotate(issued.token),
         service.rotate(issued.token),
       ]);
 
-      const fulfilled = results.filter((r) => r.status === 'fulfilled');
-      const rejected = results.filter((r) => r.status === 'rejected');
-      expect(fulfilled).toHaveLength(1);
-      expect(rejected).toHaveLength(1);
-      expect(rejected[0].reason).toMatchObject({
-        statusCode: 401,
+      expect(new Set(results.map(({ token }) => token)).size).toBe(1);
+      expect(
+        await tokens().countDocuments({ userId: user.id, revokedAt: null }),
+      ).toBe(1);
+      await expect(service.rotate(results[0].token)).resolves.toMatchObject({
+        userId: user.id,
+      });
+    });
+
+    it('reissues the same replacement when a just-rotated token is sent again', async () => {
+      const user = await createUser(db);
+      const first = await service.issue(user.id);
+      const second = await service.rotate(first.token);
+
+      // The browser never stored `second` and sends `first` again.
+      const again = await service.rotate(first.token);
+
+      expect(again.token).toBe(second.token);
+      expect((await tokenDoc(second.token))?.revokedAt).toBeNull();
+      await expect(service.rotate(second.token)).resolves.toMatchObject({
+        userId: user.id,
+      });
+    });
+
+    it('only lets the most recent predecessor be sent again within the grace period', async () => {
+      const user = await createUser(db);
+      const first = await service.issue(user.id);
+      const second = await service.rotate(first.token);
+      const third = await service.rotate(second.token);
+
+      await expect(service.rotate(first.token)).rejects.toMatchObject({
         message: 'Refresh token reuse detected',
       });
-      const activeCount = await tokens().countDocuments({
-        userId: user.id,
-        revokedAt: null,
+      expect((await tokenDoc(third.token))?.revokedReason).toBe(
+        'REUSE_DETECTED',
+      );
+    });
+
+    it('revokes the family once the grace period has passed', async () => {
+      const user = await createUser(db);
+      const first = await service.issue(user.id);
+      const second = await service.rotate(first.token);
+      await ageRotation(first.token, GRACE_SECONDS + 1);
+
+      await expect(service.rotate(first.token)).rejects.toMatchObject({
+        message: 'Refresh token reuse detected',
       });
-      expect(activeCount).toBe(0);
+      await expect(service.rotate(second.token)).rejects.toMatchObject({
+        message: 'Refresh token reuse detected',
+      });
+    });
+
+    it('never reissues a token revoked by logout, even right away', async () => {
+      const user = await createUser(db);
+      const first = await service.issue(user.id);
+      await service.revoke(first.token);
+
+      expect((await tokenDoc(first.token))?.revokedReason).toBe('LOGOUT');
+      await expect(service.rotate(first.token)).rejects.toMatchObject({
+        message: 'Refresh token reuse detected',
+      });
     });
 
     it('rejects rotation if the user was suspended or deleted after issuance', async () => {
@@ -228,13 +300,14 @@ describe('RefreshTokensService', () => {
         .exec();
       expect(doc?.revokedAt).toBeNull();
 
-      const findOneSpy = vi
-        .spyOn(users(), 'findOne')
-        .mockImplementationOnce(() => ({
-          select: () => ({
-            session: () => ({ exec: () => Promise.resolve(null) }),
-          }),
-        }) as never);
+      const findOneSpy = vi.spyOn(users(), 'findOne').mockImplementationOnce(
+        () =>
+          ({
+            select: () => ({
+              session: () => ({ exec: () => Promise.resolve(null) }),
+            }),
+          }) as never,
+      );
       await expect(service.rotate(issued.token)).rejects.toMatchObject({
         code: 'UNAUTHORIZED',
         message: 'Account no longer exists',
@@ -260,7 +333,9 @@ describe('RefreshTokensService', () => {
       await service.revoke(familyA2.token);
 
       const familyADocs = await tokens()
-        .find({ tokenHash: { $in: [sha256(familyA1.token), sha256(familyA2.token)] } })
+        .find({
+          tokenHash: { $in: [sha256(familyA1.token), sha256(familyA2.token)] },
+        })
         .exec();
       expect(familyADocs.every((doc) => doc.revokedAt instanceof Date)).toBe(
         true,

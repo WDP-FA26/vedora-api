@@ -1,10 +1,20 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectModel } from '@nestjs/mongoose';
-import { createHash, randomBytes, randomUUID } from 'node:crypto';
+import {
+  createHash,
+  createHmac,
+  hkdfSync,
+  randomBytes,
+  randomUUID,
+} from 'node:crypto';
 import type { ClientSession, Model } from 'mongoose';
 import { lockDocument } from '../mongo/document-lock.js';
-import { RefreshToken, User } from '../mongo/models.js';
+import {
+  RefreshToken,
+  type RefreshTokenRevocation,
+  User,
+} from '../mongo/models.js';
 import { MongoService } from '../mongo/mongo.service.js';
 import { assertAccountActive } from '../auth-core/account-access.js';
 import { UnauthenticatedException } from '../common/exceptions/unauthenticated.exception.js';
@@ -18,21 +28,37 @@ export interface RotatedRefreshToken extends IssuedRefreshToken {
   userId: string;
 }
 
+/**
+ * Refresh tokens rotate on every use, and a revoked token sent again normally
+ * means it was stolen, so its whole family is revoked. A token rotated less
+ * than `REFRESH_TOKEN_REUSE_GRACE_SECONDS` ago is the exception: parallel
+ * refreshes and responses lost on the way back to the browser send it again
+ * legitimately. It then gets the same replacement the first rotation issued,
+ * as long as that replacement has not rotated in turn (only the most recent
+ * predecessor qualifies). The replacement is derived from the old token with
+ * an HMAC keyed by the server secret, so it can be given out again without
+ * storing it, and only someone holding the old token and the key can know it.
+ */
 @Injectable()
 export class RefreshTokensService {
+  private readonly logger = new Logger(RefreshTokensService.name);
   private readonly refreshTokenTtl: number;
+  private readonly reuseGraceMs: number;
+  private successorKey: Buffer | null = null;
 
   constructor(
     @InjectModel(RefreshToken.name)
     private readonly tokens: Model<RefreshToken>,
     @InjectModel(User.name) private readonly users: Model<User>,
     private readonly mongo: MongoService,
-    configService: ConfigService,
+    private readonly configService: ConfigService,
   ) {
     this.refreshTokenTtl = configService.get<number>(
       'REFRESH_TOKEN_TTL',
       2592000,
     );
+    this.reuseGraceMs =
+      configService.get<number>('REFRESH_TOKEN_REUSE_GRACE_SECONDS', 30) * 1000;
   }
 
   async issue(userId: string): Promise<IssuedRefreshToken> {
@@ -56,19 +82,13 @@ export class RefreshTokensService {
       );
     }
 
-    const now = new Date();
-    if (storedToken.revokedAt) {
-      await this.revokeFamily(storedToken.familyId, now);
-      throw new UnauthenticatedException(
-        'UNAUTHORIZED',
-        'Refresh token reuse detected',
-      );
-    }
+    if (storedToken.revokedAt) return this.reissue(token, storedToken);
 
+    const now = new Date();
     if (storedToken.expiresAt <= now) {
       await this.tokens.updateOne(
         { _id: storedToken.id, revokedAt: null },
-        { $set: { revokedAt: now } },
+        { $set: { revokedAt: now, revokedReason: 'EXPIRED' } },
       );
       throw new UnauthenticatedException(
         'UNAUTHORIZED',
@@ -76,7 +96,7 @@ export class RefreshTokensService {
       );
     }
 
-    const replacementToken = this.generateToken();
+    const replacementToken = this.successorOf(token);
     const rotated = await this.mongo.withTransaction(async (session) => {
       await this.lockActiveAccount(session, storedToken.userId);
       const revoked = await this.tokens.updateOne(
@@ -86,7 +106,7 @@ export class RefreshTokensService {
           revokedAt: null,
           expiresAt: { $gt: now },
         },
-        { $set: { revokedAt: now } },
+        { $set: { revokedAt: now, revokedReason: 'ROTATED' } },
         { session },
       );
       if (revoked.modifiedCount !== 1) return false;
@@ -100,12 +120,16 @@ export class RefreshTokensService {
       return true;
     });
 
+    // Another request rotated the same token first: answer like it did.
     if (!rotated) {
-      await this.revokeFamily(storedToken.familyId, now);
-      throw new UnauthenticatedException(
-        'UNAUTHORIZED',
-        'Refresh token reuse detected',
-      );
+      const latest = await this.tokens.findOne({ tokenHash }).exec();
+      if (!latest?.revokedAt) {
+        throw new UnauthenticatedException(
+          'UNAUTHORIZED',
+          'Invalid refresh token',
+        );
+      }
+      return this.reissue(token, latest);
     }
 
     return {
@@ -115,30 +139,97 @@ export class RefreshTokensService {
     };
   }
 
+  /**
+   * A revoked token was sent again. Within the grace period after its own
+   * rotation it gets the replacement that rotation issued; anything else is
+   * treated as reuse of a stolen token and ends the whole family.
+   */
+  private async reissue(
+    token: string,
+    storedToken: RefreshToken,
+  ): Promise<RotatedRefreshToken> {
+    const now = new Date();
+    const revokedAt = storedToken.revokedAt ?? now;
+    const sinceMs = now.getTime() - revokedAt.getTime();
+    const inGrace =
+      storedToken.revokedReason === 'ROTATED' && sinceMs <= this.reuseGraceMs;
+
+    if (inGrace) {
+      const replacementToken = this.successorOf(token);
+      const replacement = await this.tokens
+        .findOne({
+          tokenHash: this.hashToken(replacementToken),
+          familyId: storedToken.familyId,
+          revokedAt: null,
+          expiresAt: { $gt: now },
+        })
+        .exec();
+      if (replacement) {
+        this.logger.log(
+          `Refresh token sent again ${Math.round(sinceMs / 1000)}s after rotation; reissued its replacement (family ${storedToken.familyId})`,
+        );
+        return {
+          token: replacementToken,
+          expiresIn: this.refreshTokenTtl,
+          userId: storedToken.userId,
+        };
+      }
+    }
+
+    await this.revokeFamily(storedToken.familyId, now, 'REUSE_DETECTED');
+    this.logger.warn(
+      `Refresh token reuse detected: family ${storedToken.familyId} of user ${storedToken.userId} revoked; the token was revoked ${Math.round(sinceMs / 1000)}s earlier (${storedToken.revokedReason ?? 'unknown reason'})`,
+    );
+    throw new UnauthenticatedException(
+      'UNAUTHORIZED',
+      'Refresh token reuse detected',
+    );
+  }
+
   async revoke(token: string): Promise<void> {
     const storedToken = await this.tokens
       .findOne({ tokenHash: this.hashToken(token) })
       .exec();
     if (!storedToken) return;
-    await this.revokeFamily(storedToken.familyId, new Date());
+    await this.revokeFamily(storedToken.familyId, new Date(), 'LOGOUT');
   }
 
   async revokeAllForUser(userId: string): Promise<void> {
     await this.tokens.updateMany(
       { userId, revokedAt: null },
-      { $set: { revokedAt: new Date() } },
+      { $set: { revokedAt: new Date(), revokedReason: 'REVOKED' } },
     );
   }
 
-  private async revokeFamily(familyId: string, revokedAt: Date): Promise<void> {
+  private async revokeFamily(
+    familyId: string,
+    revokedAt: Date,
+    revokedReason: RefreshTokenRevocation,
+  ): Promise<void> {
     await this.tokens.updateMany(
       { familyId, revokedAt: null },
-      { $set: { revokedAt } },
+      { $set: { revokedAt, revokedReason } },
     );
   }
 
   private generateToken(): string {
     return randomBytes(48).toString('base64url');
+  }
+
+  /** The token that replaces `token` when it rotates: the same every time, unknowable without the server secret. */
+  private successorOf(token: string): string {
+    this.successorKey ??= Buffer.from(
+      hkdfSync(
+        'sha256',
+        this.configService.getOrThrow<string>('JWT_SECRET'),
+        'vedora-refresh-token',
+        'successor',
+        48,
+      ),
+    );
+    return createHmac('sha384', this.successorKey)
+      .update(token)
+      .digest('base64url');
   }
 
   private async insertToken(

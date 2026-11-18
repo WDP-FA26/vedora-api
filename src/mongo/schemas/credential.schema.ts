@@ -4,6 +4,10 @@ import { OneTimeCodePurpose } from '../enums.js';
 import { collectionSchema } from './common.js';
 import { Identified } from './identified.js';
 
+/** Why a refresh token stopped working; `null` on tokens revoked before this was recorded. */
+export type RefreshTokenRevocation =
+  'ROTATED' | 'LOGOUT' | 'REVOKED' | 'REUSE_DETECTED' | 'EXPIRED';
+
 @Schema(collectionSchema('refresh_tokens', 'created'))
 export class RefreshToken extends Identified {
   @Prop({ type: String, default: () => randomUUID() })
@@ -23,6 +27,9 @@ export class RefreshToken extends Identified {
 
   @Prop({ type: Date, default: null })
   revokedAt!: Date | null;
+
+  @Prop({ type: String, default: null })
+  revokedReason!: RefreshTokenRevocation | null;
 
   @Prop({ type: Date })
   createdAt!: Date;

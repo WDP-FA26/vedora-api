@@ -100,6 +100,7 @@ describe('AuthService', () => {
           useValue: new ConfigService({
             JWT_ACCESS_TTL: 3600,
             REFRESH_TOKEN_TTL: 2592000,
+            JWT_SECRET: 'refresh-token-test-secret-of-32-chars-or-more',
           }),
         },
         {

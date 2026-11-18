@@ -617,6 +617,13 @@ describe('Auth flows (e2e)', () => {
   });
 
   describe('POST /auth/refresh and /auth/logout', () => {
+    /** Moves every rotation of the user's tokens back past the reuse grace period. */
+    const pastGrace = (userId: string) =>
+      tokens().updateMany(
+        { userId, revokedReason: 'ROTATED' },
+        { $set: { revokedAt: new Date(Date.now() - 61_000) } },
+      );
+
     it('rotates the refresh token and returns a working access token', async () => {
       const user = await activeUser();
       const first = await session(user.username);
@@ -633,10 +640,27 @@ describe('Auth flows (e2e)', () => {
       const user = await activeUser();
       const first = await session(user.username);
       await refresh(first.refreshToken).expect(200);
+      await pastGrace(user.id);
 
       const response = await refresh(first.refreshToken).expect(401);
 
       expect(errorSchema.parse(response.body).code).toBe('UNAUTHORIZED');
+    });
+
+    it('answers a rotated token sent again within the grace period with the same new token', async () => {
+      const user = await activeUser();
+      const first = await session(user.username);
+      const second = authResponseSchema.parse(
+        (await refresh(first.refreshToken).expect(200)).body,
+      );
+
+      const again = authResponseSchema.parse(
+        (await refresh(first.refreshToken).expect(200)).body,
+      );
+
+      expect(again.refreshToken).toBe(second.refreshToken);
+      await me(again.accessToken).expect(200);
+      await refresh(second.refreshToken).expect(200);
     });
 
     it('revokes the live descendant when a rotated token is reused', async () => {
@@ -645,6 +669,7 @@ describe('Auth flows (e2e)', () => {
       const second = authResponseSchema.parse(
         (await refresh(first.refreshToken).expect(200)).body,
       );
+      await pastGrace(user.id);
 
       await refresh(first.refreshToken).expect(401);
 
@@ -656,23 +681,28 @@ describe('Auth flows (e2e)', () => {
       const phone = await session(user.username);
       const laptop = await session(user.username);
       await refresh(phone.refreshToken).expect(200);
+      await pastGrace(user.id);
       await refresh(phone.refreshToken).expect(401);
 
       await refresh(laptop.refreshToken).expect(200);
     });
 
-    it('lets at most one of two parallel refreshes with the same token succeed', async () => {
+    it('gives two parallel refreshes with the same token the same new token', async () => {
       const user = await activeUser();
       const first = await session(user.username);
 
       const results = await Promise.all([
-        refresh(first.refreshToken),
-        refresh(first.refreshToken),
+        refresh(first.refreshToken).expect(200),
+        refresh(first.refreshToken).expect(200),
       ]);
 
-      const successes = results.filter((result) => result.status === 200);
-      expect(successes.length).toBeLessThanOrEqual(1);
-      expect(results.every((r) => [200, 401].includes(r.status))).toBe(true);
+      const issued = results.map(
+        (result) => authResponseSchema.parse(result.body).refreshToken,
+      );
+      expect(issued[0]).toBe(issued[1]);
+      expect(
+        await tokens().countDocuments({ userId: user.id, revokedAt: null }),
+      ).toBe(1);
     });
 
     it('rejects an expired refresh token', async () => {
