@@ -83,6 +83,18 @@ export class Post extends Identified {
   @Prop({ type: String, default: null })
   body!: string | null;
 
+  @Prop({ type: String, enum: ['POST', 'VIDEO', null], default: null })
+  draftKind!: 'POST' | 'VIDEO' | null;
+
+  @Prop({ type: String, default: '' })
+  draftTitle!: string;
+
+  @Prop({ type: String, default: '' })
+  draftDescription!: string;
+
+  @Prop({ type: Number, default: 0 })
+  draftVersion!: number;
+
   /** Serializes comment writes with post deletion without changing its public edit time. */
   @Prop({ type: Number, default: 0 })
   commentRevision!: number;
