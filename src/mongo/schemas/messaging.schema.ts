@@ -99,6 +99,10 @@ export class DirectMessage extends Identified {
   @Prop({ type: String, required: true })
   clientMessageId!: string;
 
+  /** Retain the reference after post deletion, so history can show an unavailable card. */
+  @Prop({ type: String, default: null })
+  sharedPostId!: string | null;
+
   @Prop({ type: Number, required: true, min: 1 })
   sequence!: number;
 

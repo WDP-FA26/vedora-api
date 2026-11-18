@@ -1,4 +1,6 @@
 import { runtimeConfig } from '../../config/runtime-config.js';
+import { PostAuthorDto } from '../../common/dto/post-author.dto.js';
+import { PostType } from '../../mongo/enums.js';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Transform } from 'class-transformer';
 import {
@@ -56,6 +58,32 @@ export class ReadConversationDto {
   messageId!: string;
 }
 
+export class SharePostDto {
+  @ApiProperty({
+    format: 'uuid',
+    description:
+      'Reuse this ID when retrying the same share to the same recipient',
+  })
+  @IsUUID('4')
+  clientMessageId!: string;
+
+  @ApiProperty({
+    format: 'uuid',
+    description: 'An existing PUBLISHED post or blog',
+  })
+  @IsUUID('4')
+  postId!: string;
+}
+
+export class SharedPostDto {
+  @ApiProperty({ format: 'uuid' }) id!: string;
+  @ApiProperty({ enum: PostType }) type!: PostType;
+  @ApiProperty({ type: String, nullable: true }) title!: string | null;
+  @ApiProperty() excerpt!: string;
+  @ApiProperty({ type: String, nullable: true }) imageUrl!: string | null;
+  @ApiProperty({ type: PostAuthorDto }) author!: PostAuthorDto;
+}
+
 export class DeleteMessageRequestDto {
   @ApiProperty({
     format: 'uuid',
@@ -79,6 +107,15 @@ export class MessageDto {
   @ApiProperty({ format: 'uuid' }) clientMessageId!: string;
   @ApiProperty({ minimum: 1 }) sequence!: number;
   @ApiProperty() body!: string;
+  @ApiProperty({ type: String, nullable: true, format: 'uuid' }) sharedPostId!:
+    string | null;
+  @ApiProperty({
+    type: SharedPostDto,
+    nullable: true,
+    description:
+      'Null when the referenced post is no longer public or no longer exists',
+  })
+  sharedPost!: SharedPostDto | null;
   @ApiProperty() createdAt!: Date;
 }
 
