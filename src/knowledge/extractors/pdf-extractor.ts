@@ -1,3 +1,4 @@
+import { runtimeConfig } from '../../config/runtime-config.js';
 import { createHash } from 'node:crypto';
 import { Injectable, Logger } from '@nestjs/common';
 import {
@@ -16,12 +17,12 @@ type MuPdfImage = InstanceType<MuPdf['Image']>;
 
 export const PDF_CONTENT_TYPE = 'application/pdf';
 
-const MIN_IMAGE_PX = 100;
-const MIN_IMAGE_PT = 48;
-const MAX_IMAGE_PX = 1024;
-const MAX_IMAGES_PER_DOCUMENT = 100;
-const JPEG_QUALITY = 80;
-const MIN_OCR_COVERAGE = 0.9;
+const MIN_IMAGE_PX = runtimeConfig.KNOWLEDGE_MIN_IMAGE_PX;
+const MIN_IMAGE_PT = runtimeConfig.KNOWLEDGE_MIN_IMAGE_PT;
+const MAX_IMAGE_PX = runtimeConfig.KNOWLEDGE_MAX_IMAGE_PX;
+const MAX_IMAGES_PER_DOCUMENT = runtimeConfig.KNOWLEDGE_MAX_IMAGES_PER_DOCUMENT;
+const JPEG_QUALITY = runtimeConfig.KNOWLEDGE_JPEG_QUALITY;
+const MIN_OCR_COVERAGE = runtimeConfig.KNOWLEDGE_MIN_OCR_COVERAGE;
 
 @Injectable()
 export class PdfExtractor {

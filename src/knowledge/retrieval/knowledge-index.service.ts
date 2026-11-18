@@ -1,3 +1,4 @@
+import { runtimeConfig } from '../../config/runtime-config.js';
 import { randomUUID } from 'node:crypto';
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
@@ -18,8 +19,8 @@ import {
   KnowledgeModelsService,
 } from './knowledge-models.service.js';
 
-const CHUNK_CHARS = 1000;
-const UPSERT_BATCH = 64;
+const CHUNK_CHARS = runtimeConfig.KNOWLEDGE_CHUNK_MAX_CHARS;
+const UPSERT_BATCH = runtimeConfig.KNOWLEDGE_UPSERT_BATCH_SIZE;
 
 interface IndexedDocument {
   id: string;
