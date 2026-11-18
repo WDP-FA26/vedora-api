@@ -1,3 +1,4 @@
+import { runtimeConfig } from '../../config/runtime-config.js';
 import { tool } from 'ai';
 import { z } from 'zod';
 import type {
@@ -12,7 +13,7 @@ export function searchRecipesTool(mealPlan: MealPlanService, userId: string) {
     inputSchema: z.object({
       query: z
         .string()
-        .max(100)
+        .max(runtimeConfig.RECIPE_CATALOG_QUERY_MAX_LENGTH)
         .optional()
         .describe('A Vietnamese dish or ingredient name, with accents'),
     }),

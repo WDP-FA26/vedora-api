@@ -1,3 +1,4 @@
+import { runtimeConfig } from '../config/runtime-config.js';
 import { rethrowAsStateConflict } from '../mongo/unique-conflict.js';
 import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
@@ -44,7 +45,7 @@ export interface RecipeSuggestion {
 
 export type MealPlanPreview = MealPlanPreviewDto;
 
-const MAX_SUGGESTIONS = 30;
+const MAX_SUGGESTIONS = runtimeConfig.MEAL_PLAN_SUGGESTIONS_LIMIT;
 
 const emptyDay = (): DaySections => ({
   BREAKFAST: [],
