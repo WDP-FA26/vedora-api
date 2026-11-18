@@ -1,3 +1,4 @@
+import { runtimeConfig } from '../config/runtime-config.js';
 import { Injectable, Logger, OnModuleDestroy } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import type { ClientSession, Model, mongo } from 'mongoose';
@@ -109,7 +110,7 @@ export class MessagingEventsService implements OnModuleDestroy {
         this.retry = setTimeout(() => {
           this.retry = undefined;
           this.start();
-        }, 3000);
+        }, runtimeConfig.MESSAGING_EVENTS_RETRY_MS);
         this.retry.unref();
       }
     }

@@ -1,3 +1,4 @@
+import { runtimeConfig } from '../../config/runtime-config.js';
 import { randomUUID } from 'node:crypto';
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { collectionSchema, onDelete } from './common.js';
@@ -39,7 +40,11 @@ export class Conversation extends Identified {
   @Prop({ type: String, default: null })
   lastSenderId!: string | null;
 
-  @Prop({ type: String, default: null, maxlength: 2000 })
+  @Prop({
+    type: String,
+    default: null,
+    maxlength: runtimeConfig.MESSAGE_MAX_LENGTH,
+  })
   lastMessageBody!: string | null;
 
   @Prop({ type: Date })
@@ -82,7 +87,12 @@ export class DirectMessage extends Identified {
   @Prop({ type: Number, required: true, min: 1 })
   sequence!: number;
 
-  @Prop({ type: String, required: true, trim: true, maxlength: 2000 })
+  @Prop({
+    type: String,
+    required: true,
+    trim: true,
+    maxlength: runtimeConfig.MESSAGE_MAX_LENGTH,
+  })
   body!: string;
 
   @Prop({ type: Date })
