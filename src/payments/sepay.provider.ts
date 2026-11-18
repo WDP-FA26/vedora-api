@@ -1,3 +1,4 @@
+import { runtimeConfig } from '../config/runtime-config.js';
 import { timingSafeEqual } from 'node:crypto';
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
@@ -61,7 +62,7 @@ export class SePayProvider {
   }
 
   qr(bank: BankSnapshot, amount: string) {
-    const url = new URL('https://vietqr.app/img');
+    const url = new URL(runtimeConfig.SEPAY_QR_IMAGE_BASE_URL);
     url.search = new URLSearchParams({
       acc: bank.accountNumber,
       bank: bank.bankCode,

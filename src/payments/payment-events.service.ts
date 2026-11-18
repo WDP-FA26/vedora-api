@@ -1,3 +1,4 @@
+import { runtimeConfig } from '../config/runtime-config.js';
 import { Injectable, Logger, OnModuleDestroy } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { createClient } from 'redis';
@@ -65,7 +66,9 @@ export class PaymentEventsService implements OnModuleDestroy {
       const pair = this.pair;
       if (!this.ready || !pair) return;
       await pair.publisher
-        .withAbortSignal(AbortSignal.timeout(1000))
+        .withAbortSignal(
+          AbortSignal.timeout(runtimeConfig.PAYMENT_EVENTS_PUBLISH_TIMEOUT_MS),
+        )
         .publish(this.channel, JSON.stringify(event));
     } catch {
       if (this.pair) this.disconnect(this.pair);
@@ -89,7 +92,10 @@ export class PaymentEventsService implements OnModuleDestroy {
   private async open(url: string): Promise<void> {
     const options = {
       url,
-      socket: { connectTimeout: 1500, reconnectStrategy: false as const },
+      socket: {
+        connectTimeout: runtimeConfig.PAYMENT_EVENTS_CONNECT_TIMEOUT_MS,
+        reconnectStrategy: false as const,
+      },
       disableOfflineQueue: true,
     };
     const pair: Pair = {
@@ -123,7 +129,7 @@ export class PaymentEventsService implements OnModuleDestroy {
         new Promise<never>((_, reject) => {
           timeout = setTimeout(
             () => reject(new Error('Realtime connect timeout')),
-            2000,
+            runtimeConfig.PAYMENT_EVENTS_OPEN_TIMEOUT_MS,
           );
         }),
       ]);
@@ -149,7 +155,7 @@ export class PaymentEventsService implements OnModuleDestroy {
       this.retry = setTimeout(() => {
         this.retry = undefined;
         void this.connect();
-      }, 3000);
+      }, runtimeConfig.PAYMENT_EVENTS_RETRY_MS);
       this.retry.unref();
     }
   }

@@ -1,3 +1,4 @@
+import { runtimeConfig } from '../config/runtime-config.js';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { BillingPlan, PaymentStatus } from '../mongo/models.js';
 import { Equals, IsIn } from 'class-validator';
@@ -46,7 +47,9 @@ export class PaymentDto {
   @ApiProperty() invoiceNumber!: string;
   @ApiProperty() paymentCode!: string;
   @ApiProperty() createdAt!: string;
-  @ApiProperty({ description: 'Payment deadline, 30 minutes after creation' })
+  @ApiProperty({
+    description: `Payment deadline; new orders expire ${runtimeConfig.PAYMENT_INTENT_TTL_SECONDS} seconds after creation`,
+  })
   expiresAt!: string;
   @ApiProperty({ description: 'Server time for countdown synchronization' })
   serverTime!: string;
@@ -114,7 +117,7 @@ export class BillingOverviewDto {
   pendingPayment!: PaymentDto | null;
   @ApiProperty({
     type: [PaymentDto],
-    description: 'Most recent 20 attempts, not a complete statement',
+    description: `Most recent ${runtimeConfig.BILLING_RECENT_PAYMENTS_LIMIT} attempts, not a complete statement`,
   })
   recentPayments!: PaymentDto[];
 }

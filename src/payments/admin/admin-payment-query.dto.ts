@@ -1,3 +1,4 @@
+import { runtimeConfig } from '../../config/runtime-config.js';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import {
@@ -35,12 +36,12 @@ export class AdminPaymentQueryDto extends DashboardQueryDto {
   @ApiPropertyOptional({
     description:
       'Exact invoice, code, order/user ID, provider transaction, username or email (case insensitive)',
-    maxLength: 200,
+    maxLength: runtimeConfig.ADMIN_PAYMENT_SEARCH_MAX_LENGTH,
   })
   @IsOptional()
   @IsString()
   @MinLength(1)
-  @MaxLength(200)
+  @MaxLength(runtimeConfig.ADMIN_PAYMENT_SEARCH_MAX_LENGTH)
   q?: string;
 }
 export class AdminPaymentPageDto {
@@ -49,15 +50,18 @@ export class AdminPaymentPageDto {
   @Type(() => Number)
   @IsInt()
   @Min(1)
-  @Max(100000)
+  @Max(runtimeConfig.ADMIN_PAGINATION_MAX_PAGE)
   page = 1;
-  @ApiPropertyOptional({ default: 25, maximum: 100 })
+  @ApiPropertyOptional({
+    default: runtimeConfig.ADMIN_PAGINATION_DEFAULT_LIMIT,
+    maximum: runtimeConfig.ADMIN_PAGINATION_MAX_LIMIT,
+  })
   @IsOptional()
   @Type(() => Number)
   @IsInt()
   @Min(1)
-  @Max(100)
-  limit = 25;
+  @Max(runtimeConfig.ADMIN_PAGINATION_MAX_LIMIT)
+  limit = runtimeConfig.ADMIN_PAGINATION_DEFAULT_LIMIT;
 }
 export class AdminPaymentListDto extends AdminPaymentQueryDto {
   @ApiPropertyOptional({ default: 1 })
@@ -65,32 +69,39 @@ export class AdminPaymentListDto extends AdminPaymentQueryDto {
   @Type(() => Number)
   @IsInt()
   @Min(1)
-  @Max(100000)
+  @Max(runtimeConfig.ADMIN_PAGINATION_MAX_PAGE)
   page = 1;
-  @ApiPropertyOptional({ default: 25, maximum: 100 })
+  @ApiPropertyOptional({
+    default: runtimeConfig.ADMIN_PAGINATION_DEFAULT_LIMIT,
+    maximum: runtimeConfig.ADMIN_PAGINATION_MAX_LIMIT,
+  })
   @IsOptional()
   @Type(() => Number)
   @IsInt()
   @Min(1)
-  @Max(100)
-  limit = 25;
+  @Max(runtimeConfig.ADMIN_PAGINATION_MAX_LIMIT)
+  limit = runtimeConfig.ADMIN_PAGINATION_DEFAULT_LIMIT;
 }
 export class AdminReceiptQueryDto extends DashboardQueryDto {
   @ApiPropertyOptional({ format: 'uuid' })
   @IsOptional()
   @IsUUID()
   intentId?: string;
-  @ApiPropertyOptional({ maxLength: 100 })
+  @ApiPropertyOptional({
+    maxLength: runtimeConfig.ADMIN_RECEIPT_CODE_MAX_LENGTH,
+  })
   @IsOptional()
   @IsString()
   @MinLength(1)
-  @MaxLength(100)
+  @MaxLength(runtimeConfig.ADMIN_RECEIPT_CODE_MAX_LENGTH)
   outcome?: string;
-  @ApiPropertyOptional({ maxLength: 200 })
+  @ApiPropertyOptional({
+    maxLength: runtimeConfig.ADMIN_RECEIPT_REFERENCE_MAX_LENGTH,
+  })
   @IsOptional()
   @IsString()
   @MinLength(1)
-  @MaxLength(200)
+  @MaxLength(runtimeConfig.ADMIN_RECEIPT_REFERENCE_MAX_LENGTH)
   transactionId?: string;
   @ApiPropertyOptional({ enum: ['true', 'false'] })
   @IsOptional()
@@ -101,15 +112,18 @@ export class AdminReceiptQueryDto extends DashboardQueryDto {
   @Type(() => Number)
   @IsInt()
   @Min(1)
-  @Max(100000)
+  @Max(runtimeConfig.ADMIN_PAGINATION_MAX_PAGE)
   page = 1;
-  @ApiPropertyOptional({ default: 25, maximum: 100 })
+  @ApiPropertyOptional({
+    default: runtimeConfig.ADMIN_PAGINATION_DEFAULT_LIMIT,
+    maximum: runtimeConfig.ADMIN_PAGINATION_MAX_LIMIT,
+  })
   @IsOptional()
   @Type(() => Number)
   @IsInt()
   @Min(1)
-  @Max(100)
-  limit = 25;
+  @Max(runtimeConfig.ADMIN_PAGINATION_MAX_LIMIT)
+  limit = runtimeConfig.ADMIN_PAGINATION_DEFAULT_LIMIT;
 }
 export class AdminSubscriptionQueryDto extends AdminPaymentPageDto {
   @ApiPropertyOptional({ enum: PAID_PLANS })

@@ -1,3 +1,4 @@
+import { runtimeConfig } from '../../config/runtime-config.js';
 import {
   Controller,
   Get,
@@ -82,8 +83,7 @@ export class AdminPaymentsController {
   @Header('Cache-Control', 'private, no-store')
   @Header('Vary', 'Authorization')
   @ApiOperation({
-    summary:
-      'Paginated webhook outcomes including unmatched callbacks; Bangkok date range',
+    summary: `Paginated webhook outcomes including unmatched callbacks; ${runtimeConfig.APP_TIMEZONE} date range`,
   })
   receipts(@Query() query: AdminReceiptQueryDto) {
     return this.payments.receiptsPage(query);
@@ -103,8 +103,7 @@ export class AdminPaymentsController {
   @Header('Vary', 'Authorization')
   @ApiProduces('text/csv')
   @ApiOperation({
-    summary:
-      'Export up to 10000 orders matching creation-date filters; exact VND integers and formula-escaped text',
+    summary: `Export up to ${runtimeConfig.ADMIN_EXPORT_MAX_ROWS} orders matching creation-date filters; exact VND integers and formula-escaped text`,
   })
   async export(
     @Query() query: AdminPaymentQueryDto,

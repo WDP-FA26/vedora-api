@@ -3,7 +3,7 @@ import { PaymentIntent, PaymentWebhookReceipt } from '../../mongo/models.js';
 import {
   purchasedPlanName,
   effectivePlan,
-  SUBSCRIPTION_LIMITS,
+  purchasedLimits,
 } from '../../subscriptions/subscription-policy.js';
 
 export const normalizedPlan = {
@@ -50,7 +50,7 @@ export const customerJoin: PipelineStage[] = [
 export type AdminIntent = PaymentIntent & { customer?: AdminCustomer };
 export function orderRow(intent: AdminIntent) {
   const planCode = effectivePlan(intent),
-    limits = SUBSCRIPTION_LIMITS[planCode];
+    limits = purchasedLimits(intent);
   const customer = intent.customer;
   return {
     id: intent._id,
