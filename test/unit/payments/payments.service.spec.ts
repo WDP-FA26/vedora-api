@@ -209,7 +209,7 @@ describe('PaymentsService', () => {
         paidAt: null,
         capturedAt: null,
         cancelledAt: null,
-        createdAt: new Date('2026-10-01T00:00:00Z'),
+        createdAt: new Date(),
         updatedAt: new Date('2026-10-01T00:00:00Z'),
       };
 
