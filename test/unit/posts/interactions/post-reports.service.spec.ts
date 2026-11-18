@@ -10,6 +10,7 @@ import {
   prepareTestDatabase,
 } from '../../../support/mongo-test-db.js';
 import {
+  NotificationType,
   Post,
   PostReport,
   PostReportReason,
@@ -20,6 +21,8 @@ import {
 import { MongoModule } from '../../../../src/mongo/mongo.module.js';
 import { MongoService } from '../../../../src/mongo/mongo.service.js';
 import { PostReportsService } from '../../../../src/posts/interactions/post-reports.service.js';
+import { NotificationsService } from '../../../../src/notifications/notifications.service.js';
+import { type DeepMockProxy, mockDeep } from 'vitest-mock-extended';
 
 describe('PostReportsService', () => {
   let app: INestApplication;
@@ -28,11 +31,16 @@ describe('PostReportsService', () => {
   let author: User;
   let reporter: User;
   let post: Post;
+  let notifications: DeepMockProxy<NotificationsService>;
 
   beforeAll(async () => {
+    notifications = mockDeep<NotificationsService>();
     const moduleRef = await Test.createTestingModule({
       imports: [MongoModule.forTest(createTestMongoUrl('reports'))],
-      providers: [PostReportsService],
+      providers: [
+        PostReportsService,
+        { provide: NotificationsService, useValue: notifications },
+      ],
     }).compile();
     app = moduleRef.createNestApplication();
     await app.init();
@@ -46,6 +54,7 @@ describe('PostReportsService', () => {
     await db.connection.model(PostReport.name).deleteMany({});
     await db.connection.model(Post.name).deleteMany({});
     post = await createPost(db, { authorId: author.id });
+    notifications.notify.mockReset();
   });
   afterAll(async () => {
     await dropTestDatabase(app);
@@ -117,5 +126,82 @@ describe('PostReportsService', () => {
     await expect(
       service.review(crypto.randomUUID(), author.id, PostReportStatus.RESOLVED),
     ).rejects.toBeInstanceOf(ResourceNotFoundException);
+    expect(notifications.notify).toHaveBeenCalledTimes(1);
+  });
+
+  it('tells the reporter how their report was closed', async () => {
+    const dismissed = await file();
+    await service.review(dismissed.id, author.id, PostReportStatus.DISMISSED);
+    expect(notifications.notify).toHaveBeenLastCalledWith({
+      recipientId: reporter.id,
+      type: NotificationType.REPORT_DISMISSED,
+      postId: post.id,
+      reason: PostReportReason.SPAM,
+    });
+
+    const other = await createUser(db, { username: 'other.reporter' });
+    const resolved = await file(other.id);
+    await service.review(resolved.id, author.id, PostReportStatus.RESOLVED);
+    expect(notifications.notify).toHaveBeenLastCalledWith({
+      recipientId: other.id,
+      type: NotificationType.REPORT_RESOLVED,
+      postId: post.id,
+      reason: PostReportReason.SPAM,
+    });
+  });
+
+  it('collects the author, reporters and top reason before a removal', async () => {
+    const second = await createUser(db, { username: 'second.reporter' });
+    const third = await createUser(db, { username: 'third.reporter' });
+    await file();
+    await service.create(post.id, second.id, {
+      reason: PostReportReason.HARMFUL_ADVICE,
+    });
+    await service.create(post.id, third.id, {
+      reason: PostReportReason.HARMFUL_ADVICE,
+    });
+
+    const notice = await service.removalNotice(post.id);
+
+    expect(notice).toMatchObject({
+      authorId: author.id,
+      reason: PostReportReason.HARMFUL_ADVICE,
+    });
+    expect(notice?.reporterIds.sort()).toEqual(
+      [reporter.id, second.id, third.id].sort(),
+    );
+    await expect(
+      service.removalNotice(crypto.randomUUID()),
+    ).resolves.toBeNull();
+  });
+
+  it('notifies the author and every reporter once a post is removed', async () => {
+    await service.announceRemoval(
+      {
+        authorId: author.id,
+        reporterIds: [reporter.id],
+        reason: PostReportReason.SPAM,
+        excerpt: 'Canh chua',
+      },
+      'admin-id',
+    );
+    expect(notifications.notify).toHaveBeenCalledWith({
+      recipientId: reporter.id,
+      type: NotificationType.REPORTED_POST_REMOVED,
+      note: 'Canh chua',
+    });
+    expect(notifications.notify).toHaveBeenCalledWith({
+      recipientId: author.id,
+      type: NotificationType.POST_REMOVED,
+      reason: PostReportReason.SPAM,
+      note: 'Canh chua',
+    });
+
+    notifications.notify.mockReset();
+    await service.announceRemoval(
+      { authorId: author.id, reporterIds: [], reason: null, excerpt: null },
+      author.id,
+    );
+    expect(notifications.notify).not.toHaveBeenCalled();
   });
 });

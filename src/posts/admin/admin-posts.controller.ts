@@ -37,7 +37,6 @@ import {
   AdminPostsQueryDto,
   ModeratePostDto,
 } from '../dto/admin-post.dto.js';
-import { PostsService } from '../posts.service.js';
 import { ErrorBodyDto } from '../../common/exceptions/error-body.dto.js';
 
 @ApiTags('admin')
@@ -54,10 +53,7 @@ import { ErrorBodyDto } from '../../common/exceptions/error-body.dto.js';
 @Roles(UserRole.ADMIN)
 @Controller('admin/posts')
 export class AdminPostsController {
-  constructor(
-    private readonly adminPosts: AdminPostsService,
-    private readonly posts: PostsService,
-  ) {}
+  constructor(private readonly adminPosts: AdminPostsService) {}
 
   @Get()
   @ApiOperation({
@@ -109,9 +105,16 @@ export class AdminPostsController {
 
   @Delete(':id')
   @HttpCode(HttpStatus.NO_CONTENT)
-  @ApiOperation({ summary: "Delete anyone's post and its videos" })
+  @ApiOperation({
+    summary: "Delete anyone's post and its videos",
+    description:
+      'Notifies the author (POST_REMOVED, with the most reported reason) and everyone who reported the post (REPORTED_POST_REMOVED).',
+  })
   @ApiNoContentResponse()
-  async remove(@Param('id', ParseUUIDPipe) id: string): Promise<void> {
-    await this.posts.removeAsAdmin(id);
+  async remove(
+    @Req() request: AuthenticatedRequest,
+    @Param('id', ParseUUIDPipe) id: string,
+  ): Promise<void> {
+    await this.adminPosts.remove(id, request.user.sub);
   }
 }

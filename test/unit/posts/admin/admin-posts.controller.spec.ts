@@ -5,7 +5,6 @@ import { PostStatus, UserRole } from '../../../../src/mongo/models.js';
 import { AdminPostsController } from '../../../../src/posts/admin/admin-posts.controller.js';
 import type { AdminPostsService } from '../../../../src/posts/admin/admin-posts.service.js';
 import type { AdminPostDto } from '../../../../src/posts/dto/admin-post.dto.js';
-import type { PostsService } from '../../../../src/posts/posts.service.js';
 
 describe('AdminPostsController', () => {
   const adminId = '11111111-1111-4111-8111-111111111111';
@@ -15,13 +14,11 @@ describe('AdminPostsController', () => {
   } as AuthenticatedRequest;
 
   let adminPosts: DeepMockProxy<AdminPostsService>;
-  let posts: DeepMockProxy<PostsService>;
   let controller: AdminPostsController;
 
   beforeEach(() => {
     adminPosts = mockDeep<AdminPostsService>();
-    posts = mockDeep<PostsService>();
-    controller = new AdminPostsController(adminPosts, posts);
+    controller = new AdminPostsController(adminPosts);
   });
 
   it('delegates findAll, findOne, moderate, and remove', async () => {
@@ -40,7 +37,7 @@ describe('AdminPostsController', () => {
     adminPosts.findAll.mockResolvedValue(page);
     adminPosts.findOne.mockResolvedValue(dto);
     adminPosts.moderate.mockResolvedValue(dto);
-    posts.removeAsAdmin.mockResolvedValue();
+    adminPosts.remove.mockResolvedValue();
 
     await expect(
       controller.findAll({ page: 1, limit: 20, status: PostStatus.PENDING_REVIEW }),
@@ -67,7 +64,7 @@ describe('AdminPostsController', () => {
       'Clean recipe',
     );
 
-    await expect(controller.remove(postId)).resolves.toBeUndefined();
-    expect(posts.removeAsAdmin).toHaveBeenCalledWith(postId);
+    await expect(controller.remove(adminReq, postId)).resolves.toBeUndefined();
+    expect(adminPosts.remove).toHaveBeenCalledWith(postId, adminId);
   });
 });

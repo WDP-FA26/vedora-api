@@ -46,3 +46,16 @@ Luồng chỉ phát tới các client đang kết nối vào **cùng một insta
 ## Thông báo từ hệ thống (kiểm duyệt)
 
 `type` có thêm `POST_PENDING_REVIEW`, `POST_APPROVED`, `POST_REJECTED`. Với chúng `actor` là `null`, và có thêm `postType`, `reason`, `note`. Xem `content-moderation.md`.
+
+## Thông báo từ hệ thống (báo cáo bài viết)
+
+`actor` luôn là `null`.
+
+| `type` | Người nhận | Khi nào | Trường đi kèm |
+| --- | --- | --- | --- |
+| `REPORT_RESOLVED` | Người báo cáo | Admin bấm "Đã xử lý" (`POST /admin/reports/:id/review` với `RESOLVED`) | `postId`, `postType`, `reason` = lý do báo cáo (`SPAM`, …) |
+| `REPORT_DISMISSED` | Người báo cáo | Admin bấm "Bỏ qua" (`DISMISSED`) | như trên |
+| `POST_REMOVED` | Chủ bài | Admin xoá bài (`DELETE /admin/posts/:id`) | `reason` = lý do bị báo cáo nhiều nhất, `null` nếu bài không có báo cáo; `note` = tiêu đề blog hoặc đầu bài |
+| `REPORTED_POST_REMOVED` | Mọi người đã báo cáo bài đó | Admin xoá bài | `note` = tiêu đề blog hoặc đầu bài |
+
+Bài đã bị xoá nên `POST_REMOVED` và `REPORTED_POST_REMOVED` có `postId` = `null`. Ở hai loại này `note` là đoạn trích bài, **không** phải ghi chú của admin. Admin tự xoá bài của chính mình thì không có `POST_REMOVED`.
