@@ -16,6 +16,17 @@ Invalid values stop startup, including empty/NaN/fractional integer limits, inva
 
 ## Exact defaults
 
+After integrating `main` at `b6d221715fc61166f82e16b88d5add0b87047319`, four defaults follow the newer upstream implementation. Explicit env overrides still take precedence:
+
+| Setting | Initial refactor baseline | Integrated main default |
+| --- | --- | --- |
+| `AI_DECISION_TIMEOUT_MS` | 4000 | 10000 |
+| `MEAL_PLAN_MAX_DISHES_PER_SECTION` | 6 | 5 |
+| `MEAL_PLAN_SUGGESTIONS_LIMIT` | 30 | 60 |
+| `PLANNER_CHAT_MAX_STEPS` | 8 | 10 |
+
+The planner prompt file now contains the latest upstream draft-editing instructions. Both moderation model defaults follow upstream `openai/gpt-6-luna-decisions`, including Compose forwarding. Audit fixtures retain their initial values/hashes and explicitly record upstream replacements and the source revision; they do not silently rewrite the original evidence. Recipe tags, generation/editing tools, draft conflict handling, moderation latency logs and Admin quota behavior from main are retained.
+
 `test/fixtures/runtime-defaults-before-refactor.json` records 156 scalar constants evaluated from the old source, with file/name and any unit multiplier. A regression test checks every one against the new defaults. DTO override tests verify that the new values actually affect validation, generation, scheduling and public responses.
 
 Additional defaults were checked at their call sites: AI-cost pagination remains 50 (ordinary Admin payments pagination remains 25), guest quota resets in UTC, reporting/subscription dates use Asia/Bangkok, and moderation receives at most 24000 history characters by default. No default budget, token count, model or timeout was silently increased.
@@ -52,3 +63,5 @@ See [BE_ENV_REFERENCE.md](BE_ENV_REFERENCE.md) for all keys and values, and [doc
 - Docker production-mode API smoke uses isolated Mongo/Redis fixtures and env overrides. It verifies public config secret exclusion/no-store, DTO limits, persistence of a 2500-character message under a 3000-character configured limit, rejection above that limit, unchanged 49000/30 pricing/duration, changed new-order TTL/code/allowances, idempotency and ownership, unattended cron expiration, late callback receipt, successful payment, purchased and historical allowance contracts, and CSV row cap. No real payment, paid AI call or production CAPTCHA request is made.
 - All 259 new env defaults match `.env.example` and Compose. All 156 captured scalar constants and the hashes of the three original prompts/three policy objects are checked. Compose shell override forwarding is verified.
 - FE code remains unchanged. These checks validate implementation on the feature branch; they do not mean it has been merged or deployed.
+
+The main-integration follow-up was checked separately: 302 relevant unit tests across 47 files and all 48 meal-plan flow E2E tests pass. Build, ESLint, production Docker build and the env-override Docker API smoke pass again. All 259 defaults still match Compose and `.env.example`. The integration resolves eight conflicted files on the feature branch; it does not merge the feature branch into main or deploy it. The earlier full-unit baseline result above is historical and was not represented as a fresh full-suite run for this follow-up.
