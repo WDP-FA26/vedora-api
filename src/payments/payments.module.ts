@@ -12,6 +12,7 @@ import { PaymentStreamController } from './payment-stream.controller.js';
 import { SubscriptionsModule } from '../subscriptions/subscriptions.module.js';
 import { AdminPaymentsController } from './admin/admin-payments.controller.js';
 import { AdminPaymentsService } from './admin/admin-payments.service.js';
+import { PaymentMaintenanceService } from './payment-maintenance.service.js';
 
 @Module({
   imports: [SubscriptionsModule],
@@ -28,6 +29,7 @@ import { AdminPaymentsService } from './admin/admin-payments.service.js';
     SePayWebhookGuard,
     PaymentEventsService,
     AdminPaymentsService,
+    PaymentMaintenanceService,
   ],
 })
 export class PaymentsModule {}
