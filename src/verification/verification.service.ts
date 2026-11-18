@@ -1,6 +1,7 @@
+import { runtimeConfig } from '../config/runtime-config.js';
 import { randomUUID } from 'node:crypto';
 import { Injectable, Logger } from '@nestjs/common';
-import { Cron, CronExpression } from '@nestjs/schedule';
+import { Cron } from '@nestjs/schedule';
 import { InjectModel } from '@nestjs/mongoose';
 
 import type { Model, QueryFilter } from 'mongoose';
@@ -40,10 +41,11 @@ const IMAGE_EXTENSIONS: Record<string, string> = {
   'image/png': 'png',
   'image/webp': 'webp',
 };
-const MAX_PROOF_BYTES = 10 * 1024 * 1024;
-const MAX_UNSUBMITTED_PROOFS = 12;
-const CLEANUP_AGE_MS = 48 * 60 * 60 * 1000;
-const PROOF_URL_TTL_SECONDS = 10 * 60;
+const MAX_PROOF_BYTES = runtimeConfig.VERIFICATION_PROOF_MAX_MB * 1048576;
+const MAX_UNSUBMITTED_PROOFS =
+  runtimeConfig.VERIFICATION_MAX_UNSUBMITTED_PROOFS;
+const CLEANUP_AGE_MS = runtimeConfig.VERIFICATION_CLEANUP_AGE_SECONDS * 1000;
+const PROOF_URL_TTL_SECONDS = runtimeConfig.VERIFICATION_PROOF_URL_TTL_SECONDS;
 
 @Injectable()
 export class VerificationService {
@@ -277,7 +279,7 @@ export class VerificationService {
     return decided;
   }
 
-  @Cron(CronExpression.EVERY_HOUR)
+  @Cron(runtimeConfig.VERIFICATION_CLEANUP_CRON)
   async purgeUnusedProofs(): Promise<void> {
     if (!this.storage.isConfigured()) return;
     const proofs = await this.proofs
@@ -286,7 +288,7 @@ export class VerificationService {
         createdAt: { $lt: new Date(Date.now() - CLEANUP_AGE_MS) },
       })
       .sort({ createdAt: 1 })
-      .limit(200)
+      .limit(runtimeConfig.VERIFICATION_CLEANUP_BATCH_SIZE)
       .exec();
     for (const proof of proofs) {
       try {
