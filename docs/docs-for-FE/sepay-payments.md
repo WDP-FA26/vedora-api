@@ -39,7 +39,7 @@ FREE trả `startsAt=null, expiresAt=null`; lịch sử thanh toán vẫn còn.
 
 Payment trả `id`, `planCode`, `durationDays`, `amount`, `currency`, `status`,
 `invoiceNumber`, `paymentCode`, `createdAt`, `paidAt`, `capturedAt`,
-`cancelledAt`, `planVersion`, `purchasedPlanName`, `textLimit`, `imageLimit`, `qr`. QR chỉ có khi PENDING và thanh toán đang bật:
+`cancelledAt`, `expiresAt`, `serverTime`, `cancellationReason`, `planVersion`, `purchasedPlanName`, `textLimit`, `imageLimit`, `qr`. QR chỉ có khi PENDING, chưa đến hạn 30 phút và thanh toán đang bật:
 `imageUrl`, `downloadUrl`, `bankCode`, `bankGateway`, `accountNumber`,
 `accountHolder`, `storeName`, `transferContent`, `amount`, `currency`.
 Không trả email/userId, provider reference hoặc raw callback.
@@ -84,17 +84,17 @@ tất cả. Callback lỗi DB trả non-2xx
 lưu outcome: CAPTURED, DUPLICATE, NOT_INCOMING, ACCOUNT_MISMATCH,
 PAYMENT_CODE_MISSING, PAYMENT_INTENT_NOT_FOUND, AMOUNT_MISMATCH,
 TRANSACTION_ALREADY_USED, PAYMENT_INTENT_ALREADY_SUCCEEDED,
-PAYMENT_CANCELLED, ACCOUNT_UNAVAILABLE. Receipt không lưu raw body, sender,
+PAYMENT_CANCELLED, PAYMENT_EXPIRED, ACCOUNT_UNAVAILABLE. Receipt không lưu raw body, sender,
 content, account hay secret; chỉ ID provider, hash, outcome, intent và giờ nhận.
 Đối soát Admin qua Swagger; chưa có UI đối soát riêng.
 
 Giao dịch sau hủy, sai/thừa/thiếu tiền, mã không nhận diện, hoặc account đã
 bị khóa/xóa không tự kích hoạt gói; lưu receipt để vận hành đối soát. Không tự
-cộng nhiều lần chuyển thiếu, không tự hoàn tiền. Không tự hết hạn PENDING
-hoặc xóa receipt/idempotency/history. Cần chính sách retention trước khi tăng
+cộng nhiều lần chuyển thiếu, không tự hoàn tiền. PENDING tự hủy sau 30 phút;
+không xóa receipt/idempotency/history. Cần chính sách retention trước khi tăng
 quy mô. Các khoản tiền dư/thừa và tranh chấp xử lý ngoài luồng tự động này.
-`paidAt` là giờ provider, `capturedAt` là giờ ghi nhận; không có cửa sổ tuổi
-callback riêng ngoài identity/state và snapshot.
+`paidAt` là giờ provider, `capturedAt` là giờ ghi nhận. Callback chỉ capture khi
+BE xử lý trước `expiresAt`; callback đến muộn phải đối soát. Xem [payment-expiration.md](payment-expiration.md).
 
 ## Cấu hình và triển khai
 
