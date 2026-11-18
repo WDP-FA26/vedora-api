@@ -82,6 +82,12 @@ export class PaymentIntent extends Identified {
   cancelledAt!: Date | null;
 
   @Prop({ type: Date })
+  expiresAt?: Date;
+
+  @Prop({ type: String, enum: ['USER', 'EXPIRED'], default: null })
+  cancellationReason?: 'USER' | 'EXPIRED' | null;
+
+  @Prop({ type: Date })
   createdAt!: Date;
 
   @Prop({ type: Date })
@@ -109,6 +115,7 @@ PaymentIntentSchema.index({ userId: 1, createdAt: 1 });
 PaymentIntentSchema.index({ userId: 1, status: 1, capturedAt: 1 });
 PaymentIntentSchema.index({ createdAt: -1, _id: -1 });
 PaymentIntentSchema.index({ status: 1, capturedAt: -1, _id: -1 });
+PaymentIntentSchema.index({ status: 1, expiresAt: 1, createdAt: 1 });
 
 @Schema(collectionSchema('payment_requests', 'created'))
 export class PaymentRequest extends Identified {
