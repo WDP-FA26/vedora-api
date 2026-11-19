@@ -226,6 +226,7 @@ describe('CloudinaryService', () => {
 
       expect(resourceSpy).toHaveBeenCalledWith('vedora/videos/m1', {
         resource_type: 'video',
+        media_metadata: true,
       });
       expect(found).toEqual({
         public_id: 'vedora/videos/m1',
