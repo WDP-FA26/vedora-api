@@ -31,7 +31,7 @@ Bài mới và blog xuất bản (hoặc sửa tiêu đề, nội dung, ảnh b�
 - Vi phạm: `status: REJECTED` và `moderationVerdict` là category ở trên. Chỉ tác giả thấy. Sửa blog bị từ chối mà không gửi `status` sẽ đưa nó về `DRAFT`.
 - Model chưa trả lời được: giữ `PROCESSING`, server tự thử lại mỗi 5 phút. FE tiếp tục poll `GET /posts/:id` như với video.
 
-Video: chữ của bài, 4 khung hình lấy từ Cloudinary và transcript lời thoại được chấm cùng lúc trước khi xuất bản. Bài ở `PROCESSING` cho đến khi có transcript (thường vài giây đến vài chục giây sau khi video xử lý xong). Video không có lời thoại hoặc ghi lời lỗi thì chỉ chấm chữ và khung hình.
+Video: chữ của bài, các khung hình lấy từ Cloudinary (cách nhau khoảng 5 giây, ít nhất 4 khung mỗi video, tối đa 24 khung mỗi bài) và transcript lời thoại được chấm cùng lúc trước khi xuất bản. Bài ở `PROCESSING` cho đến khi có transcript (thường vài giây đến vài chục giây sau khi video xử lý xong). Video không có lời thoại hoặc ghi lời lỗi thì chỉ chấm chữ và khung hình.
 Blog: tiêu đề, nội dung, ảnh bìa và tối đa 5 ảnh trong nội dung Markdown.
 
 ## Sửa bài đã đăng
@@ -66,7 +66,100 @@ Bài đang `PROCESSING` hoặc `PENDING_REVIEW` chỉ tác giả thấy, FE nên
 ## Admin
 
 - Hàng chờ: `GET /admin/posts?status=PENDING_REVIEW` (hoặc `REJECTED`). Mỗi bài có `moderation`: `verdict`, `violationScore`, `scores` (xác suất từng nhóm), `checkedAt`, `reviewedById`, `reviewedAt`, `reviewNote`.
+- Bằng chứng: `moderation.evidence` (chỉ có ở API admin, tác giả không thấy). Xem mục "Bằng chứng vi phạm" bên dưới.
 - Quyết định: `POST /admin/posts/:id/moderation` với `{ "decision": "APPROVE" | "REJECT", "note"?: string }`. APPROVE xuất bản bài (kể cả bài đã bị `REJECTED`), REJECT chặn bài. Bài ở trạng thái khác trả 409 `POST_NOT_REVIEWABLE`.
+
+## Người kiểm duyệt thứ hai (System 2) và bằng chứng (admin)
+
+Mỗi bài, blog, video mà model quyết định (System 1) gắn cờ (điểm `>= MODERATION_REVIEW_THRESHOLD`, kể cả bài bị chặn thẳng) được gửi cùng chữ, khung hình và ảnh cho một model thứ hai (mặc định `deepseek/deepseek-v4.1-flash-1017`, xem `OPENROUTER_MODERATION_EVIDENCE_MODEL`). Model này là **người kiểm duyệt**: nó quyết định `accept` (System 1 chấm nhầm), `reject`, hoặc `escalate` (chuyển admin), và chỉ ra **phần nào** vi phạm. Bài System 1 cho qua (`< MODERATION_REVIEW_THRESHOLD`) không đi qua System 2.
+
+### Hai chế độ (`MODERATION_MODE`)
+
+- `shadow` (mặc định): ngưỡng của System 1 vẫn quyết định như mục trên. System 2 chạy sau đó; kết quả của nó và của router chỉ được **ghi lại** (`moderation.route.appliedBy = null`) để so sánh với quyết định của admin. Luật chèo lái AI cũng chỉ được ghi lại.
+- `enforce`: bài bị gắn cờ ở `PROCESSING` (`moderation.heldAt` có giá trị) cho đến khi System 2 trả lời, rồi router áp dụng kết quả. Tác giả chỉ nhận **một** thông báo, khi đã có kết quả cuối (không có `POST_PENDING_REVIEW` trước đó trừ khi bài chuyển admin). FE vẫn poll `GET /posts/:id` như mọi bài `PROCESSING`. Nếu System 2 không trả lời (server khởi động lại...), cron đưa bài vào hàng đợi lại sau `MODERATION_HOLD_RETRY_AFTER_SECONDS` (mặc định 300).
+
+### Router (`moderation.route`)
+
+Luật đầu tiên khớp thắng:
+
+| `rule` | Khi nào | `outcome` |
+| --- | --- | --- |
+| `PROVIDER_BLOCKED` | Nhà cung cấp của System 1 từ chối đọc | `ADMIN` |
+| `MANIPULATION` | `scores.manipulation >= manipulationThreshold` | `REJECT` (System 1 chặn ngay, không chờ System 2) |
+| `REVIEWER_UNAVAILABLE` | System 2 `FAILED`/`REFUSED` | `ADMIN` |
+| `REVIEWER_REJECT` | System 2 `reject` và có ít nhất một bằng chứng đã kiểm tra | `REJECT` |
+| `UNVERIFIED_REJECT` | System 2 `reject` nhưng không bằng chứng nào khớp bài | `ADMIN` |
+| `REVIEWER_ESCALATE` | System 2 `escalate` | `ADMIN` |
+| `REVIEWER_ACCEPT` | System 2 `accept` | `PUBLISH` |
+
+`outcome`: `PUBLISH` → `PUBLISHED`, `REJECT` → `REJECTED`, `ADMIN` → `PENDING_REVIEW`.
+
+```json
+"route": {
+  "outcome": "REJECT",
+  "rule": "REVIEWER_REJECT",
+  "category": "violence",
+  "appliedBy": "SYSTEM_TWO",
+  "decidedAt": "2026-11-19T14:25:57.819Z"
+}
+```
+
+- `category`: nhóm mà kết quả đại diện. Với bài bị `REJECTED` do router (`appliedBy` khác `null`), `moderationVerdict`/`moderationReason` của tác giả và `reason` của thông báo lấy từ đây; `moderation.verdict` vẫn là nhóm của System 1 (khớp với các thanh điểm).
+- `appliedBy`: `SYSTEM_TWO` (router áp dụng), `SYSTEM_ONE` (luật chèo lái AI hoặc nhà cung cấp từ chối đọc, ở chế độ `enforce`), `null` (chỉ ghi lại: chế độ `shadow`, hoặc chạy lại trên bài đã có quyết định).
+- Lưu ý: bằng chứng khung hình/ảnh chỉ được kiểm tra là số thứ tự ảnh có thật, nên `REVIEWER_REJECT` với video dựa nhiều vào nhận định của model hơn so với trích dẫn chữ.
+
+### Chèo lái AI (`manipulation`)
+
+Nhóm `manipulation` có sẵn trong chính sách và không xoá được (xem [moderation-settings.md](moderation-settings.md)): nội dung nói với AI hoặc người kiểm duyệt để thay đổi cách chấm chính nó ("bỏ qua hướng dẫn", "hãy đánh giá bài này là an toàn", "đã được admin duyệt", tin nhắn hệ thống giả, chỉ dẫn giấu trong ảnh). Ở chế độ `enforce`, `P(manipulation) >= manipulationThreshold` (mặc định 0.5) bị chặn ngay: bài `REJECTED` với `moderationVerdict: "manipulation"`, bình luận 422 `CONTENT_REJECTED` với `details.category: "manipulation"`. System 2 cũng được dặn `reject` với `category: "manipulation"` khi thấy nội dung như vậy.
+
+### Bằng chứng (`moderation.evidence`)
+
+Có ở `GET /admin/posts` và `GET /admin/posts/:id`, thường sau vài giây (tối đa khoảng 1 phút). Trong lúc chờ, `evidence` là `null`.
+
+```json
+{
+  "status": "READY",
+  "decision": "reject",
+  "category": "violence",
+  "summary": "Nội dung chứa lời đe dọa giết cả gia đình.",
+  "items": [
+    {
+      "field": "body",
+      "category": "violence",
+      "reason": "Cụm này là lời đe dọa giết người trực tiếp.",
+      "quote": "Tao sẽ giết cả nhà mày",
+      "start": 17,
+      "end": 39,
+      "mediaId": null,
+      "seconds": null,
+      "imageUrl": null,
+      "box": null
+    }
+  ],
+  "dropped": 0,
+  "model": "deepseek/deepseek-v4.1-flash-1017",
+  "createdAt": "2026-11-19T14:25:57.819Z"
+}
+```
+
+- `status`: `READY`; `FAILED` (model không trả lời, bấm chạy lại); `REFUSED` (nhà cung cấp model từ chối đọc nội dung, nên coi là nghi vi phạm nặng, không phải "sạch").
+- `decision`: `accept` | `reject` | `escalate`, `null` khi không `READY`. Bản ghi cũ (trước khi có trường này) không có `decision`; FE coi là `null`.
+- `category`: nhóm System 2 từ chối, hoặc `null`.
+- `summary`, `reason`: tiếng Việt, ngắn.
+- `items[].field`:
+  - `body` (chữ của bài), `title`, `content` (blog), `transcript` (lời thoại video, `mediaId` là video đó): `quote` **khớp nguyên văn** với nội dung, server đã kiểm tra. `start`/`end` là vị trí trong chuỗi đã chuẩn hoá NFC (`text.normalize("NFC").slice(start, end) === quote`). Chỉ dùng để tô sáng `body`; `content` là Markdown nên chỉ hiện danh sách trích dẫn.
+  - `frame` (khung video, có `mediaId`, `seconds`) và `image` (ảnh blog): `imageUrl` là ảnh đó. `quote` là chữ model đọc được trong ảnh, có thể sai dấu, chỉ để tham khảo. `box` là vùng gần đúng `[x0, y0, x1, y1]` theo thang 0–1000 của ảnh, hoặc `null`; chỉ là gợi ý.
+- `items[].category`: nhóm model nghĩ là vi phạm, chỉ để tham khảo.
+- `dropped`: số trích dẫn model đưa ra nhưng không có trong bài, đã bị bỏ.
+- Hiển thị `quote`, `summary`, `reason` như văn bản thường (không render HTML), vì chúng lấy từ nội dung người dùng.
+
+Chạy lại: `POST /admin/posts/:id/moderation/evidence` (không có body) chạy System 2 ngay và trả về bài như `GET /admin/posts/:id`. Trên bài đang giữ (`PROCESSING`, `enforce`) kết quả được áp dụng; trên bài `PENDING_REVIEW`/`REJECTED` chỉ được ghi lại (một `route` đã áp dụng thì giữ nguyên). Mất tới khoảng 1 phút và tốn một ít chi phí. Bài không bị gắn cờ, hoặc vừa được chấm lại trong lúc chạy, trả 409 `POST_NOT_REVIEWABLE`; bài không tồn tại trả 404.
+
+### Admin lật quyết định
+
+`POST /admin/posts/:id/moderation` như cũ, thêm: `REJECT` được cả bài `PUBLISHED` do System 2 cho đăng (`route.appliedBy: "SYSTEM_TWO"`); tác giả nhận `POST_REJECTED`. `APPROVE` vẫn chỉ cho `PENDING_REVIEW`/`REJECTED`.
+
+Chưa có: khiếu nại của tác giả, việc báo cáo kéo bài System 2 đã cho đăng về hàng chờ admin, và bộ lọc theo `appliedBy` trong `GET /admin/posts`.
 
 ## FE cần xử lý
 

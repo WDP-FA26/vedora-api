@@ -1,10 +1,15 @@
-import { ALLOW_KEY } from './policies/content.js';
+import { ALLOW_KEY, MANIPULATION_KEY } from './policies/content.js';
 
 export type ContentDecision = 'publish' | 'review' | 'reject';
 
 export interface ContentThresholds {
   rejectThreshold: number;
   reviewThreshold: number;
+  /**
+   * When set, a `manipulation` chance at or above it is rejected whatever
+   * the overall score. Left out while the rule is only recorded (shadow).
+   */
+  manipulationThreshold?: number;
 }
 
 /**
@@ -39,7 +44,11 @@ export function isProviderBlocked(assessment: ContentAssessment): boolean {
 export function assessContent(
   choice: string,
   probabilities: Record<string, number> | undefined,
-  { rejectThreshold, reviewThreshold }: ContentThresholds,
+  {
+    rejectThreshold,
+    reviewThreshold,
+    manipulationThreshold,
+  }: ContentThresholds,
 ): ContentAssessment {
   const scores = probabilities ?? { [choice]: 1 };
   const violationScore = 1 - (scores[ALLOW_KEY] ?? 0);
@@ -50,6 +59,18 @@ export function assessContent(
       category = key;
       best = score;
     }
+  }
+  const manipulation = scores[MANIPULATION_KEY] ?? 0;
+  if (
+    manipulationThreshold !== undefined &&
+    manipulation >= manipulationThreshold
+  ) {
+    return {
+      decision: 'reject',
+      category: MANIPULATION_KEY,
+      violationScore,
+      scores,
+    };
   }
   let decision: ContentDecision = 'publish';
   if (violationScore >= rejectThreshold) decision = 'reject';

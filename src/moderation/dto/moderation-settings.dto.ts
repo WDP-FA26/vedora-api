@@ -51,7 +51,7 @@ export class ModerationChoiceDto {
   @ApiProperty({
     example: 'hate',
     description:
-      'Stable id, 2-32 characters: lowercase letters, digits and _, starting with a letter. Stored on posts, so do not reuse one for something else. `allow` is built in',
+      'Stable id, 2-32 characters: lowercase letters, digits and _, starting with a letter. Stored on posts, so do not reuse one for something else. `allow` is built in; `manipulation` is always kept (added back when missing) and only its texts can be edited',
   })
   @IsString()
   @Matches(KEY_PATTERN, {
@@ -137,6 +137,18 @@ export class ModerationPolicyDto {
   @Max(1)
   @Validate(BelowRejectThreshold)
   reviewThreshold!: number;
+
+  @ApiPropertyOptional({
+    minimum: 0,
+    maximum: 1,
+    description:
+      'A `manipulation` chance at or above this is rejected outright, before the reviewer model decides. Omit it to keep the saved value',
+  })
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  @Max(1)
+  manipulationThreshold?: number;
 }
 
 export class UpdateModerationSettingsDto extends ModerationPolicyDto {
@@ -160,6 +172,12 @@ export class ModerationSettingsDto extends ModerationPolicyDto {
   @ApiProperty({ nullable: true, type: Date }) updatedAt!: Date | null;
   @ApiProperty({ nullable: true, type: String }) updatedById!: string | null;
   @ApiProperty() isDefault!: boolean;
+
+  @ApiProperty({
+    description:
+      'True when MODERATION_MODE=enforce: the manipulation rule and the reviewer model decide. False (shadow): they are only recorded',
+  })
+  manipulationEnforced!: boolean;
 }
 
 export class TestModerationDto {

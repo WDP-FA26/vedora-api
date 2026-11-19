@@ -8,8 +8,13 @@ import {
 } from '../../common/pagination/index.js';
 import { AdminMediaDto } from '../../media/dto/media-response.dto.js';
 import { MediaService } from '../../media/media.service.js';
-import { type MediaAsset, Post } from '../../mongo/models.js';
 import {
+  type MediaAsset,
+  Post,
+  type PostModeration,
+} from '../../mongo/models.js';
+import {
+  type AdminModerationDto,
   AdminPostDto,
   AdminPostsQueryDto,
   type ModerationDecision,
@@ -20,6 +25,24 @@ import { PostRelationsService } from '../post-relations.service.js';
 import { ResourceNotFoundException } from '../../common/exceptions/resource-not-found.exception.js';
 import { PostReportsService } from '../interactions/post-reports.service.js';
 import { PostsService } from '../posts.service.js';
+
+function toModerationDto(
+  moderation: PostModeration | null,
+): AdminModerationDto | null {
+  if (!moderation) return null;
+  return {
+    verdict: moderation.verdict,
+    violationScore: moderation.violationScore,
+    scores: moderation.scores,
+    checkedAt: moderation.checkedAt,
+    reviewedById: moderation.reviewedById,
+    reviewedAt: moderation.reviewedAt,
+    reviewNote: moderation.reviewNote,
+    evidence: moderation.evidence ?? null,
+    route: moderation.route ?? null,
+    heldAt: moderation.heldAt ?? null,
+  };
+}
 
 @Injectable()
 export class AdminPostsService {
@@ -82,7 +105,7 @@ export class AdminPostsService {
     if (!applied) {
       throw new StateConflictException(
         'POST_NOT_REVIEWABLE',
-        'Only a post waiting for review or a rejected one can be moderated',
+        'Only a post waiting for review, a rejected one, or (to reject it) one the reviewer model published can be moderated',
       );
     }
     return this.findOne(id);
@@ -108,7 +131,7 @@ export class AdminPostsService {
           likeCount: related.likeCount,
           repostCount: related.repostCount,
           viewCount: row.viewCount,
-          moderation: row.moderation,
+          moderation: toModerationDto(row.moderation),
         },
       ];
     });

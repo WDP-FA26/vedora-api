@@ -1,12 +1,24 @@
 import { runtimeConfig } from '../config/runtime-config.js';
 import { Injectable, Logger, type OnModuleInit } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import { isEnforced } from '../config/moderation-mode.js';
+import { PROVIDER_BLOCKED_KEY } from '../moderation/content-decision.js';
+import { MANIPULATION_KEY } from '../moderation/policies/content.js';
+import type { RoutedVerdict } from '../moderation/moderation-route.js';
 import { InjectModel } from '@nestjs/mongoose';
 import type { Model } from 'mongoose';
+import { Subject } from 'rxjs';
 import {
   ContentModerationService,
   type ContentPart,
 } from '../moderation/content-moderation.service.js';
 import type { ContentAssessment } from '../moderation/content-decision.js';
+import type {
+  EvidenceImage,
+  EvidenceSources,
+  EvidenceText,
+} from '../moderation/content-evidence.js';
+import { toJevJpeg } from '../moderation/moderation-image.js';
 import { NotificationsService } from '../notifications/notifications.service.js';
 import { CaptionService } from './captions/caption.service.js';
 import { CloudinaryService } from '../cloudinary/cloudinary.service.js';
@@ -16,6 +28,8 @@ import {
   CaptionStatus,
   MediaAsset,
   MediaStatus,
+  type ModerationEvidence,
+  type RouteOutcome,
   NotificationType,
   Post,
   PostStatus,
@@ -30,6 +44,19 @@ const STATUS_BY_DECISION: Record<ContentAssessment['decision'], PostStatus> = {
   reject: PostStatus.REJECTED,
 };
 
+const STATUS_BY_OUTCOME: Record<RouteOutcome, PostStatus> = {
+  PUBLISH: PostStatus.PUBLISHED,
+  REJECT: PostStatus.REJECTED,
+  ADMIN: PostStatus.PENDING_REVIEW,
+};
+
+const DECISION_BY_OUTCOME: Record<RouteOutcome, ContentAssessment['decision']> =
+  {
+    PUBLISH: 'publish',
+    REJECT: 'reject',
+    ADMIN: 'review',
+  };
+
 const FRAME_SAMPLING: FrameSampling = {
   intervalSeconds: runtimeConfig.MODERATION_VIDEO_FRAME_INTERVAL_SECONDS,
   minPerVideo: runtimeConfig.MODERATION_VIDEO_MIN_FRAMES,
@@ -40,6 +67,8 @@ const MAX_INLINE_IMAGES = runtimeConfig.MODERATION_MAX_INLINE_IMAGES;
 @Injectable()
 export class PostModerationService implements OnModuleInit {
   private readonly logger = new Logger(PostModerationService.name);
+  /** Ids of posts the classifier just held for review or rejected. */
+  readonly flagged = new Subject<string>();
 
   constructor(
     private readonly moderation: ContentModerationService,
@@ -50,7 +79,23 @@ export class PostModerationService implements OnModuleInit {
     @InjectModel(Post.name) private readonly posts: Model<Post>,
     @InjectModel(MediaAsset.name)
     private readonly mediaAssets: Model<MediaAsset>,
+    private readonly config: ConfigService,
   ) {}
+
+  /**
+   * Under enforce, a flagged post waits in PROCESSING for the reviewer model,
+   * except what System 1 settles for good: the manipulation rule and content
+   * the provider refused to read (an admin's call).
+   */
+  private holdsForReview(assessment: ContentAssessment): boolean {
+    if (!isEnforced(this.config)) return false;
+    if (assessment.decision === 'publish') return false;
+    if (assessment.category === PROVIDER_BLOCKED_KEY) return false;
+    const manipulation =
+      assessment.decision === 'reject' &&
+      assessment.category === MANIPULATION_KEY;
+    return !manipulation;
+  }
 
   onModuleInit(): void {
     this.captions.transcribed.subscribe((postId) => {
@@ -75,10 +120,18 @@ export class PostModerationService implements OnModuleInit {
       const judged = await this.judge(id);
       if (judged === null) continue;
       const { post, assessment } = judged;
-      const settled = await this.apply(post.id, assessment);
+      const held = this.holdsForReview(assessment);
+      const settled = await this.apply(post.id, assessment, held);
       if (!settled) continue;
-      if (assessment.decision === 'publish') published += 1;
-      await this.tellAuthor(post, assessment);
+      if (assessment.decision === 'publish') {
+        published += 1;
+        continue;
+      }
+      this.flagged.next(post.id);
+      // A held post's author hears once, when the reviewer has decided.
+      if (!held) {
+        await this.tellAuthor(post, assessment.decision, assessment.category);
+      }
     }
     return published;
   }
@@ -90,12 +143,17 @@ export class PostModerationService implements OnModuleInit {
     note: string | null,
   ): Promise<boolean> {
     const approve = decision === 'APPROVE';
-    const before = await this.posts
-      .findOne({
-        _id: id,
-        status: { $in: [PostStatus.PENDING_REVIEW, PostStatus.REJECTED] },
-      })
-      .exec();
+    const decidable: Record<string, unknown>[] = [
+      { status: { $in: [PostStatus.PENDING_REVIEW, PostStatus.REJECTED] } },
+    ];
+    // An admin can take down what the reviewer model let through.
+    if (!approve) {
+      decidable.push({
+        status: PostStatus.PUBLISHED,
+        'moderation.route.appliedBy': 'SYSTEM_TWO',
+      });
+    }
+    const before = await this.posts.findOne({ _id: id, $or: decidable }).exec();
     if (!before) return false;
     const now = new Date();
     const result = await this.posts
@@ -126,7 +184,7 @@ export class PostModerationService implements OnModuleInit {
         postId: id,
         note: note ?? undefined,
       });
-    } else if (before.status === PostStatus.PENDING_REVIEW) {
+    } else if (before.status !== PostStatus.REJECTED) {
       await this.notifications.notify({
         recipientId: before.authorId,
         type: NotificationType.POST_REJECTED,
@@ -140,18 +198,72 @@ export class PostModerationService implements OnModuleInit {
 
   private async tellAuthor(
     post: Post,
-    assessment: ContentAssessment,
+    decision: ContentAssessment['decision'],
+    category: string | null,
   ): Promise<void> {
-    if (assessment.decision === 'publish') return;
+    if (decision === 'publish') return;
     await this.notifications.notify({
       recipientId: post.authorId,
       type:
-        assessment.decision === 'reject'
+        decision === 'reject'
           ? NotificationType.POST_REJECTED
           : NotificationType.POST_PENDING_REVIEW,
       postId: post.id,
-      reason: assessment.category ?? undefined,
+      reason: category ?? undefined,
     });
+  }
+
+  /**
+   * Applies the router's outcome to a post held for the reviewer model, then
+   * tells the author once. False when the post was judged again or left
+   * PROCESSING meanwhile: that newer verdict gets its own review.
+   */
+  async finishReview(
+    post: Post,
+    evidence: ModerationEvidence,
+    routed: RoutedVerdict,
+  ): Promise<boolean> {
+    if (!post.moderation?.heldAt) return false;
+    const now = new Date();
+    const status = STATUS_BY_OUTCOME[routed.outcome];
+    const published = status === PostStatus.PUBLISHED;
+    const route = { ...routed, appliedBy: 'SYSTEM_TWO', decidedAt: now };
+    const result = await this.posts
+      .updateOne(
+        {
+          _id: post.id,
+          status: PostStatus.PROCESSING,
+          'moderation.checkedAt': post.moderation.checkedAt,
+          'moderation.heldAt': { $ne: null },
+        },
+        [
+          {
+            $set: {
+              status,
+              publishedAt: published
+                ? { $ifNull: ['$publishedAt', now] }
+                : '$publishedAt',
+              // Quotes come from members: never read them as expressions.
+              'moderation.evidence': { $literal: evidence },
+              'moderation.route': { $literal: route },
+              'moderation.heldAt': null,
+            },
+          },
+        ],
+        { updatePipeline: true },
+      )
+      .exec();
+    if (result.modifiedCount === 0) return false;
+    this.logger.log(
+      `Post ${post.id} ${routed.outcome} by the reviewer (${routed.rule})`,
+    );
+    if (published) this.captions.schedule();
+    await this.tellAuthor(
+      post,
+      DECISION_BY_OUTCOME[routed.outcome],
+      routed.category,
+    );
+    return true;
   }
 
   private async judge(
@@ -176,9 +288,12 @@ export class PostModerationService implements OnModuleInit {
   private async apply(
     id: string,
     assessment: ContentAssessment,
+    held: boolean,
   ): Promise<boolean> {
     const now = new Date();
-    const status = STATUS_BY_DECISION[assessment.decision];
+    const status = held
+      ? PostStatus.PROCESSING
+      : STATUS_BY_DECISION[assessment.decision];
     const published = status === PostStatus.PUBLISHED;
     const result = await this.posts
       .updateOne(
@@ -198,6 +313,9 @@ export class PostModerationService implements OnModuleInit {
                 reviewedById: null,
                 reviewedAt: null,
                 reviewNote: null,
+                evidence: null,
+                route: null,
+                heldAt: held ? now : null,
               },
             },
           },
@@ -206,11 +324,76 @@ export class PostModerationService implements OnModuleInit {
       )
       .exec();
     if (!published) {
+      const verb = held ? 'held for the reviewer' : assessment.decision;
       this.logger.log(
-        `Post ${id} ${assessment.decision}: ${assessment.category ?? 'allow'} (${assessment.violationScore.toFixed(2)})`,
+        `Post ${id} ${verb}: ${assessment.category ?? 'allow'} (${assessment.violationScore.toFixed(2)})`,
       );
     }
     return result.modifiedCount > 0;
+  }
+
+  /**
+   * The same text and pictures the classifier judged, labelled with where each
+   * came from, for the explainer. Frames are taken at the same seconds.
+   */
+  async evidenceSources(post: Post): Promise<EvidenceSources> {
+    if (post.type === PostType.BLOG) return this.blogEvidence(post);
+    const videos = await this.readyVideos(post.id);
+    const texts: EvidenceText[] = [];
+    if (post.body)
+      texts.push({ field: 'body', mediaId: null, text: post.body });
+    for (const video of videos) {
+      if (video.transcript) {
+        texts.push({
+          field: 'transcript',
+          mediaId: video.id,
+          text: video.transcript,
+        });
+      }
+    }
+    const times = videoFrameTimes(
+      videos.map((video) => video.durationSec ?? 0),
+      FRAME_SAMPLING,
+    );
+    const frames: Promise<EvidenceImage>[] = [];
+    videos.forEach((video, index) => {
+      for (const seconds of times[index]) {
+        frames.push(this.evidenceFrame(video, seconds));
+      }
+    });
+    return { texts, images: await Promise.all(frames) };
+  }
+
+  private async evidenceFrame(
+    video: MediaAsset,
+    seconds: number,
+  ): Promise<EvidenceImage> {
+    const url = this.cloudinary.frameUrl(video.publicId, seconds);
+    const jpeg = await fetchPublicImage(url);
+    if (!jpeg) throw new Error(`No frame at ${seconds}s of ${video.publicId}`);
+    return { field: 'frame', jpeg, mediaId: video.id, seconds, url };
+  }
+
+  private async blogEvidence(post: Post): Promise<EvidenceSources> {
+    const blog = post.blog;
+    if (!blog) return { texts: [], images: [] };
+    const texts: EvidenceText[] = [
+      { field: 'title', mediaId: null, text: blog.title },
+      { field: 'content', mediaId: null, text: blog.content },
+    ];
+    const images: EvidenceImage[] = [];
+    for (const url of this.blogImageUrls(blog.coverImageUrl, blog.content)) {
+      const source = await this.downloadImage(url);
+      if (!source) continue;
+      images.push({
+        field: 'image',
+        jpeg: await toJevJpeg(source),
+        mediaId: null,
+        seconds: null,
+        url,
+      });
+    }
+    return { texts, images };
   }
 
   private async partsOf(post: Post): Promise<ContentPart[] | null> {
@@ -261,9 +444,25 @@ export class PostModerationService implements OnModuleInit {
       { kind: 'text', text: blog.title },
       { kind: 'text', text: blog.content },
     ];
+    const sources = await Promise.all(
+      this.blogImageUrls(blog.coverImageUrl, blog.content).map((url) =>
+        this.downloadImage(url),
+      ),
+    );
+    for (const source of sources) {
+      if (source) parts.push({ kind: 'image', source });
+    }
+    return parts;
+  }
+
+  /** The cover and up to MAX_INLINE_IMAGES images of ours in the content. */
+  private blogImageUrls(
+    coverImageUrl: string | null,
+    content: string,
+  ): string[] {
     const urls: string[] = [];
-    if (blog.coverImageUrl) urls.push(blog.coverImageUrl);
-    for (const url of extractMarkdownMediaUrls(blog.content)) {
+    if (coverImageUrl) urls.push(coverImageUrl);
+    for (const url of extractMarkdownMediaUrls(content)) {
       if (
         !urls.includes(url) &&
         this.storage.keyFromPublicUrl(StorageTarget.Blogs, url) !== null
@@ -271,15 +470,7 @@ export class PostModerationService implements OnModuleInit {
         urls.push(url);
       }
     }
-    const sources = await Promise.all(
-      urls
-        .slice(0, MAX_INLINE_IMAGES + 1)
-        .map((url) => this.downloadImage(url)),
-    );
-    for (const source of sources) {
-      if (source) parts.push({ kind: 'image', source });
-    }
-    return parts;
+    return urls.slice(0, MAX_INLINE_IMAGES + 1);
   }
 
   private async downloadImage(url: string): Promise<Buffer | null> {

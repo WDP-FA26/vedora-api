@@ -6,6 +6,8 @@ import type { Connection } from 'mongoose';
 import type { App } from 'supertest/types.js';
 import { AppModule } from '../../src/app.module.js';
 import { CONTENT_MODERATION_MODEL } from '../../src/moderation/content-moderation.service.js';
+import { MODERATION_EVIDENCE_MODEL } from '../../src/moderation/content-evidence.service.js';
+import { FakeModel } from '@nestjs/ai/testing';
 import { configureApp } from '../../src/app.setup.js';
 import { MongoService } from '../../src/mongo/mongo.service.js';
 import {
@@ -94,7 +96,21 @@ export async function createE2eApp(
   const moduleRef = await override(
     Test.createTestingModule({ imports: [AppModule] })
       .overrideProvider(CONTENT_MODERATION_MODEL)
-      .useValue(fakeJev),
+      .useValue(fakeJev)
+      // Flagged posts are explained in the background; never call a real model.
+      .overrideProvider(MODERATION_EVIDENCE_MODEL)
+      .useValue({
+        id: 'fake/evidence',
+        // A function (not a list) answers every call.
+        model: new FakeModel(() => ({
+          object: {
+            decision: 'escalate',
+            category: null,
+            summary: 'Không có bằng chứng.',
+            evidence: [],
+          },
+        })),
+      }),
   ).compile();
   const app = moduleRef.createNestApplication<INestApplication<App>>({
     rawBody: true,

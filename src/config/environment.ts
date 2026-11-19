@@ -17,9 +17,11 @@ import {
 } from 'class-validator';
 import {
   DEFAULT_CONTENT_MODERATION_MODEL,
+  DEFAULT_MODERATION_EVIDENCE_MODEL,
   DEFAULT_MODERATION_MODEL,
 } from '../ai/openrouter.js';
 import { REASONING_EFFORTS } from '../ai/reasoning.js';
+import { MODERATION_MODES, type ModerationMode } from './moderation-mode.js';
 import {
   parseRuntimeSettings,
   type RuntimeSettings,
@@ -197,6 +199,18 @@ export class EnvironmentVariables {
 
   @IsString()
   OPENROUTER_CONTENT_MODERATION_MODEL = DEFAULT_CONTENT_MODERATION_MODEL;
+
+  @IsString()
+  OPENROUTER_MODERATION_EVIDENCE_MODEL = DEFAULT_MODERATION_EVIDENCE_MODEL;
+
+  @IsIn(MODERATION_MODES)
+  MODERATION_MODE: ModerationMode = 'shadow';
+
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  @Max(1)
+  MODERATION_MANIPULATION_THRESHOLD = 0.5;
 
   @Type(() => Number)
   @IsNumber()

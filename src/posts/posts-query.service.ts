@@ -15,6 +15,7 @@ import {
   Follow,
   Post,
   PostBookmark,
+  type PostModeration,
   PostRepost,
   PostStatus,
   PostType,
@@ -34,6 +35,18 @@ import { PostPageDto, PostResponseDto } from './dto/post-response.dto.js';
 import { SearchPostsQueryDto } from './dto/search-posts-query.dto.js';
 import { PostRelationsService } from './post-relations.service.js';
 import { ResourceNotFoundException } from '../common/exceptions/resource-not-found.exception.js';
+
+/**
+ * The category a rejected post is told it broke: the router's when it decided
+ * (the reviewer model or the manipulation rule), else System 1's verdict.
+ */
+function rejectedCategory(moderation: PostModeration | null): string | null {
+  if (!moderation) return null;
+  if (moderation.route?.appliedBy && moderation.route.category) {
+    return moderation.route.category;
+  }
+  return moderation.verdict;
+}
 
 @Injectable()
 export class PostsQueryService {
@@ -333,11 +346,12 @@ export class PostsQueryService {
           status: post.status,
           moderationVerdict:
             post.status === PostStatus.REJECTED
-              ? (post.moderation?.verdict ?? null)
+              ? rejectedCategory(post.moderation)
               : null,
           moderationReason:
-            post.status === PostStatus.REJECTED && post.moderation
-              ? (reasonTexts.get(post.moderation.verdict) ?? null)
+            post.status === PostStatus.REJECTED
+              ? (reasonTexts.get(rejectedCategory(post.moderation) ?? '') ??
+                null)
               : null,
           body: post.body,
           blog: related.blog,

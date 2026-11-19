@@ -6,11 +6,17 @@ import { MediaController } from './media.controller.js';
 import { MediaMaintenanceService } from './media-maintenance.service.js';
 import { MediaService } from './media.service.js';
 import { PostModerationService } from './post-moderation.service.js';
+import { PostEvidenceService } from './post-evidence.service.js';
 
 @Module({
   imports: [NotificationsModule, CaptionsModule],
   controllers: [MediaController, CloudinaryWebhookController],
-  providers: [MediaService, MediaMaintenanceService, PostModerationService],
-  exports: [MediaService, PostModerationService],
+  providers: [
+    MediaService,
+    MediaMaintenanceService,
+    PostModerationService,
+    PostEvidenceService,
+  ],
+  exports: [MediaService, PostModerationService, PostEvidenceService],
 })
 export class MediaModule {}

@@ -29,6 +29,137 @@ export class Blog {
 
 export const BlogSchema = SchemaFactory.createForClass(Blog);
 
+export const EVIDENCE_STATUSES = ['READY', 'FAILED', 'REFUSED'] as const;
+export type EvidenceStatus = (typeof EVIDENCE_STATUSES)[number];
+
+export const REVIEW_DECISIONS = ['accept', 'reject', 'escalate'] as const;
+export type ReviewDecision = (typeof REVIEW_DECISIONS)[number];
+
+export const ROUTE_OUTCOMES = ['PUBLISH', 'REJECT', 'ADMIN'] as const;
+export type RouteOutcome = (typeof ROUTE_OUTCOMES)[number];
+
+export const ROUTE_RULES = [
+  'PROVIDER_BLOCKED',
+  'MANIPULATION',
+  'REVIEWER_UNAVAILABLE',
+  'REVIEWER_REJECT',
+  'UNVERIFIED_REJECT',
+  'REVIEWER_ESCALATE',
+  'REVIEWER_ACCEPT',
+] as const;
+export type RouteRule = (typeof ROUTE_RULES)[number];
+
+export const ROUTE_APPLIERS = ['SYSTEM_ONE', 'SYSTEM_TWO'] as const;
+export type RouteApplier = (typeof ROUTE_APPLIERS)[number];
+
+export const EVIDENCE_FIELDS = [
+  'body',
+  'title',
+  'content',
+  'transcript',
+  'frame',
+  'image',
+] as const;
+export type EvidenceField = (typeof EVIDENCE_FIELDS)[number];
+
+/** One part of a post that the explainer model says breaks the policy. */
+@Schema({ _id: false })
+export class ModerationEvidenceItem {
+  @Prop({ type: String, enum: EVIDENCE_FIELDS, required: true })
+  field!: EvidenceField;
+
+  @Prop({ type: String, required: true })
+  category!: string;
+
+  @Prop({ type: String, required: true })
+  reason!: string;
+
+  /** Text fields: the exact substring. Frames and images: text the model read in it (OCR, may be off). */
+  @Prop({ type: String, default: null })
+  quote!: string | null;
+
+  /** Offset of `quote` in the field (UTF-16 code units, after NFC). Text fields only. */
+  @Prop({ type: Number, default: null })
+  start!: number | null;
+
+  @Prop({ type: Number, default: null })
+  end!: number | null;
+
+  @Prop({ type: String, default: null })
+  mediaId!: string | null;
+
+  @Prop({ type: Number, default: null })
+  seconds!: number | null;
+
+  @Prop({ type: String, default: null })
+  imageUrl!: string | null;
+
+  /** Approximate region `[x0, y0, x1, y1]` scaled to 0-1000. */
+  @Prop({ type: [Number], default: null })
+  box!: number[] | null;
+}
+
+export const ModerationEvidenceItemSchema = SchemaFactory.createForClass(
+  ModerationEvidenceItem,
+);
+
+@Schema({ _id: false })
+export class ModerationEvidence {
+  @Prop({ type: String, enum: EVIDENCE_STATUSES, required: true })
+  status!: EvidenceStatus;
+
+  /** The reviewer model's call: null unless READY. */
+  @Prop({ type: String, enum: [...REVIEW_DECISIONS, null], default: null })
+  decision!: ReviewDecision | null;
+
+  /** The category it rejects for, if any. */
+  @Prop({ type: String, default: null })
+  category!: string | null;
+
+  @Prop({ type: String, default: null })
+  summary!: string | null;
+
+  @Prop({ type: [ModerationEvidenceItemSchema], default: [] })
+  items!: ModerationEvidenceItem[];
+
+  /** Model quotes that did not match the post, so were dropped. */
+  @Prop({ type: Number, default: 0 })
+  dropped!: number;
+
+  @Prop({ type: String, required: true })
+  model!: string;
+
+  @Prop({ type: Date, required: true })
+  createdAt!: Date;
+}
+
+export const ModerationEvidenceSchema =
+  SchemaFactory.createForClass(ModerationEvidence);
+
+/** Where the router sent a flagged post, and whether that was applied. */
+@Schema({ _id: false })
+export class ModerationRoute {
+  @Prop({ type: String, enum: ROUTE_OUTCOMES, required: true })
+  outcome!: RouteOutcome;
+
+  @Prop({ type: String, enum: ROUTE_RULES, required: true })
+  rule!: RouteRule;
+
+  /** The category the outcome stands for: what a rejected author is told. */
+  @Prop({ type: String, default: null })
+  category!: string | null;
+
+  /** Who applied it; null when it was only recorded (shadow mode, or a rerun). */
+  @Prop({ type: String, enum: [...ROUTE_APPLIERS, null], default: null })
+  appliedBy!: RouteApplier | null;
+
+  @Prop({ type: Date, required: true })
+  decidedAt!: Date;
+}
+
+export const ModerationRouteSchema =
+  SchemaFactory.createForClass(ModerationRoute);
+
 @Schema({ _id: false })
 export class PostModeration {
   @Prop({ type: String, required: true })
@@ -51,6 +182,17 @@ export class PostModeration {
 
   @Prop({ type: String, default: null })
   reviewNote!: string | null;
+
+  /** Admin-only explanation of the verdict; null until the explainer ran. */
+  @Prop({ type: ModerationEvidenceSchema, default: null })
+  evidence?: ModerationEvidence | null;
+
+  @Prop({ type: ModerationRouteSchema, default: null })
+  route?: ModerationRoute | null;
+
+  /** Set while the post waits in PROCESSING for the reviewer model (enforce). */
+  @Prop({ type: Date, default: null })
+  heldAt?: Date | null;
 }
 
 export const PostModerationSchema =

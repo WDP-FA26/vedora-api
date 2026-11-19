@@ -1,6 +1,21 @@
 import { runtimeConfig } from '../../config/runtime-config.js';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { PostStatus, PostType } from '../../mongo/models.js';
+import {
+  EVIDENCE_FIELDS,
+  EVIDENCE_STATUSES,
+  type EvidenceField,
+  type EvidenceStatus,
+  PostStatus,
+  PostType,
+  REVIEW_DECISIONS,
+  type ReviewDecision,
+  ROUTE_APPLIERS,
+  ROUTE_OUTCOMES,
+  ROUTE_RULES,
+  type RouteApplier,
+  type RouteOutcome,
+  type RouteRule,
+} from '../../mongo/models.js';
 import { IsIn, IsEnum, IsOptional, IsString, MaxLength } from 'class-validator';
 import { PaginationQueryDto } from '../../common/pagination/index.js';
 import { AdminMediaDto } from '../../media/dto/media-response.dto.js';
@@ -16,6 +31,114 @@ export class AdminPostsQueryDto extends PaginationQueryDto {
 
 export const MODERATION_DECISIONS = ['APPROVE', 'REJECT'] as const;
 export type ModerationDecision = (typeof MODERATION_DECISIONS)[number];
+
+export class ModerationEvidenceItemDto {
+  @ApiProperty({
+    enum: EVIDENCE_FIELDS,
+    description:
+      'Where it is: `body`, blog `title`/`content`, a video `transcript`, a video `frame` or a blog `image`',
+  })
+  field!: EvidenceField;
+  @ApiProperty({ description: 'Policy category key, informational only' })
+  category!: string;
+  @ApiProperty({ description: 'Why it breaks the policy, in Vietnamese' })
+  reason!: string;
+  @ApiProperty({
+    nullable: true,
+    type: String,
+    description:
+      'Text fields: the exact words. Frames and images: text the model read in the picture, which may be slightly off',
+  })
+  quote!: string | null;
+  @ApiProperty({
+    nullable: true,
+    type: Number,
+    description:
+      'Text fields: offset of `quote` in the NFC-normalized field (UTF-16 code units)',
+  })
+  start!: number | null;
+  @ApiProperty({ nullable: true, type: Number }) end!: number | null;
+  @ApiProperty({
+    nullable: true,
+    type: String,
+    description: 'The video of a `transcript` or `frame` item',
+  })
+  mediaId!: string | null;
+  @ApiProperty({
+    nullable: true,
+    type: Number,
+    description: 'Second of the video a `frame` was taken at',
+  })
+  seconds!: number | null;
+  @ApiProperty({
+    nullable: true,
+    type: String,
+    description: 'The frame or image the item points at',
+  })
+  imageUrl!: string | null;
+  @ApiProperty({
+    nullable: true,
+    type: [Number],
+    description:
+      'Approximate region [x0, y0, x1, y1] of the picture, scaled 0-1000; a hint, not exact',
+  })
+  box!: number[] | null;
+}
+
+export class ModerationEvidenceDto {
+  @ApiProperty({
+    enum: EVIDENCE_STATUSES,
+    description:
+      'READY, FAILED (the explainer did not answer; retry with POST /admin/posts/:id/moderation/evidence) or REFUSED (its provider would not read the content)',
+  })
+  status!: EvidenceStatus;
+  @ApiProperty({
+    nullable: true,
+    enum: REVIEW_DECISIONS,
+    description:
+      'The reviewer model: accept (System 1 was wrong), reject, or escalate to an admin. Null unless READY. Applied only when MODERATION_MODE=enforce, see `route`',
+  })
+  decision!: ReviewDecision | null;
+  @ApiProperty({
+    nullable: true,
+    type: String,
+    description: 'Policy category the reviewer rejects for',
+  })
+  category!: string | null;
+  @ApiProperty({ nullable: true, type: String }) summary!: string | null;
+  @ApiProperty({ type: [ModerationEvidenceItemDto] })
+  items!: ModerationEvidenceItemDto[];
+  @ApiProperty({
+    minimum: 0,
+    description: 'Model claims dropped because they did not match the post',
+  })
+  dropped!: number;
+  @ApiProperty() model!: string;
+  @ApiProperty() createdAt!: Date;
+}
+
+export class ModerationRouteDto {
+  @ApiProperty({ enum: ROUTE_OUTCOMES }) outcome!: RouteOutcome;
+  @ApiProperty({
+    enum: ROUTE_RULES,
+    description: 'The rule of the router that matched first',
+  })
+  rule!: RouteRule;
+  @ApiProperty({
+    nullable: true,
+    type: String,
+    description: 'The category the outcome stands for',
+  })
+  category!: string | null;
+  @ApiProperty({
+    nullable: true,
+    enum: ROUTE_APPLIERS,
+    description:
+      'Who applied the outcome; null when it was only recorded (shadow mode, or a rerun on a post already decided)',
+  })
+  appliedBy!: RouteApplier | null;
+  @ApiProperty() decidedAt!: Date;
+}
 
 export class AdminModerationDto {
   @ApiProperty({
@@ -41,6 +164,25 @@ export class AdminModerationDto {
   @ApiProperty({ nullable: true, type: String }) reviewedById!: string | null;
   @ApiProperty({ nullable: true, type: Date }) reviewedAt!: Date | null;
   @ApiProperty({ nullable: true, type: String }) reviewNote!: string | null;
+  @ApiProperty({
+    nullable: true,
+    type: ModerationEvidenceDto,
+    description:
+      'Which parts break the policy, for PENDING_REVIEW and REJECTED posts; null until the explainer ran. Admin only',
+  })
+  evidence!: ModerationEvidenceDto | null;
+  @ApiProperty({
+    nullable: true,
+    type: ModerationRouteDto,
+    description: 'Where the router sent the flagged post',
+  })
+  route!: ModerationRouteDto | null;
+  @ApiProperty({
+    nullable: true,
+    type: Date,
+    description: 'Set while the post waits for the reviewer model (enforce)',
+  })
+  heldAt!: Date | null;
 }
 
 export class ModeratePostDto {

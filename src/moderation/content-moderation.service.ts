@@ -11,7 +11,11 @@ import {
   providerBlockedAssessment,
 } from './content-decision.js';
 import { toJevJpeg } from './moderation-image.js';
-import { ALLOW_KEY, buildContentPolicy } from './policies/content.js';
+import {
+  ALLOW_KEY,
+  buildContentPolicy,
+  withReservedChoices,
+} from './policies/content.js';
 import {
   type ContentSettingsInput,
   ModerationSettingsService,
@@ -28,7 +32,7 @@ const CONTENT_TIMEOUT_MS = runtimeConfig.MODERATION_CONTENT_TIMEOUT_MS;
 const PROHIBITED_CONTENT_CODE = 'prohibited_content';
 
 /** True when the model's provider refused the input itself (HTTP 400 `prohibited_content`). */
-function isProviderRefusal(error: unknown): boolean {
+export function isProviderRefusal(error: unknown): boolean {
   if (!APICallError.isInstance(error)) return false;
   if (error.statusCode !== 400) return false;
   return error.responseBody?.includes(PROHIBITED_CONTENT_CODE) === true;
@@ -50,7 +54,19 @@ export class ContentModerationService {
     abortSignal: AbortSignal = new AbortController().signal,
     override?: ContentSettingsInput,
   ): Promise<ContentAssessment> {
-    const policy = override ?? (await this.settings.get());
+    const saved = await this.settings.get();
+    // Saved settings already hold the built-in categories; a draft may not.
+    const policy = override
+      ? { ...override, choices: withReservedChoices(override.choices) }
+      : saved;
+    // The manipulation rule applies only once enforced (MODERATION_MODE).
+    const thresholds = {
+      rejectThreshold: policy.rejectThreshold,
+      reviewThreshold: policy.reviewThreshold,
+      manipulationThreshold: saved.manipulationEnforced
+        ? (policy.manipulationThreshold ?? saved.manipulationThreshold)
+        : undefined,
+    };
     const state: (
       string | { type: 'image_url'; image_url: { url: string } }
     )[] = [];
@@ -67,7 +83,8 @@ export class ContentModerationService {
         image_url: { url: `data:image/jpeg;base64,${jpeg.toString('base64')}` },
       });
     }
-    if (state.length === 0) return assessContent(ALLOW_KEY, undefined, policy);
+    if (state.length === 0)
+      return assessContent(ALLOW_KEY, undefined, thresholds);
     try {
       const { choice, probabilities } = await decide(
         this.model,
@@ -76,7 +93,7 @@ export class ContentModerationService {
         buildContentPolicy(policy),
         CONTENT_TIMEOUT_MS,
       );
-      return assessContent(choice, probabilities, policy);
+      return assessContent(choice, probabilities, thresholds);
     } catch (error) {
       if (!isProviderRefusal(error)) throw error;
       this.logger.warn(

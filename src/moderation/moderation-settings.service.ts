@@ -9,7 +9,9 @@ import { ModerationSettings } from '../mongo/models.js';
 import {
   type ContentPolicySettings,
   DEFAULT_CONTENT_POLICY,
+  withReservedChoices,
 } from './policies/content.js';
+import { isEnforced } from '../config/moderation-mode.js';
 
 const SETTINGS_ID = 'content';
 const CACHE_TTL_MS = runtimeConfig.MODERATION_CACHE_TTL_MS;
@@ -17,9 +19,15 @@ const CACHE_TTL_MS = runtimeConfig.MODERATION_CACHE_TTL_MS;
 export interface ContentSettingsInput extends ContentPolicySettings {
   rejectThreshold: number;
   reviewThreshold: number;
+  /** Omitted: keep the saved one (or the default). */
+  manipulationThreshold?: number;
 }
 
 export interface ContentSettings extends ContentSettingsInput {
+  /** A `manipulation` chance at or above this is rejected outright. */
+  manipulationThreshold: number;
+  /** Whether that rule is applied now (MODERATION_MODE=enforce) or only recorded. */
+  manipulationEnforced: boolean;
   version: number;
   updatedById: string | null;
   updatedAt: Date | null;
@@ -35,9 +43,17 @@ export class ModerationSettingsService {
     private readonly config: ConfigService,
   ) {}
 
+  private defaultManipulationThreshold(): number {
+    return this.config.get<number>('MODERATION_MANIPULATION_THRESHOLD', 0.5);
+  }
+
   defaults(): ContentSettings {
+    const policy = structuredClone(DEFAULT_CONTENT_POLICY);
     return {
-      ...structuredClone(DEFAULT_CONTENT_POLICY),
+      ...policy,
+      choices: withReservedChoices(policy.choices),
+      manipulationThreshold: this.defaultManipulationThreshold(),
+      manipulationEnforced: isEnforced(this.config),
       rejectThreshold: this.config.get<number>(
         'MODERATION_REJECT_THRESHOLD',
         0.85,
@@ -67,12 +83,15 @@ export class ModerationSettingsService {
     adminId: string,
     expectedVersion: number,
   ): Promise<ContentSettings> {
+    const manipulationThreshold =
+      input.manipulationThreshold ?? (await this.get()).manipulationThreshold;
     const fields = {
       instructions: input.instructions,
       allowDescription: input.allowDescription,
-      choices: input.choices,
+      choices: withReservedChoices(input.choices),
       rejectThreshold: input.rejectThreshold,
       reviewThreshold: input.reviewThreshold,
+      manipulationThreshold,
       updatedById: adminId,
     };
     const saved =
@@ -107,7 +126,10 @@ export class ModerationSettingsService {
   }
 
   private async createFirst(
-    fields: Omit<ContentSettings, 'version' | 'updatedAt'>,
+    fields: Omit<
+      ContentSettings,
+      'version' | 'updatedAt' | 'manipulationEnforced'
+    >,
   ): Promise<ModerationSettings | null> {
     try {
       return await this.model.create({
@@ -122,17 +144,23 @@ export class ModerationSettingsService {
   }
 
   private fromRow(row: ModerationSettings): ContentSettings {
-    return {
-      instructions: row.instructions,
-      allowDescription: row.allowDescription,
-      choices: row.choices.map(({ key, label, reasonText, description }) => ({
+    const choices = row.choices.map(
+      ({ key, label, reasonText, description }) => ({
         key,
         label,
         reasonText,
         description,
-      })),
+      }),
+    );
+    return {
+      instructions: row.instructions,
+      allowDescription: row.allowDescription,
+      choices: withReservedChoices(choices),
       rejectThreshold: row.rejectThreshold,
       reviewThreshold: row.reviewThreshold,
+      manipulationThreshold:
+        row.manipulationThreshold ?? this.defaultManipulationThreshold(),
+      manipulationEnforced: isEnforced(this.config),
       version: row.version,
       updatedById: row.updatedById,
       updatedAt: row.updatedAt,
