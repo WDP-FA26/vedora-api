@@ -105,11 +105,18 @@ export class EmailVerificationService {
     if (counted.modifiedCount !== 1) return 'invalid';
 
     const pending = await this.codes.findOne(codeKey(user.id, PURPOSE)).exec();
-    if (!hashesMatch(pending?.codeHash ?? '', hashCode(user.id, code))) {
+    if (!pending || !hashesMatch(pending.codeHash, hashCode(user.id, code))) {
       return 'invalid';
     }
 
-    await this.mongo.withTransaction(async (session) => {
+    const redeemed = await this.mongo.withTransaction(async (session) => {
+      // Deleting the code is the redeem: of two parallel requests with the
+      // same code, only the one that deletes it goes on to verify.
+      const consumed = await this.codes.deleteOne(
+        { ...codeKey(user.id, PURPOSE), codeHash: pending.codeHash },
+        { session },
+      );
+      if (consumed.deletedCount !== 1) return false;
       const now = new Date();
       const verified = await this.users.updateOne(
         {
@@ -129,9 +136,10 @@ export class EmailVerificationService {
       if (verified.matchedCount !== 1) {
         throw new ResourceNotFoundException('NOT_FOUND', 'Account not found');
       }
-      await this.codes.deleteOne(codeKey(user.id, PURPOSE), { session });
       await this.guesses.deleteOne({ _id: user.email }, { session });
+      return true;
     });
+    if (!redeemed) return 'invalid';
     this.profileSearchIndex?.schedule();
     return 'verified';
   }

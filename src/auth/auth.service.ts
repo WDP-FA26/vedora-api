@@ -2,7 +2,7 @@ import { runtimeConfig } from '../config/runtime-config.js';
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
-import { compare } from 'bcryptjs';
+import { compare, truncates } from 'bcryptjs';
 import { randomBytes } from 'node:crypto';
 import { AccountStatus } from '../mongo/models.js';
 import { assertAccountActive } from '../auth-core/account-access.js';
@@ -82,10 +82,13 @@ export class AuthService {
     dto: Pick<LoginDto, 'username' | 'password'>,
   ): Promise<AuthResponseDto> {
     const user = await this.accounts.findByUsername(dto.username);
-    const passwordMatches = await compare(
+    const hashMatches = await compare(
       dto.password,
       user?.passwordHash ?? DUMMY_PASSWORD_HASH,
     );
+    // bcrypt only reads the first 72 bytes, and stored passwords never exceed
+    // them (hashPassword refuses), so a longer one cannot be the right one.
+    const passwordMatches = hashMatches && !truncates(dto.password);
 
     if (!user || !passwordMatches) {
       throw new UnauthenticatedException(
