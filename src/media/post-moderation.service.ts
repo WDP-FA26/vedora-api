@@ -46,6 +46,7 @@ import {
 import { MongoService } from '../mongo/mongo.service.js';
 import { StorageService, StorageTarget } from '../storage/storage.service.js';
 import { type FrameSampling, videoFrameTimes } from './video-frame-times.js';
+import { composeFrameGrid, frameGridLayouts } from './video-frame-grid.js';
 
 const STATUS_BY_DECISION: Record<ContentAssessment['decision'], PostStatus> = {
   publish: PostStatus.PUBLISHED,
@@ -72,6 +73,8 @@ const FRAME_SAMPLING: FrameSampling = {
   maxPerPost: runtimeConfig.MODERATION_VIDEO_MAX_FRAMES,
 };
 const MAX_INLINE_IMAGES = runtimeConfig.MODERATION_MAX_INLINE_IMAGES;
+/** Frames per grid side for the classifier; 1 sends each frame alone. */
+const FRAME_GRID = runtimeConfig.MODERATION_VIDEO_FRAME_GRID;
 
 @Injectable()
 export class PostModerationService implements OnModuleInit {
@@ -388,7 +391,8 @@ export class PostModerationService implements OnModuleInit {
 
   /**
    * The same text and pictures the classifier judged, labelled with where each
-   * came from, for the explainer. Frames are taken at the same seconds.
+   * came from, for the explainer. Frames are taken at the same seconds, one
+   * picture each even when the classifier saw them tiled into grids.
    */
   async evidenceSources(post: Post): Promise<EvidenceSources> {
     if (post.type === PostType.BLOG) return this.blogEvidence(post);
@@ -545,23 +549,57 @@ export class PostModerationService implements OnModuleInit {
       videos.map((video) => video.durationSec ?? 0),
       FRAME_SAMPLING,
     );
-    const frames: Promise<ContentPart>[] = [];
-    videos.forEach((video, index) => {
-      for (const seconds of times[index]) {
-        frames.push(this.videoFrame(video.publicId, seconds));
-      }
-    });
-    return Promise.all(frames);
+    const perVideo = videos.map((video, index) =>
+      this.framesOf(video.publicId, times[index]),
+    );
+    const parts: ContentPart[] = [];
+    for (const frames of await Promise.all(perVideo)) {
+      parts.push(...frames);
+    }
+    return parts;
   }
 
-  private async videoFrame(
+  /**
+   * One video's frames for the classifier: one picture each, or, with
+   * MODERATION_VIDEO_FRAME_GRID above 1, tiled into grids that each come
+   * after a line saying which seconds they show.
+   */
+  private async framesOf(
     publicId: string,
-    seconds: number,
-  ): Promise<ContentPart> {
+    seconds: number[],
+  ): Promise<ContentPart[]> {
+    const sources = await Promise.all(
+      seconds.map((at) => this.videoFrame(publicId, at)),
+    );
+    if (FRAME_GRID <= 1) {
+      return sources.map((source) => ({ kind: 'jpeg', source }));
+    }
+    const parts: ContentPart[] = [];
+    for (const layout of frameGridLayouts(sources.length, FRAME_GRID)) {
+      const end = layout.start + layout.count;
+      const shown = seconds
+        .slice(layout.start, end)
+        .map((at) => `${at.toFixed(1)}s`);
+      parts.push({
+        kind: 'text',
+        text: `Next image: video frames at ${shown.join(', ')}, read left to right, top to bottom.`,
+      });
+      parts.push({
+        kind: 'jpeg',
+        source: await composeFrameGrid(
+          sources.slice(layout.start, end),
+          layout,
+        ),
+      });
+    }
+    return parts;
+  }
+
+  private async videoFrame(publicId: string, seconds: number): Promise<Buffer> {
     const source = await fetchPublicImage(
       this.cloudinary.frameUrl(publicId, seconds),
     );
     if (!source) throw new Error(`No frame at ${seconds}s of ${publicId}`);
-    return { kind: 'jpeg', source };
+    return source;
   }
 }

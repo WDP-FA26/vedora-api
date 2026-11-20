@@ -139,8 +139,9 @@ describe('PostModerationService', () => {
         expect((await posts().findById(post.id).exec())?.status).toBe(
           PostStatus.PUBLISHED,
         );
+        // The listener schedules captions after the status write lands.
+        expect(schedule).toHaveBeenCalledOnce();
       });
-      expect(schedule).toHaveBeenCalledOnce();
     });
 
     it('logs and swallows errors thrown while settling after transcript', async () => {

@@ -142,6 +142,7 @@ Values below are defaults matched to the original source. All values are read at
 | `MODERATION_MAX_CHOICES` | `16` |
 | `MODERATION_MAX_INLINE_IMAGES` | `5` |
 | `MODERATION_MAX_TEXT_CHARS` | `30000` |
+| `MODERATION_VIDEO_FRAME_GRID` | `1` |
 | `MODERATION_VIDEO_FRAME_INTERVAL_SECONDS` | `5` |
 | `MODERATION_VIDEO_MAX_FRAMES` | `24` |
 | `MODERATION_VIDEO_MIN_FRAMES` | `4` |
