@@ -4,7 +4,7 @@ import { QdrantService } from '../../../../src/qdrant/qdrant.service.js';
 import { KnowledgeIndexService } from '../../../../src/knowledge/retrieval/knowledge-index.service.js';
 import { KnowledgeModelsService } from '../../../../src/knowledge/retrieval/knowledge-models.service.js';
 
-const document = { id: 'doc-1', title: 'dinh-duong.pdf' };
+const document = { id: 'doc-1', title: 'dinh-duong.pdf', runId: 'run-1' };
 
 describe('KnowledgeIndexService', () => {
   let client: DeepMockProxy<QdrantService>;
@@ -89,6 +89,7 @@ describe('KnowledgeIndexService', () => {
       page: 1,
       kind: 'text',
       text: '# Canxi\n\nĐậu phụ giàu canxi.',
+      runId: 'run-1',
     });
     expect(Object.keys(points[1].vector)).toEqual(['dense']);
     expect(points[1].payload).toMatchObject({ kind: 'image', page: 1 });

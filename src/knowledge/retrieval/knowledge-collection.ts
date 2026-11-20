@@ -1,4 +1,4 @@
-import { IsIn, IsNumber, IsString } from 'class-validator';
+import { IsIn, IsNumber, IsOptional, IsString } from 'class-validator';
 
 export const DENSE_VECTOR = 'dense';
 export const BM25_VECTOR = 'bm25';
@@ -33,4 +33,9 @@ export class KnowledgePointPayload {
 
   @IsString()
   text!: string;
+
+  /** The indexing run that wrote the point; absent on points written before runs. */
+  @IsOptional()
+  @IsString()
+  runId?: string;
 }

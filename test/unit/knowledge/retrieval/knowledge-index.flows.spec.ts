@@ -11,7 +11,7 @@ import { KnowledgeModelsService } from '../../../../src/knowledge/retrieval/know
  * no text from a page is lost.
  */
 
-const document = { id: 'doc-1', title: 'dinh-duong.pdf' };
+const document = { id: 'doc-1', title: 'dinh-duong.pdf', runId: 'run-1' };
 const PREFIX = 'title: dinh-duong.pdf | text: ';
 
 function tableRows(count: number): string {
@@ -86,14 +86,19 @@ describe('KnowledgeIndexService chunking flows', () => {
       expect(upsertedPayloads()).toEqual([]);
     });
 
-    it('still clears earlier points when a re-index has no chunks', async () => {
+    // Points of other runs are cleared by KnowledgeService once this run
+    // finishes as the document's current one (removeOtherRuns).
+    it("still clears this run's earlier points when a re-index has no chunks", async () => {
       await service.index(document, pagesOf(['']));
 
       expect(client.delete).toHaveBeenCalledWith(
         'flows_knowledge',
         expect.objectContaining({
           filter: {
-            must: [{ key: 'documentId', match: { value: 'doc-1' } }],
+            must: [
+              { key: 'documentId', match: { value: 'doc-1' } },
+              { key: 'runId', match: { value: 'run-1' } },
+            ],
           },
         }),
       );

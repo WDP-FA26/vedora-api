@@ -25,11 +25,34 @@ import {
 } from './extractors/document-extractor.js';
 import { PDF_CONTENT_TYPE, PdfExtractor } from './extractors/pdf-extractor.js';
 import { KnowledgeIndexService } from './retrieval/knowledge-index.service.js';
+import { MongoService } from '../mongo/mongo.service.js';
 import { ResourceNotFoundException } from '../common/exceptions/resource-not-found.exception.js';
 import { StateConflictException } from '../common/exceptions/state-conflict.exception.js';
 import { UnsupportedFileTypeException } from '../common/exceptions/unsupported-file-type.exception.js';
 
 const FILE_URL_TTL_SECONDS = runtimeConfig.KNOWLEDGE_FILE_URL_TTL_SECONDS;
+
+/** One extraction or indexing run, and the filter that matches its document only while the run owns it. */
+interface DocumentRun {
+  runId: string;
+  filter: {
+    _id: string;
+    status: KnowledgeDocumentStatus;
+    runId: string | null;
+  };
+}
+
+function runOf(
+  document: KnowledgeDocument,
+  status: KnowledgeDocumentStatus,
+): DocumentRun {
+  return {
+    // A document started before runs existed has no runId; its id tags the
+    // points instead, and the filter matches the missing field.
+    runId: document.runId ?? document.id,
+    filter: { _id: document.id, status, runId: document.runId ?? null },
+  };
+}
 
 @Injectable()
 export class KnowledgeService {
@@ -44,6 +67,7 @@ export class KnowledgeService {
     private readonly storage: StorageService,
     private readonly pdf: PdfExtractor,
     private readonly index: KnowledgeIndexService,
+    private readonly mongo: MongoService,
     configService: ConfigService,
   ) {
     this.maxBytes =
@@ -94,7 +118,12 @@ export class KnowledgeService {
           storageKey: key,
           status: KnowledgeDocumentStatus.WAITING_UPLOAD,
         },
-        { $set: { status: KnowledgeDocumentStatus.PROCESSING } },
+        {
+          $set: {
+            status: KnowledgeDocumentStatus.PROCESSING,
+            runId: randomUUID(),
+          },
+        },
         { returnDocument: 'after' },
       )
       .exec();
@@ -104,6 +133,7 @@ export class KnowledgeService {
 
   /** OCRs the file and parks the text for an admin to review. Nothing is indexed yet. */
   async ingest(document: KnowledgeDocument): Promise<void> {
+    const run = runOf(document, KnowledgeDocumentStatus.PROCESSING);
     let file: Uint8Array;
     let sections: ExtractedSection[];
     try {
@@ -113,42 +143,58 @@ export class KnowledgeService {
       );
       sections = await this.pdf.extract(file);
     } catch (error) {
-      await this.failExtraction(document.id, error);
+      await this.failExtraction(run, error);
       return;
     }
 
+    let saved: boolean;
     try {
-      await this.pages.deleteMany({ documentId: document.id }).exec();
-      await this.pages.insertMany(
-        sections.map(({ text, flags }, index) => ({
-          documentId: document.id,
-          page: index + 1,
-          text,
-          flags,
-        })),
-      );
+      // The pages are saved together with the status change, and only while
+      // this run still owns a PROCESSING document: a run the cron failed, or
+      // a document deleted meanwhile, leaves no pages behind.
+      saved = await this.mongo.withTransaction(async (session) => {
+        const claimed = await this.documents
+          .updateOne(
+            run.filter,
+            {
+              $set: {
+                status: KnowledgeDocumentStatus.AWAITING_REVIEW,
+                failureReason: null,
+                sectionCount: sections.length,
+                sizeBytes: file.byteLength,
+              },
+            },
+            { session },
+          )
+          .exec();
+        if (claimed.matchedCount !== 1) return false;
+        await this.pages
+          .deleteMany({ documentId: document.id }, { session })
+          .exec();
+        await this.pages.insertMany(
+          sections.map(({ text, flags }, index) => ({
+            documentId: document.id,
+            page: index + 1,
+            text,
+            flags,
+          })),
+          { session },
+        );
+        return true;
+      });
     } catch (error) {
-      await this.fail(
-        document.id,
-        KnowledgeDocumentFailureReason.EXTRACTION_FAILED,
-      );
+      await this.failRun(run, KnowledgeDocumentFailureReason.EXTRACTION_FAILED);
       this.logger.error(
         `Saving pages of ${document.id} failed: ${String(error)}`,
       );
       return;
     }
-
-    await this.documents.updateOne(
-      { _id: document.id },
-      {
-        $set: {
-          status: KnowledgeDocumentStatus.AWAITING_REVIEW,
-          failureReason: null,
-          sectionCount: sections.length,
-          sizeBytes: file.byteLength,
-        },
-      },
-    );
+    if (!saved) {
+      this.logger.warn(
+        `Discarded extraction of ${document.id}: the document moved on meanwhile`,
+      );
+      return;
+    }
     this.logger.log(
       `Extracted ${document.id} (${sections.length} pages), awaiting review`,
     );
@@ -195,6 +241,7 @@ export class KnowledgeService {
         {
           $set: {
             status: KnowledgeDocumentStatus.INDEXING,
+            runId: randomUUID(),
             failureReason: null,
             reviewedById: adminId,
             reviewedAt: new Date(),
@@ -210,6 +257,7 @@ export class KnowledgeService {
   }
 
   async indexApproved(document: KnowledgeDocument): Promise<void> {
+    const run = runOf(document, KnowledgeDocumentStatus.INDEXING);
     try {
       const file = await this.storage.getBytes(
         StorageTarget.Knowledge,
@@ -224,46 +272,62 @@ export class KnowledgeService {
         text,
         images: imagesByPage[page - 1] ?? [],
       }));
-      const imageCount = await this.index.index(document, sections);
-      await this.documents.updateOne(
-        { _id: document.id },
-        {
+      const imageCount = await this.index.index(
+        { id: document.id, title: document.title, runId: run.runId },
+        sections,
+      );
+      const finished = await this.documents
+        .updateOne(run.filter, {
           $set: {
             status: KnowledgeDocumentStatus.READY,
             failureReason: null,
             imageCount,
           },
-        },
-      );
+        })
+        .exec();
+      if (finished.matchedCount !== 1) {
+        // Rejected, deleted, or re-approved meanwhile: drop this run's points.
+        await this.index.removeRun(document.id, run.runId);
+        this.logger.warn(
+          `Discarded indexing of ${document.id}: the document moved on meanwhile`,
+        );
+        return;
+      }
+      // Points of earlier or overlapping runs (or from before runs) go.
+      await this.index.removeOtherRuns(document.id, run.runId);
       this.logger.log(
         `Indexed ${document.id} (${sections.length} pages, ${imageCount} images)`,
       );
     } catch (error) {
       await this.returnToReview(
-        document.id,
+        run,
         KnowledgeDocumentFailureReason.INDEXING_FAILED,
       );
+      await this.index
+        .removeRun(document.id, run.runId)
+        .catch((cleanup: unknown) =>
+          this.logger.warn(
+            `Removing points of a failed run of ${document.id} failed: ${String(cleanup)}`,
+          ),
+        );
       this.logger.error(`Indexing ${document.id} failed: ${String(error)}`);
     }
   }
 
   /** The reviewed pages are kept, so the admin can approve again. */
-  async returnToReview(
-    id: string,
+  private async returnToReview(
+    run: DocumentRun,
     reason: KnowledgeDocumentFailureReason,
   ): Promise<void> {
-    await this.documents.updateOne(
-      { _id: id },
-      {
-        $set: {
-          status: KnowledgeDocumentStatus.AWAITING_REVIEW,
-          failureReason: reason,
-          reviewedById: null,
-          reviewedAt: null,
-          reviewNote: null,
-        },
+    await this.documents.updateOne(run.filter, {
+      $set: {
+        status: KnowledgeDocumentStatus.AWAITING_REVIEW,
+        failureReason: reason,
+        reviewedById: null,
+        reviewedAt: null,
+        reviewNote: null,
       },
-    );
+    });
   }
 
   /** Declines the document but keeps its file and pages. `remove` deletes. */
@@ -342,31 +406,33 @@ export class KnowledgeService {
     );
   }
 
-  private async failExtraction(id: string, error: unknown): Promise<void> {
+  private async failExtraction(
+    run: DocumentRun,
+    error: unknown,
+  ): Promise<void> {
+    const id = run.filter._id;
     if (error instanceof DocumentExtractionError) {
-      await this.fail(id, error.reason);
+      await this.failRun(run, error.reason);
       this.logger.warn(`Rejected ${id}: ${error.message}`);
     } else if (error instanceof NoSuchKey) {
-      await this.fail(id, KnowledgeDocumentFailureReason.UPLOAD_EXPIRED);
+      await this.failRun(run, KnowledgeDocumentFailureReason.UPLOAD_EXPIRED);
     } else {
-      await this.fail(id, KnowledgeDocumentFailureReason.EXTRACTION_FAILED);
+      await this.failRun(run, KnowledgeDocumentFailureReason.EXTRACTION_FAILED);
       this.logger.error(`Extracting ${id} failed: ${String(error)}`);
     }
   }
 
-  async fail(
-    id: string,
+  /** Fails the document, unless another run or a person has moved it on. */
+  private async failRun(
+    run: DocumentRun,
     reason: KnowledgeDocumentFailureReason,
   ): Promise<void> {
-    await this.documents.updateOne(
-      { _id: id },
-      {
-        $set: {
-          status: KnowledgeDocumentStatus.FAILED,
-          failureReason: reason,
-        },
+    await this.documents.updateOne(run.filter, {
+      $set: {
+        status: KnowledgeDocumentStatus.FAILED,
+        failureReason: reason,
       },
-    );
+    });
   }
 
   async findAll(): Promise<KnowledgeDocumentResponseDto[]> {

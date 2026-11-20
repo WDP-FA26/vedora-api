@@ -27,6 +27,8 @@ const UPSERT_BATCH = runtimeConfig.KNOWLEDGE_UPSERT_BATCH_SIZE;
 interface IndexedDocument {
   id: string;
   title: string;
+  /** Tags every point, so one run's points can be told from another's. */
+  runId: string;
 }
 
 @Injectable()
@@ -104,7 +106,9 @@ export class KnowledgeIndexService {
       })),
     ];
 
-    await this.remove(document.id);
+    // Clear only what this run may have written before (a retry), never
+    // another run's points: the run that finishes current cleans up the rest.
+    await this.removeRun(document.id, document.runId);
     for (let start = 0; start < points.length; start += UPSERT_BATCH) {
       await this.qdrant.upsert(this.collection, {
         wait: true,
@@ -112,6 +116,32 @@ export class KnowledgeIndexService {
       });
     }
     return images.length;
+  }
+
+  /** Deletes the points one indexing run wrote. */
+  async removeRun(documentId: string, runId: string): Promise<void> {
+    await this.ensureCollection();
+    await this.qdrant.delete(this.collection, {
+      wait: true,
+      filter: {
+        must: [
+          { key: 'documentId', match: { value: documentId } },
+          { key: 'runId', match: { value: runId } },
+        ],
+      },
+    });
+  }
+
+  /** Deletes the document's points written by any run but `runId`. */
+  async removeOtherRuns(documentId: string, runId: string): Promise<void> {
+    await this.ensureCollection();
+    await this.qdrant.delete(this.collection, {
+      wait: true,
+      filter: {
+        must: [{ key: 'documentId', match: { value: documentId } }],
+        must_not: [{ key: 'runId', match: { value: runId } }],
+      },
+    });
   }
 
   async remove(documentId: string): Promise<void> {
@@ -201,5 +231,12 @@ function payload(
   kind: KnowledgePointPayload['kind'],
   text: string,
 ): KnowledgePointPayload {
-  return { documentId: document.id, title: document.title, page, kind, text };
+  return {
+    documentId: document.id,
+    title: document.title,
+    page,
+    kind,
+    text,
+    runId: document.runId,
+  };
 }

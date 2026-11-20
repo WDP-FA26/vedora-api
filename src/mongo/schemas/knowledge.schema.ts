@@ -58,6 +58,14 @@ export class KnowledgeDocument extends Identified {
   @Prop({ type: String, default: null })
   reviewNote!: string | null;
 
+  /**
+   * The extraction or indexing run that owns the document now. A run only
+   * writes its result while this still names it, so a run the cron gave up
+   * on, or one overtaken by a newer approval, cannot overwrite the outcome.
+   */
+  @Prop({ type: String, default: null })
+  runId?: string | null;
+
   @Prop({ type: Date })
   createdAt!: Date;
 
