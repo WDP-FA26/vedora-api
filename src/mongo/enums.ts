@@ -20,6 +20,8 @@ export enum AccountStatus {
   ACTIVE = 'ACTIVE',
   SUSPENDED = 'SUSPENDED',
   DELETED = 'DELETED',
+  /** The built-in Vedora AI account: it cannot sign in and has no public profile. */
+  SYSTEM = 'SYSTEM',
 }
 
 export enum UserAccountAction {
@@ -175,6 +177,16 @@ export enum CaptionStatus {
   TRANSCRIBING = 'TRANSCRIBING',
   READY = 'READY',
   NO_SPEECH = 'NO_SPEECH',
+  FAILED = 'FAILED',
+}
+
+export enum PostSummaryStatus {
+  /** Claimed by a summarizer run; released for retry once stale. */
+  PENDING = 'PENDING',
+  READY = 'READY',
+  /** Nothing worth summarizing (too short, no speech, not about food). */
+  SKIPPED = 'SKIPPED',
+  /** Gave up after the maximum number of attempts. */
   FAILED = 'FAILED',
 }
 

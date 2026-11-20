@@ -14,6 +14,9 @@ import {
 import { rethrowUniqueViolation } from './unique-conflict.js';
 import { ResourceNotFoundException } from '../common/exceptions/resource-not-found.exception.js';
 
+/** Filter that leaves out the Vedora AI system account. */
+export const HUMAN_ACCOUNT = { status: { $ne: AccountStatus.SYSTEM } } as const;
+
 export type NewUser = Pick<User, 'username' | 'fullName' | 'email'> &
   Partial<
     Pick<User, 'passwordHash' | 'googleId' | 'emailVerifiedAt' | 'status'>
@@ -58,21 +61,23 @@ export class AccountsService {
     });
   }
 
+  // These lookups serve sign-in, recovery and admin reads, so they never
+  // return the Vedora AI system account (see system-account.ts).
   findByUsername(username: string): Promise<User | null> {
-    return this.users.findOne({ username }).exec();
+    return this.users.findOne({ username, ...HUMAN_ACCOUNT }).exec();
   }
 
   findByGoogleId(googleId: string): Promise<User | null> {
-    return this.users.findOne({ googleId }).exec();
+    return this.users.findOne({ googleId, ...HUMAN_ACCOUNT }).exec();
   }
 
   findByEmail(email: string): Promise<User | null> {
-    return this.users.findOne({ email }).exec();
+    return this.users.findOne({ email, ...HUMAN_ACCOUNT }).exec();
   }
 
   async findPublicById(id: string): Promise<PublicUser | null> {
     const user = await this.users
-      .findOne({ _id: id })
+      .findOne({ _id: id, ...HUMAN_ACCOUNT })
       .select(publicUserProjection)
       .exec();
     return user && toPublicUser(user);

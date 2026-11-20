@@ -25,10 +25,12 @@ import {
   UserRole,
 } from '../../mongo/models.js';
 import {
+  type CommentAuthorDto,
   CommentBodyDto,
   CommentPageDto,
   CommentResponseDto,
 } from '../dto/comment.dto.js';
+import { isSystemAccount } from '../../users/system-account.js';
 import {
   PostBookmarkResponseDto,
   PostRepostResponseDto,
@@ -37,6 +39,17 @@ import { PostLikeResponseDto } from '../dto/post-like-response.dto.js';
 import { AccessDeniedException } from '../../common/exceptions/access-denied.exception.js';
 import { InvalidInputException } from '../../common/exceptions/invalid-input.exception.js';
 import { ResourceNotFoundException } from '../../common/exceptions/resource-not-found.exception.js';
+
+function toCommentAuthor(user: User): CommentAuthorDto {
+  return {
+    id: user.id,
+    username: user.username,
+    fullName: user.fullName,
+    avatarUrl: user.avatarUrl,
+    isProfessional: user.isProfessional,
+    isSystem: isSystemAccount(user.id),
+  };
+}
 
 function toCommentDto(
   comment: PostComment,
@@ -49,26 +62,12 @@ function toCommentDto(
     postId: comment.postId,
     parentId: comment.parentId ?? null,
     replyToId: comment.replyToId ?? null,
-    replyToAuthor: replyToAuthor
-      ? {
-          id: replyToAuthor.id,
-          username: replyToAuthor.username,
-          fullName: replyToAuthor.fullName,
-          avatarUrl: replyToAuthor.avatarUrl,
-          isProfessional: replyToAuthor.isProfessional,
-        }
-      : null,
+    replyToAuthor: replyToAuthor ? toCommentAuthor(replyToAuthor) : null,
     replyCount,
     body: comment.body,
     createdAt: comment.createdAt,
     updatedAt: comment.updatedAt,
-    author: {
-      id: author.id,
-      username: author.username,
-      fullName: author.fullName,
-      avatarUrl: author.avatarUrl,
-      isProfessional: author.isProfessional,
-    },
+    author: toCommentAuthor(author),
   };
 }
 
@@ -219,7 +218,11 @@ export class PostInteractionsService {
         return { post, targetAuthorId: target.authorId, comment };
       },
     );
-    if (result.targetAuthorId !== authorId)
+    // Vedora AI cannot sign in, so replies to it notify no one.
+    if (
+      result.targetAuthorId !== authorId &&
+      !isSystemAccount(result.targetAuthorId)
+    )
       await this.notifications.notify({
         recipientId: result.targetAuthorId,
         actorId: authorId,

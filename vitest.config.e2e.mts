@@ -22,6 +22,7 @@ export default defineConfig({
       CLOUDINARY_API_SECRET: 'e2e-api-secret',
       CLOUDINARY_WEBHOOKS_ENABLED: 'true',
       CAPTIONS_ENABLED: 'false',
+      POST_SUMMARIES_ENABLED: 'false',
       RESEND_API_KEY: '',
       OPENROUTER_API_KEY: 'e2e-openrouter-key',
       QDRANT_URL: 'http://localhost:6333',

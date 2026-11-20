@@ -172,6 +172,13 @@ Values below are defaults matched to the original source. All values are read at
 | `POST_SEARCH_CHUNK_MAX_CHARS` | `1500` |
 | `POST_SEARCH_INDEX_BATCH_SIZE` | `64` |
 | `POST_SEARCH_MAX_RESULTS` | `200` |
+| `POST_SUMMARY_BATCH_SIZE` | `10` |
+| `POST_SUMMARY_MAX_ATTEMPTS` | `3` |
+| `POST_SUMMARY_MAX_INPUT_CHARS` | `24000` |
+| `POST_SUMMARY_MIN_TEXT_LENGTH` | `280` |
+| `POST_SUMMARY_STALE_AFTER_SECONDS` | `900` |
+| `POST_SUMMARY_TIMEOUT_MS` | `120000` |
+| `POST_SUMMARY_WINDOW_SECONDS` | `86400` |
 | `POST_VIEWS_DEDUPE_WINDOW_SECONDS` | `1800` |
 | `POST_VIEWS_FLUSH_BATCH_SIZE` | `500` |
 | `POST_VIEWS_FLUSH_INTERVAL_MS` | `10000` |
@@ -268,4 +275,6 @@ Values below are defaults matched to the original source. All values are read at
 | `AI_COST_SSE_LINE_MAX_CHARS` | `1048576` |
 | `FOLLOW_SUGGESTION_REBUILD_CRON` | `0 0 * * * *` |
 | `POST_SEARCH_INDEX_CRON` | `0 * * * * *` |
+| `POST_SUMMARY_CRON` | `*/10 * * * * *` |
+| `POST_SUMMARY_PROMPT_FILE` | `config/prompts/post-summary.md` |
 | `AI_IMAGE_DEFAULT_ASPECT_RATIO` | `4:3` |

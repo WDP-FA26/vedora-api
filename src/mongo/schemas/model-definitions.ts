@@ -51,6 +51,7 @@ import {
   KnowledgePageSchema,
 } from './knowledge.schema.js';
 import { MediaAssetSchema } from './media.schema.js';
+import { PostSummarySchema } from './post-summary.schema.js';
 import { ModerationSettingsSchema } from './moderation.schema.js';
 import {
   VerificationProofSchema,
@@ -89,6 +90,7 @@ export const MODEL_DEFINITIONS = [
   { name: 'PostBookmark', schema: PostBookmarkSchema },
   { name: 'PostReport', schema: PostReportSchema },
   { name: 'PostViewDay', schema: PostViewDaySchema },
+  { name: 'PostSummary', schema: PostSummarySchema },
   { name: 'SupportTicket', schema: SupportTicketSchema },
   { name: 'SupportMessage', schema: SupportMessageSchema },
   { name: 'SupportAttachment', schema: SupportAttachmentSchema },

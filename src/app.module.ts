@@ -30,6 +30,7 @@ import { BlogsModule } from './posts/blogs/blogs.module.js';
 import { PostInteractionsModule } from './posts/interactions/post-interactions.module.js';
 import { PostsModule } from './posts/posts.module.js';
 import { PostAnalyticsModule } from './posts/analytics/post-analytics.module.js';
+import { PostSummariesModule } from './posts/summaries/post-summaries.module.js';
 import { MongoModule } from './mongo/mongo.module.js';
 import { ProfilesModule } from './profiles/profiles.module.js';
 import { QdrantModule } from './qdrant/qdrant.module.js';
@@ -64,6 +65,7 @@ import { VerificationModule } from './verification/verification.module.js';
     PostsModule,
     PostAnalyticsModule,
     PostInteractionsModule,
+    PostSummariesModule,
     BlogsModule,
     PostsAdminModule,
     SupportModule,

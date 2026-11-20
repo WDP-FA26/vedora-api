@@ -20,7 +20,7 @@ import {
   UserRole,
 } from '../mongo/models.js';
 import { MongoService } from '../mongo/mongo.service.js';
-import { AccountsService } from './accounts.service.js';
+import { AccountsService, HUMAN_ACCOUNT } from './accounts.service.js';
 import { UpdateUserDto } from './dto/update-user.dto.js';
 import { UpdateUserRoleDto } from './dto/update-user-role.dto.js';
 import { UpdateUserStatusDto } from './dto/update-user-status.dto.js';
@@ -48,7 +48,7 @@ export class UsersService {
   async findAll(
     query: UsersQueryDto,
   ): Promise<PaginatedResponseDto<PublicUser>> {
-    const filters: QueryFilter<User>[] = [];
+    const filters: QueryFilter<User>[] = [HUMAN_ACCOUNT];
     if (query.status) filters.push({ status: query.status });
     if (query.q) {
       const pattern = { $regex: escapeRegExp(query.q), $options: 'i' };
@@ -58,12 +58,7 @@ export class UsersService {
         })),
       });
     }
-    const filter: QueryFilter<User> =
-      filters.length === 0
-        ? {}
-        : filters.length === 1
-          ? filters[0]
-          : { $and: filters };
+    const filter: QueryFilter<User> = { $and: filters };
     const { skip, take } = getPaginationArgs(query);
     const [items, totalItems] = await Promise.all([
       this.users
@@ -101,7 +96,7 @@ export class UsersService {
         dto.username !== undefined || dto.fullName !== undefined;
       const user = await this.users
         .findOneAndUpdate(
-          { _id: id },
+          { _id: id, ...HUMAN_ACCOUNT },
           {
             $set: {
               ...(dto.username !== undefined && { username: dto.username }),
@@ -351,7 +346,11 @@ export class UsersService {
         );
       }
       const target = await this.findUser(id, session);
-      if (!target || target.status === AccountStatus.DELETED)
+      if (
+        !target ||
+        target.status === AccountStatus.DELETED ||
+        target.status === AccountStatus.SYSTEM
+      )
         throw new ResourceNotFoundException('NOT_FOUND', 'User not found');
       return operation(target, session);
     });

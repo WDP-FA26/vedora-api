@@ -121,7 +121,7 @@ export class AdminDashboardService {
           this.users,
           dailyCounts('createdAt', {
             role: UserRole.USER,
-            status: { $ne: AccountStatus.DELETED },
+            status: { $nin: [AccountStatus.DELETED, AccountStatus.SYSTEM] },
             createdAt: bounds,
           }),
         ),

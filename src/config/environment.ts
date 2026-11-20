@@ -127,6 +127,11 @@ export class EnvironmentVariables {
   @IsBoolean()
   CAPTIONS_ENABLED = true;
 
+  /** Vedora AI comments a summary (and recipe, if any) on newly published posts. */
+  @Transform(toBoolean)
+  @IsBoolean()
+  POST_SUMMARIES_ENABLED = true;
+
   @IsString()
   TRANSCRIPTION_MODEL = 'elevenlabs/scribe-v2';
 

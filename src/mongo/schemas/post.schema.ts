@@ -314,6 +314,7 @@ cascadeOnDelete(PostSchema, [
   { model: 'PostBookmark', field: 'postId', action: 'delete' },
   { model: 'PostReport', field: 'postId', action: 'delete' },
   { model: 'PostViewDay', field: 'postId', action: 'delete' },
+  { model: 'PostSummary', field: 'postId', action: 'delete' },
   { model: 'MediaAsset', field: 'postId', action: 'unset' },
   { model: 'Recipe', field: 'postId', action: 'unset' },
 ]);
@@ -359,6 +360,7 @@ cascadeOnDelete(PostCommentSchema, [
   { model: 'PostComment', field: 'parentId', action: 'delete' },
   { model: 'PostComment', field: 'replyToId', action: 'unset' },
   { model: 'Notification', field: 'commentId', action: 'delete' },
+  { model: 'PostSummary', field: 'commentId', action: 'unset' },
 ]);
 
 @Schema(collectionSchema('post_likes', 'created'))

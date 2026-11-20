@@ -457,7 +457,8 @@ export class ProfilesService {
 
   private async requirePublicUser(id: string): Promise<User> {
     const user = await this.users.findOne({ _id: id }).exec();
-    if (!user?.emailVerifiedAt)
+    // The Vedora AI system account has no public profile.
+    if (!user?.emailVerifiedAt || user.status === AccountStatus.SYSTEM)
       throw new ResourceNotFoundException('NOT_FOUND', 'Profile not found');
     return user;
   }

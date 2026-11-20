@@ -18,6 +18,15 @@ export class CommentBodyDto {
   body!: string;
 }
 
+export class CommentAuthorDto extends PostAuthorDto {
+  /**
+   * True for Vedora AI, the system account behind automatic summaries. It has
+   * no profile page, so clients should not link to one.
+   */
+  @ApiProperty()
+  isSystem!: boolean;
+}
+
 export class CommentResponseDto {
   @ApiProperty({ format: 'uuid' })
   id!: string;
@@ -31,8 +40,8 @@ export class CommentResponseDto {
   @ApiProperty({ type: String, nullable: true, format: 'uuid' })
   replyToId!: string | null;
 
-  @ApiProperty({ type: PostAuthorDto, nullable: true })
-  replyToAuthor!: PostAuthorDto | null;
+  @ApiProperty({ type: CommentAuthorDto, nullable: true })
+  replyToAuthor!: CommentAuthorDto | null;
 
   @ApiProperty({ minimum: 0 })
   replyCount!: number;
@@ -40,8 +49,8 @@ export class CommentResponseDto {
   @ApiProperty()
   body!: string;
 
-  @ApiProperty({ type: PostAuthorDto })
-  author!: PostAuthorDto;
+  @ApiProperty({ type: CommentAuthorDto })
+  author!: CommentAuthorDto;
 
   @ApiProperty()
   createdAt!: Date;

@@ -44,12 +44,19 @@ Content-Type: application/json
     "id": "33333333-3333-4333-8333-333333333333",
     "username": "vedora.user",
     "fullName": "Vedora User",
-    "avatarUrl": null
+    "avatarUrl": null,
+    "isProfessional": false,
+    "isSystem": false
   },
   "createdAt": "2026-10-02T08:00:00.000Z",
   "updatedAt": "2026-10-02T08:00:00.000Z"
 }
 ```
+
+`author.isSystem` là `true` cho **Vedora AI** — tài khoản hệ thống tự bình luận
+tóm tắt bài đăng (xem [post-ai-summary.md](post-ai-summary.md)). Tài khoản này không
+đăng nhập được và không có trang profile (`GET /profiles/:id` trả 404), nên FE
+không được link tới profile của nó; hiển thị nhãn AI thay cho avatar/link.
 
 Quyền thao tác:
 
