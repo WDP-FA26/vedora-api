@@ -1,7 +1,9 @@
 import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import type { Model } from 'mongoose';
+import type { ClientSession, Model } from 'mongoose';
 import { Ingredient, Post, PostStatus, Recipe, User } from '../mongo/models.js';
+import { lockDocument } from '../mongo/document-lock.js';
+import { MongoService } from '../mongo/mongo.service.js';
 import { allExist } from '../mongo/references.js';
 import { RecipeDetailDto } from './dto/recipe.dto.js';
 import { IncompatibilityRulesService } from './incompatibility-rules.service.js';
@@ -15,6 +17,7 @@ export class RecipeRelationsService {
     @InjectModel(Post.name) private readonly posts: Model<Post>,
     @InjectModel(User.name) private readonly users: Model<User>,
     private readonly rules: IncompatibilityRulesService,
+    private readonly mongo: MongoService,
   ) {}
 
   async hydrate(rows: readonly Recipe[]): Promise<RecipeDetailDto[]> {
@@ -107,14 +110,18 @@ export class RecipeRelationsService {
 
   async assertReferences(
     ingredients: readonly { ingredientId: string }[],
-    postId?: string,
+    postId: string | undefined,
+    session: ClientSession,
   ): Promise<void> {
     const ingredientIds = ingredients.map(({ ingredientId }) => ingredientId);
+    // Ingredient deletion takes the same locks, so neither side can commit
+    // against a snapshot that misses the other.
+    for (const ingredientId of [...new Set(ingredientIds)].sort()) {
+      await lockDocument(this.mongo, session, 'ingredient', ingredientId);
+    }
     const postIds = postId === undefined ? [] : [postId];
-    const [found, post] = await Promise.all([
-      allExist(this.ingredients, ingredientIds),
-      allExist(this.posts, postIds),
-    ]);
+    const found = await allExist(this.ingredients, ingredientIds, session);
+    const post = await allExist(this.posts, postIds, session);
     if (!found || !post) {
       throw new InvalidInputException(
         'UNKNOWN_REFERENCE',

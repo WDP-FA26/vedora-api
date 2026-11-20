@@ -6,6 +6,7 @@ import { Identified } from './schemas/identified.js';
 export type LockKind =
   | 'user'
   | 'recipe'
+  | 'ingredient'
   | 'post'
   | 'ticket'
   | 'account-gate'

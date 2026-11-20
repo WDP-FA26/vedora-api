@@ -17,6 +17,7 @@ import {
   Weekday,
 } from '../mongo/models.js';
 import { MongoService } from '../mongo/mongo.service.js';
+import { allExist } from '../mongo/references.js';
 import { DietaryService } from '../recipes/dietary.service.js';
 import { IncompatibilityRulesService } from '../recipes/incompatibility-rules.service.js';
 import {
@@ -678,6 +679,19 @@ export class MealPlanService {
         .exec();
       if (!user)
         throw new ResourceNotFoundException('NOT_FOUND', 'User not found');
+      // The preview checked the dishes outside this transaction; lock them
+      // (as recipe deletion does) and check again, so a dish deleted in
+      // between is refused instead of saved as a dangling entry.
+      const recipeIds = [...new Set(entries.map(({ recipeId }) => recipeId))];
+      for (const recipeId of recipeIds.sort()) {
+        await lockDocument(this.mongo, session, 'recipe', recipeId);
+      }
+      if (!(await allExist(this.recipes, recipeIds, session))) {
+        throw new StateConflictException(
+          'MEAL_PLAN_INVALID',
+          'These dishes break a dietary restriction or no longer exist',
+        );
+      }
       const appliedDays = preview.days.map(({ day }) => day);
       if (options.requireEmptyDays) {
         const taken = await this.entries

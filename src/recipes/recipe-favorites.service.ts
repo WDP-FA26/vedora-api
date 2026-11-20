@@ -2,7 +2,7 @@ import { rethrowAsStateConflict } from '../mongo/unique-conflict.js';
 import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { randomUUID } from 'node:crypto';
-import type { Model } from 'mongoose';
+import type { Model, PipelineStage } from 'mongoose';
 import {
   createPaginatedResponse,
   getPaginationArgs,
@@ -41,21 +41,46 @@ export class RecipeFavoritesService {
     query: PaginationQueryDto,
   ): Promise<PaginatedResponseDto<FavoriteRecipeDto>> {
     const { skip, take } = getPaginationArgs(query);
-    const [rows, count] = await Promise.all([
+    // The page and the count share one filter: favorites whose recipe still
+    // exists. A favorite left behind by a deleted recipe is neither listed
+    // nor counted.
+    const withRecipe: PipelineStage[] = [
+      { $match: { userId } },
+      {
+        $lookup: {
+          from: this.recipes.collection.name,
+          localField: 'recipeId',
+          foreignField: '_id',
+          pipeline: [{ $project: { _id: 1 } }],
+          as: 'recipe',
+        },
+      },
+      { $match: { 'recipe.0': { $exists: true } } },
+    ];
+    const [rows, counted] = await Promise.all([
       this.favorites
-        .find({ userId })
-        .sort({ createdAt: -1, recipeId: -1 })
-        .skip(skip)
-        .limit(take)
+        .aggregate<Pick<RecipeFavorite, 'recipeId' | 'createdAt'>>([
+          ...withRecipe,
+          { $sort: { createdAt: -1, recipeId: -1 } },
+          { $skip: skip },
+          { $limit: take },
+          { $project: { _id: 0, recipeId: 1, createdAt: 1 } },
+        ])
         .exec(),
-      this.favorites.countDocuments({ userId }),
+      this.favorites
+        .aggregate<{ total: number }>([...withRecipe, { $count: 'total' }])
+        .exec(),
     ]);
+    const count = counted.at(0)?.total ?? 0;
     const recipeIds = rows.map(({ recipeId }) => recipeId);
     const saved = await this.recipes.find({ _id: { $in: recipeIds } }).exec();
     const savedById = new Map(saved.map((recipe) => [recipe.id, recipe]));
-    const ordered = rows.flatMap(
-      ({ recipeId }) => savedById.get(recipeId) ?? [],
-    );
+    // Keep each recipe paired with its own favorite row (and savedAt).
+    const pairs = rows.flatMap((row) => {
+      const recipe = savedById.get(row.recipeId);
+      return recipe ? [{ recipe, savedAt: row.createdAt }] : [];
+    });
+    const ordered = pairs.map(({ recipe }) => recipe);
     const [recipes, published] = await Promise.all([
       this.relations.hydrate(ordered),
       this.relations.publishedPostIds(sourcePostIds(ordered)),
@@ -69,7 +94,7 @@ export class RecipeFavoritesService {
             : null,
         totalMinutes: totalMinutes(recipe),
         isFavorite: true,
-        savedAt: rows[index].createdAt,
+        savedAt: pairs[index].savedAt,
       })),
       count,
       query,

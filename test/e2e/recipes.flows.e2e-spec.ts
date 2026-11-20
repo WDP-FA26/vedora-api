@@ -11,6 +11,7 @@ import {
   UserRole,
 } from '../../src/mongo/models.js';
 import { createE2eApp, type E2eApp } from '../support/e2e-app.js';
+import { nextWeekStart } from '../support/meal-week.js';
 import {
   createIngredient,
   createRecipe,
@@ -48,6 +49,9 @@ interface FavoriteBody {
   id: string;
   savedAt: string;
 }
+
+/** Meal plans are saved per week, and past days are locked. */
+const NEXT_WEEK = nextWeekStart();
 
 describe('Recipe catalog and admin flows (e2e)', () => {
   let e2e: E2eApp;
@@ -517,6 +521,7 @@ describe('Recipe catalog and admin flows (e2e)', () => {
         .put('/api/v1/meal-plan/days')
         .set('Authorization', `Bearer ${token}`)
         .send({
+          weekStart: NEXT_WEEK,
           days: [
             {
               day: 'MON',
@@ -546,137 +551,143 @@ describe('Recipe catalog and admin flows (e2e)', () => {
     });
   });
 
-  describe('concurrent writes against recipe deletion', () => {
-    const ATTEMPTS = 25;
-    const MEAL_PLAN_ATTEMPTS = 100;
+  // Each test races up to 100 transactions; give them more than the default 5s.
+  describe(
+    'concurrent writes against recipe deletion',
+    { timeout: 60_000 },
+    () => {
+      const ATTEMPTS = 25;
+      const MEAL_PLAN_ATTEMPTS = 100;
 
-    async function orphanCount(
-      name: 'RecipeFavorite' | 'RecipeRating' | 'MealPlanEntry',
-      recipeIds: string[],
-    ): Promise<number> {
-      const live = await model<Recipe>('Recipe')
-        .find({ _id: { $in: recipeIds } })
-        .select('_id')
-        .exec();
-      const liveIds = new Set(live.map(({ id }) => id));
-      const missing = recipeIds.filter((id) => !liveIds.has(id));
-      return model<{ recipeId: string }>(name).countDocuments({
-        recipeId: { $in: missing },
+      async function orphanCount(
+        name: 'RecipeFavorite' | 'RecipeRating' | 'MealPlanEntry',
+        recipeIds: string[],
+      ): Promise<number> {
+        const live = await model<Recipe>('Recipe')
+          .find({ _id: { $in: recipeIds } })
+          .select('_id')
+          .exec();
+        const liveIds = new Set(live.map(({ id }) => id));
+        const missing = recipeIds.filter((id) => !liveIds.has(id));
+        return model<{ recipeId: string }>(name).countDocuments({
+          recipeId: { $in: missing },
+        });
+      }
+
+      it('removes a favorite when the recipe is deleted afterwards (sequential control)', async () => {
+        const recipe = await createRecipe(e2e.mongo, {}, [tofu.id]);
+        await asMember(
+          request(server()).put(`/api/v1/recipes/${recipe.id}/favorite`),
+        )
+          .send({})
+          .expect(200);
+        await asAdmin(
+          request(server()).delete(`/api/v1/admin/recipes/${recipe.id}`),
+        ).expect(204);
+        expect(await orphanCount('RecipeFavorite', [recipe.id])).toBe(0);
       });
-    }
 
-    it('removes a favorite when the recipe is deleted afterwards (sequential control)', async () => {
-      const recipe = await createRecipe(e2e.mongo, {}, [tofu.id]);
-      await asMember(
-        request(server()).put(`/api/v1/recipes/${recipe.id}/favorite`),
-      )
-        .send({})
-        .expect(200);
-      await asAdmin(
-        request(server()).delete(`/api/v1/admin/recipes/${recipe.id}`),
-      ).expect(204);
-      expect(await orphanCount('RecipeFavorite', [recipe.id])).toBe(0);
-    });
-
-    it('removes a rating when the recipe is deleted afterwards (sequential control)', async () => {
-      const recipe = await createRecipe(e2e.mongo, {}, [tofu.id]);
-      await asMember(
-        request(server()).put(`/api/v1/recipes/${recipe.id}/rating`),
-      )
-        .send({ value: 4 })
-        .expect(200);
-      await asAdmin(
-        request(server()).delete(`/api/v1/admin/recipes/${recipe.id}`),
-      ).expect(204);
-      expect(await orphanCount('RecipeRating', [recipe.id])).toBe(0);
-    });
-
-    // BUG-1: Recipe delete takes no recipe lock, so a concurrent first-time favorite/rating commits after the cascade (orphan rows)
-    it('never leaves a favorite pointing at a deleted recipe', async () => {
-      const recipeIds: string[] = [];
-      for (let attempt = 0; attempt < ATTEMPTS; attempt++) {
+      it('removes a rating when the recipe is deleted afterwards (sequential control)', async () => {
         const recipe = await createRecipe(e2e.mongo, {}, [tofu.id]);
-        recipeIds.push(recipe.id);
-        await Promise.all([
-          asMember(
-            request(server()).put(`/api/v1/recipes/${recipe.id}/favorite`),
-          ).send({}),
-          asAdmin(
-            request(server()).delete(`/api/v1/admin/recipes/${recipe.id}`),
-          ),
-        ]);
-      }
-      expect(await orphanCount('RecipeFavorite', recipeIds)).toBe(0);
-    });
+        await asMember(
+          request(server()).put(`/api/v1/recipes/${recipe.id}/rating`),
+        )
+          .send({ value: 4 })
+          .expect(200);
+        await asAdmin(
+          request(server()).delete(`/api/v1/admin/recipes/${recipe.id}`),
+        ).expect(204);
+        expect(await orphanCount('RecipeRating', [recipe.id])).toBe(0);
+      });
 
-    // BUG-1: Recipe delete takes no recipe lock, so a concurrent first-time favorite/rating commits after the cascade (orphan rows)
-    it('never leaves a rating pointing at a deleted recipe', async () => {
-      const recipeIds: string[] = [];
-      for (let attempt = 0; attempt < ATTEMPTS; attempt++) {
-        const recipe = await createRecipe(e2e.mongo, {}, [tofu.id]);
-        recipeIds.push(recipe.id);
-        await Promise.all([
-          asMember(
-            request(server()).put(`/api/v1/recipes/${recipe.id}/rating`),
-          ).send({ value: 4 }),
-          asAdmin(
-            request(server()).delete(`/api/v1/admin/recipes/${recipe.id}`),
-          ),
-        ]);
-      }
-      expect(await orphanCount('RecipeRating', recipeIds)).toBe(0);
-    });
-
-    // BUG-6: PUT /meal-plan/days checks recipes in preview() outside its transaction, so a recipe deleted meanwhile is saved (intermittent, ~1 in 25-100 races)
-    it('never leaves a meal-plan entry pointing at a deleted recipe', async () => {
-      const { token } = await signedUser();
-      const recipeIds: string[] = [];
-      for (let attempt = 0; attempt < MEAL_PLAN_ATTEMPTS; attempt++) {
-        const recipe = await createRecipe(e2e.mongo, {}, [tofu.id]);
-        recipeIds.push(recipe.id);
-        await Promise.all([
-          request(server())
-            .put('/api/v1/meal-plan/days')
-            .set('Authorization', `Bearer ${token}`)
-            .send({
-              days: [
-                {
-                  day: 'TUE',
-                  breakfast: [],
-                  lunch: [recipe.id],
-                  dinner: [],
-                  others: [],
-                },
-              ],
-            }),
-          asAdmin(
-            request(server()).delete(`/api/v1/admin/recipes/${recipe.id}`),
-          ),
-        ]);
-      }
-      expect(await orphanCount('MealPlanEntry', recipeIds)).toBe(0);
-    });
-
-    // BUG-2: Ingredient delete and recipe create check references in different snapshots, leaving a recipe with a missing ingredient
-    it('never both deletes an ingredient and saves a recipe that uses it', async () => {
-      let bothSucceeded = 0;
-      for (let attempt = 0; attempt < ATTEMPTS; attempt++) {
-        const ingredient = await createIngredient(e2e.mongo);
-        const [created, deleted] = await Promise.all([
-          asAdmin(request(server()).post('/api/v1/admin/recipes')).send(
-            recipeBody([ingredient.id]),
-          ),
-          asAdmin(
-            request(server()).delete(
-              `/api/v1/admin/ingredients/${ingredient.id}`,
+      // BUG-1: Recipe delete takes no recipe lock, so a concurrent first-time favorite/rating commits after the cascade (orphan rows)
+      it('never leaves a favorite pointing at a deleted recipe', async () => {
+        const recipeIds: string[] = [];
+        for (let attempt = 0; attempt < ATTEMPTS; attempt++) {
+          const recipe = await createRecipe(e2e.mongo, {}, [tofu.id]);
+          recipeIds.push(recipe.id);
+          await Promise.all([
+            asMember(
+              request(server()).put(`/api/v1/recipes/${recipe.id}/favorite`),
+            ).send({}),
+            asAdmin(
+              request(server()).delete(`/api/v1/admin/recipes/${recipe.id}`),
             ),
-          ),
-        ]);
-        if (created.status === 201 && deleted.status === 204) bothSucceeded++;
-      }
-      expect(bothSucceeded).toBe(0);
-    });
-  });
+          ]);
+        }
+        expect(await orphanCount('RecipeFavorite', recipeIds)).toBe(0);
+      });
+
+      // BUG-1: Recipe delete takes no recipe lock, so a concurrent first-time favorite/rating commits after the cascade (orphan rows)
+      it('never leaves a rating pointing at a deleted recipe', async () => {
+        const recipeIds: string[] = [];
+        for (let attempt = 0; attempt < ATTEMPTS; attempt++) {
+          const recipe = await createRecipe(e2e.mongo, {}, [tofu.id]);
+          recipeIds.push(recipe.id);
+          await Promise.all([
+            asMember(
+              request(server()).put(`/api/v1/recipes/${recipe.id}/rating`),
+            ).send({ value: 4 }),
+            asAdmin(
+              request(server()).delete(`/api/v1/admin/recipes/${recipe.id}`),
+            ),
+          ]);
+        }
+        expect(await orphanCount('RecipeRating', recipeIds)).toBe(0);
+      });
+
+      // BUG-6: PUT /meal-plan/days checks recipes in preview() outside its transaction, so a recipe deleted meanwhile is saved (intermittent, ~1 in 25-100 races)
+      it('never leaves a meal-plan entry pointing at a deleted recipe', async () => {
+        const { token } = await signedUser();
+        const recipeIds: string[] = [];
+        for (let attempt = 0; attempt < MEAL_PLAN_ATTEMPTS; attempt++) {
+          const recipe = await createRecipe(e2e.mongo, {}, [tofu.id]);
+          recipeIds.push(recipe.id);
+          await Promise.all([
+            request(server())
+              .put('/api/v1/meal-plan/days')
+              .set('Authorization', `Bearer ${token}`)
+              .send({
+                weekStart: NEXT_WEEK,
+                days: [
+                  {
+                    day: 'TUE',
+                    breakfast: [],
+                    lunch: [recipe.id],
+                    dinner: [],
+                    others: [],
+                  },
+                ],
+              }),
+            asAdmin(
+              request(server()).delete(`/api/v1/admin/recipes/${recipe.id}`),
+            ),
+          ]);
+        }
+        expect(await orphanCount('MealPlanEntry', recipeIds)).toBe(0);
+      });
+
+      // BUG-2: Ingredient delete and recipe create check references in different snapshots, leaving a recipe with a missing ingredient
+      it('never both deletes an ingredient and saves a recipe that uses it', async () => {
+        let bothSucceeded = 0;
+        for (let attempt = 0; attempt < ATTEMPTS; attempt++) {
+          const ingredient = await createIngredient(e2e.mongo);
+          const [created, deleted] = await Promise.all([
+            asAdmin(request(server()).post('/api/v1/admin/recipes')).send(
+              recipeBody([ingredient.id]),
+            ),
+            asAdmin(
+              request(server()).delete(
+                `/api/v1/admin/ingredients/${ingredient.id}`,
+              ),
+            ),
+          ]);
+          if (created.status === 201 && deleted.status === 204) bothSucceeded++;
+        }
+        expect(bothSucceeded).toBe(0);
+      });
+    },
+  );
 
   describe('favorites list after a dangling favorite', () => {
     async function seedFavoritesWithDanglingNewest() {

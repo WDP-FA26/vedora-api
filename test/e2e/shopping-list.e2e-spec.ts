@@ -2,21 +2,10 @@ import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import request from 'supertest';
 import { createE2eApp, type E2eApp } from '../support/e2e-app.js';
 import { createUser } from '../support/fixtures.js';
-import { runtimeConfig } from '../../src/config/runtime-config.js';
-import {
-  addDays,
-  calendarDate,
-  mondayOf,
-} from '../../src/meal-plan/meal-week.js';
+import { nextWeekStart } from '../support/meal-week.js';
 
-/**
- * Next week: wholly in the future, so no day is dropped as already past
- * (the list only covers today onward), and inside the planning horizon.
- */
-const NEXT_WEEK = addDays(
-  mondayOf(calendarDate(new Date(), runtimeConfig.APP_TIMEZONE)),
-  7,
-);
+/** Wholly in the future: the list drops days that are already past. */
+const NEXT_WEEK = nextWeekStart();
 
 const ROOT = '/api/v1/meal-plan/shopping-list';
 describe('Shopping list API (e2e)', () => {

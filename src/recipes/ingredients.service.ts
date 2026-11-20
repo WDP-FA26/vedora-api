@@ -8,6 +8,7 @@ import {
   PaginatedResponseDto,
   PaginationQueryDto,
 } from '../common/pagination/index.js';
+import { lockDocument } from '../mongo/document-lock.js';
 import { isUniqueViolation } from '../mongo/errors.js';
 import { Ingredient, IngredientGroup, Recipe } from '../mongo/models.js';
 import { MongoService } from '../mongo/mongo.service.js';
@@ -125,6 +126,8 @@ export class IngredientsService {
 
   async remove(id: string): Promise<void> {
     await this.mongo.withTransaction(async (session) => {
+      // Saving a recipe locks its ingredients too (assertReferences).
+      await lockDocument(this.mongo, session, 'ingredient', id);
       const inUse = await this.recipes
         .countDocuments({ 'ingredients.ingredientId': id })
         .limit(1)
