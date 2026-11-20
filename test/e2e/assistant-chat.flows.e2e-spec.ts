@@ -16,6 +16,7 @@ import request from 'supertest';
 import { MODERATION_MODEL } from '../../src/ai/guardrails/guardrail.js';
 import { type AiRequest, type User, UserRole } from '../../src/mongo/models.js';
 import { GuestSessionService } from '../../src/nutrition-chat/guest/guest-session.service.js';
+import { nextWeekStart } from '../support/meal-week.js';
 import { createE2eApp, type E2eApp } from '../support/e2e-app.js';
 import { createUser } from '../support/fixtures.js';
 
@@ -109,6 +110,9 @@ function replyText(body: string): string {
   return text;
 }
 
+/** The planner chat is about one week, sent as weekStart. */
+const NEXT_WEEK = nextWeekStart();
+
 describe('Assistant chat flows (e2e)', () => {
   let e2e: E2eApp;
   let ipCounter = 0;
@@ -148,7 +152,7 @@ describe('Assistant chat flows (e2e)', () => {
       request(server())
         .post('/api/v1/meal-plan/chat')
         .set('Authorization', `Bearer ${token}`)
-        .send(body);
+        .send({ weekStart: NEXT_WEEK, ...body });
 
     it('streams the model reply and charges one completed turn', async () => {
       const { user, token } = await signedUser();
@@ -318,7 +322,7 @@ describe('Assistant chat flows (e2e)', () => {
       request(server())
         .post('/api/v1/meal-plan/chat')
         .set('Authorization', `Bearer ${token}`)
-        .send(body);
+        .send({ weekStart: NEXT_WEEK, ...body });
 
     it('persists normal turns, refused turns, and >10 messages in chronological order without loss', async () => {
       const admin = await createUser(e2e.mongo, { role: UserRole.ADMIN });
@@ -599,10 +603,7 @@ describe('Assistant chat flows (e2e)', () => {
         .set('Authorization', `Bearer ${token}`)
         .expect(200);
       const listBody = listRes.body as { items: { id: string }[] };
-      expect(listBody.items.map((item) => item.id)).toEqual([
-        threadA,
-        threadB,
-      ]);
+      expect(listBody.items.map((item) => item.id)).toEqual([threadA, threadB]);
     });
 
     it('handles empty list, out-of-range pagination, validation errors, 404s, and 401s on thread endpoints', async () => {
