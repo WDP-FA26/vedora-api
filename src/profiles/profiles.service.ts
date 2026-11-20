@@ -297,19 +297,37 @@ export class ProfilesService {
         ],
       };
     }
+    // Unverified accounts are skipped before the limit, not after, so one in
+    // the lookahead row cannot end the list early.
     const rows = await this.follows
-      .find(match)
-      .sort({ createdAt: -1, _id: -1 })
-      .limit(query.limit + 1)
+      .aggregate<{ accountId: string }>([
+        { $match: match },
+        { $sort: { createdAt: -1, _id: -1 } },
+        {
+          $lookup: {
+            from: this.users.collection.name,
+            localField: accountField,
+            foreignField: '_id',
+            pipeline: [
+              { $match: { emailVerifiedAt: { $ne: null } } },
+              { $project: { _id: 1 } },
+            ],
+            as: 'verified',
+          },
+        },
+        { $match: { 'verified.0': { $exists: true } } },
+        { $limit: query.limit + 1 },
+        { $project: { _id: 0, accountId: `$${accountField}` } },
+      ])
       .exec();
     const accounts = await this.users
-      .find({ _id: { $in: rows.map((row) => row[accountField]) } })
+      .find({ _id: { $in: rows.map((row) => row.accountId) } })
       .exec();
     const byId = new Map(accounts.map((user) => [user.id, user]));
     const items: ProfileSummaryDto[] = [];
     for (const row of rows) {
-      const user = byId.get(row[accountField]);
-      if (user?.emailVerifiedAt) items.push(this.summary(user));
+      const user = byId.get(row.accountId);
+      if (user) items.push(this.summary(user));
     }
     return this.listResult(items, query.limit);
   }

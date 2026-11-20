@@ -3,6 +3,8 @@ import { randomUUID } from 'node:crypto';
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { chunkdown } from 'chunkdown';
+import { fromMarkdown } from 'mdast-util-from-markdown';
+import { toString } from 'mdast-util-to-string';
 import { QdrantService } from '../../qdrant/qdrant.service.js';
 import type { ExtractedSection } from '../extractors/document-extractor.js';
 
@@ -159,12 +161,17 @@ export class KnowledgeIndexService {
   }
 }
 
-const HEADING_LINE = /^#{1,6}[ \t]+(.+?)[ \t]*#*[ \t]*$/gm;
-
+/**
+ * The page's headings as Markdown parses them: ATX (`# Sắt`, closing hashes
+ * dropped but `C#` kept) and setext (`Canxi` over `===`), never a `#` line
+ * inside a code block.
+ */
 function headingsOf(markdown: string): string[] {
   const headings: string[] = [];
-  for (const match of markdown.matchAll(HEADING_LINE)) {
-    headings.push(match[1]);
+  for (const node of fromMarkdown(markdown).children) {
+    if (node.type !== 'heading') continue;
+    const text = toString(node).trim();
+    if (text !== '') headings.push(text);
   }
   return headings;
 }

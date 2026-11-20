@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import type { Model, QueryFilter } from 'mongoose';
+import { isUniqueViolation } from '../mongo/errors.js';
 import { filter, Observable, Subject } from 'rxjs';
 import { ModerationSettingsService } from '../moderation/moderation-settings.service.js';
 import {
@@ -44,6 +45,12 @@ const TOGGLED_TYPES: readonly NotificationType[] = [
   NotificationType.REPOST,
   NotificationType.FOLLOW,
 ];
+
+/** The once-per-recipient key of a toggled notification, or null for other types. */
+function toggleKeyOf(input: NotifyInput): string | null {
+  if (!TOGGLED_TYPES.includes(input.type)) return null;
+  return `${input.type}:${input.actorId ?? ''}:${input.postId ?? ''}`;
+}
 
 function toDto({
   notification,
@@ -100,26 +107,20 @@ export class NotificationsService {
   async notify(input: NotifyInput): Promise<void> {
     if (input.recipientId === input.actorId) return;
     try {
-      if (TOGGLED_TYPES.includes(input.type)) {
-        const existing = await this.notifications
-          .findOne({
-            recipientId: input.recipientId,
-            actorId: input.actorId,
-            type: input.type,
-            postId: input.postId ?? null,
-          })
-          .select('_id')
-          .exec();
-        if (existing) return;
-      }
-      const created = await this.notifications.create({
-        ...input,
-        actorId: input.actorId ?? null,
-      });
+      // A notification whose actor is gone would count as unread but never
+      // show in the list, so it is not created at all.
       const actor = input.actorId
         ? await this.users.findById(input.actorId).exec()
         : null;
       if (input.actorId && !actor) return;
+      const toggleKey = toggleKeyOf(input);
+      if (toggleKey !== null && (await this.alreadyNotified(input))) return;
+      const created = await this.insertOnce({
+        ...input,
+        actorId: input.actorId ?? null,
+        toggleKey,
+      });
+      if (!created) return;
       const [postType] = await this.postTypes([created.postId]);
       const texts = await this.moderationSettings.reasonTexts();
       this.events.next({
@@ -132,6 +133,32 @@ export class NotificationsService {
       this.logger.warn(
         `Could not create ${input.type} notification: ${String(error)}`,
       );
+    }
+  }
+
+  /** A like/repost/follow notification that already exists, including rows from before toggleKey. */
+  private async alreadyNotified(input: NotifyInput): Promise<boolean> {
+    const existing = await this.notifications
+      .findOne({
+        recipientId: input.recipientId,
+        actorId: input.actorId,
+        type: input.type,
+        postId: input.postId ?? null,
+      })
+      .select('_id')
+      .exec();
+    return existing !== null;
+  }
+
+  /** Creates the notification, or returns null when a concurrent toggle already did. */
+  private async insertOnce(
+    fields: Partial<Notification>,
+  ): Promise<Notification | null> {
+    try {
+      return await this.notifications.create(fields);
+    } catch (error: unknown) {
+      if (isUniqueViolation(error)) return null;
+      throw error;
     }
   }
 

@@ -36,6 +36,14 @@ export class Notification extends Identified {
   @Prop({ type: Date, default: null })
   readAt!: Date | null;
 
+  /**
+   * `type:actorId:postId` for like/repost/follow, which notify once per
+   * recipient however often they are toggled; null for every other type.
+   * Unique per recipient, so concurrent toggles cannot both insert.
+   */
+  @Prop({ type: String, default: null })
+  toggleKey?: string | null;
+
   @Prop({ type: Date })
   createdAt!: Date;
 }
@@ -44,3 +52,7 @@ export const NotificationSchema = SchemaFactory.createForClass(Notification);
 NotificationSchema.index({ recipientId: 1, createdAt: 1, _id: 1 });
 NotificationSchema.index({ recipientId: 1, readAt: 1 });
 NotificationSchema.index({ postId: 1 });
+NotificationSchema.index(
+  { recipientId: 1, toggleKey: 1 },
+  { unique: true, partialFilterExpression: { toggleKey: { $type: 'string' } } },
+);

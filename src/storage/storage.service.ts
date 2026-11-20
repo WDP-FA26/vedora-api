@@ -56,6 +56,25 @@ export interface StorageEvent {
   }[];
 }
 
+type StorageEventRecord = NonNullable<StorageEvent['Records']>[number];
+
+/** Every field of a record is optional, so any object is one; null and scalars are not. */
+function isEventRecord(value: unknown): value is StorageEventRecord {
+  return typeof value === 'object' && value !== null;
+}
+
+/** S3 URL-encodes keys in events, with `+` for spaces. */
+function decodeObjectKey(key: string): string {
+  try {
+    return decodeURIComponent(key.replace(/\+/g, ' '));
+  } catch {
+    throw new InvalidInputException(
+      'BAD_REQUEST',
+      'An S3 event object key is not valid URL encoding',
+    );
+  }
+}
+
 interface StorageClients {
   internal: S3Client;
   presigner: S3Client;
@@ -240,16 +259,25 @@ export class StorageService implements OnModuleInit {
   parseEvent(target: StorageTarget, body: StorageEvent): string[] {
     if (!Array.isArray(body?.Records))
       throw new InvalidInputException('BAD_REQUEST', 'Expected an S3 event');
-    return body.Records.flatMap(({ eventName, s3 }) => {
+    const keys: string[] = [];
+    const records: unknown[] = body.Records;
+    for (const record of records) {
+      if (!isEventRecord(record))
+        throw new InvalidInputException(
+          'BAD_REQUEST',
+          'Each S3 event record must be an object',
+        );
+      const { eventName, s3 } = record;
       const key = s3?.object?.key;
       if (
         !eventName?.startsWith('s3:ObjectCreated:') ||
         s3?.bucket?.name !== this.buckets[target] ||
         !key
       )
-        return [];
-      return [decodeURIComponent(key.replace(/\+/g, ' '))];
-    });
+        continue;
+      keys.push(decodeObjectKey(key));
+    }
+    return keys;
   }
 
   private require(): StorageClients {
