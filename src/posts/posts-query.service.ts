@@ -281,15 +281,20 @@ export class PostsQueryService {
       const cursor = await this.posts
         .findOne({ _id: query.cursor, authorId: { $in: authorIds } })
         .exec();
-      if (!cursor) return { items: [], nextCursor: null };
+      if (!cursor?.publishedAt) return { items: [], nextCursor: null };
+      // Like every other timeline: by when a post went public, so one held
+      // for review lands where it was published, not where it was written.
       Object.assign(
         filter,
-        afterCursor('createdAt', { value: cursor.createdAt, id: cursor.id }),
+        afterCursor('publishedAt', {
+          value: cursor.publishedAt,
+          id: cursor.id,
+        }),
       );
     }
     const rows = await this.posts
       .find(filter)
-      .sort({ createdAt: -1, _id: -1 })
+      .sort({ publishedAt: -1, _id: -1 })
       .limit(query.limit + 1)
       .exec();
     const page = createCursorPaginatedResponse(rows, query.limit);
