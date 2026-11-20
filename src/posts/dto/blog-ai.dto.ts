@@ -64,6 +64,8 @@ export class BlogAssistantChatDto {
   messages!: unknown[];
 
   @ApiProperty({ type: EditorSnapshotDto })
+  // ValidateNested skips a missing value; the editor state is required.
+  @IsObject()
   @ValidateNested()
   @Type(() => EditorSnapshotDto)
   editor!: EditorSnapshotDto;
