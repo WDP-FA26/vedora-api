@@ -16,7 +16,7 @@ AI như mọi bình luận khác; AI sẽ không bình luận lại.
 
 ## Khi nào AI bỏ qua
 
-- Bài xuất bản trước khi job chạy quá `POST_SUMMARY_WINDOW_SECONDS` (mặc định 24 giờ):
+- Bài xuất bản trước khi job chạy quá `POST_SUMMARY_WINDOW_SECONDS` (mặc định 7 ngày):
   bài cũ không được tóm tắt.
 - Tổng nội dung (chữ + transcript) ngắn hơn `POST_SUMMARY_MIN_TEXT_LENGTH` (mặc định
   280 ký tự) → `SKIPPED`, không gọi AI.

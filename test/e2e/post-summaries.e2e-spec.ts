@@ -266,7 +266,7 @@ describe('Vedora AI post summaries (e2e)', () => {
     await createPost(e2e.mongo, {
       authorId: author.id,
       body: RECIPE_TEXT,
-      publishedAt: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000),
+      publishedAt: new Date(Date.now() - 10 * 24 * 60 * 60 * 1000),
     });
     await service().drain();
     expect(calls).toHaveLength(0);
