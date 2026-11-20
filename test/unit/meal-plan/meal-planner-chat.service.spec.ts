@@ -149,6 +149,7 @@ describe('MealPlannerChatService', () => {
       ingredients: [],
       groups: [],
       liked: [],
+      terms: [],
     });
     mealPlan.find.mockResolvedValue({
       weekStart: WEEK,

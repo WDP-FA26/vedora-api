@@ -4,7 +4,13 @@ import { collectionSchema } from './schemas/common.js';
 import { Identified } from './schemas/identified.js';
 
 export type LockKind =
-  'user' | 'recipe' | 'post' | 'account-gate' | 'payer' | 'transaction';
+  | 'user'
+  | 'recipe'
+  | 'post'
+  | 'ticket'
+  | 'account-gate'
+  | 'payer'
+  | 'transaction';
 
 @Schema(collectionSchema('document_locks', 'none'))
 export class DocumentLock extends Identified {

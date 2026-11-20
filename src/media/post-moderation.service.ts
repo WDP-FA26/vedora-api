@@ -1,12 +1,18 @@
 import { runtimeConfig } from '../config/runtime-config.js';
-import { Injectable, Logger, type OnModuleInit } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  Optional,
+  type OnModuleInit,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { SupportSyncService } from '../support/support-sync.service.js';
 import { isEnforced } from '../config/moderation-mode.js';
 import { PROVIDER_BLOCKED_KEY } from '../moderation/content-decision.js';
 import { MANIPULATION_KEY } from '../moderation/policies/content.js';
 import type { RoutedVerdict } from '../moderation/moderation-route.js';
 import { InjectModel } from '@nestjs/mongoose';
-import type { Model } from 'mongoose';
+import type { ClientSession, Model } from 'mongoose';
 import { Subject } from 'rxjs';
 import {
   ContentModerationService,
@@ -25,6 +31,7 @@ import { CloudinaryService } from '../cloudinary/cloudinary.service.js';
 import { fetchPublicImage } from '../common/http/fetch-public-image.js';
 import { extractMarkdownMediaUrls } from '../common/text.js';
 import {
+  AppealOutcome,
   CaptionStatus,
   MediaAsset,
   MediaStatus,
@@ -34,7 +41,9 @@ import {
   Post,
   PostStatus,
   PostType,
+  type SupportTicket,
 } from '../mongo/models.js';
+import { MongoService } from '../mongo/mongo.service.js';
 import { StorageService, StorageTarget } from '../storage/storage.service.js';
 import { type FrameSampling, videoFrameTimes } from './video-frame-times.js';
 
@@ -80,6 +89,8 @@ export class PostModerationService implements OnModuleInit {
     @InjectModel(MediaAsset.name)
     private readonly mediaAssets: Model<MediaAsset>,
     private readonly config: ConfigService,
+    @Optional() private readonly mongo?: MongoService,
+    @Optional() private readonly supportSync?: SupportSyncService,
   ) {}
 
   /**
@@ -153,43 +164,86 @@ export class PostModerationService implements OnModuleInit {
         'moderation.route.appliedBy': 'SYSTEM_TWO',
       });
     }
-    const before = await this.posts.findOne({ _id: id, $or: decidable }).exec();
-    if (!before) return false;
     const now = new Date();
-    const result = await this.posts
-      .updateOne(
-        { _id: id, status: before.status },
-        [
-          {
-            $set: {
-              status: approve ? PostStatus.PUBLISHED : PostStatus.REJECTED,
-              publishedAt: approve
-                ? { $ifNull: ['$publishedAt', now] }
-                : '$publishedAt',
-              'moderation.reviewedById': adminId,
-              'moderation.reviewedAt': now,
-              'moderation.reviewNote': note,
+    let before: Post | null = null;
+    let closedAppeal: SupportTicket | null = null;
+
+    const runUpdate = async (session?: ClientSession): Promise<boolean> => {
+      const findQuery = this.posts.findOne({ _id: id, $or: decidable });
+      if (session) findQuery.session(session);
+      before = await findQuery.exec();
+      if (!before) return false;
+      const updateOptions = session
+        ? { updatePipeline: true, session }
+        : { updatePipeline: true };
+      const result = await this.posts
+        .updateOne(
+          { _id: id, status: before.status },
+          [
+            {
+              $set: {
+                status: approve ? PostStatus.PUBLISHED : PostStatus.REJECTED,
+                publishedAt: approve
+                  ? { $ifNull: ['$publishedAt', now] }
+                  : '$publishedAt',
+                'moderation.reviewedById': adminId,
+                'moderation.reviewedAt': now,
+                'moderation.reviewNote': note,
+              },
             },
+          ],
+          updateOptions,
+        )
+        .exec();
+      if (result.modifiedCount === 0) return false;
+      if (approve && this.supportSync && session) {
+        closedAppeal = await this.supportSync.closeActiveAppealOnAdminAction(
+          session,
+          {
+            postId: id,
+            adminId,
+            outcome: AppealOutcome.APPROVED,
+            note,
+            now,
           },
-        ],
-        { updatePipeline: true },
-      )
-      .exec();
-    if (result.modifiedCount === 0) return false;
+        );
+      }
+      return true;
+    };
+
+    const modified =
+      this.mongo && this.supportSync && approve
+        ? await this.mongo.withTransaction((session) => runUpdate(session))
+        : await runUpdate();
+
+    if (!modified || !before) return false;
+    const decidedPost: Post = before;
     if (approve) {
       this.captions.schedule();
+      if (closedAppeal !== null) {
+        const closed: SupportTicket = closedAppeal;
+        await this.notifications.notify({
+          recipientId: decidedPost.authorId,
+          type: NotificationType.SUPPORT_TICKET_RESOLVED,
+          postId: id,
+          ticketId: closed.id,
+          reason: 'APPEAL_APPROVED',
+          note: note ?? undefined,
+        });
+      } else {
+        await this.notifications.notify({
+          recipientId: decidedPost.authorId,
+          type: NotificationType.POST_APPROVED,
+          postId: id,
+          note: note ?? undefined,
+        });
+      }
+    } else if (decidedPost.status !== PostStatus.REJECTED) {
       await this.notifications.notify({
-        recipientId: before.authorId,
-        type: NotificationType.POST_APPROVED,
-        postId: id,
-        note: note ?? undefined,
-      });
-    } else if (before.status !== PostStatus.REJECTED) {
-      await this.notifications.notify({
-        recipientId: before.authorId,
+        recipientId: decidedPost.authorId,
         type: NotificationType.POST_REJECTED,
         postId: id,
-        reason: before.moderation?.verdict,
+        reason: decidedPost.moderation?.verdict,
         note: note ?? undefined,
       });
     }

@@ -60,9 +60,9 @@ describe('VerificationController', () => {
     };
     service.createProofUpload.mockResolvedValue(upload);
 
-    await expect(
-      controller.createProofUpload(userRequest, dto),
-    ).resolves.toBe(upload);
+    await expect(controller.createProofUpload(userRequest, dto)).resolves.toBe(
+      upload,
+    );
     expect(service.createProofUpload).toHaveBeenCalledExactlyOnceWith(
       userId,
       dto,
@@ -127,9 +127,9 @@ describe('VerificationController', () => {
     } as AdminVerificationRequestDto;
     service.review.mockResolvedValue(reviewed);
 
-    await expect(
-      controller.review(adminRequest, requestId, dto),
-    ).resolves.toBe(reviewed);
+    await expect(controller.review(adminRequest, requestId, dto)).resolves.toBe(
+      reviewed,
+    );
     expect(service.review).toHaveBeenCalledExactlyOnceWith(
       requestId,
       adminId,

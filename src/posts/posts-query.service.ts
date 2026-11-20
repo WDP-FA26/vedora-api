@@ -1,6 +1,8 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Optional } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import type { Model } from 'mongoose';
+import { SupportSyncService } from '../support/support-sync.service.js';
+import type { PostAppealSummaryDto } from '../support/dto/post-appeal-summary.dto.js';
 import {
   afterCursor,
   createCursorPaginatedResponse,
@@ -16,6 +18,7 @@ import {
   Post,
   PostBookmark,
   type PostModeration,
+  PostRemovalActor,
   PostRepost,
   PostStatus,
   PostType,
@@ -65,6 +68,7 @@ export class PostsQueryService {
     private readonly reposts: Model<PostRepost>,
     @InjectModel(Follow.name) private readonly follows: Model<Follow>,
     @InjectModel(User.name) private readonly users: Model<User>,
+    @Optional() private readonly supportSync?: SupportSyncService,
   ) {}
 
   async search(
@@ -298,7 +302,14 @@ export class PostsQueryService {
   async findOne(id: string, viewerId?: string): Promise<PostResponseDto> {
     const post = await this.posts.findOne({ _id: id }).exec();
     const isAuthor = viewerId !== undefined && post?.authorId === viewerId;
-    if (!post || (post.status !== PostStatus.PUBLISHED && !isAuthor)) {
+    const authorDeleted =
+      post?.status === PostStatus.REMOVED &&
+      post.removal?.removedByRole === PostRemovalActor.AUTHOR;
+    if (
+      !post ||
+      authorDeleted ||
+      (post.status !== PostStatus.PUBLISHED && !isAuthor)
+    ) {
       throw new ResourceNotFoundException('NOT_FOUND', 'Post not found');
     }
 
@@ -334,11 +345,21 @@ export class PostsQueryService {
     posts: readonly Post[],
     viewerId?: string,
   ): Promise<PostResponseDto[]> {
-    const relations = await this.relations.hydrate(posts, viewerId);
-    const reasonTexts = await this.moderationSettings.reasonTexts();
+    const [relations, reasonTexts, appealsByPost] = await Promise.all([
+      this.relations.hydrate(posts, viewerId),
+      this.moderationSettings.reasonTexts(),
+      this.supportSync
+        ? this.supportSync.summarizeAppealsForPosts(posts, viewerId)
+        : Promise.resolve(new Map<string, PostAppealSummaryDto>()),
+    ]);
     return posts.flatMap((post) => {
       const related = relations.get(post.id);
       if (!related) return [];
+      const isAuthor = viewerId !== undefined && post.authorId === viewerId;
+      const adminRemoved =
+        isAuthor &&
+        post.status === PostStatus.REMOVED &&
+        post.removal?.removedByRole === PostRemovalActor.ADMIN;
       return [
         {
           id: post.id,
@@ -353,6 +374,8 @@ export class PostsQueryService {
               ? (reasonTexts.get(rejectedCategory(post.moderation) ?? '') ??
                 null)
               : null,
+          removalReason: adminRemoved ? (post.removal?.reason ?? null) : null,
+          appeal: isAuthor ? (appealsByPost.get(post.id) ?? null) : null,
           body: post.body,
           blog: related.blog,
           publishedAt: post.publishedAt,

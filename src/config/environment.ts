@@ -170,6 +170,9 @@ export class EnvironmentVariables {
   STORAGE_VERIFICATIONS_BUCKET = 'vedora-verifications';
 
   @IsString()
+  STORAGE_SUPPORT_BUCKET = 'vedora-support';
+
+  @IsString()
   STORAGE_WEBHOOK_TOKEN = '';
 
   @Type(() => Number)

@@ -37,6 +37,7 @@ function build(env: Record<string, unknown> = {}) {
       STORAGE_KNOWLEDGE_BUCKET: 'vedora-knowledge',
       STORAGE_PROFILES_BUCKET: 'vedora-profiles',
       STORAGE_VERIFICATIONS_BUCKET: 'vedora-verifications',
+      STORAGE_SUPPORT_BUCKET: 'vedora-support',
       STORAGE_BLOGS_BUCKET: 'vedora-blogs',
       ...env,
     }),

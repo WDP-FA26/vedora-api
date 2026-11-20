@@ -3,7 +3,10 @@ import {
   MessagingEventsService,
   type MessagingSignal,
 } from '../../../src/messaging/messaging-events.service.js';
-import { MessagingEvent, MessagingEventType } from '../../../src/mongo/models.js';
+import {
+  MessagingEvent,
+  MessagingEventType,
+} from '../../../src/mongo/models.js';
 
 interface FakeWatcher {
   closed: boolean;
@@ -147,9 +150,9 @@ describe('MessagingEventsService', () => {
     vi.useFakeTimers();
     const firstWatcher: FakeWatcher = {
       closed: false,
-      tryNext: vi.fn<() => Promise<unknown>>().mockRejectedValue(
-        new Error('not a replica set'),
-      ),
+      tryNext: vi
+        .fn<() => Promise<unknown>>()
+        .mockRejectedValue(new Error('not a replica set')),
       close: vi.fn<() => Promise<void>>().mockResolvedValue(undefined),
     };
     let parkResolve: ((v: unknown) => void) | undefined;
@@ -193,9 +196,9 @@ describe('MessagingEventsService', () => {
     vi.useFakeTimers();
     const failingWatcher: FakeWatcher = {
       closed: false,
-      tryNext: vi.fn<() => Promise<unknown>>().mockRejectedValue(
-        new Error('replica set unavailable'),
-      ),
+      tryNext: vi
+        .fn<() => Promise<unknown>>()
+        .mockRejectedValue(new Error('replica set unavailable')),
       close: vi.fn<() => Promise<void>>().mockResolvedValue(undefined),
     };
     watchMock.mockReturnValue(failingWatcher);

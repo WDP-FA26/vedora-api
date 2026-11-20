@@ -9,7 +9,9 @@ describe('GuestSessionService', () => {
   let service: GuestSessionService;
 
   beforeEach(() => {
-    jwtService = new JwtService({ secret: 'test-guest-hmac-secret-key-32chars' });
+    jwtService = new JwtService({
+      secret: 'test-guest-hmac-secret-key-32chars',
+    });
     service = new GuestSessionService(jwtService);
   });
 
@@ -25,9 +27,11 @@ describe('GuestSessionService', () => {
       /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i,
     );
 
-    const decoded = jwtService.decode<{ aud?: string; exp?: number; iat?: number }>(
-      token,
-    );
+    const decoded = jwtService.decode<{
+      aud?: string;
+      exp?: number;
+      iat?: number;
+    }>(token);
     expect(decoded.aud).toBe('guest');
     expect((decoded.exp ?? 0) - (decoded.iat ?? 0)).toBe(GUEST_SESSION_TTL_SEC);
   });

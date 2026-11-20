@@ -6,10 +6,7 @@ import { UnauthenticatedException } from '../../../src/common/exceptions/unauthe
 import { MongoModule } from '../../../src/mongo/mongo.module.js';
 import { MongoService } from '../../../src/mongo/mongo.service.js';
 import { RecipeRatingsService } from '../../../src/recipes/recipe-ratings.service.js';
-import {
-  createRecipe,
-  createUser,
-} from '../../support/fixtures.js';
+import { createRecipe, createUser } from '../../support/fixtures.js';
 import {
   createTestMongoUrl,
   dropTestDatabase,
@@ -97,9 +94,7 @@ describe('RecipeRatingsService', () => {
   });
 
   it('excludes unverified users from aggregate and prevents unverified users from setting a score while allowing removal', async () => {
-    await expect(
-      service.set(RECIPE_ID, UNVERIFIED_ID, 5),
-    ).rejects.toSatisfy(
+    await expect(service.set(RECIPE_ID, UNVERIFIED_ID, 5)).rejects.toSatisfy(
       (err: unknown) =>
         err instanceof AccessDeniedException &&
         err.code === 'EMAIL_NOT_VERIFIED',

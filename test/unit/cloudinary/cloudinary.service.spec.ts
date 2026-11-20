@@ -119,9 +119,9 @@ describe('CloudinaryService', () => {
           'https://res.cloudinary.com/demo/image/upload/vedora/blog-videos/a.png',
         ),
       ).toBe(false);
-      expect(createService({ CLOUDINARY_CLOUD_NAME: '' }).isBlogVideoUrl(url)).toBe(
-        false,
-      );
+      expect(
+        createService({ CLOUDINARY_CLOUD_NAME: '' }).isBlogVideoUrl(url),
+      ).toBe(false);
     });
 
     it('signs an image upload restricted to image formats', () => {
@@ -163,11 +163,7 @@ describe('CloudinaryService', () => {
         const now = String(Math.floor(Date.now() / 1000));
         const body = '{"notification_type":"upload"}';
         expect(
-          service.verifyNotification(
-            body,
-            now,
-            sign(body, now, algorithm),
-          ),
+          service.verifyNotification(body, now, sign(body, now, algorithm)),
         ).toBe(true);
       },
     );
@@ -202,7 +198,11 @@ describe('CloudinaryService', () => {
       const service = createService();
       const now = String(Math.floor(Date.now() / 1000));
       expect(
-        service.verifyNotification('{}', now, sign('{}', now, 'sha256', 'other')),
+        service.verifyNotification(
+          '{}',
+          now,
+          sign('{}', now, 'sha256', 'other'),
+        ),
       ).toBe(false);
       expect(service.verifyNotification('{}', now, 'short')).toBe(false);
     });
@@ -244,7 +244,9 @@ describe('CloudinaryService', () => {
         error: { http_code: 404 },
       });
 
-      await expect(service.findVideo('vedora/videos/missing')).resolves.toBeNull();
+      await expect(
+        service.findVideo('vedora/videos/missing'),
+      ).resolves.toBeNull();
     });
 
     it('rethrows non-404 errors from findVideo', async () => {

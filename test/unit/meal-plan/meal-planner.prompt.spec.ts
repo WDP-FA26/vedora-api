@@ -35,6 +35,7 @@ describe('meal-planner prompt & refusals', () => {
       ingredients: [],
       groups: [],
       liked: [],
+      terms: [],
     };
 
     const output = plannerInstructions(restrictions, emptyPlan());
@@ -50,6 +51,7 @@ describe('meal-planner prompt & refusals', () => {
       ingredients: [],
       groups: [],
       liked: [],
+      terms: [],
     };
 
     const output = plannerInstructions(restrictions, emptyPlan());
@@ -71,6 +73,7 @@ describe('meal-planner prompt & refusals', () => {
       ingredients: [],
       groups: [],
       liked: [],
+      terms: [],
     };
     const output = plannerInstructions(restrictions, {
       ...emptyPlan(),
@@ -90,6 +93,7 @@ describe('meal-planner prompt & refusals', () => {
       ingredients: [],
       groups: [],
       liked: [],
+      terms: [],
     };
     const plan = { ...emptyPlan(), weekStart: '2026-11-09', editable: false };
 
@@ -105,6 +109,7 @@ describe('meal-planner prompt & refusals', () => {
       ingredients: [],
       groups: [],
       liked: [],
+      terms: [],
     };
     const output = plannerInstructions(restrictions, {
       ...emptyPlan(),
@@ -122,6 +127,7 @@ describe('meal-planner prompt & refusals', () => {
       ingredients: [{ id: 'ing-1', name: 'Hành' }],
       groups: [{ id: 'grp-1', name: 'Ngũ vị tân' }],
       liked: [{ id: 'ing-2', name: 'Đậu hũ' }],
+      terms: ['tôm khô'],
     };
     const plan = emptyPlan();
     plan.days[0].sections[1].recipes.push({
@@ -161,6 +167,7 @@ describe('meal-planner prompt & refusals', () => {
       ingredients: [],
       groups: [],
       liked: [],
+      terms: [],
     };
     const output = plannerInstructions(restrictions, emptyPlan(), {
       weekStart: '2026-11-16',

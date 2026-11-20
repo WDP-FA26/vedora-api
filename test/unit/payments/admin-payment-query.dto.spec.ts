@@ -98,8 +98,12 @@ describe('AdminPaymentQueryDto and related DTOs', () => {
         { limit: '101' },
         { limit: '2.5' },
       ]) {
-        expect((await errorsFor(AdminPaymentPageDto, bad)).errors.length).toBeGreaterThan(0);
-        expect((await errorsFor(AdminPaymentListDto, bad)).errors.length).toBeGreaterThan(0);
+        expect(
+          (await errorsFor(AdminPaymentPageDto, bad)).errors.length,
+        ).toBeGreaterThan(0);
+        expect(
+          (await errorsFor(AdminPaymentListDto, bad)).errors.length,
+        ).toBeGreaterThan(0);
       }
     });
   });

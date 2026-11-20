@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import {
+  PostRemovalActor,
   PostReportReason,
   PostReportStatus,
   PostStatus,
@@ -198,6 +199,40 @@ export class PostModeration {
 export const PostModerationSchema =
   SchemaFactory.createForClass(PostModeration);
 
+@Schema({ _id: false })
+export class PostRemoval {
+  @Prop({ type: String, required: true })
+  removedById!: string;
+
+  @Prop({
+    type: String,
+    enum: Object.values(PostRemovalActor),
+    required: true,
+  })
+  removedByRole!: PostRemovalActor;
+
+  @Prop({ type: Date, required: true })
+  removedAt!: Date;
+
+  @Prop({
+    type: String,
+    enum: Object.values(PostStatus),
+    required: true,
+  })
+  previousStatus!: PostStatus;
+
+  @Prop({ type: String, default: null })
+  reason!: string | null;
+
+  @Prop({ type: String, default: null })
+  restoredById!: string | null;
+
+  @Prop({ type: Date, default: null })
+  restoredAt!: Date | null;
+}
+
+export const PostRemovalSchema = SchemaFactory.createForClass(PostRemoval);
+
 @Schema(collectionSchema('posts'))
 export class Post extends Identified {
   @Prop({ type: String, default: () => randomUUID() })
@@ -246,6 +281,9 @@ export class Post extends Identified {
 
   @Prop({ type: PostModerationSchema, default: null })
   moderation!: PostModeration | null;
+
+  @Prop({ type: PostRemovalSchema, default: null })
+  removal?: PostRemoval | null;
 
   @Prop({ type: Date, default: null })
   searchIndexedAt!: Date | null;

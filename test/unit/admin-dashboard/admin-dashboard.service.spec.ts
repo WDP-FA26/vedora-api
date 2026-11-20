@@ -15,7 +15,11 @@ import {
 } from '../../../src/mongo/models.js';
 import { MongoModule } from '../../../src/mongo/mongo.module.js';
 import { MongoService } from '../../../src/mongo/mongo.service.js';
-import { createPost, createRecipe, createUser } from '../../support/fixtures.js';
+import {
+  createPost,
+  createRecipe,
+  createUser,
+} from '../../support/fixtures.js';
 import {
   createTestMongoUrl,
   dropTestDatabase,
@@ -191,7 +195,9 @@ describe('AdminDashboardService', () => {
         dismissedReports: 0,
       },
     ]);
-    expect(result.unavailableMetrics).toEqual([...UNAVAILABLE_DASHBOARD_METRICS]);
+    expect(result.unavailableMetrics).toEqual([
+      ...UNAVAILABLE_DASHBOARD_METRICS,
+    ]);
   });
 
   it('zero-fills empty date ranges while preserving snapshots', async () => {

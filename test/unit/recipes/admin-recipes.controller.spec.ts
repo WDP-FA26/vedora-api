@@ -63,9 +63,9 @@ describe('AdminRecipesController', () => {
     const ids = ['a1a2d3e4-0000-4000-8000-000000000001'];
     rules.findConflicts.mockResolvedValue([]);
 
-    await expect(
-      controller.conflicts({ ingredientIds: ids }),
-    ).resolves.toEqual([]);
+    await expect(controller.conflicts({ ingredientIds: ids })).resolves.toEqual(
+      [],
+    );
     expect(rules.findConflicts).toHaveBeenCalledWith(ids);
   });
 

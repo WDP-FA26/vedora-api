@@ -5,7 +5,11 @@ import type {
   OptionalAuthenticatedRequest,
 } from '../../../../src/auth-core/auth.types.js';
 import type { CloudinaryService } from '../../../../src/cloudinary/cloudinary.service.js';
-import { PostStatus, PostType, UserRole } from '../../../../src/mongo/models.js';
+import {
+  PostStatus,
+  PostType,
+  UserRole,
+} from '../../../../src/mongo/models.js';
 import type { BlogImagesService } from '../../../../src/posts/blogs/blog-images.service.js';
 import { BlogsController } from '../../../../src/posts/blogs/blogs.controller.js';
 import type { BlogsService } from '../../../../src/posts/blogs/blogs.service.js';
@@ -44,8 +48,12 @@ describe('BlogsController', () => {
 
   it('delegates create, createImageUpload, and createVideoUpload', async () => {
     const detail = { id: blogId } as BlogDetailDto;
-    const imgUpload = { url: 'https://cdn.example.com/a.jpg' } as BlogImageUploadDto;
-    const vidUpload = { url: 'https://cdn.example.com/a.mp4' } as BlogVideoUploadDto;
+    const imgUpload = {
+      url: 'https://cdn.example.com/a.jpg',
+    } as BlogImageUploadDto;
+    const vidUpload = {
+      url: 'https://cdn.example.com/a.mp4',
+    } as BlogVideoUploadDto;
     blogs.create.mockResolvedValue(detail);
     images.createUpload.mockResolvedValue(imgUpload);
     cloudinary.signBlogVideoUpload.mockReturnValue(vidUpload);

@@ -9,6 +9,7 @@ import { PaymentsModule } from './payments/payments.module.js';
 import { AppController } from './app.controller.js';
 import { PublicConfigController } from './config/public-config.controller.js';
 import { AdminDashboardModule } from './admin-dashboard/admin-dashboard.module.js';
+import { SupportModule } from './support/support.module.js';
 import { AiModule } from './ai/ai.module.js';
 import { AuthCoreModule } from './auth-core/auth-core.module.js';
 import { AuthModule } from './auth/auth.module.js';
@@ -63,6 +64,7 @@ import { VerificationModule } from './verification/verification.module.js';
     PostInteractionsModule,
     BlogsModule,
     PostsAdminModule,
+    SupportModule,
     NotificationsModule,
     MessagingModule,
     ModerationModule,

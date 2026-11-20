@@ -20,7 +20,7 @@ describe('DietaryController', () => {
 
   it('delegates options, find, and replace to DietaryService', async () => {
     const opts = { ingredients: [], groups: [] };
-    const restrictions = { ingredients: [], groups: [], liked: [] };
+    const restrictions = { ingredients: [], groups: [], liked: [], terms: [] };
     const dto = { ingredientIds: [], groupIds: [], likedIngredientIds: [] };
 
     dietary.options.mockResolvedValue(opts);

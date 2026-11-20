@@ -84,7 +84,10 @@ describe('NutritionChatController', () => {
         expiresIn: GUEST_SESSION_TTL_SEC,
         remaining: 5,
       });
-      expect(quota.remaining).toHaveBeenCalledWith('guest-uuid', '198.51.100.1');
+      expect(quota.remaining).toHaveBeenCalledWith(
+        'guest-uuid',
+        '198.51.100.1',
+      );
     });
 
     it('returns remaining=0 if verified guestId is unexpectedly null', async () => {

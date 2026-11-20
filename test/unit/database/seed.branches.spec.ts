@@ -65,8 +65,8 @@ describe('seedDatabase edge branches', () => {
       .findOne({ email: 'admin@vedora.local' })
       .exec();
     expect(admin?.fullName).toBe('Vedora Admin');
-    expect(
-      await compare('StrongPassword123!', admin?.passwordHash ?? ''),
-    ).toBe(true);
+    expect(await compare('StrongPassword123!', admin?.passwordHash ?? '')).toBe(
+      true,
+    );
   });
 });

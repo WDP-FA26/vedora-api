@@ -91,7 +91,8 @@ describe('Post reads and admin posts (e2e)', () => {
       .delete(`/api/v1/admin/posts/${post.id}`)
       .auth(adminToken, { type: 'bearer' })
       .expect(204);
-    expect(await posts().findOne({ _id: post.id }).exec()).toBeNull();
+    const saved = await posts().findOne({ _id: post.id }).exec();
+    expect(saved?.status).toBe(PostStatus.REMOVED);
     expect(searchIndex.remove).toHaveBeenCalledWith(post.id);
   });
 

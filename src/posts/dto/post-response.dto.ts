@@ -1,8 +1,9 @@
-import { ApiProperty } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { PostStatus, PostType } from '../../mongo/models.js';
 import { CursorPaginatedResponseDto } from '../../common/pagination/index.js';
 import { MediaResponseDto } from '../../media/dto/media-response.dto.js';
 import { PostAuthorDto } from '../../common/dto/post-author.dto.js';
+import { PostAppealSummaryDto } from '../../support/dto/post-appeal-summary.dto.js';
 import { BlogSummaryDto } from './blog-summary.dto.js';
 
 export class PostResponseDto {
@@ -34,6 +35,22 @@ export class PostResponseDto {
       '`moderationVerdict` worded for the author, e.g. "bạo lực hoặc đe dọa". Null if the category no longer exists',
   })
   moderationReason!: string | null;
+
+  @ApiPropertyOptional({
+    nullable: true,
+    type: String,
+    description:
+      'Reason an admin removed this post, shown only to the author when status is REMOVED',
+  })
+  removalReason?: string | null;
+
+  @ApiPropertyOptional({
+    nullable: true,
+    type: PostAppealSummaryDto,
+    description:
+      'Appeal eligibility and active/latest ticket summary; shown only to the author for REJECTED or admin-REMOVED posts',
+  })
+  appeal?: PostAppealSummaryDto | null;
 
   @ApiProperty({ nullable: true, type: String })
   body!: string | null;

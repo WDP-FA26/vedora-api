@@ -356,15 +356,13 @@ describe('Blog lifecycle: publish, edit, hide, delete (e2e)', () => {
         authorToken,
         request(server()).delete(`/api/v1/blogs/${blog.id}`),
       ).expect(204);
-      for (const name of [
-        PostComment.name,
-        PostLike.name,
-        PostBookmark.name,
-        Notification.name,
-      ]) {
-        const left = await model(name).countDocuments({ postId: blog.id });
-        if (left !== 0) throw new Error(`${name} still has ${left} rows`);
-      }
+      const saved = await model(Post.name)
+        .findById(blog.id)
+        .select('status')
+        .exec();
+      expect((saved as { status: PostStatus } | null)?.status).toBe(
+        PostStatus.REMOVED,
+      );
       expect(await model(Recipe.name).countDocuments({ _id: recipe.id })).toBe(
         1,
       );
@@ -389,7 +387,11 @@ describe('Blog lifecycle: publish, edit, hide, delete (e2e)', () => {
           request(server()).delete(`/api/v1/blogs/${id}`),
         ).expect(204);
       }
-      expect(await model(Post.name).countDocuments({})).toBe(0);
+      expect(
+        await model(Post.name).countDocuments({
+          status: { $ne: PostStatus.REMOVED },
+        }),
+      ).toBe(0);
     });
 
     it('lets an admin delete a blog through the admin route', async () => {
@@ -398,7 +400,13 @@ describe('Blog lifecycle: publish, edit, hide, delete (e2e)', () => {
         adminToken,
         request(server()).delete(`/api/v1/admin/posts/${blog.id}`),
       ).expect(204);
-      expect(await model(Post.name).countDocuments({ _id: blog.id })).toBe(0);
+      const saved = await model(Post.name)
+        .findById(blog.id)
+        .select('status')
+        .exec();
+      expect((saved as { status: PostStatus } | null)?.status).toBe(
+        PostStatus.REMOVED,
+      );
     });
   });
 

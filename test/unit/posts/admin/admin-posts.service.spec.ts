@@ -23,6 +23,7 @@ import {
   type Post,
   PostComment,
   PostLike,
+  PostRemovalActor,
   PostStatus,
 } from '../../../../src/mongo/models.js';
 import { MongoModule } from '../../../../src/mongo/mongo.module.js';
@@ -30,7 +31,10 @@ import { MongoService } from '../../../../src/mongo/mongo.service.js';
 import { AdminPostsService } from '../../../../src/posts/admin/admin-posts.service.js';
 import { PostRelationsService } from '../../../../src/posts/post-relations.service.js';
 import { PostReportsService } from '../../../../src/posts/interactions/post-reports.service.js';
-import { PostsService } from '../../../../src/posts/posts.service.js';
+import { CaptionService } from '../../../../src/media/captions/caption.service.js';
+import { NotificationsService } from '../../../../src/notifications/notifications.service.js';
+import { PostSearchIndexService } from '../../../../src/posts/search/post-search-index.service.js';
+import { SupportSyncService } from '../../../../src/support/support-sync.service.js';
 
 describe('AdminPostsService', () => {
   let app: INestApplication;
@@ -38,14 +42,14 @@ describe('AdminPostsService', () => {
   let service: AdminPostsService;
   let mediaService: DeepMockProxy<MediaService>;
   let postModeration: DeepMockProxy<PostModerationService>;
-  let postsService: DeepMockProxy<PostsService>;
+  let searchIndex: DeepMockProxy<PostSearchIndexService>;
   let reports: DeepMockProxy<PostReportsService>;
   let post: Post;
 
   beforeAll(async () => {
     mediaService = mockDeep<MediaService>();
     postModeration = mockDeep<PostModerationService>();
-    postsService = mockDeep<PostsService>();
+    searchIndex = mockDeep<PostSearchIndexService>();
     reports = mockDeep<PostReportsService>();
     mediaService.toResponse.mockImplementation((item) => ({
       id: item.id,
@@ -76,8 +80,14 @@ describe('AdminPostsService', () => {
           provide: PostModerationService,
           useValue: postModeration,
         },
-        { provide: PostsService, useValue: postsService },
         { provide: PostReportsService, useValue: reports },
+        { provide: PostSearchIndexService, useValue: searchIndex },
+        { provide: CaptionService, useValue: mockDeep<CaptionService>() },
+        {
+          provide: NotificationsService,
+          useValue: mockDeep<NotificationsService>(),
+        },
+        SupportSyncService,
       ],
     }).compile();
     app = moduleRef.createNestApplication();
@@ -197,7 +207,9 @@ describe('AdminPostsService', () => {
     );
   });
 
-  it('reads who to notify before deleting a post, then notifies them', async () => {
+  it('reads who to notify before soft-deleting a post, then notifies them', async () => {
+    const author = await createUser(db);
+    const target = await createPost(db, { authorId: author.id });
     const notice = {
       authorId: 'author',
       reporterIds: ['reporter'],
@@ -209,8 +221,8 @@ describe('AdminPostsService', () => {
       order.push('notice');
       return Promise.resolve(notice);
     });
-    postsService.removeAsAdmin.mockImplementation(() => {
-      order.push('delete');
+    searchIndex.remove.mockImplementation(() => {
+      order.push('unindex');
       return Promise.resolve();
     });
     reports.announceRemoval.mockImplementation(() => {
@@ -218,9 +230,23 @@ describe('AdminPostsService', () => {
       return Promise.resolve();
     });
 
-    await service.remove(post.id, 'admin');
+    await service.remove(target.id, 'admin', '  Spam  ');
 
-    expect(order).toEqual(['notice', 'delete', 'announce']);
-    expect(reports.announceRemoval).toHaveBeenCalledWith(notice, 'admin');
+    expect(order).toEqual(['notice', 'unindex', 'announce']);
+    expect(reports.announceRemoval).toHaveBeenCalledWith(
+      notice,
+      'admin',
+      'Spam',
+    );
+    const removed = await db.connection
+      .model<Post>('Post')
+      .findOne({ _id: target.id })
+      .exec();
+    expect(removed?.status).toBe(PostStatus.REMOVED);
+    expect(removed?.removal?.removedByRole).toBe(PostRemovalActor.ADMIN);
+    expect(removed?.removal?.reason).toBe('Spam');
+    await expect(service.remove(target.id, 'admin')).rejects.toBeInstanceOf(
+      StateConflictException,
+    );
   });
 });

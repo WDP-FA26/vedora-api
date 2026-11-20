@@ -38,7 +38,11 @@ describe('AdminReportsController', () => {
     reports.review.mockResolvedValue(dto);
 
     await expect(
-      controller.findAll({ page: 1, limit: 20, status: PostReportStatus.PENDING }),
+      controller.findAll({
+        page: 1,
+        limit: 20,
+        status: PostReportStatus.PENDING,
+      }),
     ).resolves.toBe(page);
     expect(reports.findAll).toHaveBeenCalledWith({
       page: 1,
@@ -47,7 +51,9 @@ describe('AdminReportsController', () => {
     });
 
     await expect(
-      controller.review(adminReq, reportId, { status: PostReportStatus.RESOLVED }),
+      controller.review(adminReq, reportId, {
+        status: PostReportStatus.RESOLVED,
+      }),
     ).resolves.toBe(dto);
     expect(reports.review).toHaveBeenCalledWith(
       reportId,

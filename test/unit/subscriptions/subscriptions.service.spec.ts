@@ -81,7 +81,10 @@ describe('SubscriptionsService', () => {
   });
 
   it('returns the Bangkok-day FREE period when the user has no succeeded intents', async () => {
-    await seedIntent({ status: PaymentStatus.PENDING, activeIntentKey: USER_ID });
+    await seedIntent({
+      status: PaymentStatus.PENDING,
+      activeIntentKey: USER_ID,
+    });
     await seedIntent({ status: PaymentStatus.CANCELLED });
 
     expect(await service.period(USER_ID, NOW)).toEqual({

@@ -5,6 +5,7 @@ import {
   EVIDENCE_STATUSES,
   type EvidenceField,
   type EvidenceStatus,
+  PostRemovalActor,
   PostStatus,
   PostType,
   REVIEW_DECISIONS,
@@ -201,6 +202,39 @@ export class ModeratePostDto {
   note?: string;
 }
 
+export class AdminPostRemovalDto {
+  @ApiProperty({ format: 'uuid' }) removedById!: string;
+  @ApiProperty({ enum: PostRemovalActor }) removedByRole!: PostRemovalActor;
+  @ApiProperty() removedAt!: Date;
+  @ApiProperty({ enum: PostStatus }) previousStatus!: PostStatus;
+  @ApiProperty({ nullable: true, type: String }) reason!: string | null;
+  @ApiProperty({ nullable: true, type: String }) restoredById!: string | null;
+  @ApiProperty({ nullable: true, type: Date }) restoredAt!: Date | null;
+}
+
+export class RemovePostDto {
+  @ApiPropertyOptional({
+    maxLength: runtimeConfig.POST_REMOVAL_REASON_MAX_LENGTH,
+    description:
+      'Optional reason for removing the post; defaults to the top report reason when omitted',
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(runtimeConfig.POST_REMOVAL_REASON_MAX_LENGTH)
+  reason?: string;
+}
+
+export class RestorePostDto {
+  @ApiPropertyOptional({
+    maxLength: runtimeConfig.POST_REVIEW_NOTE_MAX_LENGTH,
+    description: 'Optional note shown to the author when the post is restored',
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(runtimeConfig.POST_REVIEW_NOTE_MAX_LENGTH)
+  note?: string;
+}
+
 export class AdminPostDto {
   @ApiProperty({ format: 'uuid' }) id!: string;
   @ApiProperty({ enum: PostType }) type!: PostType;
@@ -222,4 +256,11 @@ export class AdminPostDto {
     description: 'Result of the automated content check, null before it ran',
   })
   moderation!: AdminModerationDto | null;
+  @ApiProperty({
+    nullable: true,
+    type: AdminPostRemovalDto,
+    description:
+      'Soft-delete metadata when removed (or previously removed and restored); null otherwise',
+  })
+  removal!: AdminPostRemovalDto | null;
 }

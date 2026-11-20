@@ -421,23 +421,17 @@ describe('Post lifecycle: create, edit, delete and what hangs off a post (e2e)',
 
       await remove(created.id).expect(204);
 
-      for (const name of [
-        PostComment.name,
-        PostLike.name,
-        PostRepost.name,
-        PostBookmark.name,
-        PostReport.name,
-        Notification.name,
-      ]) {
-        const left = await model(name).countDocuments({ postId: created.id });
-        if (left !== 0) throw new Error(`${name} still has ${left} rows`);
-      }
-      expect(await posts().findById(created.id).exec()).toBe(null);
+      const saved = await posts().findById(created.id).exec();
+      expect(saved?.status).toBe(PostStatus.REMOVED);
+      // Related rows stay attached so an admin can restore the post if needed.
+      expect(
+        await model(PostComment.name).countDocuments({ postId: created.id }),
+      ).toBe(1);
       await request(server()).get(base).expect(404);
       expect(await publicList()).not.toContain(created.id);
     });
 
-    it('discards the post videos', async () => {
+    it('keeps post videos attached on soft-delete so the post can be restored', async () => {
       const upload = await createMedia(e2e.mongo, {
         ownerId: author.id,
         status: MediaStatus.READY,
@@ -451,9 +445,8 @@ describe('Post lifecycle: create, edit, delete and what hangs off a post (e2e)',
       ).body as PostBody;
       await remove(created.id).expect(204);
       const row = await media().findById(upload.id).exec();
-      expect(
-        row === null || (row.postId === null && row.discardedAt !== null),
-      ).toBe(true);
+      expect(row?.postId).toBe(created.id);
+      expect(row?.discardedAt).toBeNull();
     });
 
     it('deletes a post that is still being processed, and one held or rejected', async () => {
@@ -481,7 +474,9 @@ describe('Post lifecycle: create, edit, delete and what hangs off a post (e2e)',
       ).body as PostBody;
       for (const id of [processing.id, held.id, rejected.id]) {
         await remove(id).expect(204);
-        expect(await posts().findById(id).exec()).toBe(null);
+        expect((await posts().findById(id).exec())?.status).toBe(
+          PostStatus.REMOVED,
+        );
       }
     });
 
@@ -489,7 +484,9 @@ describe('Post lifecycle: create, edit, delete and what hangs off a post (e2e)',
       const created = await publish();
       await remove(created.id, strangerToken).expect(403);
       await request(server()).delete(`/api/v1/posts/${created.id}`).expect(401);
-      expect(await posts().findById(created.id).exec()).not.toBe(null);
+      expect((await posts().findById(created.id).exec())?.status).toBe(
+        PostStatus.PUBLISHED,
+      );
 
       await remove(created.id).expect(204);
       await remove(created.id).expect(404);
@@ -499,7 +496,9 @@ describe('Post lifecycle: create, edit, delete and what hangs off a post (e2e)',
         adminToken,
         request(server()).delete(`/api/v1/admin/posts/${another.id}`),
       ).expect(204);
-      expect(await posts().findById(another.id).exec()).toBe(null);
+      expect((await posts().findById(another.id).exec())?.status).toBe(
+        PostStatus.REMOVED,
+      );
     });
   });
 

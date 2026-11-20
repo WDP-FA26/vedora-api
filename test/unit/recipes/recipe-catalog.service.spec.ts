@@ -266,7 +266,12 @@ describe('RecipeCatalogService', () => {
   it('returns recipe detail with favorite status and throws 404 when not found', async () => {
     const recipe = await createRecipe(
       mongo,
-      { title: 'Canh nấm', prepMinutes: 5, cookMinutes: 10, postId: DRAFT_POST },
+      {
+        title: 'Canh nấm',
+        prepMinutes: 5,
+        cookMinutes: 10,
+        postId: DRAFT_POST,
+      },
       [MUSHROOM_ID],
     );
     await favorites().create({

@@ -166,10 +166,9 @@ describe('TranscriptionService', () => {
 
     it('throws ExternalServiceException with error details on non-OK HTTP responses', async () => {
       fetchSpy.mockResolvedValue(
-        new Response(
-          JSON.stringify({ error: { message: 'rate limited' } }),
-          { status: 429 },
-        ),
+        new Response(JSON.stringify({ error: { message: 'rate limited' } }), {
+          status: 429,
+        }),
       );
 
       await expect(

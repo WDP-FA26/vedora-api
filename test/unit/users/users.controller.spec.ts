@@ -86,9 +86,7 @@ describe('UsersController', () => {
     const dto = { fullName: 'Updated Name' };
     usersService.update.mockResolvedValue(user);
 
-    await expect(controller.update(request, targetId, dto)).resolves.toBe(
-      user,
-    );
+    await expect(controller.update(request, targetId, dto)).resolves.toBe(user);
     expect(usersService.update).toHaveBeenCalledExactlyOnceWith(
       targetId,
       dto,
@@ -122,9 +120,9 @@ describe('UsersController', () => {
     };
     usersService.updateStatus.mockResolvedValue(user);
 
-    await expect(
-      controller.updateStatus(request, targetId, dto),
-    ).resolves.toBe(user);
+    await expect(controller.updateStatus(request, targetId, dto)).resolves.toBe(
+      user,
+    );
     expect(usersService.updateStatus).toHaveBeenCalledExactlyOnceWith(
       targetId,
       dto,

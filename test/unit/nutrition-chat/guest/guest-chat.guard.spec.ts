@@ -10,7 +10,10 @@ import { GuestChatGuard } from '../../../../src/nutrition-chat/guest/guest-chat.
 import type { GuestQuotaService } from '../../../../src/nutrition-chat/guest/guest-quota.service.js';
 import type { GuestSessionService } from '../../../../src/nutrition-chat/guest/guest-session.service.js';
 
-function contextWithAuth(authorization?: string, body?: unknown): ExecutionContext {
+function contextWithAuth(
+  authorization?: string,
+  body?: unknown,
+): ExecutionContext {
   const request = { headers: { authorization }, body } as unknown as Request;
   return {
     switchToHttp: () => ({
@@ -107,7 +110,9 @@ describe('GuestChatGuard', () => {
     quota.consume.mockReturnValue('ok');
 
     await expect(
-      guard.canActivate(contextWithAuth('Bearer valid-token', { messages: [] })),
+      guard.canActivate(
+        contextWithAuth('Bearer valid-token', { messages: [] }),
+      ),
     ).resolves.toBe(true);
     expect(quota.consume).not.toHaveBeenCalled();
 

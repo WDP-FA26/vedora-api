@@ -338,7 +338,8 @@ describe('Posts DTOs', () => {
         title: 'Title',
         recipeIds: Array.from(
           { length: MAX_BLOG_RECIPES + 1 },
-          (_, i) => `11111111-1111-4111-8111-1111111111${String(i).padStart(2, '0')}`,
+          (_, i) =>
+            `11111111-1111-4111-8111-1111111111${String(i).padStart(2, '0')}`,
         ),
       });
       await expect(validate(tooManyRecipes)).resolves.not.toHaveLength(0);

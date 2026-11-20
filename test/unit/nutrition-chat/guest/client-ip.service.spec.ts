@@ -27,7 +27,9 @@ describe('ClientIpService', () => {
     );
 
     expect(
-      service.of(request({ 'x-forwarded-for': [' 198.51.100.4 ', '10.0.0.1'] })),
+      service.of(
+        request({ 'x-forwarded-for': [' 198.51.100.4 ', '10.0.0.1'] }),
+      ),
     ).toBe('198.51.100.4');
   });
 
@@ -37,9 +39,7 @@ describe('ClientIpService', () => {
     );
 
     expect(service.of(request({}))).toBe('10.0.0.2');
-    expect(service.of(request({ 'cf-connecting-ip': '   ' }))).toBe(
-      '10.0.0.2',
-    );
+    expect(service.of(request({ 'cf-connecting-ip': '   ' }))).toBe('10.0.0.2');
   });
 
   it('returns unknown when both header and socket address are missing', () => {

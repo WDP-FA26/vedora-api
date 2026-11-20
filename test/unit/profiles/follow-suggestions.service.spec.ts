@@ -299,9 +299,9 @@ describe('FollowSuggestionsService', () => {
         new Error('connection lost'),
       );
 
-      await expect(
-        service.dismiss(randomUUID(), randomUUID()),
-      ).rejects.toThrow('connection lost');
+      await expect(service.dismiss(randomUUID(), randomUUID())).rejects.toThrow(
+        'connection lost',
+      );
     });
   });
 
@@ -320,9 +320,9 @@ describe('FollowSuggestionsService', () => {
       });
 
       await service.rebuildAll();
-      expect(
-        await suggestions().countDocuments({ userId: verified.id }),
-      ).toBe(1);
+      expect(await suggestions().countDocuments({ userId: verified.id })).toBe(
+        1,
+      );
       expect(
         await suggestions().countDocuments({ userId: unverified.id }),
       ).toBe(0);

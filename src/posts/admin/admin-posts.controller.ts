@@ -36,6 +36,8 @@ import {
   AdminPostDto,
   AdminPostsQueryDto,
   ModeratePostDto,
+  RemovePostDto,
+  RestorePostDto,
 } from '../dto/admin-post.dto.js';
 import { ErrorBodyDto } from '../../common/exceptions/error-body.dto.js';
 
@@ -106,15 +108,40 @@ export class AdminPostsController {
   @Delete(':id')
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({
-    summary: "Delete anyone's post and its videos",
+    summary: "Soft-delete anyone's post so it can be appealed or restored",
     description:
-      'Notifies the author (POST_REMOVED, with the most reported reason) and everyone who reported the post (REPORTED_POST_REMOVED).',
+      'Marks the post REMOVED, resolves pending reports, and notifies the author (POST_REMOVED with postId) and reporters (REPORTED_POST_REMOVED).',
   })
   @ApiNoContentResponse()
+  @ApiConflictResponse({
+    type: ErrorBodyDto,
+    description: 'The post is already removed',
+  })
   async remove(
     @Req() request: AuthenticatedRequest,
     @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto?: RemovePostDto,
   ): Promise<void> {
-    await this.adminPosts.remove(id, request.user.sub);
+    await this.adminPosts.remove(id, request.user.sub, dto?.reason);
+  }
+
+  @Post(':id/restore')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Restore a soft-deleted post',
+    description:
+      'Returns the post to its status before removal and closes any active appeal ticket as APPROVED.',
+  })
+  @ApiOkResponse({ type: AdminPostDto })
+  @ApiConflictResponse({
+    type: ErrorBodyDto,
+    description: 'The post is not REMOVED',
+  })
+  restore(
+    @Req() request: AuthenticatedRequest,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto?: RestorePostDto,
+  ): Promise<AdminPostDto> {
+    return this.adminPosts.restore(id, request.user.sub, dto?.note);
   }
 }

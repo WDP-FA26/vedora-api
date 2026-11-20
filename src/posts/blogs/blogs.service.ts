@@ -3,6 +3,7 @@ import { Injectable, Optional } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { randomUUID } from 'node:crypto';
 import type { ClientSession, Model } from 'mongoose';
+import { SupportSyncService } from '../../support/support-sync.service.js';
 import { CloudinaryService } from '../../cloudinary/cloudinary.service.js';
 import { extractMarkdownMediaUrls } from '../../common/text.js';
 import {
@@ -10,7 +11,13 @@ import {
   createCursorPaginatedResponse,
 } from '../../common/pagination/index.js';
 import { lockDocument } from '../../mongo/document-lock.js';
-import { Post, PostStatus, PostType, Recipe } from '../../mongo/models.js';
+import {
+  Post,
+  PostRemovalActor,
+  PostStatus,
+  PostType,
+  Recipe,
+} from '../../mongo/models.js';
 import { MongoService } from '../../mongo/mongo.service.js';
 import {
   StorageService,
@@ -24,9 +31,11 @@ import {
 } from '../dto/blog.dto.js';
 import { PostPageDto } from '../dto/post-response.dto.js';
 import { PostsQueryService } from '../posts-query.service.js';
+import { PostSearchIndexService } from '../search/post-search-index.service.js';
 import { PostModerationService } from '../../media/post-moderation.service.js';
 import { InvalidInputException } from '../../common/exceptions/invalid-input.exception.js';
 import { ResourceNotFoundException } from '../../common/exceptions/resource-not-found.exception.js';
+import { StateConflictException } from '../../common/exceptions/state-conflict.exception.js';
 import { coverFromContent } from './blog-cover.js';
 
 @Injectable()
@@ -39,6 +48,8 @@ export class BlogsService {
     @InjectModel(Post.name) private readonly postsModel: Model<Post>,
     @InjectModel(Recipe.name) private readonly recipesModel: Model<Recipe>,
     @Optional() private readonly cloudinary?: CloudinaryService,
+    @Optional() private readonly searchIndex?: PostSearchIndexService,
+    @Optional() private readonly supportSync?: SupportSyncService,
   ) {}
 
   async create(authorId: string, dto: CreateBlogDto): Promise<BlogDetailDto> {
@@ -82,8 +93,12 @@ export class BlogsService {
     const post = await this.postsModel
       .findOne({ _id: id, type: PostType.BLOG })
       .exec();
+    const authorDeleted =
+      post?.status === PostStatus.REMOVED &&
+      post.removal?.removedByRole === PostRemovalActor.AUTHOR;
     if (
       !post ||
+      authorDeleted ||
       (post.status !== PostStatus.PUBLISHED && post.authorId !== viewerId)
     ) {
       throw new ResourceNotFoundException('NOT_FOUND', 'Blog not found');
@@ -98,7 +113,14 @@ export class BlogsService {
     const filter: Record<string, unknown> = {
       authorId,
       type: PostType.BLOG,
-      ...(query.status && { status: query.status }),
+      ...(query.status
+        ? { status: query.status }
+        : {
+            $or: [
+              { status: { $ne: PostStatus.REMOVED } },
+              { 'removal.removedByRole': PostRemovalActor.ADMIN },
+            ],
+          }),
     };
     if (query.cursor) {
       const cursor = await this.postsModel
@@ -142,6 +164,18 @@ export class BlogsService {
       const blog = current.blog;
       if (!blog)
         throw new ResourceNotFoundException('NOT_FOUND', 'Blog not found');
+      if (current.status === PostStatus.REMOVED) {
+        if (current.removal?.removedByRole === PostRemovalActor.AUTHOR) {
+          throw new ResourceNotFoundException('NOT_FOUND', 'Blog not found');
+        }
+        throw new StateConflictException(
+          'POST_NOT_EDITABLE',
+          'A removed blog cannot be edited',
+        );
+      }
+      if (this.supportSync) {
+        await this.supportSync.assertNoActiveAppeal(id, session);
+      }
       const requested = this.requestedStatus(current.status, dto.status);
       const content = dto.content ?? blog.content;
       this.validatePublication(requested, content);
@@ -196,9 +230,39 @@ export class BlogsService {
 
   async remove(id: string, authorId: string): Promise<void> {
     await this.mongo.withTransaction(async (session) => {
-      await this.lockOwned(session, id, authorId);
-      await this.postsModel.deleteOne({ _id: id }, { session }).exec();
+      const current = await this.lockOwned(session, id, authorId);
+      if (current.status === PostStatus.REMOVED) {
+        throw new ResourceNotFoundException('NOT_FOUND', 'Blog not found');
+      }
+      if (this.supportSync) {
+        await this.supportSync.assertNoActiveAppeal(id, session);
+      }
+      const now = new Date();
+      await this.postsModel
+        .updateOne(
+          { _id: id },
+          {
+            $set: {
+              status: PostStatus.REMOVED,
+              removal: {
+                removedById: authorId,
+                removedByRole: PostRemovalActor.AUTHOR,
+                removedAt: now,
+                previousStatus: current.status,
+                reason: null,
+                restoredById: null,
+                restoredAt: null,
+              },
+              searchIndexedAt: null,
+            },
+          },
+          { session },
+        )
+        .exec();
     });
+    if (this.searchIndex) {
+      await this.searchIndex.remove(id);
+    }
   }
 
   private async lockOwned(

@@ -74,8 +74,7 @@ describe('AiCostTransportService', () => {
   });
 
   it('maps OpenRouter URLs to operations and reads model from Request, body string, or fallback', async () => {
-    const okJson = () =>
-      Response.json({ id: 'gen-1', usage: { cost: 0.001 } });
+    const okJson = () => Response.json({ id: 'gen-1', usage: { cost: 0.001 } });
 
     const cases: [string, string][] = [
       ['https://openrouter.ai/api/v1/embeddings', 'EMBEDDING'],
@@ -124,7 +123,9 @@ describe('AiCostTransportService', () => {
     const fetchMock = vi
       .fn<typeof fetch>()
       .mockImplementation(() =>
-        Promise.resolve(Response.json({ id: 'gen-ctx', usage: { cost: 0.005 } })),
+        Promise.resolve(
+          Response.json({ id: 'gen-ctx', usage: { cost: 0.005 } }),
+        ),
       );
     vi.stubGlobal('fetch', fetchMock);
 
@@ -222,13 +223,11 @@ describe('AiCostTransportService', () => {
     const resBroken = await transport.observe(
       'https://openrouter.ai/api/v1/chat/completions',
       undefined,
-      vi
-        .fn<typeof fetch>()
-        .mockResolvedValue(
-          new Response(brokenStream, {
-            headers: { 'content-type': 'text/event-stream' },
-          }),
-        ),
+      vi.fn<typeof fetch>().mockResolvedValue(
+        new Response(brokenStream, {
+          headers: { 'content-type': 'text/event-stream' },
+        }),
+      ),
     );
     await expect(resBroken.text()).rejects.toThrow('stream broken');
     expect((await onlyRow()).status).toBe('FAILED');

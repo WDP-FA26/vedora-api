@@ -87,14 +87,9 @@ describe('conversation-state guardrails', () => {
     ).toHaveLength(0);
 
     expect(() => assertLastMessageFromUser([])).not.toThrow();
+    expect(() => assertLastMessageFromUser([{ role: 'user' }])).not.toThrow();
     expect(() =>
-      assertLastMessageFromUser([{ role: 'user' }]),
-    ).not.toThrow();
-    expect(() =>
-      assertLastMessageFromUser([
-        { role: 'user' },
-        { role: 'assistant' },
-      ]),
+      assertLastMessageFromUser([{ role: 'user' }, { role: 'assistant' }]),
     ).toThrow(InvalidInputException);
   });
 });

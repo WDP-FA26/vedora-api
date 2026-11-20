@@ -217,7 +217,9 @@ describe('MessagingController', () => {
     const conv = { id: convId } as unknown as ConversationDto;
     const msgPage = { items: [], nextCursor: null } as MessagePageDto;
     const contact = { conversationId: null } as unknown as MessagingContactDto;
-    const sent = { conversationId: convId } as unknown as SendMessageResponseDto;
+    const sent = {
+      conversationId: convId,
+    } as unknown as SendMessageResponseDto;
     const readRes: ConversationReadDto = {
       conversationId: convId,
       readSequence: 2,

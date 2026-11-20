@@ -164,9 +164,7 @@ describe('RecipesService', () => {
       service.create(ADMIN_ID, {
         title: 'Sai nguyên liệu',
         servings: 1,
-        ingredients: [
-          { ingredientId: 'a1a2d3e4-0000-4000-8000-000000000099' },
-        ],
+        ingredients: [{ ingredientId: 'a1a2d3e4-0000-4000-8000-000000000099' }],
         steps: ['Nấu'],
       }),
     ).rejects.toSatisfy(

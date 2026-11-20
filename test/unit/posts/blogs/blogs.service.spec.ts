@@ -5,7 +5,11 @@ import { Test } from '@nestjs/testing';
 import type { Model } from 'mongoose';
 import { type DeepMockProxy, mockDeep } from 'vitest-mock-extended';
 import { ResourceNotFoundException } from '../../../../src/common/exceptions/resource-not-found.exception.js';
-import { createPost, createRecipe, createUser } from '../../../support/fixtures.js';
+import {
+  createPost,
+  createRecipe,
+  createUser,
+} from '../../../support/fixtures.js';
 import {
   createTestMongoUrl,
   dropTestDatabase,
@@ -66,7 +70,9 @@ describe('BlogsService covers', () => {
     );
     cloudinary = mockDeep<CloudinaryService>();
     cloudinary.isBlogVideoUrl.mockImplementation((url) =>
-      url.startsWith('https://res.cloudinary.com/demo/video/upload/vedora/blog-videos/'),
+      url.startsWith(
+        'https://res.cloudinary.com/demo/video/upload/vedora/blog-videos/',
+      ),
     );
     const posts = mockDeep<PostsQueryService>();
     posts.toResponses.mockResolvedValue([{}] as never);
@@ -122,15 +128,18 @@ describe('BlogsService covers', () => {
     ['external https link', 'https://cdn.example.com/pho.jpg'],
     ['plain http elsewhere', 'http://cdn.example.com/pho.jpg'],
     ['https without a public host', 'https://localhost/pho.jpg'],
-  ])('still refuses a sent cover that is %s, before writing', async (_case, url) => {
-    const error = await create('Nội dung.', url).catch(
-      (caught: unknown) => caught,
-    );
+  ])(
+    'still refuses a sent cover that is %s, before writing',
+    async (_case, url) => {
+      const error = await create('Nội dung.', url).catch(
+        (caught: unknown) => caught,
+      );
 
-    expect(error).toBeInstanceOf(InvalidInputException);
-    expect(error).toMatchObject({ code: 'BLOG_COVER_NOT_ALLOWED' });
-    expect(await stored()).toEqual([]);
-  });
+      expect(error).toBeInstanceOf(InvalidInputException);
+      expect(error).toMatchObject({ code: 'BLOG_COVER_NOT_ALLOWED' });
+      expect(await stored()).toEqual([]);
+    },
+  );
 
   it('follows the content when the first image is replaced', async () => {
     await create(image(`${STORAGE}/blogs/user/old.jpg`));
@@ -508,6 +517,11 @@ describe('BlogsService lifecycle', () => {
     );
 
     await blogs.remove(draft.id, authorId);
-    expect(await postsModel.findOne({ _id: draft.id }).exec()).toBeNull();
+    const removed = await postsModel.findOne({ _id: draft.id }).exec();
+    expect(removed?.status).toBe(PostStatus.REMOVED);
+    expect(removed?.removal?.previousStatus).toBe(PostStatus.DRAFT);
+    await expect(blogs.remove(draft.id, authorId)).rejects.toBeInstanceOf(
+      ResourceNotFoundException,
+    );
   });
 });

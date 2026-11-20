@@ -26,9 +26,7 @@ describe('AI cost query DTOs', () => {
         validate(plainToInstance(AiCostQueryDto, { feature: 'UNKNOWN' })),
       ).resolves.not.toHaveLength(0);
       await expect(
-        validate(
-          plainToInstance(AiCostQueryDto, { model: 'm'.repeat(201) }),
-        ),
+        validate(plainToInstance(AiCostQueryDto, { model: 'm'.repeat(201) })),
       ).resolves.not.toHaveLength(0);
       await expect(
         validate(plainToInstance(AiCostQueryDto, { model: 42 })),

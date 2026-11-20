@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { SupportCoreModule } from '../support/support-core.module.js';
 import { MediaModule } from '../media/media.module.js';
 import { PostRelationsService } from './post-relations.service.js';
 import { PostViewsService } from './post-views.service.js';
@@ -10,7 +11,7 @@ import { PostDraftsController } from './post-drafts.controller.js';
 import { PostSearchModule } from './search/post-search.module.js';
 
 @Module({
-  imports: [MediaModule, PostSearchModule],
+  imports: [MediaModule, PostSearchModule, SupportCoreModule],
   controllers: [PostDraftsController, PostsController],
   providers: [
     PostsService,

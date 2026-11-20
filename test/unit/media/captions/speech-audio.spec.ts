@@ -115,18 +115,21 @@ describe('speech-audio', () => {
     it.each([
       'Output file #0 does not contain any stream',
       'Stream specifier :a:0 in filtergraph matches no streams',
-    ])('returns null when the video has no audio stream (%s)', async (stderr) => {
-      fetchMock.mockResolvedValue(
-        new Response(new Uint8Array([1, 2]), { status: 200 }),
-      );
-      runFfmpeg.mockRejectedValue(
-        new ffmpegModule.FfmpegError('ffmpeg failed', stderr),
-      );
+    ])(
+      'returns null when the video has no audio stream (%s)',
+      async (stderr) => {
+        fetchMock.mockResolvedValue(
+          new Response(new Uint8Array([1, 2]), { status: 200 }),
+        );
+        runFfmpeg.mockRejectedValue(
+          new ffmpegModule.FfmpegError('ffmpeg failed', stderr),
+        );
 
-      await expect(
-        extractSpeechAudio('https://cdn/muted.mp4', 10),
-      ).resolves.toBeNull();
-    });
+        await expect(
+          extractSpeechAudio('https://cdn/muted.mp4', 10),
+        ).resolves.toBeNull();
+      },
+    );
 
     it('rethrows unexpected ffmpeg errors', async () => {
       fetchMock.mockResolvedValue(

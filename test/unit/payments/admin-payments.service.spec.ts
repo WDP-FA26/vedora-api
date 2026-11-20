@@ -217,9 +217,18 @@ describe('AdminPaymentsService', () => {
 
     it('paginates deterministically by createdAt DESC, _id DESC', async () => {
       const sameCreated = new Date('2026-10-01T12:00:00Z');
-      await seedIntent({ _id: '00000000-0000-4000-8000-00000000000a', createdAt: sameCreated });
-      await seedIntent({ _id: '00000000-0000-4000-8000-00000000000b', createdAt: sameCreated });
-      await seedIntent({ _id: '00000000-0000-4000-8000-00000000000c', createdAt: sameCreated });
+      await seedIntent({
+        _id: '00000000-0000-4000-8000-00000000000a',
+        createdAt: sameCreated,
+      });
+      await seedIntent({
+        _id: '00000000-0000-4000-8000-00000000000b',
+        createdAt: sameCreated,
+      });
+      await seedIntent({
+        _id: '00000000-0000-4000-8000-00000000000c',
+        createdAt: sameCreated,
+      });
 
       const p1 = await service.orders(
         Object.assign(new AdminPaymentListDto(), RANGE, { page: 1, limit: 2 }),
@@ -426,12 +435,14 @@ describe('AdminPaymentsService', () => {
         capturedAt: NOW,
       });
 
-      expect((await service.detail(current.id, NOW)).currentMembership).toEqual({
-        planCode: BillingPlan.PRO,
-        startsAt: NOW.toISOString(),
-        expiresAt: new Date(NOW.getTime() + 30 * 86_400_000).toISOString(),
-        isCurrentPurchase: true,
-      });
+      expect((await service.detail(current.id, NOW)).currentMembership).toEqual(
+        {
+          planCode: BillingPlan.PRO,
+          startsAt: NOW.toISOString(),
+          expiresAt: new Date(NOW.getTime() + 30 * 86_400_000).toISOString(),
+          isCurrentPurchase: true,
+        },
+      );
       expect(
         (await service.detail(older.id, NOW)).currentMembership
           .isCurrentPurchase,

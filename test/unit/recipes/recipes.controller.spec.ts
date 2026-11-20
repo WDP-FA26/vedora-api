@@ -107,9 +107,9 @@ describe('RecipesController', () => {
       };
       favorites.list.mockResolvedValue(expected);
 
-      await expect(
-        controller.favoritesList(query, authReq, res),
-      ).resolves.toBe(expected);
+      await expect(controller.favoritesList(query, authReq, res)).resolves.toBe(
+        expected,
+      );
       expect(setHeader).toHaveBeenCalledWith(
         'Cache-Control',
         'private, no-store',
@@ -171,17 +171,17 @@ describe('RecipesController', () => {
       catalog.findOne.mockResolvedValue(detail);
 
       const guest = mockResponse();
-      await expect(controller.findOne(recipeId, guestReq, guest.res)).resolves.toBe(
-        detail,
-      );
+      await expect(
+        controller.findOne(recipeId, guestReq, guest.res),
+      ).resolves.toBe(detail);
       expect(guest.vary).toHaveBeenCalledWith('Authorization');
       expect(guest.setHeader).not.toHaveBeenCalled();
       expect(catalog.findOne).toHaveBeenCalledWith(recipeId, undefined);
 
       const auth = mockResponse();
-      await expect(controller.findOne(recipeId, authReq, auth.res)).resolves.toBe(
-        detail,
-      );
+      await expect(
+        controller.findOne(recipeId, authReq, auth.res),
+      ).resolves.toBe(detail);
       expect(auth.vary).toHaveBeenCalledWith('Authorization');
       expect(auth.setHeader).toHaveBeenCalledWith(
         'Cache-Control',

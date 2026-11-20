@@ -103,8 +103,10 @@ describe('moderation-settings.dto', () => {
       const dto = plainToInstance(
         ModerationPolicyDto,
         validPolicy({
-          instructions: '  Classify content posted on Vedora for safety only.  ',
-          allowDescription: '  Cooking recipes, food photos, and everyday chatter.  ',
+          instructions:
+            '  Classify content posted on Vedora for safety only.  ',
+          allowDescription:
+            '  Cooking recipes, food photos, and everyday chatter.  ',
         }),
       );
 
@@ -132,9 +134,9 @@ describe('moderation-settings.dto', () => {
         ModerationPolicyDto,
         validPolicy({ choices: [] }),
       );
-      expect((await validate(empty)).some((e) => e.property === 'choices')).toBe(
-        true,
-      );
+      expect(
+        (await validate(empty)).some((e) => e.property === 'choices'),
+      ).toBe(true);
 
       const tooMany = plainToInstance(
         ModerationPolicyDto,
@@ -158,7 +160,8 @@ describe('moderation-settings.dto', () => {
       expect(
         equalErrors.find((e) => e.property === 'reviewThreshold')?.constraints,
       ).toMatchObject({
-        belowRejectThreshold: 'reviewThreshold must be lower than rejectThreshold',
+        belowRejectThreshold:
+          'reviewThreshold must be lower than rejectThreshold',
       });
 
       const higher = plainToInstance(
@@ -230,9 +233,9 @@ describe('moderation-settings.dto', () => {
       const tooLong = plainToInstance(TestModerationDto, {
         text: 'a'.repeat(5001),
       });
-      expect(
-        (await validate(tooLong)).some((e) => e.property === 'text'),
-      ).toBe(true);
+      expect((await validate(tooLong)).some((e) => e.property === 'text')).toBe(
+        true,
+      );
 
       const invalidDraft = plainToInstance(TestModerationDto, {
         text: 'hello',

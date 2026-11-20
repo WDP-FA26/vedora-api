@@ -755,7 +755,9 @@ describe('MediaService', () => {
         public_id: second.publicId,
         video: { dar: 'invalid' },
       });
-      expect((await assets().findById(second.id).exec())?.aspectRatio).toBeNull();
+      expect(
+        (await assets().findById(second.id).exec())?.aspectRatio,
+      ).toBeNull();
     });
 
     it('does nothing on streamBuilt for WAITING_UPLOAD when findVideo returns null', async () => {

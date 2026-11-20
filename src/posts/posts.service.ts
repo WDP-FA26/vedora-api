@@ -1,10 +1,17 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Optional } from '@nestjs/common';
 import { InvalidInputException } from '../common/exceptions/invalid-input.exception.js';
 import { InjectModel } from '@nestjs/mongoose';
 import type { Model } from 'mongoose';
 import { randomUUID } from 'node:crypto';
+import { SupportSyncService } from '../support/support-sync.service.js';
 import { MediaService } from '../media/media.service.js';
-import { MediaAsset, Post, PostStatus, PostType } from '../mongo/models.js';
+import {
+  MediaAsset,
+  Post,
+  PostRemovalActor,
+  PostStatus,
+  PostType,
+} from '../mongo/models.js';
 import { MongoService } from '../mongo/mongo.service.js';
 import { PostSearchIndexService } from './search/post-search-index.service.js';
 import { CreatePostDto } from './dto/create-post.dto.js';
@@ -32,6 +39,7 @@ export class PostsService {
     private readonly searchIndex: PostSearchIndexService,
     @InjectModel(Post.name) private readonly posts: Model<Post>,
     @InjectModel(MediaAsset.name) private readonly media: Model<MediaAsset>,
+    @Optional() private readonly supportSync?: SupportSyncService,
   ) {}
 
   async create(authorId: string, dto: CreatePostDto): Promise<PostResponseDto> {
@@ -94,7 +102,11 @@ export class PostsService {
         .findOne({ _id: id, type: PostType.POST })
         .session(session)
         .exec();
-      if (!current) {
+      if (
+        !current ||
+        (current.status === PostStatus.REMOVED &&
+          current.removal?.removedByRole === PostRemovalActor.AUTHOR)
+      ) {
         throw new ResourceNotFoundException('NOT_FOUND', 'Post not found');
       }
       if (current.authorId !== authorId) {
@@ -106,8 +118,13 @@ export class PostsService {
       if (!EDITABLE_STATUSES.includes(current.status)) {
         throw new StateConflictException(
           'POST_NOT_EDITABLE',
-          'This post is still being processed and cannot be edited yet',
+          current.status === PostStatus.REMOVED
+            ? 'A removed post cannot be edited'
+            : 'This post is still being processed and cannot be edited yet',
         );
+      }
+      if (this.supportSync) {
+        await this.supportSync.assertNoActiveAppeal(id, session);
       }
 
       const body = dto.body === undefined ? current.body : dto.body || null;
@@ -167,38 +184,48 @@ export class PostsService {
   }
 
   async remove(id: string, authorId: string): Promise<void> {
-    const post = await this.posts
-      .findOne({ _id: id })
-      .select('authorId')
-      .exec();
-    if (!post) {
-      throw new ResourceNotFoundException('NOT_FOUND', 'Post not found');
-    }
-    if (post.authorId !== authorId) {
-      throw new AccessDeniedException(
-        'FORBIDDEN',
-        'Only the author can delete this post',
-      );
-    }
-    await this.destroy(id);
-  }
-
-  async removeAsAdmin(id: string): Promise<void> {
-    const post = await this.posts.findOne({ _id: id }).select('_id').exec();
-    if (!post) {
-      throw new ResourceNotFoundException('NOT_FOUND', 'Post not found');
-    }
-    await this.destroy(id);
-  }
-
-  private async destroy(id: string): Promise<void> {
-    const media = await this.media.find({ postId: id }).select('_id').exec();
-    await this.mongo.withTransaction((session) =>
-      this.posts.deleteOne({ _id: id }, { session }).exec(),
-    );
-    await this.searchIndex.remove(id);
-    await this.mediaService.discard({
-      _id: { $in: media.map((item) => item.id) },
+    await this.mongo.withTransaction(async (session) => {
+      await lockDocument(this.mongo, session, 'post', id);
+      const post = await this.posts
+        .findOne({ _id: id })
+        .select('authorId status removal')
+        .session(session)
+        .exec();
+      if (!post || post.status === PostStatus.REMOVED) {
+        throw new ResourceNotFoundException('NOT_FOUND', 'Post not found');
+      }
+      if (post.authorId !== authorId) {
+        throw new AccessDeniedException(
+          'FORBIDDEN',
+          'Only the author can delete this post',
+        );
+      }
+      if (this.supportSync) {
+        await this.supportSync.assertNoActiveAppeal(id, session);
+      }
+      const now = new Date();
+      await this.posts
+        .updateOne(
+          { _id: id },
+          {
+            $set: {
+              status: PostStatus.REMOVED,
+              removal: {
+                removedById: authorId,
+                removedByRole: PostRemovalActor.AUTHOR,
+                removedAt: now,
+                previousStatus: post.status,
+                reason: null,
+                restoredById: null,
+                restoredAt: null,
+              },
+              searchIndexedAt: null,
+            },
+          },
+          { session },
+        )
+        .exec();
     });
+    await this.searchIndex.remove(id);
   }
 }

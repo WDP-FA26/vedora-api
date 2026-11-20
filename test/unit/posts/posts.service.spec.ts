@@ -11,6 +11,7 @@ import { MediaService } from '../../../src/media/media.service.js';
 import {
   MediaAsset,
   Post,
+  PostRemovalActor,
   PostStatus,
   PostType,
   type User,
@@ -265,17 +266,17 @@ describe('PostsService', () => {
     });
   });
 
-  describe('remove & removeAsAdmin', () => {
-    it('enforces ownership on remove and deletes post, search entry, and media', async () => {
-      await expect(
-        service.remove('missing', author.id),
-      ).rejects.toBeInstanceOf(ResourceNotFoundException);
+  describe('remove', () => {
+    it('enforces ownership and soft-deletes the post for its author', async () => {
+      await expect(service.remove('missing', author.id)).rejects.toBeInstanceOf(
+        ResourceNotFoundException,
+      );
 
       const post = await createPost(db, {
         authorId: author.id,
         body: 'To delete',
       });
-      const media = await createMedia(db, { postId: post.id });
+      await createMedia(db, { postId: post.id });
 
       await expect(service.remove(post.id, other.id)).rejects.toBeInstanceOf(
         AccessDeniedException,
@@ -283,31 +284,16 @@ describe('PostsService', () => {
 
       await service.remove(post.id, author.id);
 
-      expect(await postsModel.findOne({ _id: post.id }).exec()).toBeNull();
+      const removed = await postsModel.findOne({ _id: post.id }).exec();
+      expect(removed?.status).toBe(PostStatus.REMOVED);
+      expect(removed?.removal?.removedByRole).toBe(PostRemovalActor.AUTHOR);
+      expect(removed?.removal?.previousStatus).toBe(post.status);
       expect(searchIndex.remove).toHaveBeenCalledWith(post.id);
-      expect(mediaService.discard).toHaveBeenCalledWith({
-        _id: { $in: [media.id] },
-      });
-    });
-
-    it('allows admin deletion and throws 404 for unknown posts', async () => {
-      await expect(service.removeAsAdmin('missing')).rejects.toBeInstanceOf(
+      // Media stays so an admin can still review or restore the post.
+      expect(mediaService.discard).not.toHaveBeenCalled();
+      await expect(service.remove(post.id, author.id)).rejects.toBeInstanceOf(
         ResourceNotFoundException,
       );
-
-      const post = await createPost(db, {
-        authorId: author.id,
-        body: 'Admin delete',
-      });
-      const media = await createMedia(db, { postId: post.id });
-
-      await service.removeAsAdmin(post.id);
-
-      expect(await postsModel.findOne({ _id: post.id }).exec()).toBeNull();
-      expect(searchIndex.remove).toHaveBeenCalledWith(post.id);
-      expect(mediaService.discard).toHaveBeenCalledWith({
-        _id: { $in: [media.id] },
-      });
     });
   });
 });

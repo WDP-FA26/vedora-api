@@ -10,6 +10,11 @@ import {
   PaymentWebhookReceiptSchema,
 } from './payment.schema.js';
 import {
+  SupportAttachmentSchema,
+  SupportMessageSchema,
+  SupportTicketSchema,
+} from './support.schema.js';
+import {
   PostBookmarkSchema,
   PostCommentSchema,
   PostLikeSchema,
@@ -82,6 +87,9 @@ export const MODEL_DEFINITIONS = [
   { name: 'PostRepost', schema: PostRepostSchema },
   { name: 'PostBookmark', schema: PostBookmarkSchema },
   { name: 'PostReport', schema: PostReportSchema },
+  { name: 'SupportTicket', schema: SupportTicketSchema },
+  { name: 'SupportMessage', schema: SupportMessageSchema },
+  { name: 'SupportAttachment', schema: SupportAttachmentSchema },
   { name: 'MediaAsset', schema: MediaAssetSchema },
   { name: 'KnowledgeDocument', schema: KnowledgeDocumentSchema },
   { name: 'KnowledgePage', schema: KnowledgePageSchema },

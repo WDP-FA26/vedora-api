@@ -158,9 +158,7 @@ describe('ContentModerationService when the provider refuses the content', () =>
     await expect(service.review(text('hi'))).rejects.toBeInstanceOf(
       APICallError,
     );
-    doEvaluate.mockRejectedValue(
-      providerError(401, PROHIBITED_BODY),
-    );
+    doEvaluate.mockRejectedValue(providerError(401, PROHIBITED_BODY));
     await expect(service.review(text('hi'))).rejects.toBeInstanceOf(
       APICallError,
     );

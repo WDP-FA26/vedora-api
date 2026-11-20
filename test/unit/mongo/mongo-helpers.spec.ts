@@ -1,4 +1,9 @@
-import { mongo, type ClientSession, type Connection, type Model } from 'mongoose';
+import {
+  mongo,
+  type ClientSession,
+  type Connection,
+  type Model,
+} from 'mongoose';
 import { randomUUID } from 'node:crypto';
 import { FeatureUnavailableException } from '../../../src/common/exceptions/feature-unavailable.exception.js';
 import { StateConflictException } from '../../../src/common/exceptions/state-conflict.exception.js';
@@ -32,7 +37,10 @@ describe('mongo helpers & module', () => {
       registered[name] = schema;
       return schema;
     });
-    const fakeConnection = { models: registered, model } as unknown as Connection;
+    const fakeConnection = {
+      models: registered,
+      model,
+    } as unknown as Connection;
     registerModels(fakeConnection);
 
     expect(model).toHaveBeenCalledTimes(MODEL_DEFINITIONS.length - 1);
@@ -49,9 +57,8 @@ describe('mongo helpers & module', () => {
       Test.createTestingModule({ imports: [MongoModule.forRoot()] }).compile(),
     ).rejects.toThrow('DATABASE_URL is not set');
 
-    const { createTestMongoUrl, dropTestDatabase } = await import(
-      '../../support/mongo-test-db.js'
-    );
+    const { createTestMongoUrl, dropTestDatabase } =
+      await import('../../support/mongo-test-db.js');
     vi.stubEnv('DATABASE_URL', createTestMongoUrl('mongo_root'));
     const mod = await Test.createTestingModule({
       imports: [MongoModule.forRoot()],
@@ -63,7 +70,9 @@ describe('mongo helpers & module', () => {
   }, 30_000);
 
   it('MongoService.ping throws when db is absent and pings when ready', async () => {
-    const unready = new MongoService({ db: undefined } as unknown as Connection);
+    const unready = new MongoService({
+      db: undefined,
+    } as unknown as Connection);
     await expect(unready.ping()).rejects.toBeInstanceOf(
       FeatureUnavailableException,
     );
@@ -152,7 +161,10 @@ describe('mongo helpers & module', () => {
       `user:${second}`,
     ]);
 
-    const dupError = new mongo.MongoServerError({ message: 'dup', code: 11000 });
+    const dupError = new mongo.MongoServerError({
+      message: 'dup',
+      code: 11000,
+    });
     vi.mocked(fakeMongo.withTransaction)
       .mockRejectedValueOnce(dupError)
       .mockResolvedValueOnce('recovered');

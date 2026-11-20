@@ -26,7 +26,10 @@ import {
 import { MongoModule } from '../../../src/mongo/mongo.module.js';
 import { MongoService } from '../../../src/mongo/mongo.service.js';
 import { NotificationsService } from '../../../src/notifications/notifications.service.js';
-import { StorageService, StorageTarget } from '../../../src/storage/storage.service.js';
+import {
+  StorageService,
+  StorageTarget,
+} from '../../../src/storage/storage.service.js';
 
 vi.mock('../../../src/common/http/fetch-public-image.js', () => ({
   fetchPublicImage: vi.fn(() => Promise.resolve(Buffer.from('img'))),
@@ -176,7 +179,12 @@ describe('PostModerationService', () => {
         publishedAt: null,
       });
 
-      const ok = await service.decide(post.id, 'admin-1', 'APPROVE', 'Looks ok');
+      const ok = await service.decide(
+        post.id,
+        'admin-1',
+        'APPROVE',
+        'Looks ok',
+      );
 
       expect(ok).toBe(true);
       const updated = await posts().findById(post.id).exec();
@@ -258,10 +266,11 @@ describe('PostModerationService', () => {
   describe('settle parts extraction', () => {
     it('moderates blogs with storage cover image and up to 5 deduplicated inline storage images without fetching external URLs', async () => {
       const storagePrefix = 'https://storage.vedora.vn/vedora-blogs/';
-      keyFromPublicUrl.mockImplementation((target: StorageTarget, url: string) =>
-        target === StorageTarget.Blogs && url.startsWith(storagePrefix)
-          ? url.slice(storagePrefix.length)
-          : null,
+      keyFromPublicUrl.mockImplementation(
+        (target: StorageTarget, url: string) =>
+          target === StorageTarget.Blogs && url.startsWith(storagePrefix)
+            ? url.slice(storagePrefix.length)
+            : null,
       );
       getBytes.mockResolvedValue(new Uint8Array([1, 2, 3]));
 

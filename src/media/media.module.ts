@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { SupportCoreModule } from '../support/support-core.module.js';
 import { NotificationsModule } from '../notifications/notifications.module.js';
 import { CaptionsModule } from './captions/captions.module.js';
 import { CloudinaryWebhookController } from './cloudinary-webhook.controller.js';
@@ -9,7 +10,7 @@ import { PostModerationService } from './post-moderation.service.js';
 import { PostEvidenceService } from './post-evidence.service.js';
 
 @Module({
-  imports: [NotificationsModule, CaptionsModule],
+  imports: [NotificationsModule, CaptionsModule, SupportCoreModule],
   controllers: [MediaController, CloudinaryWebhookController],
   providers: [
     MediaService,
@@ -17,6 +18,11 @@ import { PostEvidenceService } from './post-evidence.service.js';
     PostModerationService,
     PostEvidenceService,
   ],
-  exports: [MediaService, PostModerationService, PostEvidenceService],
+  exports: [
+    MediaService,
+    PostModerationService,
+    PostEvidenceService,
+    CaptionsModule,
+  ],
 })
 export class MediaModule {}

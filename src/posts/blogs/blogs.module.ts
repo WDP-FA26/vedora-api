@@ -1,8 +1,10 @@
 import { Module } from '@nestjs/common';
+import { SupportCoreModule } from '../../support/support-core.module.js';
 import { SubscriptionsModule } from '../../subscriptions/subscriptions.module.js';
 import { KnowledgeModule } from '../../knowledge/knowledge.module.js';
 import { MediaModule } from '../../media/media.module.js';
 import { PostsModule } from '../posts.module.js';
+import { PostSearchModule } from '../search/post-search.module.js';
 import { BlogAssistantService } from './ai/blog-assistant.service.js';
 import { BlogImageGeneratorService } from './ai/blog-image-generator.service.js';
 import { BlogAiController } from './blog-ai.controller.js';
@@ -11,7 +13,14 @@ import { BlogsController } from './blogs.controller.js';
 import { BlogsService } from './blogs.service.js';
 
 @Module({
-  imports: [PostsModule, MediaModule, KnowledgeModule, SubscriptionsModule],
+  imports: [
+    PostsModule,
+    MediaModule,
+    KnowledgeModule,
+    SubscriptionsModule,
+    PostSearchModule,
+    SupportCoreModule,
+  ],
   controllers: [BlogAiController, BlogsController],
   providers: [
     BlogsService,

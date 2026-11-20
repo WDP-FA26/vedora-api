@@ -1,7 +1,10 @@
 import type { INestApplication } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { InvalidInputException } from '../../../src/common/exceptions/invalid-input.exception.js';
-import { type IncompatibilityRule, PostStatus } from '../../../src/mongo/models.js';
+import {
+  type IncompatibilityRule,
+  PostStatus,
+} from '../../../src/mongo/models.js';
 import { MongoModule } from '../../../src/mongo/mongo.module.js';
 import { MongoService } from '../../../src/mongo/mongo.service.js';
 import { IncompatibilityRulesService } from '../../../src/recipes/incompatibility-rules.service.js';
@@ -98,21 +101,18 @@ describe('RecipeRelationsService', () => {
       },
       [TOFU_ID, SPINACH_ID],
     );
-    const withMissingRefs = await createRecipe(
-      mongo,
-      {
-        title: 'Món thiếu tham chiếu',
-        postId: 'e1a2d3e4-0000-4000-8000-000000000099',
-        ingredients: [
-          {
-            ingredientId: 'a1a2d3e4-0000-4000-8000-000000000099',
-            quantity: 10,
-            unit: 'g',
-            note: null,
-          },
-        ],
-      },
-    );
+    const withMissingRefs = await createRecipe(mongo, {
+      title: 'Món thiếu tham chiếu',
+      postId: 'e1a2d3e4-0000-4000-8000-000000000099',
+      ingredients: [
+        {
+          ingredientId: 'a1a2d3e4-0000-4000-8000-000000000099',
+          quantity: 10,
+          unit: 'g',
+          note: null,
+        },
+      ],
+    });
 
     const hydrated = await service.hydrate([
       withPostAndConflict,

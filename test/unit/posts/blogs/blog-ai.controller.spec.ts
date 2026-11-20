@@ -74,7 +74,9 @@ describe('BlogAiController', () => {
     );
 
     const dto = {
-      messages: [{ id: 'm1', role: 'user', parts: [{ type: 'text', text: 'Hi' }] }],
+      messages: [
+        { id: 'm1', role: 'user', parts: [{ type: 'text', text: 'Hi' }] },
+      ],
       editor: { title: 'Phở', content: 'Nội dung' },
     };
 

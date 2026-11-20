@@ -31,7 +31,10 @@ import {
   escapeRegExp,
   extractMarkdownMediaUrls,
 } from '../../../src/common/text.js';
-import { parsePayload, validatePayload } from '../../../src/common/validation.js';
+import {
+  parsePayload,
+  validatePayload,
+} from '../../../src/common/validation.js';
 
 vi.mock('node:dns/promises', () => ({
   lookup: vi.fn(),
@@ -79,7 +82,9 @@ describe('common utilities & infrastructure', () => {
     it('maps AppException, framework HttpException, and unknown errors consistently', () => {
       expect(
         toErrorBody(
-          new InvalidInputException('EMPTY_POST', 'Empty post', { field: 'body' }),
+          new InvalidInputException('EMPTY_POST', 'Empty post', {
+            field: 'body',
+          }),
         ),
       ).toEqual({
         statusCode: 400,

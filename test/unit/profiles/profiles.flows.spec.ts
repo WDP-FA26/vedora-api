@@ -181,9 +181,7 @@ describe('ProfilesService flows', () => {
         status: AccountStatus.SUSPENDED,
       });
 
-      await expect(
-        service.follow(target.id, suspended.id),
-      ).rejects.toSatisfy(
+      await expect(service.follow(target.id, suspended.id)).rejects.toSatisfy(
         (error: unknown) =>
           error instanceof UnauthenticatedException &&
           error.code === 'ACCOUNT_SUSPENDED',

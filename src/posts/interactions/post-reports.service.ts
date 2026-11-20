@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import type { Model } from 'mongoose';
+import type { ClientSession, Model } from 'mongoose';
 import {
   createPaginatedResponse,
   getPaginationArgs,
@@ -49,8 +49,9 @@ function toReportDto(report: PostReport): PostReportDto {
 
 const EXCERPT_LENGTH = 80;
 
-/** Who to tell once an admin deletes a post; read before the post is gone. */
+/** Who to tell once an admin removes a post. */
 export interface PostRemovalNotice {
+  postId: string;
   authorId: string;
   reporterIds: string[];
   /** The most reported reason, or null when nobody reported the post. */
@@ -182,8 +183,7 @@ export class PostReportsService {
   }
 
   /**
-   * Reads who to tell about an admin deleting a post. Call it before the
-   * delete: the post's reports and notifications are removed with it.
+   * Reads who to tell about an admin soft-deleting a post.
    */
   async removalNotice(postId: string): Promise<PostRemovalNotice | null> {
     const post = await this.posts
@@ -196,6 +196,7 @@ export class PostReportsService {
       .select('reporterId reason')
       .exec();
     return {
+      postId,
       authorId: post.authorId,
       reporterIds: [
         ...new Set(reports.map(({ reporterId }) => reporterId)),
@@ -205,14 +206,35 @@ export class PostReportsService {
     };
   }
 
+  async resolvePendingForPost(
+    session: ClientSession,
+    postId: string,
+    adminId: string,
+    now: Date,
+  ): Promise<void> {
+    await this.reports
+      .updateMany(
+        { postId, status: PostReportStatus.PENDING },
+        {
+          $set: {
+            status: PostReportStatus.RESOLVED,
+            reviewedById: adminId,
+            reviewedAt: now,
+          },
+        },
+        { session },
+      )
+      .exec();
+  }
+
   /**
-   * Tells the author their post was removed and every reporter that the post
-   * they reported is gone. The post no longer exists, so the notifications
-   * carry no `postId`, only the excerpt in `note`.
+   * Tells the author their post was removed (with postId so they can view it
+   * and file an appeal) and every reporter that the reported post is gone.
    */
   async announceRemoval(
     notice: PostRemovalNotice,
     adminId: string,
+    reasonOverride?: string | null,
   ): Promise<void> {
     const note = notice.excerpt ?? undefined;
     const sends: Promise<void>[] = notice.reporterIds.map((recipientId) =>
@@ -222,13 +244,14 @@ export class PostReportsService {
         note,
       }),
     );
-    // An admin deleting their own post needs no notice.
+    // An admin removing their own post needs no notice.
     if (notice.authorId !== adminId) {
       sends.push(
         this.notifications.notify({
           recipientId: notice.authorId,
           type: NotificationType.POST_REMOVED,
-          reason: notice.reason ?? undefined,
+          postId: notice.postId,
+          reason: reasonOverride ?? notice.reason ?? undefined,
           note,
         }),
       );

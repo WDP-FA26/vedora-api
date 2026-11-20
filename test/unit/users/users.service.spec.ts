@@ -197,11 +197,7 @@ describe('UsersService', () => {
       ).rejects.toBeInstanceOf(ResourceNotFoundException);
 
       await expect(
-        service.update(
-          member.id,
-          { username: 'member.two' },
-          asActor(member),
-        ),
+        service.update(member.id, { username: 'member.two' }, asActor(member)),
       ).rejects.toBeInstanceOf(StateConflictException);
     });
   });
@@ -412,7 +408,9 @@ describe('UsersService', () => {
       const rejected = results.filter((r) => r.status === 'rejected');
       expect(rejected).toHaveLength(1);
       expect(rejected[0].reason).toMatchObject({
-        code: expect.stringMatching(/^(LAST_ACTIVE_ADMIN|FORBIDDEN)$/) as string,
+        code: expect.stringMatching(
+          /^(LAST_ACTIVE_ADMIN|FORBIDDEN)$/,
+        ) as string,
       });
       expect(
         await users().countDocuments({

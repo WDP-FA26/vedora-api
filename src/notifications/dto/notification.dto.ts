@@ -31,6 +31,9 @@ export class NotificationDto {
   @ApiPropertyOptional({ format: 'uuid', nullable: true, type: String })
   commentId!: string | null;
 
+  @ApiPropertyOptional({ format: 'uuid', nullable: true, type: String })
+  ticketId!: string | null;
+
   @ApiProperty({
     nullable: true,
     type: String,

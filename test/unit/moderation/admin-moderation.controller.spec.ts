@@ -15,7 +15,9 @@ import {
 } from '../../../src/moderation/moderation-settings.service.js';
 import { UserRole } from '../../../src/mongo/models.js';
 
-function makeSettings(overrides: Partial<ContentSettings> = {}): ContentSettings {
+function makeSettings(
+  overrides: Partial<ContentSettings> = {},
+): ContentSettings {
   return {
     instructions: 'Classify content safely for plant-based cooking.',
     allowDescription: 'Everyday cooking posts and friendly questions.',

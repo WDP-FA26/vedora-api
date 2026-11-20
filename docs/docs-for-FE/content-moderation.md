@@ -157,10 +157,12 @@ Chạy lại: `POST /admin/posts/:id/moderation/evidence` (không có body) ch�
 
 ### Admin lật quyết định
 
-`POST /admin/posts/:id/moderation` như cũ, thêm: `REJECT` được cả bài `PUBLISHED` do System 2 cho đăng (`route.appliedBy: "SYSTEM_TWO"`); tác giả nhận `POST_REJECTED`. `APPROVE` vẫn chỉ cho `PENDING_REVIEW`/`REJECTED`.
+`POST /admin/posts/:id/moderation` như cũ, thêm: `REJECT` được cả bài `PUBLISHED` do System 2 cho đăng (`route.appliedBy: "SYSTEM_TWO"`); tác giả nhận `POST_REJECTED`. `APPROVE` vẫn chỉ cho `PENDING_REVIEW`/`REJECTED` (nếu bài đang có hồ sơ kháng cáo mở, hồ sơ tự động đóng với kết quả `APPROVED` và chỉ gửi `SUPPORT_TICKET_RESOLVED`).
 
-Chưa có: khiếu nại của tác giả, việc báo cáo kéo bài System 2 đã cho đăng về hàng chờ admin, và bộ lọc theo `appliedBy` trong `GET /admin/posts`.
+Hệ thống hỗ trợ & kháng cáo của tác giả và soft-delete/khôi phục bài viết xem tại [support.md](support.md).
+
+Chưa có: việc báo cáo kéo bài System 2 đã cho đăng về hàng chờ admin, và bộ lọc theo `appliedBy` trong `GET /admin/posts`.
 
 ## FE cần xử lý
 
-`PostStatus` có thêm `PENDING_REVIEW` và `REJECTED`; schema zod phải chấp nhận nó và `moderationVerdict` (nullable string).
+`PostStatus` có thêm `PENDING_REVIEW`, `REJECTED` và `REMOVED`; schema zod phải chấp nhận chúng cùng `moderationVerdict` (nullable string), `removalReason` và `appeal`.

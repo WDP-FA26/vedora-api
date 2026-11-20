@@ -361,9 +361,7 @@ describe('AdminAiCostsService', () => {
           ),
         )
         .mockResolvedValueOnce(
-          Response.json(
-            generationPayload({ id: 'gen-123', total_cost: null }),
-          ),
+          Response.json(generationPayload({ id: 'gen-123', total_cost: null })),
         );
       vi.stubGlobal('fetch', fetchMock);
 

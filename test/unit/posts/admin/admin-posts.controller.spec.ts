@@ -40,7 +40,11 @@ describe('AdminPostsController', () => {
     adminPosts.remove.mockResolvedValue();
 
     await expect(
-      controller.findAll({ page: 1, limit: 20, status: PostStatus.PENDING_REVIEW }),
+      controller.findAll({
+        page: 1,
+        limit: 20,
+        status: PostStatus.PENDING_REVIEW,
+      }),
     ).resolves.toBe(page);
     expect(adminPosts.findAll).toHaveBeenCalledWith({
       page: 1,
@@ -65,6 +69,11 @@ describe('AdminPostsController', () => {
     );
 
     await expect(controller.remove(adminReq, postId)).resolves.toBeUndefined();
-    expect(adminPosts.remove).toHaveBeenCalledWith(postId, adminId);
+    expect(adminPosts.remove).toHaveBeenCalledWith(postId, adminId, undefined);
+
+    await expect(
+      controller.remove(adminReq, postId, { reason: 'Spam' }),
+    ).resolves.toBeUndefined();
+    expect(adminPosts.remove).toHaveBeenLastCalledWith(postId, adminId, 'Spam');
   });
 });

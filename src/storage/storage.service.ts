@@ -25,6 +25,7 @@ export enum StorageTarget {
   Profiles = 'profiles',
   Verifications = 'verifications',
   Blogs = 'blogs',
+  Support = 'support',
 }
 
 const BUCKET_SETUP: Record<
@@ -35,6 +36,7 @@ const BUCKET_SETUP: Record<
   [StorageTarget.Profiles]: { webhook: true, publicRead: true },
   [StorageTarget.Verifications]: { webhook: false, publicRead: false },
   [StorageTarget.Blogs]: { webhook: false, publicRead: true },
+  [StorageTarget.Support]: { webhook: false, publicRead: false },
 };
 
 export const WebhookStorageTarget = {
@@ -90,6 +92,9 @@ export class StorageService implements OnModuleInit {
         'STORAGE_VERIFICATIONS_BUCKET',
       ),
       [StorageTarget.Blogs]: config.getOrThrow<string>('STORAGE_BLOGS_BUCKET'),
+      [StorageTarget.Support]: config.getOrThrow<string>(
+        'STORAGE_SUPPORT_BUCKET',
+      ),
     };
     const client = (url: string): S3Client =>
       new S3Client({

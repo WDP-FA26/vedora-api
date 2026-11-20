@@ -29,7 +29,10 @@ describe('openrouter-client', () => {
   });
 
   it('returns an existing ExternalServiceException unchanged', () => {
-    const existing = new ExternalServiceException('openrouter', 'already wrapped');
+    const existing = new ExternalServiceException(
+      'openrouter',
+      'already wrapped',
+    );
     expect(openRouterFailure('Rerank', existing)).toBe(existing);
   });
 

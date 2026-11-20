@@ -1,9 +1,6 @@
 import { AiModelError } from '@nestjs/ai';
 import { APICallError, RetryError } from 'ai';
-import {
-  chatErrorCode,
-  failedStatus,
-} from '../../../../src/ai/chat/errors.js';
+import { chatErrorCode, failedStatus } from '../../../../src/ai/chat/errors.js';
 
 describe('AI chat errors', () => {
   const callError = (statusCode: number) =>

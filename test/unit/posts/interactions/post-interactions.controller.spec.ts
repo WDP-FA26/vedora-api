@@ -1,6 +1,10 @@
 import { type DeepMockProxy, mockDeep } from 'vitest-mock-extended';
 import type { AuthenticatedRequest } from '../../../../src/auth-core/auth.types.js';
-import { PostReportReason, PostReportStatus, UserRole } from '../../../../src/mongo/models.js';
+import {
+  PostReportReason,
+  PostReportStatus,
+  UserRole,
+} from '../../../../src/mongo/models.js';
 import type {
   CommentPageDto,
   CommentResponseDto,
@@ -40,9 +44,9 @@ describe('PostInteractionsController', () => {
     interactions.updateComment.mockResolvedValue(comment);
     interactions.removeComment.mockResolvedValue();
 
-    await expect(
-      controller.listComments(postId, { limit: 20 }),
-    ).resolves.toBe(page);
+    await expect(controller.listComments(postId, { limit: 20 })).resolves.toBe(
+      page,
+    );
     expect(interactions.listComments).toHaveBeenCalledWith(postId, {
       limit: 20,
     });
@@ -75,18 +79,34 @@ describe('PostInteractionsController', () => {
   });
 
   it('delegates like/unlike, repost/unrepost, bookmark/unbookmark', async () => {
-    const likeRes = { postId, isLiked: true, likeCount: 1 } as PostLikeResponseDto;
+    const likeRes = {
+      postId,
+      isLiked: true,
+      likeCount: 1,
+    } as PostLikeResponseDto;
     const unlikeRes = {
       postId,
       isLiked: false,
       likeCount: 0,
     } as PostLikeResponseDto;
-    interactions.setLike.mockResolvedValueOnce(likeRes).mockResolvedValueOnce(unlikeRes);
+    interactions.setLike
+      .mockResolvedValueOnce(likeRes)
+      .mockResolvedValueOnce(unlikeRes);
 
     await expect(controller.like(postId, authReq)).resolves.toBe(likeRes);
     await expect(controller.unlike(postId, authReq)).resolves.toBe(unlikeRes);
-    expect(interactions.setLike).toHaveBeenNthCalledWith(1, postId, userId, true);
-    expect(interactions.setLike).toHaveBeenNthCalledWith(2, postId, userId, false);
+    expect(interactions.setLike).toHaveBeenNthCalledWith(
+      1,
+      postId,
+      userId,
+      true,
+    );
+    expect(interactions.setLike).toHaveBeenNthCalledWith(
+      2,
+      postId,
+      userId,
+      false,
+    );
 
     const repostRes = {
       postId,
@@ -106,8 +126,18 @@ describe('PostInteractionsController', () => {
     await expect(controller.unrepost(postId, authReq)).resolves.toBe(
       unrepostRes,
     );
-    expect(interactions.setRepost).toHaveBeenNthCalledWith(1, postId, userId, true);
-    expect(interactions.setRepost).toHaveBeenNthCalledWith(2, postId, userId, false);
+    expect(interactions.setRepost).toHaveBeenNthCalledWith(
+      1,
+      postId,
+      userId,
+      true,
+    );
+    expect(interactions.setRepost).toHaveBeenNthCalledWith(
+      2,
+      postId,
+      userId,
+      false,
+    );
 
     const bmRes = { postId, isBookmarked: true } as PostBookmarkResponseDto;
     const unbmRes = { postId, isBookmarked: false } as PostBookmarkResponseDto;

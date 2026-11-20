@@ -476,9 +476,9 @@ describe('PaymentsService', () => {
         code: 'PAYMENT_CODE_UNAVAILABLE',
       });
       expect(spy).toHaveBeenCalledTimes(5);
-      expect(
-        await requests().countDocuments({ actorId: thirdUser.id }),
-      ).toBe(0);
+      expect(await requests().countDocuments({ actorId: thirdUser.id })).toBe(
+        0,
+      );
 
       // Unrelated unique constraint is not retried
       spy.mockRestore();
@@ -670,7 +670,9 @@ describe('PaymentsService', () => {
         BillingPlan.PLUS,
         'idem-wh-cas',
       );
-      const intentModel = db.connection.model<PaymentIntent>(PaymentIntent.name);
+      const intentModel = db.connection.model<PaymentIntent>(
+        PaymentIntent.name,
+      );
       vi.spyOn(intentModel, 'updateOne').mockReturnValueOnce({
         exec: vi.fn().mockResolvedValue({ modifiedCount: 0 }),
       } as never);
