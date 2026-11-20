@@ -10,8 +10,13 @@ import {
   MaxLength,
   Min,
   MinLength,
+  ValidateIf,
 } from 'class-validator';
 import { PresignedUploadDto } from '../../storage/presigned-upload.dto.js';
+import { Transform } from 'class-transformer';
+
+const trim = ({ value }: { value: unknown }) =>
+  typeof value === 'string' ? value.trim() : value;
 
 export class ProfileSummaryDto {
   @ApiProperty({ format: 'uuid' }) id!: string;
@@ -52,6 +57,7 @@ export class ProfileRelationshipDto {
 export class UpdateProfileDto {
   @ApiPropertyOptional({ maxLength: runtimeConfig.AUTH_FULL_NAME_MAX_LENGTH })
   @IsOptional()
+  @Transform(trim)
   @IsString()
   @MinLength(1)
   @MaxLength(runtimeConfig.AUTH_FULL_NAME_MAX_LENGTH)
@@ -59,9 +65,11 @@ export class UpdateProfileDto {
 
   @ApiPropertyOptional({
     maxLength: runtimeConfig.PROFILE_BIO_MAX_LENGTH,
-    description: 'Empty string clears the bio',
+    description: 'Empty string clears the bio; null is rejected',
   })
-  @IsOptional()
+  // Only an absent bio skips validation: null must fail IsString with 400.
+  @ValidateIf((_object, value: unknown) => value !== undefined)
+  @Transform(trim)
   @IsString()
   @MaxLength(runtimeConfig.PROFILE_BIO_MAX_LENGTH)
   bio?: string;

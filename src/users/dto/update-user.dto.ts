@@ -2,12 +2,15 @@ import { runtimeConfig } from '../../config/runtime-config.js';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Transform } from 'class-transformer';
 import {
-  IsOptional,
   IsString,
   Matches,
   MaxLength,
   MinLength,
+  ValidateIf,
 } from 'class-validator';
+
+/** Absent fields are left alone; null is validated, so it fails with 400. */
+const isPresent = (_object: object, value: unknown) => value !== undefined;
 
 export class UpdateUserDto {
   @ApiPropertyOptional({ example: 'vedora.user' })
@@ -15,7 +18,7 @@ export class UpdateUserDto {
     const input: unknown = value;
     return typeof input === 'string' ? input.trim().toLowerCase() : input;
   })
-  @IsOptional()
+  @ValidateIf(isPresent)
   @IsString()
   @MinLength(runtimeConfig.AUTH_USERNAME_MIN_LENGTH)
   @MaxLength(runtimeConfig.AUTH_USERNAME_MAX_LENGTH)
@@ -27,7 +30,7 @@ export class UpdateUserDto {
     const input: unknown = value;
     return typeof input === 'string' ? input.trim() : input;
   })
-  @IsOptional()
+  @ValidateIf(isPresent)
   @IsString()
   @MinLength(1)
   @MaxLength(runtimeConfig.AUTH_FULL_NAME_MAX_LENGTH)
