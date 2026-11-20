@@ -6,7 +6,7 @@ import {
   dropTestDatabase,
   prepareTestDatabase,
 } from '../../support/mongo-test-db.js';
-import { Post, PostStatus } from '../../../src/mongo/models.js';
+import { Post, PostStatus, PostViewDay } from '../../../src/mongo/models.js';
 import { MongoModule } from '../../../src/mongo/mongo.module.js';
 import { MongoService } from '../../../src/mongo/mongo.service.js';
 import { PostViewsService } from '../../../src/posts/post-views.service.js';
@@ -29,6 +29,11 @@ describe('PostViewsService', () => {
     const post = await posts().findOne({ _id: id }).exec();
     return post?.updatedAt as Date;
   };
+  const viewDays = () => db.connection.model<PostViewDay>(PostViewDay.name);
+  const dayCount = async (postId: string, date: string) => {
+    const row = await viewDays().findOne({ postId, date }).lean().exec();
+    return row?.count ?? 0;
+  };
   const setStatus = (id: string, status: PostStatus) =>
     posts().updateOne({ _id: id }, { $set: { status } }).exec();
 
@@ -49,7 +54,8 @@ describe('PostViewsService', () => {
     await posts()
       .updateMany({}, { $set: { viewCount: 0 } })
       .exec();
-    service = new PostViewsService(posts());
+    await viewDays().deleteMany({}).exec();
+    service = new PostViewsService(posts(), viewDays());
   });
   afterEach(() => {
     vi.restoreAllMocks();
@@ -115,6 +121,40 @@ describe('PostViewsService', () => {
     service.record('user-2', [postA]);
     await service.flush();
     expect(await viewCount(postA)).toBe(2);
+  });
+
+  it('rolls views up per post and Bangkok calendar day', async () => {
+    const lateEvening = new Date('2026-11-19T16:30:00Z'); // 23:30 in Bangkok
+    const nextMorning = new Date('2026-11-19T17:30:00Z'); // 00:30 next day
+    service.record('user-1', [postA, postB]);
+    await service.flush(lateEvening);
+    service.record('user-2', [postA]);
+    await service.flush(lateEvening);
+    service.record('user-3', [postA]);
+    await service.flush(nextMorning);
+
+    expect(await dayCount(postA, '2026-11-19')).toBe(2);
+    expect(await dayCount(postB, '2026-11-19')).toBe(1);
+    expect(await dayCount(postA, '2026-11-20')).toBe(1);
+    const row = await viewDays().findOne({ postId: postA }).lean().exec();
+    expect(typeof row?._id).toBe('string');
+  });
+
+  it('keeps unpublished posts out of the daily rollup', async () => {
+    await setStatus(postB, PostStatus.PROCESSING);
+    service.record('user-1', [postB]);
+    await service.flush(new Date('2026-11-19T05:00:00Z'));
+    expect(await viewDays().countDocuments().exec()).toBe(0);
+    await setStatus(postB, PostStatus.PUBLISHED);
+  });
+
+  it('drops a failed daily rollup without counting the total twice', async () => {
+    vi.spyOn(viewDays(), 'bulkWrite').mockRejectedValueOnce(new Error('down'));
+    service.record('user-1', [postA]);
+    await service.flush();
+    await service.flush();
+    expect(await viewCount(postA)).toBe(1);
+    expect(await viewDays().countDocuments().exec()).toBe(0);
   });
 
   it('flushes what is left on shutdown', async () => {

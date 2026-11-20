@@ -21,6 +21,7 @@ import {
   PostReportSchema,
   PostRepostSchema,
   PostSchema,
+  PostViewDaySchema,
 } from './post.schema.js';
 import { UserAccountAuditSchema, UserSchema } from './user.schema.js';
 import {
@@ -87,6 +88,7 @@ export const MODEL_DEFINITIONS = [
   { name: 'PostRepost', schema: PostRepostSchema },
   { name: 'PostBookmark', schema: PostBookmarkSchema },
   { name: 'PostReport', schema: PostReportSchema },
+  { name: 'PostViewDay', schema: PostViewDaySchema },
   { name: 'SupportTicket', schema: SupportTicketSchema },
   { name: 'SupportMessage', schema: SupportMessageSchema },
   { name: 'SupportAttachment', schema: SupportAttachmentSchema },

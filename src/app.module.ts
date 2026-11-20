@@ -29,6 +29,7 @@ import { PostsAdminModule } from './posts/admin/posts-admin.module.js';
 import { BlogsModule } from './posts/blogs/blogs.module.js';
 import { PostInteractionsModule } from './posts/interactions/post-interactions.module.js';
 import { PostsModule } from './posts/posts.module.js';
+import { PostAnalyticsModule } from './posts/analytics/post-analytics.module.js';
 import { MongoModule } from './mongo/mongo.module.js';
 import { ProfilesModule } from './profiles/profiles.module.js';
 import { QdrantModule } from './qdrant/qdrant.module.js';
@@ -61,6 +62,7 @@ import { VerificationModule } from './verification/verification.module.js';
     PaymentsModule,
     MediaModule,
     PostsModule,
+    PostAnalyticsModule,
     PostInteractionsModule,
     BlogsModule,
     PostsAdminModule,

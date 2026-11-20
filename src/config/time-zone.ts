@@ -33,3 +33,13 @@ export function nextCalendarDay(day: string): string {
     .toISOString()
     .slice(0, 10);
 }
+
+/** The `YYYY-MM-DD` calendar day of an instant in the given IANA timezone. */
+export function calendarDay(instant: Date, timeZone: string): string {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(instant);
+}

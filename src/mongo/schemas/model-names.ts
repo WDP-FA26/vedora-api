@@ -22,6 +22,7 @@ export const MODEL_NAMES = [
   'PostRepost',
   'PostBookmark',
   'PostReport',
+  'PostViewDay',
   'SupportTicket',
   'SupportMessage',
   'SupportAttachment',

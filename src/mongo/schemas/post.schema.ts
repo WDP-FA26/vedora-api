@@ -313,6 +313,7 @@ cascadeOnDelete(PostSchema, [
   { model: 'PostRepost', field: 'postId', action: 'delete' },
   { model: 'PostBookmark', field: 'postId', action: 'delete' },
   { model: 'PostReport', field: 'postId', action: 'delete' },
+  { model: 'PostViewDay', field: 'postId', action: 'delete' },
   { model: 'MediaAsset', field: 'postId', action: 'unset' },
   { model: 'Recipe', field: 'postId', action: 'unset' },
 ]);
@@ -455,3 +456,32 @@ export class PostReport extends Identified {
 export const PostReportSchema = SchemaFactory.createForClass(PostReport);
 PostReportSchema.index({ postId: 1, reporterId: 1 }, { unique: true });
 PostReportSchema.index({ status: 1, createdAt: 1 });
+
+/**
+ * Views of one published post on one app-time-zone calendar day, rolled up by
+ * PostViewsService. Counts start when this collection was introduced; earlier
+ * views exist only in `Post.viewCount`.
+ */
+@Schema(collectionSchema('post_view_days', 'none'))
+export class PostViewDay extends Identified {
+  @Prop({ type: String, default: () => randomUUID() })
+  _id!: string;
+
+  @Prop({ type: String, required: true })
+  postId!: string;
+
+  @Prop({ type: String, required: true })
+  authorId!: string;
+
+  /** `YYYY-MM-DD` in APP_TIMEZONE. */
+  @Prop({ type: String, required: true })
+  date!: string;
+
+  @Prop({ type: Number, required: true, default: 0 })
+  count!: number;
+}
+
+export const PostViewDaySchema = SchemaFactory.createForClass(PostViewDay);
+PostViewDaySchema.index({ postId: 1, date: 1 }, { unique: true });
+PostViewDaySchema.index({ authorId: 1, date: 1 });
+PostViewDaySchema.index({ date: 1 });
