@@ -97,7 +97,6 @@ describe('DietaryService', () => {
       ingredients: [],
       groups: [],
       liked: [],
-      terms: [],
     });
   });
 
