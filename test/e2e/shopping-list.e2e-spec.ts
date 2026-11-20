@@ -2,6 +2,21 @@ import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import request from 'supertest';
 import { createE2eApp, type E2eApp } from '../support/e2e-app.js';
 import { createUser } from '../support/fixtures.js';
+import { runtimeConfig } from '../../src/config/runtime-config.js';
+import {
+  addDays,
+  calendarDate,
+  mondayOf,
+} from '../../src/meal-plan/meal-week.js';
+
+/**
+ * Next week: wholly in the future, so no day is dropped as already past
+ * (the list only covers today onward), and inside the planning horizon.
+ */
+const NEXT_WEEK = addDays(
+  mondayOf(calendarDate(new Date(), runtimeConfig.APP_TIMEZONE)),
+  7,
+);
 
 const ROOT = '/api/v1/meal-plan/shopping-list';
 describe('Shopping list API (e2e)', () => {
@@ -24,9 +39,10 @@ describe('Shopping list API (e2e)', () => {
   it('requires authentication', async () => {
     await request(e2e.app.getHttpServer()).get(ROOT).expect(401);
   });
-  it('returns an empty private list with the full default week and explicit quantity basis', async () => {
-    const response = await get().expect(200);
+  it('returns an empty private list with the full week and explicit quantity basis', async () => {
+    const response = await get(`weekStart=${NEXT_WEEK}`).expect(200);
     expect(response.body).toEqual({
+      weekStart: NEXT_WEEK,
       days: ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'],
       quantityBasis: 'RECIPE_PER_OCCURRENCE',
       items: [],
@@ -39,7 +55,7 @@ describe('Shopping list API (e2e)', () => {
   it.each(['days=SUN,MON', 'days=SUN&days=MON'])(
     'accepts and orders weekday filter %s',
     async (query) => {
-      const response = await get(query).expect(200);
+      const response = await get(`weekStart=${NEXT_WEEK}&${query}`).expect(200);
       expect(response.body).toMatchObject({ days: ['MON', 'SUN'], items: [] });
     },
   );
