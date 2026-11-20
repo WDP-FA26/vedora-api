@@ -73,7 +73,7 @@ export class ModerationSettingsService {
       return this.cached.settings;
     }
     const row = await this.model.findOne({ _id: SETTINGS_ID }).exec();
-    const settings = row ? this.fromRow(row) : this.defaults();
+    const settings = row && !row.isReset ? this.fromRow(row) : this.defaults();
     this.cached = { settings, at: Date.now() };
     return settings;
   }
@@ -96,10 +96,14 @@ export class ModerationSettingsService {
     };
     const saved =
       expectedVersion === 0
-        ? await this.createFirst(fields)
+        ? await this.saveOverDefaults(fields)
         : await this.model
             .findOneAndUpdate(
-              { _id: SETTINGS_ID, version: expectedVersion },
+              {
+                _id: SETTINGS_ID,
+                version: expectedVersion,
+                isReset: { $ne: true },
+              },
               { $set: fields, $inc: { version: 1 } },
               { returnDocument: 'after' },
             )
@@ -115,7 +119,9 @@ export class ModerationSettingsService {
   }
 
   async reset(): Promise<ContentSettings> {
-    await this.model.deleteOne({ _id: SETTINGS_ID }).exec();
+    await this.model
+      .updateOne({ _id: SETTINGS_ID }, { $set: { isReset: true } })
+      .exec();
     this.cached = null;
     return this.get();
   }
@@ -123,6 +129,27 @@ export class ModerationSettingsService {
   async reasonTexts(): Promise<Map<string, string>> {
     const { choices } = await this.get();
     return new Map(choices.map((choice) => [choice.key, choice.reasonText]));
+  }
+
+  /**
+   * A save made from the defaults (version 0): the very first one creates
+   * the row; after a reset it reuses the row and continues its version.
+   */
+  private async saveOverDefaults(
+    fields: Omit<
+      ContentSettings,
+      'version' | 'updatedAt' | 'manipulationEnforced'
+    >,
+  ): Promise<ModerationSettings | null> {
+    const afterReset = await this.model
+      .findOneAndUpdate(
+        { _id: SETTINGS_ID, isReset: true },
+        { $set: { ...fields, isReset: false }, $inc: { version: 1 } },
+        { returnDocument: 'after' },
+      )
+      .exec();
+    if (afterReset) return afterReset;
+    return this.createFirst(fields);
   }
 
   private async createFirst(

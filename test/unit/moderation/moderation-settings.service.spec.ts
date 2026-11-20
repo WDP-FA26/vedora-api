@@ -7,6 +7,7 @@ import {
   prepareTestDatabase,
 } from '../../support/mongo-test-db.js';
 import { MongoModule } from '../../../src/mongo/mongo.module.js';
+import { MongoService } from '../../../src/mongo/mongo.service.js';
 import {
   type ContentSettingsInput,
   ModerationSettingsService,
@@ -41,6 +42,11 @@ describe('ModerationSettingsService', () => {
     service = app.get(ModerationSettingsService);
   });
   beforeEach(async () => {
+    // A reset keeps the row and its version count; start from no row at all.
+    await app
+      .get(MongoService)
+      .connection.collection('moderation_settings')
+      .deleteMany({});
     await service.reset();
   });
   afterAll(async () => {

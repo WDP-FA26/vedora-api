@@ -45,5 +45,6 @@ Tất cả endpoint cần quyền ADMIN.
 
 - `400 VALIDATION_FAILED`: `details.messages` liệt kê mọi lỗi. Chuỗi được cắt khoảng trắng đầu/cuối trước khi kiểm tra; `key` không được là `allow` và không được trùng nhau.
 - `409 CONFLICT`: có admin khác đã lưu bản mới hơn; tải lại rồi sửa.
+- Sau khi reset, `GET` trả bản mặc định với `version: 0`; lưu bằng `version: 0`. Số version thật vẫn đếm tiếp (không quay về 1), nên trang sửa nào còn giữ `version` tải từ trước khi reset sẽ nhận `409`.
 
 `test` nhận `{ "text": "...", "settings": { ...bản nháp, không có version } }`; bỏ `settings` để thử bản đã lưu. Trả `decision` (`publish`, `review`, `reject`), `category`, `violationScore` và `scores` cho mọi lựa chọn kể cả `allow`. Endpoint này gọi model nên chậm và tốn một chút phí.

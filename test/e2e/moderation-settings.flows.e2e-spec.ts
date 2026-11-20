@@ -48,6 +48,9 @@ describe('Moderation settings flows (e2e)', () => {
     ]);
   });
   beforeEach(async () => {
+    // A reset keeps the row and its version count, so start each test from
+    // no saved settings at all; the reset then clears the service cache.
+    await e2e.connection.collection('moderation_settings').deleteMany({});
     await asAdmin(request(server()).post(`${url}/reset`)).expect(200);
   });
   afterAll(async () => {
@@ -105,7 +108,8 @@ describe('Moderation settings flows (e2e)', () => {
       );
 
       expect(firstSave.version).toBe(1);
-      expect(newerPolicy.version).toBe(1);
+      // Versions keep counting across a reset instead of restarting at 1.
+      expect(newerPolicy.version).toBeGreaterThan(firstSave.version);
       expect(stale.status).toBe(409);
       expect((await load()).choices.map(({ key }) => key)).toContain(
         'politics',
