@@ -62,6 +62,8 @@ export class PostSummariesService {
   /** Set once the Vedora AI account is known to exist; checked again after a restart. */
   private systemAccountReady = false;
   private systemAccountConflictLogged = false;
+  /** The posts last reported as waiting for transcripts, to log only changes. */
+  private waitingKey = '';
 
   constructor(
     @InjectModel(Post.name) private readonly posts: Model<Post>,
@@ -104,6 +106,7 @@ export class PostSummariesService {
     for (const claim of await this.reclaimStale()) {
       await this.process(claim);
     }
+    if (this.captions.active) await this.logWaiting();
     let found: number;
     do {
       const postIds = await this.unsummarizedPostIds();
@@ -162,9 +165,9 @@ export class PostSummariesService {
     }
   }
 
-  /** Recently published posts with no summary row, whose videos are transcribed. */
-  private async unsummarizedPostIds(): Promise<string[]> {
-    const pipeline: PipelineStage[] = [
+  /** Recently published posts that have no summary row yet. */
+  private unsummarizedStages(): PipelineStage[] {
+    return [
       {
         $match: {
           status: PostStatus.PUBLISHED,
@@ -180,32 +183,36 @@ export class PostSummariesService {
         },
       },
       { $match: { summary: { $size: 0 } } },
-    ];
-    if (this.captions.active) {
-      pipeline.push(
-        {
-          $lookup: {
-            from: this.mediaAssets.collection.name,
-            let: { postId: '$_id' },
-            pipeline: [
-              {
-                $match: {
-                  $expr: { $eq: ['$postId', '$$postId'] },
-                  status: MediaStatus.READY,
-                  discardedAt: null,
-                  transcript: null,
-                  captionStatus: {
-                    $in: [CaptionStatus.NONE, CaptionStatus.TRANSCRIBING],
-                  },
+      {
+        $lookup: {
+          from: this.mediaAssets.collection.name,
+          let: { postId: '$_id' },
+          pipeline: [
+            {
+              $match: {
+                $expr: { $eq: ['$postId', '$$postId'] },
+                status: MediaStatus.READY,
+                discardedAt: null,
+                transcript: null,
+                captionStatus: {
+                  $in: [CaptionStatus.NONE, CaptionStatus.TRANSCRIBING],
                 },
               },
-              { $project: { _id: 1 } },
-            ],
-            as: 'untranscribed',
-          },
+            },
+            { $project: { _id: 1, captionStatus: 1 } },
+          ],
+          as: 'untranscribed',
         },
-        { $match: { untranscribed: { $size: 0 } } },
-      );
+      },
+    ];
+  }
+
+  /** Recently published posts with no summary row, whose videos are transcribed. */
+  private async unsummarizedPostIds(): Promise<string[]> {
+    const pipeline = this.unsummarizedStages();
+    // Without captions no transcript is coming, so nothing waits for one.
+    if (this.captions.active) {
+      pipeline.push({ $match: { untranscribed: { $size: 0 } } });
     }
     pipeline.push(
       { $sort: { publishedAt: 1, _id: 1 } },
@@ -214,6 +221,36 @@ export class PostSummariesService {
     );
     const rows = await this.posts.aggregate<{ _id: string }>(pipeline).exec();
     return rows.map((row) => row._id);
+  }
+
+  /** Logs the posts held back for their videos' transcripts, when that list changes. */
+  private async logWaiting(): Promise<void> {
+    const pipeline = this.unsummarizedStages();
+    pipeline.push(
+      { $match: { 'untranscribed.0': { $exists: true } } },
+      { $sort: { publishedAt: 1, _id: 1 } },
+      { $limit: BATCH_SIZE },
+      { $project: { _id: 1, untranscribed: 1 } },
+    );
+    const rows = await this.posts
+      .aggregate<{
+        _id: string;
+        untranscribed: { _id: string; captionStatus: CaptionStatus }[];
+      }>(pipeline)
+      .exec();
+    const entries: string[] = [];
+    for (const row of rows) {
+      const videos: string[] = [];
+      for (const video of row.untranscribed) {
+        videos.push(`video ${video._id} ${video.captionStatus}`);
+      }
+      entries.push(`post ${row._id} (${videos.join(', ')})`);
+    }
+    const key = entries.join('; ');
+    if (key === this.waitingKey) return;
+    this.waitingKey = key;
+    if (entries.length === 0) return;
+    this.logger.log(`Waiting for transcripts: ${key}`);
   }
 
   private async claim(postId: string): Promise<Claim | null> {
@@ -281,26 +318,40 @@ export class PostSummariesService {
   }
 
   private async process(claim: Claim): Promise<void> {
+    const attempt = `attempt ${claim.attempts}/${MAX_ATTEMPTS}`;
     try {
       const post = await this.posts
         .findOne({ _id: claim.postId, status: PostStatus.PUBLISHED })
         .exec();
       if (!post) {
+        this.logger.log(`Post ${claim.postId} skipped: no longer published`);
         await this.finish(claim, { status: PostSummaryStatus.SKIPPED });
         return;
       }
-      const parts = await this.sourceOf(post);
-      const sourceHash = hashParts(parts);
-      if (textLength(parts) < MIN_TEXT_LENGTH) {
+      const source = await this.sourceOf(post);
+      const sourceHash = hashParts(source.parts);
+      const length = textLength(source.parts);
+      if (length < MIN_TEXT_LENGTH) {
+        this.logger.log(
+          `Post ${post.id} skipped: too short (${length} < ${MIN_TEXT_LENGTH} chars; ${source.description})`,
+        );
         await this.finish(claim, {
           status: PostSummaryStatus.SKIPPED,
           sourceHash,
         });
         return;
       }
-      const output = await this.generate(post, parts);
+      this.logger.log(
+        `Summarizing post ${post.id} (${attempt}; ${source.description})`,
+      );
+      const startedAt = Date.now();
+      const output = await this.generate(post, source.parts);
+      const seconds = ((Date.now() - startedAt) / 1000).toFixed(1);
       const summary = output.summary.trim();
       if (!output.worthSummarizing || !summary) {
+        this.logger.log(
+          `Post ${post.id} skipped after ${seconds}s: the model found nothing to summarize`,
+        );
         await this.finish(claim, {
           status: PostSummaryStatus.SKIPPED,
           sourceHash,
@@ -308,17 +359,35 @@ export class PostSummariesService {
         });
         return;
       }
-      await this.publish(claim, {
+      const recipe = cleanRecipe(output.recipe);
+      const commentId = await this.publish(claim, {
         sourceHash,
         language: normalizeLanguage(output.language),
         summary,
-        recipe: cleanRecipe(output.recipe),
+        recipe,
       });
+      if (commentId === undefined) return;
+      this.logger.log(
+        `Post ${post.id} summarized in ${seconds}s by ${this.generator.modelId}: ${describeRecipe(recipe)}, comment ${commentId ?? 'not posted'}`,
+      );
     } catch (error) {
-      if (error instanceof ClaimLostError) return;
+      if (error instanceof ClaimLostError) {
+        this.logger.warn(
+          `Post ${claim.postId}: another run took the summary over; this result was dropped`,
+        );
+        return;
+      }
       const message = String(error).slice(0, MAX_ERROR_LENGTH);
-      this.logger.warn(`Summarizing post ${claim.postId} failed: ${message}`);
       const exhausted = claim.attempts >= MAX_ATTEMPTS;
+      if (exhausted) {
+        this.logger.error(
+          `Summarizing post ${claim.postId} failed (${attempt}), giving up: ${message}`,
+        );
+      } else {
+        this.logger.warn(
+          `Summarizing post ${claim.postId} failed (${attempt}), retrying after ${STALE_AFTER_MS / 1000}s: ${message}`,
+        );
+      }
       await this.summaries.updateOne(
         { _id: claim.id, claimedAt: claim.claimedAt },
         {
@@ -347,7 +416,11 @@ export class PostSummariesService {
     );
   }
 
-  /** Stores the summary and posts its comment together, or neither. */
+  /**
+   * Stores the summary and posts its comment together, or neither. Returns
+   * the comment id (null when the post left PUBLISHED meanwhile), or
+   * undefined when moderation turned the comment away.
+   */
   private async publish(
     claim: Claim,
     result: {
@@ -356,7 +429,7 @@ export class PostSummariesService {
       summary: string;
       recipe: SummaryRecipe | null;
     },
-  ): Promise<void> {
+  ): Promise<string | null | undefined> {
     const body = formatSummaryComment(result, MAX_COMMENT_BODY_LENGTH);
     // Like every member comment, the AI's is moderated: its source is member
     // text that may try to steer the model.
@@ -364,16 +437,18 @@ export class PostSummariesService {
       await this.moderation.requireAllowed([{ kind: 'text', text: body }]);
     } catch (error) {
       if (!(error instanceof UnprocessableContentException)) throw error;
-      this.logger.warn(`Summary of post ${claim.postId} was rejected`);
+      this.logger.warn(
+        `Post ${claim.postId} skipped: moderation rejected its summary comment`,
+      );
       await this.finish(claim, {
         status: PostSummaryStatus.SKIPPED,
         sourceHash: result.sourceHash,
         model: this.generator.modelId,
         error: 'CONTENT_REJECTED',
       });
-      return;
+      return undefined;
     }
-    await this.mongo.withTransaction(async (session) => {
+    return this.mongo.withTransaction(async (session) => {
       // Like a member's comment, this write conflicts with deleting the post.
       const post = await this.posts
         .findOneAndUpdate(
@@ -409,6 +484,7 @@ export class PostSummariesService {
         )
         .exec();
       if (stored.matchedCount === 0) throw new ClaimLostError();
+      return commentId;
     });
   }
 
@@ -424,31 +500,63 @@ export class PostSummariesService {
     );
   }
 
-  private async sourceOf(post: Post): Promise<SummarySourcePart[]> {
+  /** The text to summarize, and a one-line description of it for the log. */
+  private async sourceOf(post: Post): Promise<SummarySource> {
     if (post.type === PostType.BLOG) {
       const blog = post.blog;
-      if (!blog) return [];
-      return clip([
-        { label: 'Blog title', text: blog.title },
-        { label: 'Blog content', text: blog.content },
-      ]);
+      if (!blog) return { parts: [], description: 'BLOG without content' };
+      return {
+        parts: clip([
+          { label: 'Blog title', text: blog.title },
+          { label: 'Blog content', text: blog.content },
+        ]),
+        description: `BLOG, title ${blog.title.length} chars, content ${blog.content.length} chars`,
+      };
     }
     const parts: SummarySourcePart[] = [];
-    if (post.body) parts.push({ label: 'Post text', text: post.body });
+    const body = post.body ?? '';
+    if (body) parts.push({ label: 'Post text', text: body });
     const videos = await this.mediaAssets
       .find({ postId: post.id, status: MediaStatus.READY, discardedAt: null })
       .sort({ position: 1 })
-      .select('transcript')
+      .select('transcript durationSec captionStatus')
       .exec();
+    const described: string[] = [`POST, body ${body.length} chars`];
     videos.forEach((video, index) => {
+      described.push(describeVideo(video));
       if (!video.transcript) return;
       parts.push({
         label: `What video ${index + 1} says`,
         text: video.transcript,
       });
     });
-    return clip(parts);
+    if (videos.length === 0) described.push('no video');
+    return { parts: clip(parts), description: described.join(', ') };
   }
+}
+
+interface SummarySource {
+  parts: SummarySourcePart[];
+  description: string;
+}
+
+function describeVideo(
+  video: Pick<
+    MediaAsset,
+    'id' | 'durationSec' | 'captionStatus' | 'transcript'
+  >,
+): string {
+  const duration =
+    video.durationSec === null ? '?s' : `${Math.round(video.durationSec)}s`;
+  const transcript = video.transcript
+    ? `transcript ${video.transcript.length} chars`
+    : 'no transcript';
+  return `video ${video.id} ${duration} ${video.captionStatus} ${transcript}`;
+}
+
+function describeRecipe(recipe: SummaryRecipe | null): string {
+  if (!recipe) return 'no recipe';
+  return `recipe "${recipe.title}" (${recipe.ingredients.length} ingredients, ${recipe.steps.length} steps)`;
 }
 
 function textLength(parts: SummarySourcePart[]): number {

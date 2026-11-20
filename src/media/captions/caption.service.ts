@@ -167,6 +167,13 @@ export class CaptionService {
       _id: media.id,
       captionStatus: CaptionStatus.TRANSCRIBING,
     };
+    const duration =
+      media.durationSec === null ? '?' : Math.round(media.durationSec);
+    this.logger.log(
+      `Captioning media ${media.id} (${duration}s) of post ${media.postId ?? 'none'}`,
+    );
+    const startedAt = Date.now();
+    const elapsed = () => ((Date.now() - startedAt) / 1000).toFixed(1);
 
     try {
       const speech = await extractSpeechAudio(
@@ -177,6 +184,9 @@ export class CaptionService {
         ? await this.transcription.transcribe(speech)
         : null;
       if (!transcript || transcript.cues.length === 0) {
+        this.logger.log(
+          `Media ${media.id} has no speech (${speech ? 'nothing transcribed' : 'no speech in the audio'}, ${elapsed()}s)`,
+        );
         await this.mediaAssets.updateOne(current, {
           $set: { captionStatus: CaptionStatus.NO_SPEECH },
         });
@@ -185,10 +195,14 @@ export class CaptionService {
       }
 
       const { language, cues } = transcript;
+      const text = cues.map((cue) => cue.text).join(' ');
       await this.store(media.id, language, cues, true);
       await this.mediaAssets.updateOne(current, {
-        $set: { transcript: cues.map((cue) => cue.text).join(' ') },
+        $set: { transcript: text },
       });
+      this.logger.log(
+        `Media ${media.id} transcribed in ${elapsed()}s: ${language}, ${cues.length} cues, ${text.length} chars`,
+      );
       this.announce(media.postId);
       await this.translate(media.id, language, cues);
       const done = await this.mediaAssets
@@ -198,12 +212,15 @@ export class CaptionService {
             $set: {
               captionStatus: CaptionStatus.READY,
               captionLanguage: language,
-              transcript: cues.map((cue) => cue.text).join(' '),
+              transcript: text,
             },
           },
           { returnDocument: 'after' },
         )
         .exec();
+      if (done) {
+        this.logger.log(`Media ${media.id} captions ready (${elapsed()}s)`);
+      }
       if (done && media.postId) {
         await this.posts.updateOne(
           { _id: media.postId },
@@ -211,7 +228,9 @@ export class CaptionService {
         );
       }
     } catch (error) {
-      this.logger.warn(`Captioning media ${media.id} failed: ${String(error)}`);
+      this.logger.warn(
+        `Captioning media ${media.id} failed after ${elapsed()}s: ${String(error)}`,
+      );
       await this.mediaAssets.updateOne(current, {
         $set: { captionStatus: CaptionStatus.FAILED },
       });
