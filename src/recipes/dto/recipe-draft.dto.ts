@@ -78,6 +78,8 @@ export class RecipeDraftRecipeDto {
   @ApiProperty({ type: Number, nullable: true }) servings!: number | null;
   @ApiProperty({ type: Number, nullable: true }) prepMinutes!: number | null;
   @ApiProperty({ type: Number, nullable: true }) cookMinutes!: number | null;
+  @ApiPropertyOptional({ type: Number, nullable: true })
+  caloriesPerServing?: number | null;
   @ApiProperty({ type: [RecipeDraftIngredientDto] })
   ingredients!: RecipeDraftIngredientDto[];
   @ApiProperty({ type: [String] }) steps!: string[];

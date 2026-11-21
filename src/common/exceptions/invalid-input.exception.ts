@@ -24,6 +24,10 @@ export const INVALID_INPUT_CODES = [
   'TICKET_MESSAGE_EMPTY',
   'UNKNOWN_ATTACHMENT',
   'EMPTY_RECIPE_SOURCE',
+  'INVALID_BIRTH_YEAR',
+  'UNSAFE_TARGET_WEIGHT',
+  'HEIGHT_REQUIRED',
+  'INVALID_DATE',
 ] as const;
 
 export type InvalidInputCode = (typeof INVALID_INPUT_CODES)[number];

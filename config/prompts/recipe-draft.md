@@ -11,6 +11,7 @@ Rules:
   - `description`: one plain sentence about the dish, or null.
   - `tag`: the dish kind when it is clearly one of the listed values, else null.
   - `servings`, `prepMinutes`, `cookMinutes`: only when stated, as whole numbers.
+  - `caloriesPerServing`: approximate kcal per 1 serving (whole number, 10–3000), estimated from the ingredients and cooking method (e.g. frying vs boiling) divided by `servings` (assume 2 servings if unstated), or null if impossible to estimate.
   - `ingredients`: each ingredient once, in the order they appear.
     - `name`: the ingredient alone, in its common name ("đậu hũ non", "nước tương"), without amounts or preparation.
     - `quantity`: a number (0.5 for "nửa", 2 for "hai"), or null when no amount is given ("vừa đủ", "a pinch" go in `note`).

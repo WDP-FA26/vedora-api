@@ -100,7 +100,16 @@ const fields = {
     .min(1)
     .max(MAX_DISHES_PER_SECTION)
     .optional()
-    .describe('Dishes per filled slot, default 1'),
+    .describe('Minimum dishes per filled slot, default 1'),
+  targetCalories: z
+    .number()
+    .int()
+    .min(800)
+    .max(4500)
+    .optional()
+    .describe(
+      'Optional daily kcal goal; when full days fall below ~88%, the algorithm automatically adds complementary 2nd/3rd dishes and snacks to hit it',
+    ),
 };
 
 export type FillSlotsOutput = DraftProposal & {

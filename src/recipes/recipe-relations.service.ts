@@ -7,6 +7,10 @@ import { MongoService } from '../mongo/mongo.service.js';
 import { allExist } from '../mongo/references.js';
 import { RecipeDetailDto } from './dto/recipe.dto.js';
 import { IncompatibilityRulesService } from './incompatibility-rules.service.js';
+import {
+  inferNutritionPillars,
+  resolveCaloriesPerServing,
+} from './nutrition.js';
 import { InvalidInputException } from '../common/exceptions/invalid-input.exception.js';
 
 @Injectable()
@@ -56,6 +60,9 @@ export class RecipeRelationsService {
       const named = (id: string) => ({ id, name: names.get(id) ?? '' });
       const post = row.postId ? postById.get(row.postId) : undefined;
       const author = post ? authorById.get(post.authorId) : undefined;
+      const ingredientNames = rowItems.map(
+        (item) => ingredientById.get(item.ingredientId)?.name ?? '',
+      );
       return {
         id: row.id,
         title: row.title,
@@ -64,6 +71,16 @@ export class RecipeRelationsService {
         servings: row.servings,
         prepMinutes: row.prepMinutes,
         cookMinutes: row.cookMinutes,
+        caloriesPerServing: resolveCaloriesPerServing({
+          caloriesPerServing: row.caloriesPerServing,
+          tag: row.tag,
+          title: row.title,
+          ingredientNames,
+        }),
+        nutritionPillars: inferNutritionPillars(
+          ingredientNames,
+          row.nutritionPillars ?? [],
+        ),
         ingredientCount: rowItems.length,
         conflictCount: conflicts[index].length,
         conflicts: conflicts[index].map(

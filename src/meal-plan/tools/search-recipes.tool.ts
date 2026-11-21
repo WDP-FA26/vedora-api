@@ -1,6 +1,6 @@
 import { tool } from 'ai';
 import { z } from 'zod';
-import { RecipeTag } from '../../mongo/models.js';
+import { NutritionPillar, RecipeTag } from '../../mongo/models.js';
 import {
   MAX_GENERATE_EXCLUDES,
   MAX_GENERATE_MINUTES,
@@ -11,10 +11,18 @@ import type {
   RecipeSuggestion,
 } from '../meal-plan.service.js';
 
+const PILLAR_LABELS: Record<NutritionPillar, string> = {
+  [NutritionPillar.PLANT_PROTEIN]: 'Đạm TV',
+  [NutritionPillar.FIBER_VEG]: 'Xơ',
+  [NutritionPillar.HEALTHY_FAT]: 'Béo tốt',
+  [NutritionPillar.IRON_RICH]: 'Giàu sắt',
+  [NutritionPillar.CALCIUM_RICH]: 'Giàu canxi',
+};
+
 export function searchRecipesTool(mealPlan: MealPlanService, userId: string) {
   return tool({
     description:
-      "List Vedora recipes. Recipes the user can eat come first; a recipe with an ingredient they avoid is still listed, marked AVOIDED with those ingredients, so you can answer questions about it, but never plan it. Without a query it returns the catalog; with one it matches titles, descriptions and ingredient names in Vietnamese, e.g. 'đậu hũ' or 'canh'. If a query finds nothing, call it again without one. Returns each recipe's id, title, tag, total minutes, ingredients and description.",
+      "List Vedora recipes. Recipes the user can eat come first; a recipe with an ingredient they avoid is still listed, marked AVOIDED with those ingredients, so you can answer questions about it, but never plan it. Without a query it returns the catalog; with one it matches titles, descriptions and ingredient names in Vietnamese, e.g. 'đậu hũ' or 'canh'. If a query finds nothing, call it again without one. Returns each recipe's id, title, tag, total minutes, approximate kcal/serving, plant nutrition pillars, ingredients and description.",
     inputSchema: z.object({
       query: z
         .string()
@@ -44,9 +52,31 @@ export function searchRecipesTool(mealPlan: MealPlanService, userId: string) {
         .max(MAX_GENERATE_MINUTES)
         .optional()
         .describe('Only dishes whose prep plus cook time is at most this'),
+      maxCalories: z
+        .number()
+        .int()
+        .min(50)
+        .max(2000)
+        .optional()
+        .describe(
+          'Only dishes with at most this approximate kcal per serving, e.g. 350 for a light dinner',
+        ),
+      pillar: z
+        .enum(NutritionPillar)
+        .optional()
+        .describe(
+          'Only dishes providing this plant-based nutrition pillar (PLANT_PROTEIN, FIBER_VEG, HEALTHY_FAT, IRON_RICH, CALCIUM_RICH)',
+        ),
     }),
-    execute: ({ query, tag, tags, exclude, maxMinutes }) =>
-      mealPlan.suggestions(userId, query, { tag, tags, exclude, maxMinutes }),
+    execute: ({ query, tag, tags, exclude, maxMinutes, maxCalories, pillar }) =>
+      mealPlan.suggestions(userId, query, {
+        tag,
+        tags,
+        exclude,
+        maxMinutes,
+        ...(maxCalories !== undefined ? { maxCalories } : {}),
+        ...(pillar !== undefined ? { pillar } : {}),
+      }),
     toModelOutput: ({ output }) => ({ type: 'text', value: lines(output) }),
   });
 }
@@ -60,11 +90,28 @@ function lines(recipes: RecipeSuggestion[]): string {
         title,
         tag,
         minutes,
+        caloriesPerServing,
+        nutritionPillars,
         ingredients,
         description,
         avoidedIngredients,
       }) => {
-        let line = `${id} | ${title} | ${tag ?? 'chưa phân loại'} | ${minutes === null ? '?' : minutes} phút | ${ingredients.join(', ')}`;
+        const parts = [
+          id,
+          title,
+          tag ?? 'chưa phân loại',
+          `${minutes === null ? '?' : minutes} phút`,
+        ];
+        if (typeof caloriesPerServing === 'number') {
+          parts.push(`~${caloriesPerServing} kcal/suất`);
+        }
+        if (nutritionPillars && nutritionPillars.length > 0) {
+          parts.push(
+            nutritionPillars.map((item) => PILLAR_LABELS[item]).join(', '),
+          );
+        }
+        parts.push(ingredients.join(', '));
+        let line = parts.join(' | ');
         const note = description?.trim();
         if (note) line += ` | ${note}`;
         if (avoidedIngredients.length > 0) {

@@ -267,3 +267,44 @@ export enum AiFeature {
   BLOG_CHAT = 'BLOG_CHAT',
   BLOG_IMAGE = 'BLOG_IMAGE',
 }
+
+export enum BiologicalSex {
+  FEMALE = 'FEMALE',
+  MALE = 'MALE',
+  OTHER = 'OTHER',
+}
+
+export enum ActivityLevel {
+  SEDENTARY = 'SEDENTARY',
+  LIGHT = 'LIGHT',
+  MODERATE = 'MODERATE',
+  ACTIVE = 'ACTIVE',
+}
+
+export enum NutritionGoal {
+  LOSE_WEIGHT = 'LOSE_WEIGHT',
+  MAINTAIN = 'MAINTAIN',
+  GAIN_WEIGHT = 'GAIN_WEIGHT',
+}
+
+export enum BmiCategory {
+  UNDERWEIGHT = 'UNDERWEIGHT',
+  NORMAL = 'NORMAL',
+  OVERWEIGHT = 'OVERWEIGHT',
+  OBESE = 'OBESE',
+}
+
+export enum BodyFeeling {
+  ENERGETIC = 'ENERGETIC',
+  NORMAL = 'NORMAL',
+  TIRED = 'TIRED',
+  BLOATED = 'BLOATED',
+}
+
+export enum NutritionPillar {
+  PLANT_PROTEIN = 'PLANT_PROTEIN',
+  FIBER_VEG = 'FIBER_VEG',
+  HEALTHY_FAT = 'HEALTHY_FAT',
+  IRON_RICH = 'IRON_RICH',
+  CALCIUM_RICH = 'CALCIUM_RICH',
+}

@@ -7,6 +7,11 @@ Swagger mô tả đầy đủ request/response tại `/docs`. Thực đơn lưu 
 
 | Method | Endpoint             | Đăng nhập                                | Kết quả                                       |
 | ------ | -------------------- | ---------------------------------------- | --------------------------------------------- |
+| `GET`  | `/dietary/me`         | Có                                       | Nguyên liệu/nhóm tránh, nguyên liệu thích và mô tả dị ứng tự nhiên (`allergyNote`) |
+| `PUT`  | `/dietary/me`         | Có                                       | Cập nhật thực phẩm tránh, thích và mô tả dị ứng tự nhiên (`allergyNote`) |
+| `GET`  | `/dietary/nutrition`  | Có                                       | Hồ sơ BMI chuẩn Châu Á, mục tiêu năng lượng (TDEE ±15%) và lịch sử check-in cân nặng |
+| `PUT`  | `/dietary/nutrition`  | Có                                       | Cập nhật chiều cao, cân nặng, mục tiêu BMI, năm sinh, giới tính, mức vận động |
+| `POST` | `/dietary/nutrition/check-in` | Có                               | Ghi nhận cân nặng & cảm giác cơ thể theo ngày (`YYYY-MM-DD`, tối đa 1 bản ghi/ngày) |
 | GET    | `/recipes`           | Không; bắt buộc nếu `suitableForMe=true` | `{ items, meta }`                             |
 | GET    | `/recipes/:id`       | Không                                    | Chi tiết công thức                            |
 | GET    | `/meal-plan?weekStart=` | Có                                    | Thực đơn một tuần, đủ 7 ngày và 4 phần/ngày; mặc định tuần hiện tại |
@@ -61,7 +66,7 @@ phải điều kiện bắt buộc. Kết quả cá nhân có `Cache-Control: pr
 FE cần cache theo tài khoản và xóa cache khi đổi tài khoản/hồ sơ ăn uống.
 
 Các item gồm `id`, `title`, `imageUrl`, `tag`, `servings`, `prepMinutes`, `cookMinutes`,
-`totalMinutes`, `ingredientCount`, `conflictCount`, `conflicts`, `post`, `updatedAt`.
+`totalMinutes`, `caloriesPerServing`, `nutritionPillars`, `ingredientCount`, `conflictCount`, `conflicts`, `post`, `updatedAt`.
 `meta` dùng [hợp đồng phân trang chung](pagination.md).
 
 Catalog/detail bổ sung `isFavorite` theo người gọi (guest=false). Mọi response
@@ -147,8 +152,29 @@ nguồn đã `PUBLISHED`; nếu bài đang xử lý, thất bại hoặc đã b�
 Response không trả dữ liệu đăng nhập, người tạo admin hay hồ sơ ăn uống.
 
 Kho công thức vẫn hiển thị món có xung đột để người dùng xem cảnh báo;
-`suitableForMe=true` mới loại chúng khỏi danh sách. Công thức hiện không có số
-liệu calo/chất dinh dưỡng.
+`suitableForMe=true` mới loại chúng khỏi danh sách. Mỗi công thức trả về thêm
+`caloriesPerServing` (kcal ước tính cho **1 suất cá nhân**, tách biệt với `servings` là số
+suất cả nồi dùng cho danh sách đi chợ) và `nutritionPillars` (`PLANT_PROTEIN`, `FIBER_VEG`,
+`HEALTHY_FAT`, `IRON_RICH`, `CALCIUM_RICH`) suy từ nguyên liệu.
+
+## Hồ sơ BMI Châu Á, TDEE & Lịch sử cân nặng (`/dietary/nutrition`)
+
+- `GET /dietary/nutrition`: trả `heightCm`, `weightKg`, `targetWeightKg`, `birthYear`, `biologicalSex`,
+  `activityLevel`, `nutritionGoal`, các trường tính toán theo chuẩn BMI Châu Á (`bmi`, `bmiCategory`:
+  `UNDERWEIGHT < 18.5 | NORMAL 18.5–22.9 | OVERWEIGHT 23.0–24.9 | OBESE >= 25.0`, `suggestedGoal`,
+  `effectiveGoal`, `idealWeightMinKg`, `idealWeightMaxKg`, `bmr`, `tdee`, `dailyCalorieTarget`, vùng
+  linh hoạt ±15% `dailyCalorieMin`–`dailyCalorieMax`, `safetyNote`) và mảng `history` tối đa 90 lần ghi
+  nhận gần nhất.
+- `PUT /dietary/nutrition`: cập nhật thông số thể trạng/mục tiêu; nếu đồng thời truyền `heightCm` + `weightKg`,
+  tự ghi nhận bản ghi `BodyMetricLog` cho ngày hôm nay. Từ chối `400 UNSAFE_TARGET_WEIGHT` nếu đặt mục
+  tiêu giảm cân dưới ngưỡng BMI 18,5.
+- `POST /dietary/nutrition/check-in`: ghi nhận `{ weightKg, heightCm?, date?, feeling?, note? }` cho một ngày
+  (`<= today`). Ghi đè nếu cùng ngày đã có bản ghi, và đồng bộ `weightKg` mới nhất lên hồ sơ người dùng.
+
+Thuật toán `generate`/`fillSlots`/`autoBalanceDraft` tự động cộng điểm cho món hợp mục tiêu BMI (tối thanh nhẹ khi `LOSE_WEIGHT`, ghép nhiều món bổ trợ cho mâm cơm cân bằng hoặc khi hụt Kcal để tiệm cận mục tiêu `~88%–115%` Kcal/ngày, nhưng bỏ qua các ngày ăn thiếu bữa chính do ăn ngoài) và cân bằng 5 nhóm dưỡng chất chay theo từng ngày. Trợ lý chat (`POST /meal-plan/chat`) nhận ngữ cảnh BMI, `allergyNote`, calo ước tính và xu hướng cân nặng, được trang bị:
+- `autoBalanceDraft`: tự động cân đối & bổ sung món kết hợp (kể cả phần `OTHER`) khi thực đơn đang hụt/dư Kcal.
+- `consultNutritionSubagent`: subagent nghiên cứu dinh dưỡng có sẵn `webSearch` + `searchRecipes` để tra món ăn ngoài hệ thống, tính Kcal còn lại và gợi ý món Vedora tương ứng.
+- `verifyMealPlanAllergies`: subagent kiểm định dị ứng đọc toàn bộ nguyên liệu + bước nấu của các món trên lịch đối chiếu với `allergyNote` ngôn ngữ tự nhiên và tự động đổi sang món an toàn nếu phát hiện rủi ro.
 
 ### Ảnh món
 
@@ -256,11 +282,7 @@ không theo prompt:
     người dùng tự yêu cầu.
   - Quyết định được lưu cùng `parts` của tin nhắn (đồng bộ qua `PATCH /meal-plan/chat/threads/:threadId`), nên FE
     dựng lại trạng thái đồng ý từ quyết định mới nhất khi mở lại đoạn chat. Đoạn chat mới luôn bắt đầu chưa cho phép.
-- **Đã cho phép** (`true`): trợ lý có công cụ server `openrouter:web_search` của OpenRouter, tự quyết định có tìm
-  hay không (mặc định engine Parallel chế độ `fast`, tối đa `PLANNER_WEB_SEARCH_MAX_USES` = 2 lần, 3 kết quả mỗi lần). Việc tìm
-  chạy ở OpenRouter nên **không có part công cụ** nào; nguồn đến dưới dạng part `source-url`
-  (`{ sourceId, url, title }`). Văn bản trả lời không chứa link (bộ lọc xóa URL), nên FE hiện danh sách nguồn từ
-  các part `source-url`.
+- **Đã cho phép** (`true`, mặc định trên FE từ đầu hội thoại; có thể tắt nếu người dùng từ chối): trợ lý có công cụ server `openrouter:web_search` của OpenRouter (engine Parallel chế độ `fast`, context `medium`, tối đa `PLANNER_WEB_SEARCH_MAX_USES` = 4 lần, 5 kết quả/lần) và có thể ủy quyền tra cứu sâu cho `consultNutritionSubagent`. Nguồn web đến dưới dạng part `source-url` (`{ sourceId, url, title }`) để FE hiển thị riêng.
 - Món trong thực đơn vẫn chỉ lấy từ kho món của Vedora. Phí tìm web nằm trong cùng một lượt AI (một ticket quota).
 
 ### Danh sách đi chợ

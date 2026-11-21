@@ -1,9 +1,18 @@
 import { tool } from 'ai';
 import { z } from 'zod';
+import { NutritionPillar } from '../../mongo/models.js';
 import type {
   MealPlanService,
   RecipeInstructions,
 } from '../meal-plan.service.js';
+
+const PILLAR_LABELS: Record<NutritionPillar, string> = {
+  [NutritionPillar.PLANT_PROTEIN]: 'Đạm thực vật',
+  [NutritionPillar.FIBER_VEG]: 'Chất xơ & rau củ',
+  [NutritionPillar.HEALTHY_FAT]: 'Chất béo tốt',
+  [NutritionPillar.IRON_RICH]: 'Giàu sắt',
+  [NutritionPillar.CALCIUM_RICH]: 'Giàu canxi',
+};
 
 export function getRecipeTool(mealPlan: MealPlanService, userId: string) {
   return tool({
@@ -46,9 +55,21 @@ function format(recipe: RecipeInstructions | null): string {
   return lines.join('\n');
 }
 
-function formatSummary({ servings, minutes }: RecipeInstructions): string {
+function formatSummary({
+  servings,
+  minutes,
+  caloriesPerServing,
+  nutritionPillars,
+}: RecipeInstructions): string {
   const minutesText = minutes === null ? '?' : String(minutes);
-  return `${servings} khẩu phần | ${minutesText} phút`;
+  const parts = [`${servings} khẩu phần`, `${minutesText} phút`];
+  if (typeof caloriesPerServing === 'number') {
+    parts.push(`~${caloriesPerServing} kcal/suất`);
+  }
+  if (nutritionPillars && nutritionPillars.length > 0) {
+    parts.push(nutritionPillars.map((item) => PILLAR_LABELS[item]).join(', '));
+  }
+  return parts.join(' | ');
 }
 
 function formatIngredient({ name, quantity, unit, note }: Ingredient): string {

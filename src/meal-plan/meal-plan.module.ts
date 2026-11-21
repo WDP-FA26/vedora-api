@@ -11,7 +11,12 @@ import { ShoppingListController } from './shopping-list.controller.js';
 import { ShoppingListService } from './shopping-list.service.js';
 
 @Module({
-  imports: [RecipesModule, KnowledgeModule, SubscriptionsModule, WorkspacesModule],
+  imports: [
+    RecipesModule,
+    KnowledgeModule,
+    SubscriptionsModule,
+    WorkspacesModule,
+  ],
   controllers: [MealPlanController, ShoppingListController],
   providers: [
     MealPlanService,

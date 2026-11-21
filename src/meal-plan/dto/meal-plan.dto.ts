@@ -4,6 +4,7 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
   type MealPlanChatProposalStatus,
   MealSection,
+  NutritionPillar,
   RecipeTag,
   Weekday,
 } from '../../mongo/models.js';
@@ -231,6 +232,18 @@ export class GenerateMealDaysDto {
   perSection?: number;
 
   @ApiPropertyOptional({
+    minimum: 800,
+    maximum: 4500,
+    description:
+      'Optional daily calorie target override for balancing multi-dish meals',
+  })
+  @IsOptional()
+  @IsInt()
+  @Min(800)
+  @Max(4500)
+  targetCalories?: number;
+
+  @ApiPropertyOptional({
     type: [String],
     format: 'uuid',
     maxItems: MAX_GENERATE_IDS,
@@ -285,6 +298,10 @@ export class MealRecipeDto {
   @ApiProperty() servings!: number;
   @ApiProperty({ nullable: true, type: Number }) prepMinutes!: number | null;
   @ApiProperty({ nullable: true, type: Number }) cookMinutes!: number | null;
+  @ApiPropertyOptional({ nullable: true, type: Number })
+  caloriesPerServing?: number | null;
+  @ApiPropertyOptional({ enum: NutritionPillar, isArray: true })
+  nutritionPillars?: NutritionPillar[];
   @ApiProperty({ type: [MealIngredientDto] }) ingredients!: MealIngredientDto[];
   @ApiProperty({ type: [String] }) steps!: string[];
 }
@@ -397,6 +414,10 @@ export class MealRecipeRefDto {
   @ApiProperty() title!: string;
   @ApiProperty({ enum: RecipeTag, nullable: true })
   tag!: RecipeTag | null;
+  @ApiPropertyOptional({ nullable: true, type: Number })
+  caloriesPerServing?: number | null;
+  @ApiPropertyOptional({ enum: NutritionPillar, isArray: true })
+  nutritionPillars?: NutritionPillar[];
 }
 
 export class MealPlanPreviewSectionDto {

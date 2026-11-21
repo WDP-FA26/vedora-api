@@ -1,6 +1,6 @@
 import { runtimeConfig } from '../../config/runtime-config.js';
 import { SignedUploadDto } from '../../media/dto/media-response.dto.js';
-import { RecipeTag } from '../../mongo/models.js';
+import { NutritionPillar, RecipeTag } from '../../mongo/models.js';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Transform, Type } from 'class-transformer';
 import {
@@ -19,6 +19,7 @@ import {
   MaxLength,
   Min,
   MinLength,
+  ValidateIf,
   ValidateNested,
 } from 'class-validator';
 import { NamedRefDto } from './ingredient.dto.js';
@@ -130,6 +131,31 @@ export class SaveRecipeDto {
   @Max(MAX_MINUTES)
   cookMinutes?: number;
 
+  @ApiPropertyOptional({
+    minimum: 10,
+    maximum: 3000,
+    nullable: true,
+    description: 'Approximate calories per single serving (kcal)',
+  })
+  @IsOptional()
+  @ValidateIf((_, value) => value !== null)
+  @IsInt()
+  @Min(10)
+  @Max(3000)
+  caloriesPerServing?: number | null;
+
+  @ApiPropertyOptional({
+    enum: NutritionPillar,
+    isArray: true,
+    description:
+      'Optional explicit plant-based nutrition pillars; inferred from ingredients when omitted',
+  })
+  @IsOptional()
+  @IsArray()
+  @ArrayUnique()
+  @IsEnum(NutritionPillar, { each: true })
+  nutritionPillars?: NutritionPillar[];
+
   @ApiProperty({ type: [RecipeIngredientInputDto], minItems: 1 })
   @IsArray()
   @ArrayMinSize(1)
@@ -195,6 +221,10 @@ export class RecipeDto {
   @ApiProperty() servings!: number;
   @ApiProperty({ nullable: true, type: Number }) prepMinutes!: number | null;
   @ApiProperty({ nullable: true, type: Number }) cookMinutes!: number | null;
+  @ApiPropertyOptional({ nullable: true, type: Number })
+  caloriesPerServing?: number | null;
+  @ApiPropertyOptional({ enum: NutritionPillar, isArray: true })
+  nutritionPillars?: NutritionPillar[];
   @ApiProperty({ minimum: 0 }) ingredientCount!: number;
   @ApiProperty({
     minimum: 0,

@@ -6,7 +6,15 @@ import {
   MAX_AVOIDED_INGREDIENTS,
   MAX_LIKED_INGREDIENTS,
   SaveDietaryRestrictionsDto,
+  SaveNutritionProfileDto,
+  WeightCheckInDto,
 } from '../../../src/recipes/dto/dietary.dto.js';
+import {
+  ActivityLevel,
+  BiologicalSex,
+  BodyFeeling,
+  NutritionGoal,
+} from '../../../src/mongo/models.js';
 import {
   MAX_ALIASES,
   MAX_NAME_LENGTH,
@@ -31,13 +39,15 @@ const uuid = (n: number) =>
 
 describe('Recipes DTOs', () => {
   describe('SaveDietaryRestrictionsDto', () => {
-    it('accepts valid unique UUID v4 arrays', async () => {
+    it('accepts valid unique UUID v4 arrays and natural-language allergyNote', async () => {
       const dto = plainToInstance(SaveDietaryRestrictionsDto, {
         ingredientIds: [uuid(1)],
         groupIds: [uuid(2)],
         likedIngredientIds: [uuid(3)],
+        allergyNote: '  Dị ứng đậu phộng và mè đen  ',
       });
       expect(await validate(dto)).toHaveLength(0);
+      expect(dto.allergyNote).toBe('Dị ứng đậu phộng và mè đen');
     });
 
     it('rejects duplicate, non-UUID, or oversized arrays', async () => {
@@ -78,6 +88,42 @@ describe('Recipes DTOs', () => {
           }),
         ),
       ).not.toHaveLength(0);
+    });
+  });
+
+  describe('SaveNutritionProfileDto & WeightCheckInDto', () => {
+    it('validates Asian BMI profile bounds and weight check-in fields', async () => {
+      const validProfile = plainToInstance(SaveNutritionProfileDto, {
+        heightCm: 162,
+        weightKg: 54.5,
+        targetWeightKg: 52,
+        birthYear: 1998,
+        biologicalSex: BiologicalSex.FEMALE,
+        activityLevel: ActivityLevel.LIGHT,
+        nutritionGoal: NutritionGoal.MAINTAIN,
+      });
+      expect(await validate(validProfile)).toHaveLength(0);
+
+      const badProfile = plainToInstance(SaveNutritionProfileDto, {
+        heightCm: 80,
+        weightKg: 10,
+      });
+      expect(await validate(badProfile)).not.toHaveLength(0);
+
+      const validCheckIn = plainToInstance(WeightCheckInDto, {
+        weightKg: 54.2,
+        date: '2026-11-21',
+        feeling: BodyFeeling.ENERGETIC,
+        note: '  Ngủ ngon  ',
+      });
+      expect(await validate(validCheckIn)).toHaveLength(0);
+      expect(validCheckIn.note).toBe('Ngủ ngon');
+
+      const badCheckIn = plainToInstance(WeightCheckInDto, {
+        weightKg: 54.2,
+        date: '21-11-2026',
+      });
+      expect(await validate(badCheckIn)).not.toHaveLength(0);
     });
   });
 

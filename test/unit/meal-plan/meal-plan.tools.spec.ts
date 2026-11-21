@@ -1,5 +1,8 @@
+import { MockLanguageModelV4 } from 'ai/test';
 import { type DeepMockProxy, mockDeep } from 'vitest-mock-extended';
 import type { MealPlanService } from '../../../src/meal-plan/meal-plan.service.js';
+import { verifyMealPlanAllergiesTool } from '../../../src/meal-plan/tools/allergy-verifier-subagent.tool.js';
+import { autoBalanceDraftTool } from '../../../src/meal-plan/tools/auto-balance-draft.tool.js';
 import { editDraftTool } from '../../../src/meal-plan/tools/edit-draft.tool.js';
 import { fillSlotsTool } from '../../../src/meal-plan/tools/fill-slots.tool.js';
 import { getPlanTool } from '../../../src/meal-plan/tools/get-plan.tool.js';
@@ -544,6 +547,228 @@ describe('Meal planner AI tools', () => {
           '- move: MON LUNCH is full',
         ].join('\n'),
       });
+    });
+  });
+
+  describe('autoBalanceDraftTool & verifyMealPlanAllergiesTool', () => {
+    it('delegates autoBalanceDraft and summarizes target calories', async () => {
+      const toolDef = autoBalanceDraftTool(mealPlan, userId, WEEK);
+      const balanced = {
+        weekStart: WEEK,
+        days: [
+          {
+            day: Weekday.MON,
+            sections: [
+              {
+                section: MealSection.LUNCH,
+                recipes: [
+                  {
+                    id: recipe1,
+                    title: 'Cơm gạo lứt muối mè',
+                    tag: RecipeTag.RICE,
+                    caloriesPerServing: 430,
+                  },
+                ],
+                previous: [],
+              },
+            ],
+          },
+        ],
+        problems: [],
+        ok: true,
+        filled: 1,
+        targetCalories: 2000,
+      };
+      mealPlan.autoBalanceDraft.mockResolvedValue(balanced);
+
+      const output = await toolDef.execute?.(
+        { days: [Weekday.MON], targetCalories: 2000 },
+        execOptions,
+      );
+      expect(mealPlan.autoBalanceDraft).toHaveBeenCalledWith(userId, {
+        weekStart: WEEK,
+        days: [Weekday.MON],
+        targetCalories: 2000,
+      });
+
+      if (!output || Symbol.asyncIterator in output) {
+        throw new Error('expected balance output');
+      }
+      const modelOut = await toolDef.toModelOutput?.({
+        input: {},
+        toolCallId: 'call-balance',
+        output,
+      });
+      expect(modelOut).toEqual({
+        type: 'text',
+        value: expect.stringContaining('~2000 kcal/day') as unknown,
+      });
+    });
+
+    it('detects natural-language allergens via keyword + subagent audit and swaps flagged dishes', async () => {
+      const safeId = 'd1a2d3e4-0000-4000-8000-000000000002';
+      const mockModel = new MockLanguageModelV4({
+        doGenerate: () =>
+          Promise.resolve({
+            content: [
+              {
+                type: 'text' as const,
+                text: JSON.stringify({
+                  flagged: [
+                    {
+                      recipeId: recipe1,
+                      reason: 'Món gỏi có đậu phộng rang gây dị ứng',
+                    },
+                  ],
+                  summary: 'Phát hiện 1 món có đậu phộng và đã đổi sang món an toàn.',
+                }),
+              },
+            ],
+            finishReason: { unified: 'stop' as const, raw: undefined },
+            usage: {
+              inputTokens: {
+                total: 10,
+                noCache: 10,
+                cacheRead: undefined,
+                cacheWrite: undefined,
+              },
+              outputTokens: {
+                total: 10,
+                text: 10,
+                reasoning: undefined,
+              },
+            },
+            warnings: [],
+          }),
+      });
+
+      const savedPlan = {
+        weekStart: WEEK,
+        currentWeekStart: WEEK,
+        today: WEEK,
+        maxWeekStart: '2026-12-14',
+        minWeekStart: WEEK,
+        editable: true,
+        days: Object.values(Weekday).map((day) => ({
+          day,
+          date: WEEK,
+          editable: true,
+          sections: Object.values(MealSection).map((section) => ({
+            section,
+            recipes: [],
+          })),
+        })),
+        problems: [],
+      };
+      const draft = {
+        weekStart: WEEK,
+        days: [
+          {
+            day: Weekday.MON,
+            sections: [
+              {
+                section: MealSection.LUNCH,
+                recipes: [
+                  {
+                    id: recipe1,
+                    title: 'Gỏi ngó sen',
+                    tag: RecipeTag.SALAD,
+                  },
+                ],
+                previous: [],
+              },
+            ],
+          },
+        ],
+        problems: [],
+        ok: true,
+      };
+      const replaced = {
+        weekStart: WEEK,
+        days: [
+          {
+            day: Weekday.MON,
+            sections: [
+              {
+                section: MealSection.LUNCH,
+                recipes: [
+                  {
+                    id: safeId,
+                    title: 'Canh bí đao hạt sen',
+                    tag: RecipeTag.SOUP,
+                  },
+                ],
+                previous: [],
+              },
+            ],
+          },
+        ],
+        problems: [],
+        ok: true,
+        filled: 1,
+        allSlotsAlreadyFilled: false,
+      };
+      mealPlan.find.mockResolvedValue(savedPlan);
+      mealPlan.getDraft.mockResolvedValue(draft);
+      mealPlan.recipeInstructions.mockResolvedValue({
+        id: recipe1,
+        title: 'Gỏi ngó sen',
+        description: null,
+        servings: 2,
+        minutes: 20,
+        ingredients: [{ name: 'Đậu phộng', quantity: 25, unit: 'g', note: null }],
+        steps: ['Trộn gỏi và rắc đậu phộng'],
+        avoidedIngredients: [],
+      });
+      mealPlan.editDraft.mockResolvedValue({
+        weekStart: WEEK,
+        days: [],
+        problems: [],
+        ok: true,
+        errors: [],
+      });
+      mealPlan.fillDraft.mockResolvedValue(replaced);
+
+      const toolDef = verifyMealPlanAllergiesTool(
+        mockModel,
+        mealPlan,
+        userId,
+        WEEK,
+        {
+          ingredients: [],
+          groups: [],
+          liked: [],
+          allergyNote: 'Dị ứng đậu phộng nặng',
+        },
+      );
+
+      const output = await toolDef.execute?.({}, execOptions);
+      if (!output || Symbol.asyncIterator in output) {
+        throw new Error('expected allergy verification output');
+      }
+      expect(output.verified).toBe(true);
+      expect(output.flaggedDishes).toHaveLength(1);
+      expect(output.flaggedDishes[0].recipeId).toBe(recipe1);
+      expect(mealPlan.editDraft).toHaveBeenCalledWith(userId, WEEK, [
+        {
+          op: 'remove',
+          day: Weekday.MON,
+          section: MealSection.LUNCH,
+          recipeId: recipe1,
+        },
+      ]);
+      expect(mealPlan.fillDraft).toHaveBeenCalledWith(
+        userId,
+        expect.objectContaining({
+          weekStart: WEEK,
+          days: [Weekday.MON],
+          sections: [MealSection.LUNCH],
+          onlyEmpty: true,
+          avoidIds: [recipe1],
+        }),
+      );
+      expect(output.ok).toBe(true);
+      expect(output.days?.[0].sections[0].recipes[0].id).toBe(safeId);
     });
   });
 });

@@ -29,9 +29,12 @@ import { MealPlannerChatHistoryService } from './meal-planner-chat-history.servi
 import { plannerInstructions } from './meal-planner.prompt.js';
 import { PLANNER_REFUSALS } from './meal-planner.refusals.js';
 import { editDraftTool } from './tools/edit-draft.tool.js';
+import { verifyMealPlanAllergiesTool } from './tools/allergy-verifier-subagent.tool.js';
+import { autoBalanceDraftTool } from './tools/auto-balance-draft.tool.js';
 import { fillSlotsTool } from './tools/fill-slots.tool.js';
 import { getPlanTool } from './tools/get-plan.tool.js';
 import { getRecipeTool } from './tools/get-recipe.tool.js';
+import { consultNutritionSubagentTool } from './tools/nutrition-subagent.tool.js';
 import { searchRecipesTool } from './tools/search-recipes.tool.js';
 import { searchRestaurantDishesTool } from './tools/search-restaurant-dishes.tool.js';
 import {
@@ -144,10 +147,13 @@ export class MealPlannerChatService {
       if (messages.length === 1) {
         await this.mealPlan.discardAllDrafts(userId);
       }
-      const [restrictions, plan, draft] = await Promise.all([
+      const [restrictions, plan, draft, nutrition] = await Promise.all([
         this.dietary.find(userId),
         this.mealPlan.find(userId, weekStart),
         this.mealPlan.getDraft(userId, weekStart),
+        Promise.resolve(this.dietary.findNutrition(userId)).then(
+          (value) => value ?? null,
+        ),
       ]);
 
       // A week that has fully passed is read-only, so tools default to this week.
@@ -155,9 +161,10 @@ export class MealPlannerChatService {
         plan.weekStart < plan.currentWeekStart
           ? plan.currentWeekStart
           : plan.weekStart;
-      const avoidedTerms = [
+       const avoidedTerms = [
         ...restrictions.ingredients.map(({ name }) => name),
         ...restrictions.groups.map(({ name }) => name),
+        ...(restrictions.allergyNote ? [restrictions.allergyNote] : []),
       ];
       const agent = new ToolLoopAgent({
         model: this.model,
@@ -166,6 +173,7 @@ export class MealPlannerChatService {
           plan,
           draft,
           allowWebSearch,
+          nutrition,
         ),
         maxOutputTokens: runtimeConfig.PLANNER_CHAT_MAX_OUTPUT_TOKENS,
         tools: {
@@ -174,7 +182,27 @@ export class MealPlannerChatService {
           getRecipe: getRecipeTool(this.mealPlan, userId),
           getPlan: getPlanTool(this.mealPlan, userId, toolWeek),
           fillSlots: fillSlotsTool(this.mealPlan, userId, toolWeek),
+          autoBalanceDraft: autoBalanceDraftTool(
+            this.mealPlan,
+            userId,
+            toolWeek,
+          ),
           editDraft: editDraftTool(this.mealPlan, userId, toolWeek),
+          consultNutritionSubagent: consultNutritionSubagentTool(
+            this.model,
+            this.mealPlan,
+            this.knowledge,
+            userId,
+            nutrition,
+            avoidedTerms,
+          ),
+          verifyMealPlanAllergies: verifyMealPlanAllergiesTool(
+            this.model,
+            this.mealPlan,
+            userId,
+            toolWeek,
+            restrictions,
+          ),
           ...(this.restaurantMenu
             ? {
                 searchRestaurantDishes: searchRestaurantDishesTool(

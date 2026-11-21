@@ -29,17 +29,30 @@ export function getPlanTool(
       const saved: string[] = [];
       for (const { day, sections } of output.plan.days) {
         const filled: string[] = [];
+        let dayCalories = 0;
+        let hasCalories = false;
         for (const section of MEAL_SECTIONS) {
           const recipes =
             sections.find((item) => item.section === section)?.recipes ?? [];
           if (recipes.length === 0) continue;
+          for (const recipe of recipes) {
+            if (typeof recipe.caloriesPerServing === 'number') {
+              dayCalories += recipe.caloriesPerServing;
+              hasCalories = true;
+            }
+          }
           const names = recipes
-            .map(({ title, id }) => `${title} (id ${id})`)
+            .map(({ title, id, caloriesPerServing }) =>
+              typeof caloriesPerServing === 'number'
+                ? `${title} (id ${id}, ~${caloriesPerServing} kcal)`
+                : `${title} (id ${id})`,
+            )
             .join(', ');
           filled.push(`${SECTION_NAMES[section]}: ${names}`);
         }
+        const totalNote = hasCalories ? ` [~${dayCalories} kcal]` : '';
         saved.push(
-          `- ${DAY_NAMES[day]}: ${filled.length > 0 ? filled.join('; ') : '(empty)'}`,
+          `- ${DAY_NAMES[day]}: ${filled.length > 0 ? filled.join('; ') : '(empty)'}${totalNote}`,
         );
       }
       const draft = describeDraft(output.draft);

@@ -20,15 +20,35 @@ export function describeProblem(problem: MealPlanProblemDto): string {
   }
 }
 
-const titles = (recipes: { title: string; id: string }[]) =>
-  recipes.map(({ title, id }) => `${title} (id ${id})`).join(', ');
+const titles = (
+  recipes: {
+    title: string;
+    id: string;
+    caloriesPerServing?: number | null;
+  }[],
+) =>
+  recipes
+    .map(({ title, id, caloriesPerServing }) =>
+      typeof caloriesPerServing === 'number'
+        ? `${title} (id ${id}, ~${caloriesPerServing} kcal)`
+        : `${title} (id ${id})`,
+    )
+    .join(', ');
 
 /** The slots of the draft that differ from the saved plan, one line per day. */
 export function describeDraft(proposal: DraftProposal): string {
   const lines: string[] = [];
   for (const { day, sections } of proposal.days) {
     const parts: string[] = [];
+    let dayCalories = 0;
+    let hasCalories = false;
     for (const { section, recipes, previous } of sections) {
+      for (const recipe of recipes) {
+        if (typeof recipe.caloriesPerServing === 'number') {
+          dayCalories += recipe.caloriesPerServing;
+          hasCalories = true;
+        }
+      }
       const same =
         recipes.map(({ id }) => id).join() ===
         previous.map(({ id }) => id).join();
@@ -36,8 +56,10 @@ export function describeDraft(proposal: DraftProposal): string {
       const now = recipes.length > 0 ? titles(recipes) : '(empty)';
       parts.push(`${SECTION_NAMES[section]}: ${now}`);
     }
-    if (parts.length > 0)
-      lines.push(`- ${DAY_NAMES[day]}: ${parts.join('; ')}`);
+    if (parts.length > 0) {
+      const totalNote = hasCalories ? ` [tổng ngày ~${dayCalories} kcal]` : '';
+      lines.push(`- ${DAY_NAMES[day]}: ${parts.join('; ')}${totalNote}`);
+    }
   }
   return lines.join('\n');
 }

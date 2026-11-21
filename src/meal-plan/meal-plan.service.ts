@@ -10,6 +10,8 @@ import {
   MealPlanDraftSlot,
   MealPlanEntry,
   MealSection,
+  NutritionGoal,
+  NutritionPillar,
   Recipe,
   RecipeIngredient,
   RecipeTag,
@@ -20,6 +22,11 @@ import { MongoService } from '../mongo/mongo.service.js';
 import { allExist } from '../mongo/references.js';
 import { DietaryService } from '../recipes/dietary.service.js';
 import { IncompatibilityRulesService } from '../recipes/incompatibility-rules.service.js';
+import {
+  extractAllergyKeywords,
+  inferNutritionPillars,
+  resolveCaloriesPerServing,
+} from '../recipes/nutrition.js';
 import {
   MEAL_SECTIONS,
   MealPlanDto,
@@ -58,13 +65,21 @@ type RecipeRow = Omit<Recipe, 'ingredients'> & {
 };
 type DaySections = Record<MealSection, RecipeRow[]>;
 type Week = Map<Weekday, DaySections>;
-type RecipeRef = { id: string; title: string; tag: RecipeTag | null };
+type RecipeRef = {
+  id: string;
+  title: string;
+  tag: RecipeTag | null;
+  caloriesPerServing: number;
+  nutritionPillars: NutritionPillar[];
+};
 
 export interface SuggestionFilters {
   tag?: RecipeTag;
   tags?: RecipeTag[];
   exclude?: string[];
   maxMinutes?: number;
+  maxCalories?: number;
+  pillar?: NutritionPillar;
 }
 
 export interface RecipeSuggestion {
@@ -72,6 +87,8 @@ export interface RecipeSuggestion {
   title: string;
   tag: RecipeTag | null;
   minutes: number | null;
+  caloriesPerServing?: number | null;
+  nutritionPillars?: NutritionPillar[];
   ingredients: string[];
   description?: string | null;
   /** Ingredients the user avoids. The recipe can be discussed but never planned. */
@@ -84,6 +101,8 @@ export interface RecipeInstructions {
   description: string | null;
   servings: number;
   minutes: number | null;
+  caloriesPerServing?: number | null;
+  nutritionPillars?: NutritionPillar[];
   ingredients: {
     name: string;
     quantity: number | null;
@@ -154,10 +173,11 @@ function onlyEditable(
   };
 }
 
-const toRef = ({ id, title, tag }: RecipeRow): RecipeRef => ({
-  id,
-  title,
-  tag,
+const toRef = (recipe: RecipeRow): RecipeRef => ({
+  id: recipe.id,
+  title: recipe.title,
+  tag: recipe.tag,
+  ...recipeNutrition(recipe),
 });
 
 @Injectable()
@@ -334,16 +354,26 @@ export class MealPlanService {
   ): Promise<{
     candidates: GeneratorCandidate[];
     ingredientsById: Map<string, string[]>;
+    caloriesById: Map<string, number>;
+    nutritionGoal: NutritionGoal | null;
+    dailyCalorieTarget: number | null;
   }> {
-    const [avoided, restrictions, rows] = await Promise.all([
+    const [avoided, restrictions, nutrition, rows] = await Promise.all([
       this.dietary.avoidedIngredientIds(userId),
       this.dietary.find(userId),
+      Promise.resolve(this.dietary.findNutrition(userId)).then(
+        (value) => value ?? null,
+      ),
       this.recipeRows(await this.recipes.find().sort({ title: 1 }).exec()),
     ]);
-    const ingredientsById = new Map(
-      rows.map((recipe) => [recipe.id, ingredientIds(recipe)]),
-    );
+    const ingredientsById = new Map<string, string[]>();
+    const caloriesById = new Map<string, number>();
+    for (const recipe of rows) {
+      ingredientsById.set(recipe.id, ingredientIds(recipe));
+      caloriesById.set(recipe.id, recipeNutrition(recipe).caloriesPerServing);
+    }
     const liked = new Set(restrictions.liked.map(({ id }) => id));
+    const allergyKeywords = extractAllergyKeywords(restrictions.allergyNote);
     const text = dto.query?.trim().toLowerCase() ?? '';
     const excluded = (dto.exclude ?? [])
       .map((word) => word.trim().toLowerCase())
@@ -358,6 +388,9 @@ export class MealPlanService {
         avoided.has(ingredientId),
       );
       if (hasAvoided) continue;
+      if (allergyKeywords.some((word) => matchesText(recipe, word, true))) {
+        continue;
+      }
       if (allowed && !allowed.has(recipe.id)) continue;
       if (denied.has(recipe.id)) continue;
       if (tags && (recipe.tag === null || !tags.includes(recipe.tag))) continue;
@@ -375,11 +408,14 @@ export class MealPlanService {
     const candidates: GeneratorCandidate[] = [];
     eligible.forEach((recipe, index) => {
       if (ownConflicts[index].length > 0) return;
+      const nutritionMeta = recipeNutrition(recipe);
       candidates.push({
         id: recipe.id,
         title: recipe.title,
         tag: recipe.tag,
         minutes: totalMinutes(recipe),
+        caloriesPerServing: nutritionMeta.caloriesPerServing,
+        nutritionPillars: nutritionMeta.nutritionPillars,
         ingredientIds: ingredientIds(recipe),
         likedCount: recipe.ingredients.filter(({ ingredientId }) =>
           liked.has(ingredientId),
@@ -388,7 +424,13 @@ export class MealPlanService {
       });
     });
 
-    return { candidates, ingredientsById };
+    return {
+      candidates,
+      ingredientsById,
+      caloriesById,
+      nutritionGoal: nutrition?.effectiveGoal ?? null,
+      dailyCalorieTarget: nutrition?.dailyCalorieTarget ?? null,
+    };
   }
 
   /**
@@ -405,7 +447,10 @@ export class MealPlanService {
     if (request.days.length === 0) {
       return { weekStart: week.weekStart, days: [], problems: [] };
     }
-    const [{ candidates, ingredientsById }, saved] = await Promise.all([
+    const [
+      { candidates, ingredientsById, nutritionGoal, dailyCalorieTarget },
+      saved,
+    ] = await Promise.all([
       this.buildGeneratorPool(userId, request),
       this.saved(userId, week.weekStart),
     ]);
@@ -421,6 +466,8 @@ export class MealPlanService {
       onlyEmpty: request.onlyEmpty,
       perSection: request.perSection ?? 1,
       ignoreFit: tags !== null,
+      nutritionGoal,
+      dailyCalorieTarget: dto.targetCalories ?? dailyCalorieTarget,
       skip,
       ingredientsById,
       areCompatible: (sets) => this.areCompatible(sets),
@@ -461,11 +508,13 @@ export class MealPlanService {
       const current = await this.getDraft(userId, week.weekStart);
       return { ...current, filled: 0, allSlotsAlreadyFilled: false };
     }
-    const [{ candidates, ingredientsById }, { savedIds, ids }] =
-      await Promise.all([
-        this.buildGeneratorPool(userId, request),
-        this.effective(userId, week),
-      ]);
+    const [
+      { candidates, ingredientsById, nutritionGoal, dailyCalorieTarget },
+      { savedIds, ids },
+    ] = await Promise.all([
+      this.buildGeneratorPool(userId, request),
+      this.effective(userId, week),
+    ]);
     const { week: base, skip: dtoSkip } = applyPinnedSlots(ids, request.pinned);
     const skip = [...dtoSkip, ...extraPinned];
     const targetSlots = request.days.flatMap((day) =>
@@ -492,6 +541,8 @@ export class MealPlanService {
       onlyEmpty: request.onlyEmpty,
       perSection: request.perSection ?? 1,
       ignoreFit: tags !== null,
+      nutritionGoal,
+      dailyCalorieTarget: dto.targetCalories ?? dailyCalorieTarget,
       skip,
       ingredientsById,
       areCompatible: (sets) => this.areCompatible(sets),
@@ -506,6 +557,81 @@ export class MealPlanService {
     const filled = changed > 0 ? changed : generated.length > 0 ? 1 : 0;
     const proposal = await this.commitDraft(userId, week, next, savedIds);
     return { ...proposal, filled, allSlotsAlreadyFilled };
+  }
+
+  /**
+   * Automatically balances editable days in the draft toward the target calorie
+   * budget: trims extra dishes on over-budget days and expands main/snack slots
+   * with complementary dishes on under-budget days while preserving existing choices.
+   */
+  async autoBalanceDraft(
+    userId: string,
+    options: {
+      weekStart?: string;
+      days?: Weekday[];
+      targetCalories?: number;
+    } = {},
+  ): Promise<DraftProposal & { filled: number; targetCalories: number }> {
+    const week = currentMealWeek(options.weekStart);
+    assertWithinHorizon(week);
+    const [
+      {
+        candidates,
+        ingredientsById,
+        caloriesById,
+        nutritionGoal,
+        dailyCalorieTarget,
+      },
+      { savedIds, ids },
+    ] = await Promise.all([
+      this.buildGeneratorPool(userId, {}),
+      this.effective(userId, week),
+    ]);
+    const resolvedTarget =
+      options.targetCalories ?? dailyCalorieTarget ?? 1800;
+    const requestedDays =
+      options.days && options.days.length > 0
+        ? options.days
+        : week.editableDays;
+    const targetDays = requestedDays.filter((day) =>
+      week.editableDays.includes(day),
+    );
+    if (targetDays.length === 0) {
+      const current = await this.getDraft(userId, week.weekStart);
+      return { ...current, filled: 0, targetCalories: resolvedTarget };
+    }
+
+    const base = cloneWeekIds(ids);
+    const ceiling = Math.round(resolvedTarget * 1.15);
+    for (const day of targetDays) {
+      const slots = base.get(day);
+      if (!slots) continue;
+      trimExcessDayDishes(slots, caloriesById, ceiling);
+    }
+
+    const generated = await generateMealDays({
+      candidates,
+      saved: base,
+      days: targetDays,
+      sections: MEAL_SECTIONS,
+      onlyEmpty: true,
+      perSection: 1,
+      ignoreFit: false,
+      nutritionGoal,
+      dailyCalorieTarget: resolvedTarget,
+      skip: [],
+      ingredientsById,
+      areCompatible: (sets) => this.areCompatible(sets),
+      random: Math.random,
+    });
+
+    const next = cloneWeekIds(base);
+    for (const { day, BREAKFAST, LUNCH, DINNER, OTHER } of generated) {
+      next.set(day, { BREAKFAST, LUNCH, DINNER, OTHER });
+    }
+    const changed = changedSlots(next, ids, MEAL_SECTIONS).length;
+    const proposal = await this.commitDraft(userId, week, next, savedIds);
+    return { ...proposal, filled: changed, targetCalories: resolvedTarget };
   }
 
   /** The unsaved draft the assistant is building, against the saved plan. */
@@ -813,6 +939,19 @@ export class MealPlanService {
         const minutes = totalMinutes(recipe);
         if (minutes === null || minutes > filters.maxMinutes) continue;
       }
+      const nutritionMeta = recipeNutrition(recipe);
+      if (
+        filters.maxCalories !== undefined &&
+        nutritionMeta.caloriesPerServing > filters.maxCalories
+      ) {
+        continue;
+      }
+      if (
+        filters.pillar !== undefined &&
+        !nutritionMeta.nutritionPillars.includes(filters.pillar)
+      ) {
+        continue;
+      }
       if (text !== '' && !matchesQuery(recipe, text, true)) continue;
       matching.push(recipe);
       if (matching.length === MAX_SUGGESTIONS * 2) break;
@@ -827,11 +966,14 @@ export class MealPlanService {
     const flagged: RecipeSuggestion[] = [];
     matching.forEach((recipe, index) => {
       if (conflicts[index].length > 0) return;
+      const nutritionMeta = recipeNutrition(recipe);
       const suggestion: RecipeSuggestion = {
         id: recipe.id,
         title: recipe.title,
         tag: recipe.tag,
         minutes: totalMinutes(recipe),
+        caloriesPerServing: nutritionMeta.caloriesPerServing,
+        nutritionPillars: nutritionMeta.nutritionPillars,
         ingredients: recipe.ingredients.map(
           ({ ingredient }) => ingredient.name,
         ),
@@ -854,6 +996,7 @@ export class MealPlanService {
     const [recipe] = await this.recipeRows([row]);
     const avoided = await this.dietary.avoidedIngredientIds(userId);
     const hasTime = recipe.prepMinutes !== null || recipe.cookMinutes !== null;
+    const nutritionMeta = recipeNutrition(recipe);
     return {
       id: recipe.id,
       title: recipe.title,
@@ -862,6 +1005,8 @@ export class MealPlanService {
       minutes: hasTime
         ? (recipe.prepMinutes ?? 0) + (recipe.cookMinutes ?? 0)
         : null,
+      caloriesPerServing: nutritionMeta.caloriesPerServing,
+      nutritionPillars: nutritionMeta.nutritionPillars,
       ingredients: recipe.ingredients.map(
         ({ ingredient, quantity, unit, note }) => ({
           name: ingredient.name,
@@ -1052,7 +1197,29 @@ function matchesQuery(
 const ingredientIds = (recipe: RecipeRow) =>
   recipe.ingredients.map(({ ingredientId }) => ingredientId);
 
+function recipeNutrition(recipe: RecipeRow): {
+  caloriesPerServing: number;
+  nutritionPillars: NutritionPillar[];
+} {
+  const ingredientNames = recipe.ingredients.map(
+    ({ ingredient }) => ingredient.name,
+  );
+  return {
+    caloriesPerServing: resolveCaloriesPerServing({
+      caloriesPerServing: recipe.caloriesPerServing,
+      tag: recipe.tag,
+      title: recipe.title,
+      ingredientNames,
+    }),
+    nutritionPillars: inferNutritionPillars(
+      ingredientNames,
+      recipe.nutritionPillars ?? [],
+    ),
+  };
+}
+
 function toRecipeDto(recipe: RecipeRow): MealRecipeDto {
+  const { caloriesPerServing, nutritionPillars } = recipeNutrition(recipe);
   return {
     id: recipe.id,
     title: recipe.title,
@@ -1061,6 +1228,8 @@ function toRecipeDto(recipe: RecipeRow): MealRecipeDto {
     servings: recipe.servings,
     prepMinutes: recipe.prepMinutes,
     cookMinutes: recipe.cookMinutes,
+    caloriesPerServing,
+    nutritionPillars,
     steps: [...recipe.steps],
     ingredients: recipe.ingredients.map(
       ({ ingredient, quantity, unit, note }) => ({
@@ -1083,4 +1252,40 @@ function avoidedNames(
     if (avoided.has(ingredientId)) names.push(ingredient.name);
   }
   return names;
+}
+
+const TRIM_SECTIONS: readonly {
+  section: MealSection;
+  minDishes: number;
+}[] = [
+  { section: MealSection.OTHER, minDishes: 0 },
+  { section: MealSection.DINNER, minDishes: 1 },
+  { section: MealSection.LUNCH, minDishes: 1 },
+  { section: MealSection.BREAKFAST, minDishes: 1 },
+];
+
+function trimExcessDayDishes(
+  slots: Record<MealSection, string[]>,
+  caloriesById: ReadonlyMap<string, number>,
+  ceiling: number,
+): void {
+  let total = MEAL_SECTIONS.reduce(
+    (sum, section) =>
+      sum +
+      slots[section].reduce(
+        (slotSum, id) => slotSum + (caloriesById.get(id) ?? 0),
+        0,
+      ),
+    0,
+  );
+  if (total <= ceiling) return;
+
+  for (const { section, minDishes } of TRIM_SECTIONS) {
+    while (total > ceiling && slots[section].length > minDishes) {
+      const removed = slots[section].pop();
+      if (!removed) break;
+      total -= caloriesById.get(removed) ?? 0;
+    }
+    if (total <= ceiling) break;
+  }
 }

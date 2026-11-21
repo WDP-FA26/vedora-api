@@ -23,7 +23,11 @@ import {
   PostSchema,
   PostViewDaySchema,
 } from './post.schema.js';
-import { UserAccountAuditSchema, UserSchema } from './user.schema.js';
+import {
+  BodyMetricLogSchema,
+  UserAccountAuditSchema,
+  UserSchema,
+} from './user.schema.js';
 import {
   FollowSchema,
   FollowSuggestionSchema,
@@ -81,6 +85,7 @@ export const MODEL_DEFINITIONS = [
   { name: 'MessagingEvent', schema: MessagingEventSchema },
   { name: 'User', schema: UserSchema },
   { name: 'UserAccountAudit', schema: UserAccountAuditSchema },
+  { name: 'BodyMetricLog', schema: BodyMetricLogSchema },
   { name: 'Follow', schema: FollowSchema },
   { name: 'Notification', schema: NotificationSchema },
   { name: 'ModerationSettings', schema: ModerationSettingsSchema },

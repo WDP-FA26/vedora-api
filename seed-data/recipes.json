@@ -1075,7 +1075,8 @@
         "Thả đậu hũ vào, nêm nước tương và bột nêm nấm rồi nấu thêm 3 phút.",
         "Cuối cùng cho rau bina vào, nhấc nồi khỏi bếp khi rau vừa xẹp lá.",
         "Múc ra tô, rắc chút tiêu và dùng nóng."
-      ]
+      ],
+      "caloriesPerServing": 170
     },
     {
       "title": "Canh mồng tơi nấm nấu đậu hũ",
@@ -1130,7 +1131,8 @@
         "Đổ khoảng 1,2 lít nước vào, đun sôi rồi cho nấm rơm vào nấu 5 phút.",
         "Thêm đậu hũ, nêm bột nêm nấm và chút muối.",
         "Khi nước sôi lại, cho mồng tơi vào, đun thêm 2 phút rồi tắt bếp để rau không bị nát."
-      ]
+      ],
+      "caloriesPerServing": 140
     },
     {
       "title": "Khoai môn kho đậu hũ",
@@ -1191,7 +1193,8 @@
         "Thêm nước tương, đường và nước xâm xấp mặt khoai, đun sôi rồi hạ lửa nhỏ.",
         "Sau 15 phút, cho đậu hũ vào, kho thêm 10 phút đến khi nước sệt lại.",
         "Rắc tiêu và hành lá, tắt bếp."
-      ]
+      ],
+      "caloriesPerServing": 310
     },
     {
       "title": "Canh chua chay đậu bắp",
@@ -1259,7 +1262,8 @@
         "Nêm đường, muối rồi nấu 5 phút cho các vị hòa vào nhau.",
         "Cho đậu hũ và đậu bắp vào, nấu thêm 4 phút.",
         "Thêm giá đỗ, tắt bếp ngay rồi rắc ngò om và ngò gai."
-      ]
+      ],
+      "caloriesPerServing": 140
     },
     {
       "title": "Đậu hũ sốt cà chua",
@@ -1315,7 +1319,8 @@
         "Thêm nước tương, đường và nửa chén nước, đun sôi nhỏ lửa 5 phút.",
         "Cho đậu hũ chiên vào, đảo nhẹ để sốt bám đều.",
         "Rắc hành lá và tắt bếp."
-      ]
+      ],
+      "caloriesPerServing": 260
     },
     {
       "title": "Đậu hũ chiên sả ớt",
@@ -1371,7 +1376,8 @@
         "Chiên đậu hũ trong dầu nóng đến vàng giòn rồi vớt ra giấy thấm dầu.",
         "Phi sả và ớt trong một ít dầu, nêm nước tương và đường.",
         "Cho đậu hũ vào, đảo đều 1 phút cho sả ớt bám quanh miếng đậu."
-      ]
+      ],
+      "caloriesPerServing": 340
     },
     {
       "title": "Rau muống xào tỏi",
@@ -1415,7 +1421,8 @@
         "Làm nóng dầu, phi tỏi vàng thơm.",
         "Tăng lửa lớn, cho rau vào xào nhanh tay khoảng 2 phút.",
         "Nêm nước tương và bột nêm nấm, đảo đều rồi dọn ngay."
-      ]
+      ],
+      "caloriesPerServing": 160
     },
     {
       "title": "Cải ngọt xào nấm hương",
@@ -1468,7 +1475,8 @@
         "Phi gừng với dầu, cho nấm hương vào xào 2 phút.",
         "Thêm cải ngọt, tăng lửa và xào nhanh.",
         "Nêm nước tương, bột nêm nấm, rắc tiêu, xào thêm 1 phút rồi tắt bếp."
-      ]
+      ],
+      "caloriesPerServing": 130
     },
     {
       "title": "Canh khổ qua nhồi nấm",
@@ -1533,7 +1541,8 @@
         "Nhồi hỗn hợp vào từng khoanh khổ qua, nén chặt tay.",
         "Đun sôi 1,2 lít nước với chút muối, thả khổ qua nhồi vào.",
         "Hạ lửa nhỏ nấu 25 phút đến khi khổ qua mềm, nếm lại cho vừa ăn."
-      ]
+      ],
+      "caloriesPerServing": 120
     },
     {
       "title": "Canh bí đao hạt sen",
@@ -1591,7 +1600,8 @@
         "Đun 1,2 lít nước cùng hạt sen và gừng, nấu nhỏ lửa 10 phút.",
         "Cho bí đao và nấm mèo vào nấu thêm 10 phút đến khi bí trong.",
         "Nêm bột nêm nấm, muối cho vừa ăn rồi rắc rau mùi."
-      ]
+      ],
+      "caloriesPerServing": 130
     },
     {
       "title": "Canh củ cải cà rốt nấm hương",
@@ -1651,7 +1661,8 @@
         "Cho nấm hương cùng nước ngâm lọc cặn và 1 lít nước vào nồi, nấu sôi.",
         "Thêm củ cải, cà rốt và gừng, hạ lửa nhỏ nấu 25 phút đến khi mềm.",
         "Nêm bột nêm nấm, rắc hành lá và tiêu."
-      ]
+      ],
+      "caloriesPerServing": 110
     },
     {
       "title": "Cà tím kho tộ chay",
@@ -1706,7 +1717,8 @@
         "Thêm cà tím, đảo đều rồi đổ nước xâm xấp.",
         "Kho lửa nhỏ 15 phút, đừng khuấy nhiều để cà không nát.",
         "Cho ớt và tiêu, kho thêm 3 phút đến khi nước sệt."
-      ]
+      ],
+      "caloriesPerServing": 180
     },
     {
       "title": "Nấm kho tiêu",
@@ -1768,7 +1780,8 @@
         "Cho các loại nấm vào xào 4 phút cho bớt nước.",
         "Thêm nước tương, đường thốt nốt và nửa chén nước, đun nhỏ lửa.",
         "Khi nước cạn sệt, rắc nhiều tiêu, đảo đều rồi tắt bếp."
-      ]
+      ],
+      "caloriesPerServing": 170
     },
     {
       "title": "Mít non kho nước tương",
@@ -1828,7 +1841,8 @@
         "Phi hành, gừng, nghệ trong dầu cho thơm.",
         "Cho mít vào xào, nêm nước tương, đường và một ít nước.",
         "Kho lửa nhỏ 20 phút đến khi mít thấm và nước cạn, rắc tiêu."
-      ]
+      ],
+      "caloriesPerServing": 210
     },
     {
       "title": "Chả giò chay",
@@ -1901,7 +1915,8 @@
         "Làm ẩm bánh tráng, cho một muỗng nhân rồi cuốn chặt tay.",
         "Chiên chả giò trong dầu vừa nóng, lửa nhỏ đến khi vàng giòn.",
         "Vớt ra để ráo dầu, dùng với nước mắm chay và rau sống."
-      ]
+      ],
+      "caloriesPerServing": 290
     },
     {
       "title": "Gỏi cuốn chay",
@@ -1985,7 +2000,8 @@
         "Nhúng bánh tráng vào nước, đặt xà lách, bún, rau thơm và các nguyên liệu lên.",
         "Cuộn chặt tay, gập hai đầu lại cho gọn.",
         "Hòa tương hột với bơ đậu phộng và chút nước ấm làm nước chấm, dùng cùng gỏi cuốn."
-      ]
+      ],
+      "caloriesPerServing": 280
     },
     {
       "title": "Gỏi dưa leo cà rốt",
@@ -2046,7 +2062,8 @@
         "Bóp dưa leo và cà rốt với chút muối, vắt ráo nước.",
         "Trộn rau củ với nước trộn gỏi, thêm rau răm.",
         "Rắc đậu phộng lên trên, dọn ngay để rau còn giòn."
-      ]
+      ],
+      "caloriesPerServing": 150
     },
     {
       "title": "Gỏi ngó sen củ năng",
@@ -2116,7 +2133,8 @@
         "Luộc sơ nấm rơm, xé nhỏ và để nguội.",
         "Trộn chanh, đường, nước mắm chay thành nước trộn gỏi.",
         "Trộn đều ngó sen, củ năng, cà rốt, nấm và rau thơm với nước gỏi, rắc đậu phộng."
-      ]
+      ],
+      "caloriesPerServing": 160
     },
     {
       "title": "Bún riêu chay",
@@ -2199,7 +2217,8 @@
         "Trộn đậu hũ non dằm với chút bột nêm rồi thả từng muỗng vào nồi nước sôi nhẹ để tạo riêu, không khuấy mạnh.",
         "Cho đậu hũ chiên vào nấu thêm 5 phút.",
         "Chần bún, xếp vào tô cùng rau muống chẻ, chan nước và riêu."
-      ]
+      ],
+      "caloriesPerServing": 410
     },
     {
       "title": "Bún bò Huế chay",
@@ -2276,7 +2295,8 @@
         "Phi sả còn lại với hạt điều màu và sa tế rồi cho vào nồi nước dùng.",
         "Nêm bột nêm nấm cho vừa miệng, nấu thêm 10 phút.",
         "Chần bún, xếp vào tô cùng nấm, củ cải và đậu hũ chiên, chan nước dùng và rắc hành lá, ăn kèm bắp cải thái sợi."
-      ]
+      ],
+      "caloriesPerServing": 430
     },
     {
       "title": "Phở chay",
@@ -2357,7 +2377,8 @@
         "Cho tất cả vào nồi cùng củ cải, nấm hương và 2 lít nước, ninh nhỏ lửa 45 phút.",
         "Lọc bỏ gia vị, nêm muối cho vừa ăn.",
         "Chần bánh phở, xếp cùng đậu hũ chiên và giá vào tô, chan nước dùng nóng, ăn với húng quế."
-      ]
+      ],
+      "caloriesPerServing": 390
     },
     {
       "title": "Hủ tiếu chay",
@@ -2433,7 +2454,8 @@
         "Nêm nước tương, bột nêm nấm cho nước dùng vừa ăn.",
         "Chần hủ tiếu và giá, cho vào tô cùng đậu hũ chiên và hẹ.",
         "Chan nước dùng nóng, rắc hành tím phi và tiêu."
-      ]
+      ],
+      "caloriesPerServing": 380
     },
     {
       "title": "Cơm chiên rau củ",
@@ -2510,7 +2532,8 @@
         "Xào cà rốt, nấm hương và bắp trong dầu 3 phút, thêm đậu Hà Lan.",
         "Cho cơm nguội vào, đảo tơi trên lửa lớn.",
         "Nêm nước tương, tiêu và hành lá, đảo thêm 2 phút rồi dọn ra."
-      ]
+      ],
+      "caloriesPerServing": 460
     },
     {
       "title": "Cơm gạo lứt muối mè",
@@ -2555,7 +2578,8 @@
         "Vo gạo lứt, nấu với lượng nước gấp 1,5 lần trong nồi cơm hoặc nồi áp suất đến khi chín mềm.",
         "Giã nhẹ mè trắng, mè đen với muối thành muối mè.",
         "Xới cơm ra chén, rắc muối mè và rong biển lên trên."
-      ]
+      ],
+      "caloriesPerServing": 430
     },
     {
       "title": "Xôi đậu xanh nước cốt dừa",
@@ -2605,7 +2629,8 @@
         "Hấp gạo nếp đã ráo nước 25 phút cho chín dẻo.",
         "Đun nước cốt dừa với đường và chút muối cho tan.",
         "Xới xôi, cho đậu xanh lên, rưới nước cốt dừa và rắc hành phi."
-      ]
+      ],
+      "caloriesPerServing": 470
     },
     {
       "title": "Cháo nấm hương",
@@ -2658,7 +2683,8 @@
         "Phi gừng và nấm hương với dầu, cho vào nồi cháo.",
         "Nêm bột nêm nấm, nấu thêm 5 phút rồi múc ra tô.",
         "Rắc hành lá và tiêu."
-      ]
+      ],
+      "caloriesPerServing": 230
     },
     {
       "title": "Bánh xèo chay",
@@ -2731,7 +2757,8 @@
         "Làm nóng chảo với dầu, đổ một vá bột, cho nhân và giá lên, đậy nắp 2 phút.",
         "Mở nắp, chiên đến khi vỏ giòn vàng, gập đôi.",
         "Dọn cùng xà lách và nước mắm chay pha chua ngọt."
-      ]
+      ],
+      "caloriesPerServing": 380
     },
     {
       "title": "Bánh mì chay đồ chua",
@@ -2798,7 +2825,8 @@
         "Áp chảo đậu hũ chiên với nước tương cho thơm.",
         "Nướng giòn bánh mì, xẻ dọc.",
         "Nhồi đậu hũ, đồ chua, rau mùi và ớt vào bánh mì."
-      ]
+      ],
+      "caloriesPerServing": 440
     },
     {
       "title": "Chè đậu đỏ nước cốt dừa",
@@ -2848,7 +2876,8 @@
         "Cho đường phèn vào nấu thêm 10 phút cho tan.",
         "Đun nước cốt dừa với muối và bột năng đã hòa cho hơi sánh.",
         "Múc chè ra chén, rưới nước cốt dừa."
-      ]
+      ],
+      "caloriesPerServing": 360
     },
     {
       "title": "Chè chuối nước cốt dừa",
@@ -2902,7 +2931,8 @@
         "Hòa bột năng với nước lạnh, đổ từ từ vào nồi, khuấy đều cho chè sánh.",
         "Cho nước cốt dừa và muối vào, đun sôi nhẹ rồi tắt bếp.",
         "Múc chè ra chén, rắc đậu phộng."
-      ]
+      ],
+      "caloriesPerServing": 390
     },
     {
       "title": "Sữa đậu nành nóng",
@@ -2940,7 +2970,8 @@
         "Đun sữa với lá dứa và khuấy liên tục, hạ lửa khi sôi để tránh trào.",
         "Nấu thêm 10 phút, cho đường phèn và muối vào khuấy tan.",
         "Rót ra ly và uống nóng."
-      ]
+      ],
+      "caloriesPerServing": 210
     },
     {
       "title": "Sinh tố bơ sữa dừa",
@@ -2983,7 +3014,8 @@
         "Cho bơ, nước cốt dừa, sữa yến mạch và đường thốt nốt vào máy xay.",
         "Xay mịn cùng một ít đá viên, nhỏ vài giọt chanh để giữ màu.",
         "Nếm lại độ ngọt rồi rót ra ly."
-      ]
+      ],
+      "caloriesPerServing": 420
     },
     {
       "title": "Cà ri chay khoai lang",
@@ -3072,7 +3104,8 @@
         "Cho khoai lang, cà rốt vào đảo đều rồi đổ 600 ml nước.",
         "Nấu sôi nhỏ lửa 15 phút, thêm nấm rơm và đậu hũ.",
         "Đổ nước cốt dừa vào, nêm muối, nấu thêm 8 phút rồi tắt bếp."
-      ]
+      ],
+      "caloriesPerServing": 410
     },
     {
       "title": "Nấm đùi gà cuốn lá lốt",
@@ -3131,7 +3164,8 @@
         "Trải lá lốt, đặt một muỗng nhân lên mặt trên lá rồi cuộn chặt.",
         "Chiên cuốn lá lốt trong chảo với dầu lửa vừa đến khi vàng hai mặt.",
         "Dọn ra đĩa, ăn nóng với nước chấm chay."
-      ]
+      ],
+      "caloriesPerServing": 220
     },
     {
       "title": "Trà xanh chanh dây mật mía",
@@ -3176,7 +3210,8 @@
         "Hòa mật mía vào trà khi còn ấm, để nguội.",
         "Thêm ruột chanh dây và nước cam, khuấy đều.",
         "Rót ra ly với đá và thả lá dứa cho thơm."
-      ]
+      ],
+      "caloriesPerServing": 90
     },
     {
       "title": "Cà phê nước cốt dừa",
@@ -3216,7 +3251,8 @@
         "Khuấy đường thốt nốt vào cà phê còn nóng cho tan.",
         "Đánh nước cốt dừa với sữa yến mạch cho hơi bông.",
         "Rót cà phê ra ly có đá, đổ lớp nước cốt dừa lên trên."
-      ]
+      ],
+      "caloriesPerServing": 210
     }
   ]
 }

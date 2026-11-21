@@ -3,6 +3,10 @@ import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import {
   AccountStatus,
   AccountType,
+  ActivityLevel,
+  BiologicalSex,
+  BodyFeeling,
+  NutritionGoal,
   UserAccountAction,
   UserRole,
 } from '../enums.js';
@@ -83,6 +87,42 @@ export class User extends Identified {
   @Prop({ type: [String], required: true, default: [] })
   likedIngredientIds!: string[];
 
+  @Prop({ type: String, default: null })
+  allergyNote!: string | null;
+
+  @Prop({ type: Number, default: null })
+  heightCm!: number | null;
+
+  @Prop({ type: Number, default: null })
+  weightKg!: number | null;
+
+  @Prop({ type: Number, default: null })
+  targetWeightKg!: number | null;
+
+  @Prop({ type: Number, default: null })
+  birthYear!: number | null;
+
+  @Prop({
+    type: String,
+    enum: Object.values(BiologicalSex),
+    default: null,
+  })
+  biologicalSex!: BiologicalSex | null;
+
+  @Prop({
+    type: String,
+    enum: Object.values(ActivityLevel),
+    default: null,
+  })
+  activityLevel!: ActivityLevel | null;
+
+  @Prop({
+    type: String,
+    enum: Object.values(NutritionGoal),
+    default: null,
+  })
+  nutritionGoal!: NutritionGoal | null;
+
   @Prop({ type: Date })
   createdAt!: Date;
 
@@ -133,6 +173,7 @@ cascadeOnDelete(UserSchema, [
   { model: 'MealPlanChatThread', field: 'userId', action: 'delete' },
   { model: 'MealPlanChatMessage', field: 'userId', action: 'delete' },
   { model: 'AiUsage', field: 'userId', action: 'delete' },
+  { model: 'BodyMetricLog', field: 'userId', action: 'delete' },
   { model: 'ProfileImageUpload', field: 'ownerId', action: 'unset' },
   { model: 'PostReport', field: 'reviewedById', action: 'unset' },
   { model: 'MediaAsset', field: 'ownerId', action: 'unset' },
@@ -188,3 +229,45 @@ export const UserAccountAuditSchema =
   SchemaFactory.createForClass(UserAccountAudit);
 UserAccountAuditSchema.index({ userId: 1, createdAt: 1 });
 UserAccountAuditSchema.index({ actorId: 1, createdAt: 1 });
+
+/** One weight/BMI check-in entry per user per calendar day (`YYYY-MM-DD`). */
+@Schema(collectionSchema('body_metric_logs'))
+export class BodyMetricLog extends Identified {
+  @Prop({ type: String, default: () => randomUUID() })
+  _id!: string;
+
+  @Prop({ type: String, required: true })
+  userId!: string;
+
+  @Prop({ type: String, required: true })
+  date!: string;
+
+  @Prop({ type: Number, required: true })
+  weightKg!: number;
+
+  @Prop({ type: Number, required: true })
+  heightCm!: number;
+
+  @Prop({ type: Number, required: true })
+  bmi!: number;
+
+  @Prop({
+    type: String,
+    enum: Object.values(BodyFeeling),
+    default: null,
+  })
+  feeling!: BodyFeeling | null;
+
+  @Prop({ type: String, default: null })
+  note!: string | null;
+
+  @Prop({ type: Date })
+  createdAt!: Date;
+
+  @Prop({ type: Date })
+  updatedAt!: Date;
+}
+
+export const BodyMetricLogSchema = SchemaFactory.createForClass(BodyMetricLog);
+BodyMetricLogSchema.index({ userId: 1, date: 1 }, { unique: true });
+BodyMetricLogSchema.index({ userId: 1, date: -1 });

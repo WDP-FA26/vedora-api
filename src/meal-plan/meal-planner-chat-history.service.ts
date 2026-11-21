@@ -38,6 +38,8 @@ const PROPOSAL_TOOL_TYPES: ReadonlySet<string> = new Set([
   'tool-proposeMealPlan',
   'tool-generateMealPlan',
   'tool-fillSlots',
+  'tool-autoBalanceDraft',
+  'tool-verifyMealPlanAllergies',
   'tool-editDraft',
 ]);
 

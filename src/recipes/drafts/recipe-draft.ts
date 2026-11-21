@@ -26,6 +26,7 @@ export const draftOutput = z.object({
       servings: z.number().nullable(),
       prepMinutes: z.number().nullable(),
       cookMinutes: z.number().nullable(),
+      caloriesPerServing: z.number().nullable().optional(),
       ingredients: z.array(
         z.object({
           name: z.string(),
@@ -89,6 +90,7 @@ export interface RecipeDraft {
   servings: number | null;
   prepMinutes: number | null;
   cookMinutes: number | null;
+  caloriesPerServing?: number | null;
   ingredients: DraftIngredient[];
   steps: string[];
 }
@@ -187,6 +189,11 @@ export function toRecipeDraft(
     servings: wholeNumberIn(recipe.servings, 1, MAX_SERVINGS),
     prepMinutes: wholeNumberIn(recipe.prepMinutes, 0, MAX_MINUTES),
     cookMinutes: wholeNumberIn(recipe.cookMinutes, 0, MAX_MINUTES),
+    caloriesPerServing: wholeNumberIn(
+      recipe.caloriesPerServing ?? null,
+      10,
+      3000,
+    ),
     ingredients,
     steps,
   };

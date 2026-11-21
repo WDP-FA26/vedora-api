@@ -100,7 +100,7 @@ export class RecipeCatalogService {
     let matching = await this.recipes
       .find()
       .select(
-        'title description imageUrl tag servings prepMinutes cookMinutes ingredients steps postId updatedAt',
+        'title description imageUrl tag servings prepMinutes cookMinutes caloriesPerServing nutritionPillars ingredients steps postId updatedAt',
       )
       .sort({ updatedAt: -1, _id: -1 })
       .exec();

@@ -6,10 +6,15 @@ import {
   type Ingredient,
   type IngredientGroup,
   type IncompatibilityRule,
+  NutritionPillar,
   type Recipe,
   RecipeTag,
 } from '../mongo/models.js';
 import type { MongoService } from '../mongo/mongo.service.js';
+import {
+  inferNutritionPillars,
+  resolveCaloriesPerServing,
+} from '../recipes/nutrition.js';
 
 const sideSchema = z.object({
   kind: z.enum(['INGREDIENT', 'GROUP']),
@@ -44,6 +49,8 @@ const seedDataSchema = z.object({
       servings: z.number(),
       prepMinutes: z.number(),
       cookMinutes: z.number(),
+      caloriesPerServing: z.number().optional(),
+      nutritionPillars: z.array(z.enum(NutritionPillar)).optional(),
       imageUrl: z.string().optional(),
       ingredients: z.array(
         z.object({
@@ -148,17 +155,41 @@ export async function seedCatalog(
 
   let recipes = 0;
   let photos = 0;
-  for (const { ingredients, ...recipe } of data.recipes) {
+  for (const {
+    ingredients,
+    caloriesPerServing: seededCalories,
+    nutritionPillars: seededPillars,
+    ...recipe
+  } of data.recipes) {
     const mappedIngredients = ingredients.map((item) => ({
       ingredientId: ingredientId(item.name),
       quantity: item.quantity ?? null,
       unit: item.unit ?? null,
       note: item.note ?? null,
     }));
+    const ingredientNames = ingredients.map((item) => item.name);
+    const caloriesPerServing = resolveCaloriesPerServing({
+      caloriesPerServing: seededCalories ?? null,
+      tag: recipe.tag ?? null,
+      title: recipe.title,
+      ingredientNames,
+    });
+    const nutritionPillars = inferNutritionPillars(
+      ingredientNames,
+      seededPillars ?? [],
+    );
     const existing = await recipesModel.findOne({ title: recipe.title });
     if (existing) {
-      const updates: Partial<Pick<Recipe, 'imageUrl' | 'tag' | 'ingredients'>> =
-        {};
+      const updates: Partial<
+        Pick<
+          Recipe,
+          | 'imageUrl'
+          | 'tag'
+          | 'ingredients'
+          | 'caloriesPerServing'
+          | 'nutritionPillars'
+        >
+      > = {};
       if (recipe.imageUrl && !existing.imageUrl) {
         updates.imageUrl = recipe.imageUrl;
         photos++;
@@ -172,6 +203,15 @@ export async function seedCatalog(
       ) {
         updates.ingredients = mappedIngredients;
       }
+      if (existing.caloriesPerServing === null) {
+        updates.caloriesPerServing = caloriesPerServing;
+      }
+      if (
+        !existing.nutritionPillars ||
+        existing.nutritionPillars.length === 0
+      ) {
+        updates.nutritionPillars = nutritionPillars;
+      }
       if (Object.keys(updates).length > 0) {
         await recipesModel.updateOne({ _id: existing.id }, { $set: updates });
       }
@@ -181,6 +221,8 @@ export async function seedCatalog(
       _id: randomUUID(),
       ...recipe,
       tag: recipe.tag ?? null,
+      caloriesPerServing,
+      nutritionPillars,
       ingredients: mappedIngredients,
     });
     recipes++;

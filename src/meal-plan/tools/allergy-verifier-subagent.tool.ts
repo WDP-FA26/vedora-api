@@ -1,0 +1,372 @@
+import { Logger } from '@nestjs/common';
+import { generateText, type LanguageModel, Output, tool } from 'ai';
+import { z } from 'zod';
+import { MealSection, Weekday } from '../../mongo/models.js';
+import type { DietaryRestrictionsDto } from '../../recipes/dto/dietary.dto.js';
+import { extractAllergyKeywords } from '../../recipes/nutrition.js';
+import { MEAL_SECTIONS } from '../dto/meal-plan.dto.js';
+import type { DraftOp } from '../meal-plan-draft.js';
+import type { MealPlanService } from '../meal-plan.service.js';
+import { DAY_NAMES, SECTION_NAMES } from '../meal-planner.prompt.js';
+import { plannableWeekStarts, weekStartInput } from './planner-weeks.js';
+import {
+  describeDraft,
+  proposalFeedback,
+  type DraftProposal,
+} from './proposal-text.js';
+
+const logger = new Logger('AllergyVerifierSubagentTool');
+
+const allergyAuditSchema = z.object({
+  flagged: z
+    .array(
+      z.object({
+        recipeId: z.string(),
+        reason: z
+          .string()
+          .describe('Lý do ngắn gọn bằng tiếng Việt món này vi phạm dị ứng/lưu ý'),
+      }),
+    )
+    .describe('Only recipes that genuinely contain or risk triggering an allergen or restriction'),
+  summary: z
+    .string()
+    .describe('Tóm tắt kết quả kiểm định ngắn gọn bằng tiếng Việt'),
+});
+
+export interface FlaggedDishReport {
+  day: Weekday;
+  section: MealSection;
+  recipeId: string;
+  title: string;
+  reason: string;
+}
+
+export interface AllergyVerificationResult {
+  verified: boolean;
+  safe: boolean;
+  checkedDishesCount: number;
+  flaggedDishes: FlaggedDishReport[];
+  summary: string;
+  weekStart?: string;
+  days?: DraftProposal['days'];
+  problems?: DraftProposal['problems'];
+  ok?: boolean;
+}
+
+function buildEffectiveSlots(
+  plan: Awaited<ReturnType<MealPlanService['find']>>,
+  draft: DraftProposal,
+): { day: Weekday; section: MealSection; recipeIds: string[] }[] {
+  const result: { day: Weekday; section: MealSection; recipeIds: string[] }[] =
+    [];
+  for (const dayObj of plan.days) {
+    if (!dayObj.editable) continue;
+    const draftDay = draft.days.find((item) => item.day === dayObj.day);
+    for (const section of MEAL_SECTIONS) {
+      const recipes =
+        (draftDay ?? dayObj).sections.find((s) => s.section === section)
+          ?.recipes ?? [];
+      result.push({
+        day: dayObj.day,
+        section,
+        recipeIds: recipes.map((r) => r.id),
+      });
+    }
+  }
+  return result;
+}
+
+function recipeHaystack(
+  recipe: NonNullable<Awaited<ReturnType<MealPlanService['recipeInstructions']>>>,
+): string {
+  const ingredientText = recipe.ingredients
+    .map((item) => `${item.name} ${item.note ?? ''}`)
+    .join(' ');
+  return [
+    recipe.title,
+    recipe.description ?? '',
+    ingredientText,
+    ...recipe.steps,
+  ]
+    .join(' ')
+    .normalize('NFC')
+    .toLowerCase();
+}
+
+async function runSemanticAllergyAudit(
+  model: LanguageModel,
+  combinedNotes: string,
+  avoidedTerms: readonly string[],
+  recipes: NonNullable<
+    Awaited<ReturnType<MealPlanService['recipeInstructions']>>
+  >[],
+  abortSignal?: AbortSignal,
+): Promise<{ flagged: { recipeId: string; reason: string }[]; summary?: string }> {
+  const recipeLines = recipes.map((recipe) => {
+    const ingredients = recipe.ingredients
+      .map((item) => (item.note ? `${item.name} (${item.note})` : item.name))
+      .join(', ');
+    const steps = recipe.steps.slice(0, 6).join(' ');
+    return `- id=${recipe.id} | ${recipe.title} | Nguyên liệu: ${ingredients} | Cách làm: ${steps}`;
+  });
+
+  const { output } = await generateText({
+    model,
+    output: Output.object({ schema: allergyAuditSchema }),
+    system: `Bạn là Chuyên gia Kiểm định Dị ứng Thực phẩm Thuần Thực Vật (Allergy Verification Subagent).
+Hãy kiểm tra TỪNG món ăn (tên món, nguyên liệu, ghi chú chế biến và các bước nấu) đối chiếu với mô tả dị ứng / kiêng kỵ bằng ngôn ngữ tự nhiên và danh sách thực phẩm tránh của người dùng.
+Lưu ý hiểu đúng ngữ cảnh ẩm thực Việt Nam:
+- Dị ứng đậu nành -> tránh đậu nành, đậu hũ/đậu phụ/tàu hũ, tương hột, nước tương, váng đậu, sữa đậu nành.
+- Dị ứng gluten/lúa mì -> tránh bánh mì, bột mì, mì căn, mì sợi lúa mì, nước tương truyền thống chứa lúa mì.
+- Dị ứng hạt điều / tree nuts -> "hạt điều màu" (annatto để tạo màu) KHÔNG phải hạt điều nhân, trừ khi người dùng dặn kiêng mọi loại hạt/gia vị màu.
+- Chỉ gắn cờ những món thực sự có nguy cơ vi phạm dựa trên nguyên liệu/cách chế biến được liệt kê; đừng gắn cờ nhầm các món an toàn.`,
+    prompt: [
+      `Thực phẩm người dùng tránh trong hồ sơ có cấu trúc: ${avoidedTerms.length > 0 ? avoidedTerms.join(', ') : 'không có'}.`,
+      `Mô tả dị ứng & lưu ý ăn uống tự nhiên: ${combinedNotes || 'không có mô tả thêm'}.`,
+      `Danh sách món cần kiểm định:\n${recipeLines.join('\n')}`,
+    ].join('\n\n'),
+    abortSignal,
+  });
+
+  return { flagged: output.flagged, summary: output.summary };
+}
+
+/**
+ * Dedicated Allergy Verification Subagent tool: audits every dish in the active
+ * week's draft + saved plan against natural-language allergy notes and
+ * automatically swaps out unsafe dishes while keeping safe selections intact.
+ */
+export function verifyMealPlanAllergiesTool(
+  model: LanguageModel,
+  mealPlan: MealPlanService,
+  userId: string,
+  openWeekStart: string,
+  restrictions: DietaryRestrictionsDto,
+) {
+  return tool({
+    description:
+      'Run the Allergy Verification Subagent on the week’s draft and saved menu to inspect every dish’s full ingredient list and cooking steps against the user’s natural-language dietary/allergy profile. Automatically replaces any flagged allergen dish with a safe alternative.',
+    inputSchema: z.object({
+      weekStart: weekStartInput(plannableWeekStarts()),
+      allergyDescription: z
+        .string()
+        .max(1000)
+        .optional()
+        .describe(
+          'Optional allergy or intolerance description mentioned in the chat turn to combine with the saved allergyNote',
+        ),
+      replaceFlagged: z
+        .boolean()
+        .optional()
+        .describe('Automatically replace any flagged dish with a safe alternative (default true)'),
+    }),
+    execute: async (
+      { weekStart, allergyDescription, replaceFlagged },
+      { abortSignal },
+    ): Promise<AllergyVerificationResult> => {
+      const week = weekStart ?? openWeekStart;
+      const [plan, draft] = await Promise.all([
+        mealPlan.find(userId, week),
+        mealPlan.getDraft(userId, week),
+      ]);
+
+      const slots = buildEffectiveSlots(plan, draft);
+      const uniqueIds = [
+        ...new Set(slots.flatMap((slot) => slot.recipeIds)),
+      ];
+      if (uniqueIds.length === 0) {
+        return {
+          verified: true,
+          safe: true,
+          checkedDishesCount: 0,
+          flaggedDishes: [],
+          summary: 'Tuần này chưa có món nào trên lịch để kiểm định dị ứng.',
+        };
+      }
+
+      const loaded = await Promise.all(
+        uniqueIds.map((id) => mealPlan.recipeInstructions(userId, id)),
+      );
+      const recipeMap = new Map(
+        loaded
+          .filter((item): item is NonNullable<typeof item> => item !== null)
+          .map((item) => [item.id, item]),
+      );
+
+      const combinedNotes = [restrictions.allergyNote, allergyDescription]
+        .filter((value): value is string => Boolean(value && value.trim()))
+        .join(' | ');
+      const avoidedTerms = [
+        ...restrictions.groups.map((item) => item.name),
+        ...restrictions.ingredients.map((item) => item.name),
+      ];
+      const keywords = extractAllergyKeywords(combinedNotes);
+
+      const flaggedReasons = new Map<string, string>();
+      for (const recipe of recipeMap.values()) {
+        if (recipe.avoidedIngredients.length > 0) {
+          flaggedReasons.set(
+            recipe.id,
+            `Chứa thành phần tránh: ${recipe.avoidedIngredients.join(', ')}`,
+          );
+          continue;
+        }
+        if (keywords.length > 0) {
+          const text = recipeHaystack(recipe);
+          const matched = keywords.filter((word) => text.includes(word));
+          if (matched.length > 0) {
+            flaggedReasons.set(
+              recipe.id,
+              `Khớp từ khóa dị ứng/kiêng kỵ: ${matched.slice(0, 3).join(', ')}`,
+            );
+          }
+        }
+      }
+
+      let subagentSummary = '';
+      if (combinedNotes.trim().length > 0) {
+        try {
+          const audit = await runSemanticAllergyAudit(
+            model,
+            combinedNotes,
+            avoidedTerms,
+            [...recipeMap.values()],
+            abortSignal,
+          );
+          subagentSummary = audit.summary ?? '';
+          for (const item of audit.flagged) {
+            if (!recipeMap.has(item.recipeId)) continue;
+            if (!flaggedReasons.has(item.recipeId)) {
+              flaggedReasons.set(item.recipeId, item.reason);
+            }
+          }
+        } catch (error) {
+          if (abortSignal?.aborted) throw error;
+          logger.warn(`Semantic allergy audit fallback used: ${String(error)}`);
+        }
+      }
+
+      const flaggedDishes: FlaggedDishReport[] = [];
+      for (const slot of slots) {
+        for (const recipeId of slot.recipeIds) {
+          const reason = flaggedReasons.get(recipeId);
+          if (!reason) continue;
+          const title = recipeMap.get(recipeId)?.title ?? recipeId;
+          flaggedDishes.push({
+            day: slot.day,
+            section: slot.section,
+            recipeId,
+            title,
+            reason,
+          });
+        }
+      }
+
+      if (flaggedDishes.length === 0) {
+        return {
+          verified: true,
+          safe: true,
+          checkedDishesCount: uniqueIds.length,
+          flaggedDishes: [],
+          summary:
+            subagentSummary ||
+            `Đã kiểm định ${uniqueIds.length} món theo hồ sơ dị ứng: tất cả đều an toàn.`,
+        };
+      }
+
+      let updatedDraft: DraftProposal | undefined;
+      if (replaceFlagged !== false) {
+        const removeOps: DraftOp[] = flaggedDishes.map((item) => ({
+          op: 'remove',
+          day: item.day,
+          section: item.section,
+          recipeId: item.recipeId,
+        }));
+        const afterRemove = await mealPlan.editDraft(userId, week, removeOps);
+        updatedDraft = afterRemove;
+
+        const vacatedKeys = new Set<string>();
+        const affectedDays = new Set<Weekday>();
+        const affectedSections = new Set<MealSection>();
+        for (const slot of slots) {
+          const hasFlag = slot.recipeIds.some((id) => flaggedReasons.has(id));
+          if (!hasFlag) continue;
+          const remainingCount = slot.recipeIds.filter(
+            (id) => !flaggedReasons.has(id),
+          ).length;
+          if (remainingCount === 0) {
+            vacatedKeys.add(`${slot.day}:${slot.section}`);
+            affectedDays.add(slot.day);
+            affectedSections.add(slot.section);
+          }
+        }
+
+        if (vacatedKeys.size > 0) {
+          const pinned = [...affectedDays].flatMap((day) =>
+            [...affectedSections]
+              .filter((section) => !vacatedKeys.has(`${day}:${section}`))
+              .map((section) => ({ day, section })),
+          );
+          updatedDraft = await mealPlan.fillDraft(userId, {
+            weekStart: week,
+            days: [...affectedDays],
+            sections: [...affectedSections],
+            onlyEmpty: true,
+            avoidIds: [...flaggedReasons.keys()],
+            pinned,
+          });
+        }
+      }
+
+      return {
+        verified: true,
+        safe: updatedDraft !== undefined && updatedDraft.ok,
+        checkedDishesCount: uniqueIds.length,
+        flaggedDishes,
+        summary:
+          subagentSummary ||
+          `Phát hiện ${flaggedDishes.length} lượt món có nguy cơ dị ứng (${flaggedDishes.map((d) => `${d.title} - ${DAY_NAMES[d.day]} ${SECTION_NAMES[d.section]}`).join('; ')})${updatedDraft ? ' và đã tự động đổi sang món an toàn.' : '.'}`,
+        ...(updatedDraft
+          ? {
+              weekStart: updatedDraft.weekStart,
+              days: updatedDraft.days,
+              problems: updatedDraft.problems,
+              ok: updatedDraft.ok,
+            }
+          : {}),
+      };
+    },
+    toModelOutput: ({ output }) => {
+      const flaggedLines =
+        output.flaggedDishes.length > 0
+          ? `\nFlagged:\n${output.flaggedDishes.map((item) => `- ${DAY_NAMES[item.day]} ${SECTION_NAMES[item.section]}: ${item.title} — ${item.reason}`).join('\n')}`
+          : '';
+      const draftNote = formatDraftAuditNote(output);
+      return {
+        type: 'text',
+        value: `${output.summary}${flaggedLines}${draftNote}`,
+      };
+    },
+  });
+}
+
+function formatDraftAuditNote(output: AllergyVerificationResult): string {
+  if (!output.days) return '';
+  if (output.weekStart) {
+    return `\n${proposalFeedback({
+      weekStart: output.weekStart,
+      days: output.days,
+      problems: output.problems ?? [],
+      ok: output.ok ?? false,
+    })}`;
+  }
+  if (output.days.length > 0) {
+    return `\n${describeDraft({
+      weekStart: '',
+      days: output.days,
+      problems: output.problems ?? [],
+      ok: output.ok ?? false,
+    })}`;
+  }
+  return '';
+}

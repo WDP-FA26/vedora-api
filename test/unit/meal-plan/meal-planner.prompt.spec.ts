@@ -6,8 +6,16 @@ import {
   SECTION_NAMES,
 } from '../../../src/meal-plan/meal-planner.prompt.js';
 import { PLANNER_REFUSALS } from '../../../src/meal-plan/meal-planner.refusals.js';
-import { MealSection, Weekday } from '../../../src/mongo/models.js';
-import type { DietaryRestrictionsDto } from '../../../src/recipes/dto/dietary.dto.js';
+import {
+  BmiCategory,
+  MealSection,
+  NutritionGoal,
+  Weekday,
+} from '../../../src/mongo/models.js';
+import type {
+  DietaryRestrictionsDto,
+  NutritionProfileDto,
+} from '../../../src/recipes/dto/dietary.dto.js';
 
 // Wednesday 2026-11-18: Monday and Tuesday have passed.
 const emptyPlan = (): MealPlanDto => ({
@@ -204,5 +212,69 @@ describe('meal-planner prompt & refusals', () => {
       expect(PLANNER_REFUSALS[verdict]).toBeTruthy();
       expect(typeof PLANNER_REFUSALS[verdict]).toBe('string');
     }
+  });
+
+  it('includes Asian BMI profile, daily calorie range, and recent weight trend when provided', () => {
+    const restrictions: DietaryRestrictionsDto = {
+      ingredients: [],
+      groups: [],
+      liked: [],
+      terms: [],
+    };
+    const nutrition: NutritionProfileDto = {
+      heightCm: 160,
+      weightKg: 62,
+      targetWeightKg: 56,
+      birthYear: 1998,
+      biologicalSex: null,
+      activityLevel: null,
+      nutritionGoal: NutritionGoal.LOSE_WEIGHT,
+      bmi: 24.2,
+      bmiCategory: BmiCategory.OVERWEIGHT,
+      suggestedGoal: NutritionGoal.LOSE_WEIGHT,
+      effectiveGoal: NutritionGoal.LOSE_WEIGHT,
+      idealWeightMinKg: 47.4,
+      idealWeightMaxKg: 58.6,
+      bmr: 1320,
+      tdee: 1820,
+      dailyCalorieTarget: 1470,
+      dailyCalorieMin: 1250,
+      dailyCalorieMax: 1690,
+      safetyNote: null,
+      history: [
+        {
+          id: 'log-1',
+          date: '2026-11-01',
+          weightKg: 63,
+          heightCm: 160,
+          bmi: 24.6,
+          feeling: null,
+          note: null,
+          updatedAt: new Date(),
+        },
+        {
+          id: 'log-2',
+          date: '2026-11-18',
+          weightKg: 62,
+          heightCm: 160,
+          bmi: 24.2,
+          feeling: null,
+          note: null,
+          updatedAt: new Date(),
+        },
+      ],
+    };
+
+    const output = plannerInstructions(
+      restrictions,
+      emptyPlan(),
+      undefined,
+      false,
+      nutrition,
+    );
+
+    expect(output).toContain('BMI ~24.2');
+    expect(output).toContain('~1470 kcal/ngày');
+    expect(output).toContain('giảm 1 kg');
   });
 });

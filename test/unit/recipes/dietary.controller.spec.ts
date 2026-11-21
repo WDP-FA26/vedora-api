@@ -35,4 +35,45 @@ describe('DietaryController', () => {
     expect(dietary.find).toHaveBeenCalledWith(userId);
     expect(dietary.replace).toHaveBeenCalledWith(userId, dto);
   });
+
+  it('delegates findNutrition, saveNutrition, and checkInWeight to DietaryService', async () => {
+    const profile = {
+      heightCm: 165,
+      weightKg: 60,
+      targetWeightKg: null,
+      birthYear: null,
+      biologicalSex: null,
+      activityLevel: null,
+      nutritionGoal: null,
+      bmi: 22,
+      bmiCategory: null,
+      suggestedGoal: null,
+      effectiveGoal: null,
+      idealWeightMinKg: 50.4,
+      idealWeightMaxKg: 62.3,
+      bmr: 1350,
+      tdee: 1860,
+      dailyCalorieTarget: 1860,
+      dailyCalorieMin: 1580,
+      dailyCalorieMax: 2140,
+      safetyNote: null,
+      history: [],
+    };
+    const saveDto = { heightCm: 165, weightKg: 60 };
+    const checkInDto = { weightKg: 59.5 };
+
+    dietary.findNutrition.mockResolvedValue(profile);
+    dietary.saveNutrition.mockResolvedValue(profile);
+    dietary.checkInWeight.mockResolvedValue(profile);
+
+    await expect(controller.findNutrition(req)).resolves.toBe(profile);
+    await expect(controller.saveNutrition(req, saveDto)).resolves.toBe(profile);
+    await expect(controller.checkInWeight(req, checkInDto)).resolves.toBe(
+      profile,
+    );
+
+    expect(dietary.findNutrition).toHaveBeenCalledWith(userId);
+    expect(dietary.saveNutrition).toHaveBeenCalledWith(userId, saveDto);
+    expect(dietary.checkInWeight).toHaveBeenCalledWith(userId, checkInDto);
+  });
 });

@@ -19,6 +19,7 @@ import {
 } from './dto/recipe.dto.js';
 import { RecipeRelationsService } from './recipe-relations.service.js';
 import { ResourceNotFoundException } from '../common/exceptions/resource-not-found.exception.js';
+import { inferNutritionPillars } from './nutrition.js';
 
 @Injectable()
 export class RecipesService {
@@ -113,6 +114,8 @@ function toData(dto: SaveRecipeDto) {
     servings: dto.servings,
     prepMinutes: dto.prepMinutes ?? null,
     cookMinutes: dto.cookMinutes ?? null,
+    caloriesPerServing: dto.caloriesPerServing ?? null,
+    nutritionPillars: inferNutritionPillars([], dto.nutritionPillars ?? []),
     ingredients: dto.ingredients.map((item) => ({
       ingredientId: item.ingredientId,
       quantity: item.quantity ?? null,
