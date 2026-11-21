@@ -71,6 +71,11 @@ export class RecipeDraftIngredientDto {
   suggestion!: IngredientSuggestionDto | null;
 }
 
+export class RecipeDraftSourceLinkDto {
+  @ApiProperty() title!: string;
+  @ApiProperty({ format: 'uri' }) url!: string;
+}
+
 export class RecipeDraftRecipeDto {
   @ApiProperty() title!: string;
   @ApiProperty({ type: String, nullable: true }) description!: string | null;
@@ -80,6 +85,10 @@ export class RecipeDraftRecipeDto {
   @ApiProperty({ type: Number, nullable: true }) cookMinutes!: number | null;
   @ApiPropertyOptional({ type: Number, nullable: true })
   caloriesPerServing?: number | null;
+  @ApiPropertyOptional({ type: String, nullable: true })
+  calorieNote?: string | null;
+  @ApiPropertyOptional({ type: [RecipeDraftSourceLinkDto] })
+  calorieSources?: RecipeDraftSourceLinkDto[];
   @ApiProperty({ type: [RecipeDraftIngredientDto] })
   ingredients!: RecipeDraftIngredientDto[];
   @ApiProperty({ type: [String] }) steps!: string[];

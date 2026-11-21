@@ -16,6 +16,19 @@ const MAX_SERVINGS = runtimeConfig.RECIPE_MAX_SERVINGS;
 const MAX_MINUTES = runtimeConfig.RECIPE_MAX_MINUTES;
 const MAX_QUANTITY = runtimeConfig.RECIPE_INGREDIENT_MAX_QUANTITY;
 
+export interface DraftSourceLink {
+  title: string;
+  url: string;
+}
+
+const MAX_CALORIE_NOTE_LENGTH = 500;
+const MAX_CALORIE_SOURCES = 6;
+
+const draftSourceSchema = z.object({
+  title: z.string(),
+  url: z.string(),
+});
+
 /** What the model returns. Catalog entries are referred to by short refs ("i3", "g1"). */
 export const draftOutput = z.object({
   recipe: z
@@ -27,6 +40,8 @@ export const draftOutput = z.object({
       prepMinutes: z.number().nullable(),
       cookMinutes: z.number().nullable(),
       caloriesPerServing: z.number().nullable().optional(),
+      calorieNote: z.string().nullable().optional(),
+      calorieSources: z.array(draftSourceSchema).optional(),
       ingredients: z.array(
         z.object({
           name: z.string(),
@@ -91,6 +106,8 @@ export interface RecipeDraft {
   prepMinutes: number | null;
   cookMinutes: number | null;
   caloriesPerServing?: number | null;
+  calorieNote?: string | null;
+  calorieSources?: DraftSourceLink[];
   ingredients: DraftIngredient[];
   steps: string[];
 }
@@ -194,9 +211,29 @@ export function toRecipeDraft(
       10,
       3000,
     ),
+    calorieNote: clipText(recipe.calorieNote ?? null, MAX_CALORIE_NOTE_LENGTH),
+    calorieSources: normalizeSources(recipe.calorieSources),
     ingredients,
     steps,
   };
+}
+
+export function normalizeSources(
+  rawSources?: readonly DraftSourceLink[],
+): DraftSourceLink[] {
+  if (!rawSources || rawSources.length === 0) return [];
+  const seen = new Set<string>();
+  const cleaned: DraftSourceLink[] = [];
+  for (const item of rawSources) {
+    const url = item.url.trim();
+    if (!url.startsWith('https://') && !url.startsWith('http://')) continue;
+    if (!URL.canParse(url) || seen.has(url)) continue;
+    seen.add(url);
+    const title = clipText(item.title, 200) || new URL(url).hostname;
+    cleaned.push({ title, url });
+    if (cleaned.length >= MAX_CALORIE_SOURCES) break;
+  }
+  return cleaned;
 }
 
 function indexByName(catalog: DraftCatalog): Map<string, CatalogIngredient> {

@@ -1,6 +1,7 @@
-import { tool, type Tool } from 'ai';
+import { tool } from 'ai';
 import { z } from 'zod';
-import { runtimeConfig } from '../../config/runtime-config.js';
+
+export { webSearchTool } from '../../ai/tools/web-search.tool.js';
 
 const MAX_REASON_LENGTH = 200;
 
@@ -23,36 +24,4 @@ export function requestWebSearchTool() {
         ),
     }),
   });
-}
-
-/**
- * OpenRouter's `openrouter:web_search` server tool: OpenRouter runs the
- * searches and returns the results to the model as `url_citation`
- * annotations, which reach the client as `source-url` parts.
- *
- * Built by hand because `@openrouter/ai-sdk-provider`'s `tools.webSearch`
- * flattens its options to the top level of the tool, where OpenRouter ignores
- * them; the server tool reads them from `parameters`.
- *
- * Defaults are the cheapest setup that still reads Vietnamese well: Parallel's
- * `fast` mode with a small context (about $0.002 a turn with search, against
- * about $0.014 on Exa's defaults, measured 2026-11-21).
- */
-export function webSearchTool(): Tool {
-  return {
-    type: 'provider',
-    id: 'openrouter.web_search',
-    isProviderExecuted: true,
-    args: {
-      parameters: {
-        engine: runtimeConfig.PLANNER_WEB_SEARCH_ENGINE,
-        mode: runtimeConfig.PLANNER_WEB_SEARCH_MODE,
-        search_context_size: runtimeConfig.PLANNER_WEB_SEARCH_CONTEXT_SIZE,
-        max_results: runtimeConfig.PLANNER_WEB_SEARCH_MAX_RESULTS,
-        max_total_results: runtimeConfig.PLANNER_WEB_SEARCH_MAX_TOTAL_RESULTS,
-        max_uses: runtimeConfig.PLANNER_WEB_SEARCH_MAX_USES,
-      },
-    },
-    inputSchema: z.object({}),
-  };
 }

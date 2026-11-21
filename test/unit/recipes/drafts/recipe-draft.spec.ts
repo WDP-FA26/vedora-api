@@ -230,4 +230,28 @@ describe('toRecipeDraft', () => {
     const draft = toRecipeDraft(output({ ingredients: many }), catalog);
     expect(draft?.ingredients).toHaveLength(50);
   });
+
+  it('keeps calorieNote and filters valid unique calorieSources', () => {
+    const draft = toRecipeDraft(
+      output({
+        caloriesPerServing: 315,
+        calorieNote: '  Tính theo 200g đậu hũ (150 kcal) và sốt cà chua.  ',
+        calorieSources: [
+          { title: 'USDA Tofu', url: 'https://fdc.nal.usda.gov/tofu' },
+          { title: 'Duplicate URL', url: 'https://fdc.nal.usda.gov/tofu' },
+          { title: 'Invalid JS URL', url: 'javascript:alert(1)' },
+          { title: '', url: 'https://nutrition.org.vn/dau-hu' },
+        ],
+      }),
+      catalog,
+    );
+    expect(draft?.caloriesPerServing).toBe(315);
+    expect(draft?.calorieNote).toBe(
+      'Tính theo 200g đậu hũ (150 kcal) và sốt cà chua.',
+    );
+    expect(draft?.calorieSources).toEqual([
+      { title: 'USDA Tofu', url: 'https://fdc.nal.usda.gov/tofu' },
+      { title: 'nutrition.org.vn', url: 'https://nutrition.org.vn/dau-hu' },
+    ]);
+  });
 });
