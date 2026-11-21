@@ -1,6 +1,11 @@
 import { randomUUID } from 'node:crypto';
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
-import { AccountStatus, UserAccountAction, UserRole } from '../enums.js';
+import {
+  AccountStatus,
+  AccountType,
+  UserAccountAction,
+  UserRole,
+} from '../enums.js';
 import { cascadeOnDelete, collectionSchema } from './common.js';
 import { Identified } from './identified.js';
 
@@ -49,6 +54,14 @@ export class User extends Identified {
   })
   status!: AccountStatus;
 
+  @Prop({
+    type: String,
+    enum: Object.values(AccountType),
+    required: true,
+    default: AccountType.PERSONAL,
+  })
+  accountType!: AccountType;
+
   @Prop({ type: Number, required: true, default: 0 })
   accountVersion!: number;
 
@@ -92,6 +105,8 @@ UserSchema.index({ status: 1, emailVerifiedAt: 1, searchIndexedAt: 1 });
 cascadeOnDelete(UserSchema, [
   { model: 'Post', field: 'authorId', action: 'delete' },
   { model: 'VerificationRequest', field: 'userId', action: 'delete' },
+  { model: 'WorkspaceMember', field: 'userId', action: 'delete' },
+  { model: 'Workspace', field: 'pageUserId', action: 'delete' },
   { model: 'Conversation', field: 'lowId', action: 'delete' },
   { model: 'Conversation', field: 'highId', action: 'delete' },
   { model: 'MessagingEvent', field: 'userIds', action: 'delete' },
@@ -103,6 +118,7 @@ cascadeOnDelete(UserSchema, [
   { model: 'FollowSuggestion', field: 'candidateId', action: 'delete' },
   { model: 'SuggestionDismissal', field: 'userId', action: 'delete' },
   { model: 'RefreshToken', field: 'userId', action: 'delete' },
+  { model: 'RefreshToken', field: 'actorId', action: 'delete' },
   { model: 'OneTimeCode', field: 'userId', action: 'delete' },
   { model: 'PostComment', field: 'authorId', action: 'delete' },
   { model: 'PostLike', field: 'userId', action: 'delete' },
@@ -122,6 +138,8 @@ cascadeOnDelete(UserSchema, [
   { model: 'KnowledgeDocument', field: 'uploadedById', action: 'unset' },
   { model: 'VerificationRequest', field: 'reviewedById', action: 'unset' },
   { model: 'VerificationProof', field: 'ownerId', action: 'unset' },
+  { model: 'WorkspaceProof', field: 'ownerId', action: 'unset' },
+  { model: 'Workspace', field: 'reviewedById', action: 'unset' },
   { model: 'Recipe', field: 'createdById', action: 'unset' },
 ]);
 

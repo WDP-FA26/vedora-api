@@ -2,7 +2,12 @@ import { Injectable, Optional } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import type { Model } from 'mongoose';
 import { hashPassword } from '../auth-core/password.js';
-import { AccountStatus, User, UserRole } from '../mongo/models.js';
+import {
+  AccountStatus,
+  User,
+  UserRole,
+  WorkspaceMember,
+} from '../mongo/models.js';
 import { MongoService } from '../mongo/mongo.service.js';
 import { ProfileSearchIndexService } from '../profiles/search/profile-search-index.service.js';
 import { CreateUserDto } from './dto/create-user.dto.js';
@@ -26,6 +31,8 @@ export type NewUser = Pick<User, 'username' | 'fullName' | 'email'> &
 export class AccountsService {
   constructor(
     @InjectModel(User.name) private readonly users: Model<User>,
+    @InjectModel(WorkspaceMember.name)
+    private readonly members: Model<WorkspaceMember>,
     private readonly mongo: MongoService,
     @Optional() private readonly profileSearchIndex?: ProfileSearchIndexService,
   ) {}
@@ -49,6 +56,11 @@ export class AccountsService {
     } catch (error: unknown) {
       rethrowUniqueViolation(error);
     }
+  }
+
+  async managesPage(userId: string, pageUserId: string): Promise<boolean> {
+    const membership = await this.members.exists({ pageUserId, userId }).exec();
+    return membership !== null;
   }
 
   async createWithPassword(dto: CreateUserDto): Promise<PublicUser> {

@@ -28,6 +28,7 @@ import {
 import { InjectModel } from '@nestjs/mongoose';
 import type { Model } from 'mongoose';
 import type { AuthenticatedRequest } from '../auth-core/auth.types.js';
+import { PersonalSessionGuard } from '../auth-core/personal-session.guard.js';
 import { JwtAuthGuard } from '../auth-core/jwt-auth.guard.js';
 import { Roles } from '../auth-core/roles.decorator.js';
 import { RolesGuard } from '../auth-core/roles.guard.js';
@@ -48,7 +49,7 @@ import { ErrorBodyDto } from '../common/exceptions/error-body.dto.js';
   type: ErrorBodyDto,
   description: 'Verified ACTIVE account required',
 })
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, PersonalSessionGuard)
 @Controller()
 export class PaymentsController {
   constructor(private readonly payments: PaymentsService) {}

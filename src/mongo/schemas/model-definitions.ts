@@ -58,6 +58,11 @@ import {
   VerificationRequestSchema,
 } from './verification.schema.js';
 import {
+  WorkspaceMemberSchema,
+  WorkspaceProofSchema,
+  WorkspaceSchema,
+} from './workspace.schema.js';
+import {
   MealPlanChatMessageSchema,
   MealPlanChatThreadSchema,
 } from './meal-plan-chat.schema.js';
@@ -99,6 +104,9 @@ export const MODEL_DEFINITIONS = [
   { name: 'KnowledgePage', schema: KnowledgePageSchema },
   { name: 'VerificationRequest', schema: VerificationRequestSchema },
   { name: 'VerificationProof', schema: VerificationProofSchema },
+  { name: 'Workspace', schema: WorkspaceSchema },
+  { name: 'WorkspaceMember', schema: WorkspaceMemberSchema },
+  { name: 'WorkspaceProof', schema: WorkspaceProofSchema },
   { name: 'Ingredient', schema: IngredientSchema },
   { name: 'IngredientGroup', schema: IngredientGroupSchema },
   { name: 'IncompatibilityRule', schema: IncompatibilityRuleSchema },

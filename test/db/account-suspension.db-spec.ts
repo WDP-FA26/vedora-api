@@ -51,6 +51,7 @@ describe('Account administration with MongoDB', () => {
     sub: user.id,
     username: user.username,
     role: user.role,
+    actorId: null,
   });
   const operation = (
     status: 'ACTIVE' | 'SUSPENDED',

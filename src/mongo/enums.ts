@@ -15,6 +15,18 @@ export enum UserRole {
   ADMIN = 'ADMIN',
 }
 
+/** A PERSONAL account belongs to one person; a PAGE is a restaurant run by its members. */
+export enum AccountType {
+  PERSONAL = 'PERSONAL',
+  PAGE = 'PAGE',
+}
+
+export enum WorkspaceMemberRole {
+  /** Opened the page; adds and removes managers. Exactly one per page. */
+  OWNER = 'OWNER',
+  MANAGER = 'MANAGER',
+}
+
 export enum AccountStatus {
   PENDING_EMAIL = 'PENDING_EMAIL',
   ACTIVE = 'ACTIVE',

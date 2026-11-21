@@ -37,6 +37,7 @@ describe('UsersService', () => {
     sub: user.id,
     username: user.username,
     role: roleOverride ?? user.role,
+    actorId: null,
   });
 
   beforeAll(async () => {

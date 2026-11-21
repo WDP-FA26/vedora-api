@@ -1,0 +1,862 @@
+import { runtimeConfig } from '../config/runtime-config.js';
+import { randomUUID } from 'node:crypto';
+import { Injectable, Logger, Optional } from '@nestjs/common';
+import { Cron } from '@nestjs/schedule';
+import { InjectModel } from '@nestjs/mongoose';
+import type { ClientSession, Model, QueryFilter } from 'mongoose';
+import {
+  createPaginatedResponse,
+  getPaginationArgs,
+  PaginatedResponseDto,
+} from '../common/pagination/index.js';
+import { lockDocument } from '../mongo/document-lock.js';
+import {
+  AccountStatus,
+  AccountType,
+  User,
+  UserRole,
+  VerificationStatus,
+  Workspace,
+  WorkspaceMember,
+  WorkspaceMemberRole,
+  WorkspaceProof,
+} from '../mongo/models.js';
+import { MongoService } from '../mongo/mongo.service.js';
+import { rethrowAsStateConflict } from '../mongo/unique-conflict.js';
+import { ProfileSearchIndexService } from '../profiles/search/profile-search-index.service.js';
+import { StorageService, StorageTarget } from '../storage/storage.service.js';
+import { RefreshTokensService } from '../auth/refresh-tokens.service.js';
+import { isSystemAccount } from '../users/system-account.js';
+import {
+  AddWorkspaceMemberDto,
+  AdminWorkspaceDetailDto,
+  AdminWorkspaceDto,
+  CreateWorkspaceDto,
+  CreateWorkspaceProofUploadDto,
+  MAX_RESTAURANTS_IN_VIEW,
+  RestaurantDetailsDto,
+  RestaurantLocationDto,
+  RestaurantPinListDto,
+  RestaurantsInViewQueryDto,
+  ReviewWorkspaceDto,
+  WorkspaceDetailDto,
+  WorkspaceDto,
+  WorkspaceMemberDto,
+  WorkspaceProofUploadDto,
+  WorkspacesQueryDto,
+} from './dto/workspace.dto.js';
+import { AccessDeniedException } from '../common/exceptions/access-denied.exception.js';
+import { FileTooLargeException } from '../common/exceptions/file-too-large.exception.js';
+import { InvalidInputException } from '../common/exceptions/invalid-input.exception.js';
+import { QuotaReachedException } from '../common/exceptions/quota-reached.exception.js';
+import { ResourceNotFoundException } from '../common/exceptions/resource-not-found.exception.js';
+import { StateConflictException } from '../common/exceptions/state-conflict.exception.js';
+
+const IMAGE_EXTENSIONS: Record<string, string> = {
+  'image/jpeg': 'jpg',
+  'image/png': 'png',
+  'image/webp': 'webp',
+};
+// Proof limits are shared with the verified-chef badge.
+const MAX_PROOF_BYTES = runtimeConfig.VERIFICATION_PROOF_MAX_MB * 1048576;
+const MAX_UNSUBMITTED_PROOFS =
+  runtimeConfig.VERIFICATION_MAX_UNSUBMITTED_PROOFS;
+const CLEANUP_AGE_MS = runtimeConfig.VERIFICATION_CLEANUP_AGE_SECONDS * 1000;
+const PROOF_URL_TTL_SECONDS = runtimeConfig.VERIFICATION_PROOF_URL_TTL_SECONDS;
+
+/** Page accounts have no mailbox; this reserved domain can never receive mail. */
+const pageEmail = (workspaceId: string) =>
+  `page-${workspaceId}@pages.vedora.invalid`;
+
+type PageUser = Pick<
+  User,
+  'id' | 'username' | 'fullName' | 'bio' | 'avatarUrl' | 'status'
+>;
+
+@Injectable()
+export class WorkspacesService {
+  private readonly logger = new Logger(WorkspacesService.name);
+
+  constructor(
+    @InjectModel(Workspace.name)
+    private readonly workspaces: Model<Workspace>,
+    @InjectModel(WorkspaceMember.name)
+    private readonly members: Model<WorkspaceMember>,
+    @InjectModel(WorkspaceProof.name)
+    private readonly proofs: Model<WorkspaceProof>,
+    @InjectModel(User.name) private readonly users: Model<User>,
+    private readonly mongo: MongoService,
+    private readonly storage: StorageService,
+    private readonly refreshTokens: RefreshTokensService,
+    @Optional() private readonly profileSearchIndex?: ProfileSearchIndexService,
+  ) {}
+
+  async createProofUpload(
+    personId: string,
+    dto: CreateWorkspaceProofUploadDto,
+  ): Promise<WorkspaceProofUploadDto> {
+    if (dto.sizeBytes > MAX_PROOF_BYTES)
+      throw new FileTooLargeException(
+        'FILE_TOO_LARGE',
+        'Proof image is too large',
+      );
+    const unsubmitted = await this.proofs.countDocuments({
+      ownerId: personId,
+      workspaceId: null,
+    });
+    if (unsubmitted >= MAX_UNSUBMITTED_PROOFS)
+      throw new QuotaReachedException(
+        'PROOF_LIMIT_REACHED',
+        'Too many unsubmitted proof images; try again later',
+      );
+    const id = randomUUID();
+    const key = `workspaces/${personId}/${id}.${IMAGE_EXTENSIONS[dto.contentType]}`;
+    const upload = await this.storage.presignUpload(
+      StorageTarget.Verifications,
+      key,
+      dto.contentType,
+      dto.sizeBytes,
+    );
+    await this.proofs.create({ _id: id, ownerId: personId, storageKey: key });
+    return { id, upload };
+  }
+
+  /** Opens a page application; the applicant becomes its owner. */
+  async create(
+    personId: string,
+    dto: CreateWorkspaceDto,
+  ): Promise<WorkspaceDetailDto> {
+    await this.assertProofsUploaded(personId, dto.proofIds);
+    const workspaceId = randomUUID();
+    await this.mongo.withTransaction(async (session) => {
+      await lockDocument(this.mongo, session, 'user', personId);
+      await this.assertNoPendingApplication(session, personId);
+      await this.assertUsernameFree(session, dto.username, null);
+      await this.workspaces.create(
+        [
+          {
+            _id: workspaceId,
+            pageUserId: null,
+            ...this.applicationFields(dto),
+            status: VerificationStatus.PENDING,
+            reviewNote: null,
+            reviewedById: null,
+            reviewedAt: null,
+          },
+        ],
+        { session },
+      );
+      await this.members.create(
+        [
+          {
+            workspaceId,
+            pageUserId: null,
+            userId: personId,
+            role: WorkspaceMemberRole.OWNER,
+          },
+        ],
+        { session },
+      );
+      await this.claimProofs(session, personId, workspaceId, dto.proofIds);
+    });
+    return this.detail(personId, workspaceId);
+  }
+
+  /** Sends a rejected application back for review with new details and proofs. */
+  async resubmit(
+    personId: string,
+    workspaceId: string,
+    dto: CreateWorkspaceDto,
+  ): Promise<WorkspaceDetailDto> {
+    await this.assertProofsUploaded(personId, dto.proofIds);
+    await this.mongo.withTransaction(async (session) => {
+      await lockDocument(this.mongo, session, 'workspace', workspaceId);
+      const workspace = await this.findWorkspace(session, workspaceId);
+      await this.assertOwner(session, workspace.id, personId);
+      if (workspace.status !== VerificationStatus.REJECTED)
+        throw new StateConflictException(
+          'WORKSPACE_NOT_REVIEWABLE',
+          'Only a rejected page can be sent for review again',
+        );
+      await this.assertNoPendingApplication(session, personId);
+      await this.assertUsernameFree(session, dto.username, workspace.id);
+      await this.workspaces.updateOne(
+        { _id: workspace.id },
+        {
+          $set: {
+            ...this.applicationFields(dto),
+            status: VerificationStatus.PENDING,
+            reviewNote: null,
+            reviewedById: null,
+            reviewedAt: null,
+          },
+        },
+        { session },
+      );
+      await this.claimProofs(session, personId, workspace.id, dto.proofIds);
+    });
+    return this.detail(personId, workspaceId);
+  }
+
+  async mine(personId: string): Promise<WorkspaceDto[]> {
+    const memberships = await this.members
+      .find({ userId: personId })
+      .sort({ createdAt: -1, _id: -1 })
+      .exec();
+    const workspaces = await this.workspaces
+      .find({ _id: { $in: memberships.map((row) => row.workspaceId) } })
+      .exec();
+    const roles = new Map<string, WorkspaceMemberRole>();
+    for (const membership of memberships)
+      roles.set(membership.workspaceId, membership.role);
+    const dtos = await this.toDtos(workspaces, roles);
+    const order = memberships.map((row) => row.workspaceId);
+    return dtos.sort((a, b) => order.indexOf(a.id) - order.indexOf(b.id));
+  }
+
+  async detail(
+    personId: string,
+    workspaceId: string,
+  ): Promise<WorkspaceDetailDto> {
+    const workspace = await this.workspaces
+      .findOne({ _id: workspaceId })
+      .exec();
+    const membership = await this.members
+      .findOne({ workspaceId, userId: personId })
+      .exec();
+    // Non-members get the same answer as a missing page.
+    if (!workspace || !membership)
+      throw new ResourceNotFoundException('NOT_FOUND', 'Page not found');
+    const [[dto], members] = await Promise.all([
+      this.toDtos([workspace], new Map([[workspace.id, membership.role]])),
+      this.memberDtos(workspace.id),
+    ]);
+    return { ...dto, members };
+  }
+
+  async updateDetails(
+    personId: string,
+    workspaceId: string,
+    dto: RestaurantDetailsDto,
+  ): Promise<WorkspaceDetailDto> {
+    const membership = await this.members
+      .exists({ workspaceId, userId: personId })
+      .exec();
+    if (!membership)
+      throw new ResourceNotFoundException('NOT_FOUND', 'Page not found');
+    await this.workspaces.updateOne(
+      { _id: workspaceId },
+      { $set: this.restaurantFields(dto) },
+    );
+    return this.detail(personId, workspaceId);
+  }
+
+  async addMember(
+    personId: string,
+    workspaceId: string,
+    dto: AddWorkspaceMemberDto,
+  ): Promise<WorkspaceDetailDto> {
+    await this.mongo.withTransaction(async (session) => {
+      await lockDocument(this.mongo, session, 'workspace', workspaceId);
+      const workspace = await this.findWorkspace(session, workspaceId);
+      await this.assertOwner(session, workspace.id, personId);
+      if (
+        workspace.status !== VerificationStatus.APPROVED ||
+        !workspace.pageUserId
+      )
+        throw new StateConflictException(
+          'WORKSPACE_NOT_APPROVED',
+          'Managers can be added once the page is approved',
+        );
+      const user = await this.users
+        .findOne({ username: dto.username })
+        .select('status accountType emailVerifiedAt')
+        .session(session)
+        .exec();
+      if (
+        !user ||
+        isSystemAccount(user.id) ||
+        user.accountType !== AccountType.PERSONAL ||
+        user.status !== AccountStatus.ACTIVE ||
+        !user.emailVerifiedAt
+      )
+        throw new ResourceNotFoundException('NOT_FOUND', 'User not found');
+      try {
+        await this.members.create(
+          [
+            {
+              workspaceId: workspace.id,
+              pageUserId: workspace.pageUserId,
+              userId: user.id,
+              role: WorkspaceMemberRole.MANAGER,
+            },
+          ],
+          { session },
+        );
+      } catch (error: unknown) {
+        rethrowAsStateConflict(
+          error,
+          'ALREADY_MEMBER',
+          'This person already manages the page',
+        );
+      }
+    });
+    return this.detail(personId, workspaceId);
+  }
+
+  /**
+   * The owner removes a manager, or a manager leaves. The owner cannot be
+   * removed. Their page sessions end at once.
+   */
+  async removeMember(
+    personId: string,
+    workspaceId: string,
+    memberId: string,
+  ): Promise<void> {
+    const pageUserId = await this.mongo.withTransaction(async (session) => {
+      await lockDocument(this.mongo, session, 'workspace', workspaceId);
+      const workspace = await this.findWorkspace(session, workspaceId);
+      const [actor, target] = await Promise.all([
+        this.members
+          .findOne({ workspaceId, userId: personId })
+          .session(session)
+          .exec(),
+        this.members
+          .findOne({ workspaceId, userId: memberId })
+          .session(session)
+          .exec(),
+      ]);
+      if (!actor)
+        throw new ResourceNotFoundException('NOT_FOUND', 'Page not found');
+      if (!target)
+        throw new ResourceNotFoundException('NOT_FOUND', 'Member not found');
+      if (target.role === WorkspaceMemberRole.OWNER)
+        throw new StateConflictException(
+          'CONFLICT',
+          'The owner cannot be removed from the page',
+        );
+      const leaving = personId === memberId;
+      if (!leaving && actor.role !== WorkspaceMemberRole.OWNER)
+        throw new AccessDeniedException(
+          'WORKSPACE_OWNER_REQUIRED',
+          'Only the owner can remove managers',
+        );
+      await this.members.deleteOne({ _id: target.id }, { session });
+      return workspace.pageUserId;
+    });
+    if (pageUserId)
+      await this.refreshTokens.revokePageSessions(pageUserId, memberId);
+  }
+
+  async adminList(
+    query: WorkspacesQueryDto,
+  ): Promise<PaginatedResponseDto<AdminWorkspaceDto>> {
+    const { skip, take } = getPaginationArgs(query);
+    const filter: QueryFilter<Workspace> = {};
+    if (query.status) filter.status = query.status;
+    const [rows, totalItems] = await Promise.all([
+      this.workspaces
+        .find(filter)
+        .sort({ createdAt: -1, _id: -1 })
+        .skip(skip)
+        .limit(take)
+        .exec(),
+      this.workspaces.countDocuments(filter),
+    ]);
+    return createPaginatedResponse(
+      await this.toAdminDtos(rows),
+      totalItems,
+      query,
+    );
+  }
+
+  async adminDetail(workspaceId: string): Promise<AdminWorkspaceDetailDto> {
+    const workspace = await this.workspaces
+      .findOne({ _id: workspaceId })
+      .exec();
+    if (!workspace)
+      throw new ResourceNotFoundException('NOT_FOUND', 'Page not found');
+    const [[dto], proofs] = await Promise.all([
+      this.toAdminDtos([workspace]),
+      this.proofs.find({ workspaceId }).sort({ createdAt: 1, _id: 1 }).exec(),
+    ]);
+    const signed = await Promise.all(
+      proofs.map(async (proof) => ({
+        id: proof.id,
+        url: await this.storage.presignDownload(
+          StorageTarget.Verifications,
+          proof.storageKey,
+          PROOF_URL_TTL_SECONDS,
+        ),
+      })),
+    );
+    return { ...dto, proofs: signed };
+  }
+
+  /**
+   * Approving creates the page account (accountType PAGE, no password, no
+   * Google id, unreachable email) and links every member to it. The
+   * username is checked again here: it was only free when the owner applied.
+   */
+  async review(
+    workspaceId: string,
+    reviewerId: string,
+    dto: ReviewWorkspaceDto,
+  ): Promise<AdminWorkspaceDto> {
+    const approved = await this.mongo.withTransaction(async (session) => {
+      await lockDocument(this.mongo, session, 'workspace', workspaceId);
+      const workspace = await this.findWorkspace(session, workspaceId);
+      if (workspace.status !== VerificationStatus.PENDING)
+        throw new StateConflictException(
+          'WORKSPACE_NOT_REVIEWABLE',
+          'This page was already reviewed',
+        );
+      const now = new Date();
+      const decision = {
+        status: dto.decision,
+        reviewNote: dto.note || null,
+        reviewedById: reviewerId,
+        reviewedAt: now,
+      };
+      if (dto.decision === VerificationStatus.REJECTED) {
+        await this.workspaces.updateOne(
+          { _id: workspace.id },
+          { $set: decision },
+          { session },
+        );
+        return false;
+      }
+      const pageUserId = await this.createPageAccount(session, workspace, now);
+      await this.workspaces.updateOne(
+        { _id: workspace.id },
+        { $set: { ...decision, pageUserId } },
+        { session },
+      );
+      await this.members.updateMany(
+        { workspaceId: workspace.id },
+        { $set: { pageUserId } },
+        { session },
+      );
+      return true;
+    });
+    if (approved) this.profileSearchIndex?.schedule();
+    const row = await this.workspaces.findOne({ _id: workspaceId }).exec();
+    if (!row)
+      throw new ResourceNotFoundException('NOT_FOUND', 'Page not found');
+    const [reviewed] = await this.toAdminDtos([row]);
+    return reviewed;
+  }
+
+  /** Approved restaurants inside a map viewport, capped at MAX_RESTAURANTS_IN_VIEW. */
+  async inView(
+    query: RestaurantsInViewQueryDto,
+  ): Promise<RestaurantPinListDto> {
+    if (query.minLat > query.maxLat)
+      throw new InvalidInputException(
+        'BAD_REQUEST',
+        'minLat must not be greater than maxLat',
+      );
+    const filter: QueryFilter<Workspace> = {
+      status: VerificationStatus.APPROVED,
+      pageUserId: { $type: 'string' },
+    };
+    const wrapsAntimeridian = query.minLng > query.maxLng;
+    const spansHemisphere = query.maxLng - query.minLng >= 180;
+    // A box wider than half the globe has no well-defined GeoJSON polygon,
+    // so a zoomed-out map just gets the capped list.
+    if (!wrapsAntimeridian && !spansHemisphere) {
+      filter.location = {
+        $geoWithin: {
+          $geometry: {
+            type: 'Polygon',
+            coordinates: [
+              [
+                [query.minLng, query.minLat],
+                [query.maxLng, query.minLat],
+                [query.maxLng, query.maxLat],
+                [query.minLng, query.maxLat],
+                [query.minLng, query.minLat],
+              ],
+            ],
+          },
+        },
+      };
+    }
+    const rows = await this.workspaces
+      .find(filter)
+      .sort({ _id: 1 })
+      .limit(MAX_RESTAURANTS_IN_VIEW + 1)
+      .exec();
+    const truncated = rows.length > MAX_RESTAURANTS_IN_VIEW;
+    const visible = rows.slice(0, MAX_RESTAURANTS_IN_VIEW);
+    const pages = await this.pageUsers(visible);
+    const items: RestaurantPinListDto['items'] = [];
+    for (const workspace of visible) {
+      if (!workspace.pageUserId) continue;
+      const page = pages.get(workspace.pageUserId);
+      if (!page || page.status !== AccountStatus.ACTIVE) continue;
+      const [longitude, latitude] = workspace.location.coordinates;
+      items.push({
+        pageUserId: page.id,
+        username: page.username,
+        name: page.fullName,
+        avatarUrl: page.avatarUrl,
+        address: workspace.address,
+        longitude,
+        latitude,
+      });
+    }
+    return { items, truncated };
+  }
+
+  @Cron(runtimeConfig.VERIFICATION_CLEANUP_CRON)
+  async purgeUnusedProofs(): Promise<void> {
+    if (!this.storage.isConfigured()) return;
+    const proofs = await this.proofs
+      .find({
+        workspaceId: null,
+        createdAt: { $lt: new Date(Date.now() - CLEANUP_AGE_MS) },
+      })
+      .sort({ createdAt: 1 })
+      .limit(runtimeConfig.VERIFICATION_CLEANUP_BATCH_SIZE)
+      .exec();
+    for (const proof of proofs) {
+      try {
+        await this.storage.delete(
+          StorageTarget.Verifications,
+          proof.storageKey,
+        );
+      } catch (error) {
+        this.logger.warn(
+          `Could not purge ${proof.storageKey}: ${String(error)}`,
+        );
+        continue;
+      }
+      await this.proofs.deleteOne({ _id: proof.id });
+    }
+  }
+
+  private async createPageAccount(
+    session: ClientSession,
+    workspace: Workspace,
+    now: Date,
+  ): Promise<string> {
+    const pageUserId = randomUUID();
+    try {
+      await this.users.create(
+        [
+          {
+            _id: pageUserId,
+            username: workspace.username,
+            fullName: workspace.name,
+            bio: workspace.bio,
+            email: pageEmail(workspace.id),
+            passwordHash: null,
+            googleId: null,
+            role: UserRole.USER,
+            status: AccountStatus.ACTIVE,
+            accountType: AccountType.PAGE,
+            accountVersion: 0,
+            isProfessional: false,
+            // Profiles, follows and search only list accounts with this set;
+            // a page has no mailbox, so approval stands in for verification.
+            emailVerifiedAt: now,
+            avoidedIngredientIds: [],
+            avoidedGroupIds: [],
+            likedIngredientIds: [],
+          },
+        ],
+        { session },
+      );
+    } catch (error: unknown) {
+      rethrowAsStateConflict(
+        error,
+        'USERNAME_TAKEN',
+        'This username was taken after the page applied; reject with a note so the owner picks another',
+      );
+    }
+    return pageUserId;
+  }
+
+  private applicationFields(dto: CreateWorkspaceDto) {
+    return {
+      username: dto.username,
+      name: dto.name,
+      bio: dto.bio ?? null,
+      statement: dto.statement,
+      ...this.restaurantFields(dto),
+    };
+  }
+
+  private restaurantFields(dto: RestaurantDetailsDto) {
+    return {
+      address: dto.address,
+      location: {
+        type: 'Point' as const,
+        coordinates: [dto.longitude, dto.latitude] satisfies [number, number],
+      },
+      phone: dto.phone ?? null,
+      website: dto.website ?? null,
+    };
+  }
+
+  private async assertProofsUploaded(
+    personId: string,
+    proofIds: string[],
+  ): Promise<void> {
+    const proofs = await this.proofs
+      .find({ ownerId: personId, workspaceId: null, _id: { $in: proofIds } })
+      .exec();
+    if (proofs.length !== proofIds.length)
+      throw new InvalidInputException('BAD_REQUEST', 'Unknown proof image');
+    const uploaded = await Promise.all(
+      proofs.map((proof) =>
+        this.storage.exists(StorageTarget.Verifications, proof.storageKey),
+      ),
+    );
+    if (uploaded.includes(false))
+      throw new StateConflictException(
+        'PROOF_NOT_UPLOADED',
+        'A proof image has not finished uploading',
+      );
+  }
+
+  private async claimProofs(
+    session: ClientSession,
+    personId: string,
+    workspaceId: string,
+    proofIds: string[],
+  ): Promise<void> {
+    const claimed = await this.proofs.updateMany(
+      { _id: { $in: proofIds }, ownerId: personId, workspaceId: null },
+      { $set: { workspaceId } },
+      { session },
+    );
+    if (claimed.modifiedCount !== proofIds.length)
+      throw new InvalidInputException('BAD_REQUEST', 'Unknown proof image');
+  }
+
+  /** One application under review per person keeps the admin queue honest. */
+  private async assertNoPendingApplication(
+    session: ClientSession,
+    personId: string,
+  ): Promise<void> {
+    const owned = await this.members
+      .find({ userId: personId, role: WorkspaceMemberRole.OWNER })
+      .select('workspaceId')
+      .session(session)
+      .exec();
+    const pending = await this.workspaces
+      .exists({
+        _id: { $in: owned.map((row) => row.workspaceId) },
+        status: VerificationStatus.PENDING,
+      })
+      .session(session)
+      .exec();
+    if (pending)
+      throw new StateConflictException(
+        'REQUEST_PENDING',
+        'You already have a page waiting for review',
+      );
+  }
+
+  private async assertUsernameFree(
+    session: ClientSession,
+    username: string,
+    workspaceId: string | null,
+  ): Promise<void> {
+    const pendingFilter: QueryFilter<Workspace> = {
+      username,
+      status: VerificationStatus.PENDING,
+    };
+    if (workspaceId) pendingFilter._id = { $ne: workspaceId };
+    const [user, pending] = await Promise.all([
+      this.users.exists({ username }).session(session).exec(),
+      this.workspaces.exists(pendingFilter).session(session).exec(),
+    ]);
+    if (user || pending)
+      throw new StateConflictException(
+        'USERNAME_TAKEN',
+        'This username is already taken',
+      );
+  }
+
+  private async findWorkspace(
+    session: ClientSession,
+    workspaceId: string,
+  ): Promise<Workspace> {
+    const workspace = await this.workspaces
+      .findOne({ _id: workspaceId })
+      .session(session)
+      .exec();
+    if (!workspace)
+      throw new ResourceNotFoundException('NOT_FOUND', 'Page not found');
+    return workspace;
+  }
+
+  private async assertOwner(
+    session: ClientSession,
+    workspaceId: string,
+    personId: string,
+  ): Promise<void> {
+    const membership = await this.members
+      .findOne({ workspaceId, userId: personId })
+      .session(session)
+      .exec();
+    if (!membership)
+      throw new ResourceNotFoundException('NOT_FOUND', 'Page not found');
+    if (membership.role !== WorkspaceMemberRole.OWNER)
+      throw new AccessDeniedException(
+        'WORKSPACE_OWNER_REQUIRED',
+        'Only the owner can do this',
+      );
+  }
+
+  private async pageUsers(
+    workspaces: Workspace[],
+  ): Promise<Map<string, PageUser>> {
+    const ids: string[] = [];
+    for (const workspace of workspaces)
+      if (workspace.pageUserId) ids.push(workspace.pageUserId);
+    const users = await this.users
+      .find({ _id: { $in: ids } })
+      .select('username fullName bio avatarUrl status')
+      .exec();
+    return new Map(users.map((user) => [user.id, user]));
+  }
+
+  private async proofCounts(
+    workspaces: Workspace[],
+  ): Promise<Map<string, number>> {
+    const counts = await this.proofs
+      .aggregate<{ _id: string; count: number }>([
+        { $match: { workspaceId: { $in: workspaces.map(({ id }) => id) } } },
+        { $group: { _id: '$workspaceId', count: { $sum: 1 } } },
+      ])
+      .exec();
+    return new Map(counts.map((row) => [row._id, row.count]));
+  }
+
+  private locationDto(workspace: Workspace): RestaurantLocationDto {
+    const [longitude, latitude] = workspace.location.coordinates;
+    return {
+      address: workspace.address,
+      longitude,
+      latitude,
+      phone: workspace.phone,
+      website: workspace.website,
+    };
+  }
+
+  /** Once approved, name, username, bio and avatar come from the page account. */
+  private async toDtos(
+    workspaces: Workspace[],
+    roles: Map<string, WorkspaceMemberRole>,
+  ): Promise<WorkspaceDto[]> {
+    const [pages, proofCounts] = await Promise.all([
+      this.pageUsers(workspaces),
+      this.proofCounts(workspaces),
+    ]);
+    const dtos: WorkspaceDto[] = [];
+    for (const workspace of workspaces) {
+      const role = roles.get(workspace.id);
+      if (!role) continue;
+      const page = workspace.pageUserId
+        ? pages.get(workspace.pageUserId)
+        : undefined;
+      dtos.push({
+        id: workspace.id,
+        pageUserId: workspace.pageUserId,
+        username: page?.username ?? workspace.username,
+        name: page?.fullName ?? workspace.name,
+        bio: page ? page.bio : workspace.bio,
+        avatarUrl: page?.avatarUrl ?? null,
+        statement: workspace.statement,
+        status: workspace.status,
+        reviewNote: workspace.reviewNote,
+        reviewedAt: workspace.reviewedAt,
+        createdAt: workspace.createdAt,
+        proofCount: proofCounts.get(workspace.id) ?? 0,
+        role,
+        ...this.locationDto(workspace),
+      });
+    }
+    return dtos;
+  }
+
+  private async memberDtos(workspaceId: string): Promise<WorkspaceMemberDto[]> {
+    const rows = await this.members
+      .find({ workspaceId })
+      .sort({ createdAt: 1, _id: 1 })
+      .exec();
+    const users = await this.users
+      .find({ _id: { $in: rows.map((row) => row.userId) } })
+      .select('username fullName avatarUrl')
+      .exec();
+    const userById = new Map(users.map((user) => [user.id, user]));
+    const dtos: WorkspaceMemberDto[] = [];
+    for (const row of rows) {
+      const user = userById.get(row.userId);
+      if (!user) continue;
+      dtos.push({
+        userId: user.id,
+        username: user.username,
+        fullName: user.fullName,
+        avatarUrl: user.avatarUrl,
+        role: row.role,
+        createdAt: row.createdAt,
+      });
+    }
+    return dtos;
+  }
+
+  private async toAdminDtos(
+    workspaces: Workspace[],
+  ): Promise<AdminWorkspaceDto[]> {
+    const workspaceIds = workspaces.map(({ id }) => id);
+    const [proofCounts, owners] = await Promise.all([
+      this.proofCounts(workspaces),
+      this.members
+        .find({
+          workspaceId: { $in: workspaceIds },
+          role: WorkspaceMemberRole.OWNER,
+        })
+        .exec(),
+    ]);
+    const ownerIdByWorkspace = new Map(
+      owners.map((row) => [row.workspaceId, row.userId]),
+    );
+    const users = await this.users
+      .find({ _id: { $in: owners.map((row) => row.userId) } })
+      .select('username fullName email avatarUrl')
+      .exec();
+    const userById = new Map(users.map((user) => [user.id, user]));
+    return workspaces.map((workspace) => {
+      const ownerId = ownerIdByWorkspace.get(workspace.id);
+      const owner = ownerId ? userById.get(ownerId) : undefined;
+      return {
+        id: workspace.id,
+        pageUserId: workspace.pageUserId,
+        username: workspace.username,
+        name: workspace.name,
+        bio: workspace.bio,
+        statement: workspace.statement,
+        status: workspace.status,
+        reviewNote: workspace.reviewNote,
+        reviewedAt: workspace.reviewedAt,
+        createdAt: workspace.createdAt,
+        proofCount: proofCounts.get(workspace.id) ?? 0,
+        owner: owner
+          ? {
+              id: owner.id,
+              username: owner.username,
+              fullName: owner.fullName,
+              email: owner.email,
+              avatarUrl: owner.avatarUrl,
+            }
+          : null,
+        ...this.locationDto(workspace),
+      };
+    });
+  }
+}

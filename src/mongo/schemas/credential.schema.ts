@@ -6,7 +6,7 @@ import { Identified } from './identified.js';
 
 /** Why a refresh token stopped working; `null` on tokens revoked before this was recorded. */
 export type RefreshTokenRevocation =
-  'ROTATED' | 'LOGOUT' | 'REVOKED' | 'REUSE_DETECTED' | 'EXPIRED';
+  'ROTATED' | 'LOGOUT' | 'REVOKED' | 'REUSE_DETECTED' | 'EXPIRED' | 'SWITCHED';
 
 @Schema(collectionSchema('refresh_tokens', 'created'))
 export class RefreshToken extends Identified {
@@ -21,6 +21,13 @@ export class RefreshToken extends Identified {
 
   @Prop({ type: String, required: true })
   userId!: string;
+
+  /**
+   * Set on a page session: `userId` is the page and `actorId` the member
+   * acting as it. Null for a personal session.
+   */
+  @Prop({ type: String, default: null })
+  actorId!: string | null;
 
   @Prop({ type: Date, required: true })
   expiresAt!: Date;
@@ -39,6 +46,10 @@ export const RefreshTokenSchema = SchemaFactory.createForClass(RefreshToken);
 RefreshTokenSchema.index({ tokenHash: 1 }, { unique: true });
 RefreshTokenSchema.index({ familyId: 1 });
 RefreshTokenSchema.index({ userId: 1 });
+RefreshTokenSchema.index(
+  { actorId: 1 },
+  { partialFilterExpression: { actorId: { $type: 'string' } } },
+);
 RefreshTokenSchema.index({ expiresAt: 1 });
 
 @Schema(collectionSchema('one_time_codes', 'none'))

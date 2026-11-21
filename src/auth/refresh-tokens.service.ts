@@ -14,6 +14,7 @@ import {
   RefreshToken,
   type RefreshTokenRevocation,
   User,
+  WorkspaceMember,
 } from '../mongo/models.js';
 import { MongoService } from '../mongo/mongo.service.js';
 import { assertAccountActive } from '../auth-core/account-access.js';
@@ -26,6 +27,14 @@ export interface IssuedRefreshToken {
 
 export interface RotatedRefreshToken extends IssuedRefreshToken {
   userId: string;
+  /** Set when the session acts as the page in `userId`. */
+  actorId: string | null;
+}
+
+/** Who a session belongs to: a person, or a person acting as a page. */
+export interface SessionOwner {
+  userId: string;
+  actorId: string | null;
 }
 
 /**
@@ -50,6 +59,8 @@ export class RefreshTokensService {
     @InjectModel(RefreshToken.name)
     private readonly tokens: Model<RefreshToken>,
     @InjectModel(User.name) private readonly users: Model<User>,
+    @InjectModel(WorkspaceMember.name)
+    private readonly members: Model<WorkspaceMember>,
     private readonly mongo: MongoService,
     private readonly configService: ConfigService,
   ) {
@@ -61,11 +72,25 @@ export class RefreshTokensService {
       configService.get<number>('REFRESH_TOKEN_REUSE_GRACE_SECONDS', 30) * 1000;
   }
 
-  async issue(userId: string): Promise<IssuedRefreshToken> {
+  async issue(
+    userId: string,
+    actorId: string | null = null,
+  ): Promise<IssuedRefreshToken> {
     const token = this.generateToken();
     await this.mongo.withTransaction(async (session) => {
       await this.lockActiveAccount(session, userId);
-      await this.insertToken(session, randomUUID(), token, userId);
+      if (actorId !== null) {
+        await this.lockActiveAccount(session, actorId);
+        if (!(await this.isMember(session, userId, actorId)))
+          throw new UnauthenticatedException(
+            'PAGE_ACCESS_REVOKED',
+            'You no longer manage this page',
+          );
+      }
+      await this.insertToken(session, randomUUID(), token, {
+        userId,
+        actorId,
+      });
     });
 
     return { token, expiresIn: this.refreshTokenTtl };
@@ -98,7 +123,7 @@ export class RefreshTokensService {
 
     const replacementToken = this.successorOf(token);
     const rotated = await this.mongo.withTransaction(async (session) => {
-      await this.lockActiveAccount(session, storedToken.userId);
+      const owner = await this.nextOwner(session, storedToken);
       const revoked = await this.tokens.updateOne(
         {
           _id: storedToken.id,
@@ -109,15 +134,15 @@ export class RefreshTokensService {
         { $set: { revokedAt: now, revokedReason: 'ROTATED' } },
         { session },
       );
-      if (revoked.modifiedCount !== 1) return false;
+      if (revoked.modifiedCount !== 1) return null;
 
       await this.insertToken(
         session,
         storedToken.familyId,
         replacementToken,
-        storedToken.userId,
+        owner,
       );
-      return true;
+      return owner;
     });
 
     // Another request rotated the same token first: answer like it did.
@@ -135,8 +160,41 @@ export class RefreshTokensService {
     return {
       token: replacementToken,
       expiresIn: this.refreshTokenTtl,
-      userId: storedToken.userId,
+      ...rotated,
     };
+  }
+
+  /**
+   * Who the rotated session belongs to. A page session whose member was
+   * removed from the page falls back to the member's own account instead of
+   * signing them out; a suspended member is signed out entirely.
+   */
+  private async nextOwner(
+    session: ClientSession,
+    storedToken: RefreshToken,
+  ): Promise<SessionOwner> {
+    const { userId, actorId } = storedToken;
+    if (actorId === null) {
+      await this.lockActiveAccount(session, userId);
+      return { userId, actorId: null };
+    }
+    await this.lockActiveAccount(session, actorId);
+    if (!(await this.isMember(session, userId, actorId)))
+      return { userId: actorId, actorId: null };
+    await this.lockActiveAccount(session, userId);
+    return { userId, actorId };
+  }
+
+  private async isMember(
+    session: ClientSession,
+    pageUserId: string,
+    actorId: string,
+  ): Promise<boolean> {
+    const membership = await this.members
+      .exists({ pageUserId, userId: actorId })
+      .session(session)
+      .exec();
+    return membership !== null;
   }
 
   /**
@@ -171,7 +229,8 @@ export class RefreshTokensService {
         return {
           token: replacementToken,
           expiresIn: this.refreshTokenTtl,
-          userId: storedToken.userId,
+          userId: replacement.userId,
+          actorId: replacement.actorId,
         };
       }
     }
@@ -194,11 +253,45 @@ export class RefreshTokensService {
     await this.revokeFamily(storedToken.familyId, new Date(), 'LOGOUT');
   }
 
+  /** Also ends every page session the user acts in. */
   async revokeAllForUser(userId: string): Promise<void> {
     await this.tokens.updateMany(
-      { userId, revokedAt: null },
+      { $or: [{ userId }, { actorId: userId }], revokedAt: null },
       { $set: { revokedAt: new Date(), revokedReason: 'REVOKED' } },
     );
+  }
+
+  /** Ends a member's sessions as one page, e.g. once they are removed from it. */
+  async revokePageSessions(pageUserId: string, actorId: string): Promise<void> {
+    await this.tokens.updateMany(
+      { userId: pageUserId, actorId, revokedAt: null },
+      { $set: { revokedAt: new Date(), revokedReason: 'REVOKED' } },
+    );
+  }
+
+  /**
+   * Ends the session `token` belongs to before it is swapped for another
+   * identity. The token must be live and belong to `owner` (the identity the
+   * access token speaks for), so a stolen access token alone cannot open a
+   * new 30-day session.
+   */
+  async revokeForSwitch(token: string, owner: SessionOwner): Promise<void> {
+    const storedToken = await this.tokens
+      .findOne({ tokenHash: this.hashToken(token) })
+      .exec();
+    const now = new Date();
+    if (
+      !storedToken ||
+      storedToken.revokedAt !== null ||
+      storedToken.expiresAt <= now ||
+      storedToken.userId !== owner.userId ||
+      storedToken.actorId !== owner.actorId
+    )
+      throw new UnauthenticatedException(
+        'UNAUTHORIZED',
+        'Invalid refresh token',
+      );
+    await this.revokeFamily(storedToken.familyId, now, 'SWITCHED');
   }
 
   private async revokeFamily(
@@ -236,7 +329,7 @@ export class RefreshTokensService {
     session: ClientSession,
     familyId: string,
     token: string,
-    userId: string,
+    { userId, actorId }: SessionOwner,
   ): Promise<void> {
     await this.tokens.create(
       [
@@ -245,6 +338,7 @@ export class RefreshTokensService {
           familyId,
           tokenHash: this.hashToken(token),
           userId,
+          actorId,
           expiresAt: this.expiresAt(),
           revokedAt: null,
         },

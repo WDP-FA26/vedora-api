@@ -6,7 +6,11 @@ import type { App } from 'supertest/types.js';
 import { mockDeep, mockReset } from 'vitest-mock-extended';
 import { AuthService } from '../../src/auth/auth.service.js';
 import { TurnstileService } from '../../src/captcha/turnstile.service.js';
-import { AccountStatus, UserRole } from '../../src/mongo/models.js';
+import {
+  AccountStatus,
+  AccountType,
+  UserRole,
+} from '../../src/mongo/models.js';
 import { createE2eApp, type E2eApp } from '../support/e2e-app.js';
 
 describe('Password login requires Turnstile (HTTP)', () => {
@@ -48,11 +52,13 @@ describe('Password login requires Turnstile (HTTP)', () => {
         email: 'user@example.test',
         avatarUrl: null,
         role: UserRole.USER,
+        accountType: AccountType.PERSONAL,
         status: AccountStatus.ACTIVE,
         accountVersion: 0,
         createdAt: new Date(),
         updatedAt: new Date(),
       },
+      actor: null,
     });
   });
   afterAll(async () => e2e?.close());

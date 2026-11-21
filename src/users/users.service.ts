@@ -14,6 +14,7 @@ import { escapeRegExp } from '../common/text.js';
 import { lockDocument } from '../mongo/document-lock.js';
 import {
   AccountStatus,
+  AccountType,
   User,
   UserAccountAction,
   UserAccountAudit,
@@ -157,6 +158,15 @@ export class UsersService {
         async (target, session) => {
           this.assertVersion(target, dto.expectedVersion);
           if (target.role === dto.role) return toPublicUser(target);
+          // Every manager acts as the page, so a page must never be an admin.
+          if (
+            dto.role === UserRole.ADMIN &&
+            target.accountType === AccountType.PAGE
+          )
+            throw new StateConflictException(
+              'INVALID_ACCOUNT_TRANSITION',
+              'A restaurant page cannot be an admin',
+            );
           if (dto.role !== UserRole.ADMIN) {
             await this.assertNotLastAdmin(target, session);
           }

@@ -7,7 +7,11 @@ import type { GoogleAuthorizationDto } from '../../../src/auth/dto/google.dto.js
 import type { GoogleOAuthService } from '../../../src/auth/google-oauth.service.js';
 import type { TurnstileService } from '../../../src/captcha/turnstile.service.js';
 import { AccessDeniedException } from '../../../src/common/exceptions/access-denied.exception.js';
-import { AccountStatus, UserRole } from '../../../src/mongo/models.js';
+import {
+  AccountStatus,
+  AccountType,
+  UserRole,
+} from '../../../src/mongo/models.js';
 import type { PublicUser } from '../../../src/users/public-user.js';
 
 describe('AuthController', () => {
@@ -17,8 +21,10 @@ describe('AuthController', () => {
     username: 'vedora.user',
     fullName: 'Vedora User',
     email: 'hello@vedora.vn',
+    avatarUrl: null,
     role: UserRole.USER,
     status: AccountStatus.ACTIVE,
+    accountType: AccountType.PERSONAL,
     accountVersion: 0,
     createdAt: new Date('2026-10-01T00:00:00Z'),
     updatedAt: new Date('2026-10-01T00:00:00Z'),
@@ -30,9 +36,15 @@ describe('AuthController', () => {
     accessTokenExpiresIn: 3600,
     refreshTokenExpiresIn: 2592000,
     user: publicUser,
+    actor: null,
   };
   const request = {
-    user: { sub: userId, username: 'vedora.user', role: UserRole.USER },
+    user: {
+      sub: userId,
+      username: 'vedora.user',
+      role: UserRole.USER,
+      actorId: null,
+    },
   } as AuthenticatedRequest;
 
   let authService: ReturnType<typeof mockDeep<AuthService>>;
@@ -193,10 +205,11 @@ describe('AuthController', () => {
     expect(authService.googleLogin).not.toHaveBeenCalled();
   });
 
-  it('delegates me() to authService.getCurrentUser with request.user.sub', async () => {
-    authService.getCurrentUser.mockResolvedValue(publicUser);
+  it('delegates me() to authService.me with request.user', async () => {
+    const current = { ...publicUser, actor: null };
+    authService.me.mockResolvedValue(current);
 
-    await expect(controller.me(request)).resolves.toBe(publicUser);
-    expect(authService.getCurrentUser).toHaveBeenCalledExactlyOnceWith(userId);
+    await expect(controller.me(request)).resolves.toBe(current);
+    expect(authService.me).toHaveBeenCalledExactlyOnceWith(request.user);
   });
 });

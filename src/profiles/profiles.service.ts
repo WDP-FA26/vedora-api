@@ -24,6 +24,8 @@ import {
   ProfileImageStatus,
   ProfileImageUpload,
   User,
+  VerificationStatus,
+  Workspace,
 } from '../mongo/models.js';
 import { StorageService, StorageTarget } from '../storage/storage.service.js';
 import {
@@ -35,6 +37,7 @@ import {
   ProfileSearchItemDto,
   ProfileSearchPageDto,
   ProfileSummaryDto,
+  RestaurantProfileDto,
   UpdateProfileDto,
 } from './dto/profile.dto.js';
 import { SearchProfilesQueryDto } from './dto/search-profiles-query.dto.js';
@@ -69,6 +72,8 @@ export class ProfilesService {
     @InjectModel(User.name) private readonly users: Model<User>,
     @InjectModel(Post.name) private readonly posts: Model<Post>,
     @InjectModel(Follow.name) private readonly follows: Model<Follow>,
+    @InjectModel(Workspace.name)
+    private readonly workspaces: Model<Workspace>,
     @InjectModel(ProfileImageUpload.name)
     private readonly uploads: Model<ProfileImageUpload>,
     private readonly storage: StorageService,
@@ -150,16 +155,20 @@ export class ProfilesService {
 
   async findOne(id: string): Promise<ProfileDto> {
     const user = await this.requirePublicUser(id);
-    const [postCount, followerCount, followingCount] = await Promise.all([
-      this.posts.countDocuments({
-        authorId: id,
-        status: PostStatus.PUBLISHED,
-      }),
-      this.follows.countDocuments({ followingId: id }),
-      this.follows.countDocuments({ followerId: id }),
-    ]);
+    const [postCount, followerCount, followingCount, restaurant] =
+      await Promise.all([
+        this.posts.countDocuments({
+          authorId: id,
+          status: PostStatus.PUBLISHED,
+        }),
+        this.follows.countDocuments({ followingId: id }),
+        this.follows.countDocuments({ followerId: id }),
+        this.restaurantOf(id),
+      ]);
     return {
       ...this.summary(user),
+      accountType: user.accountType,
+      restaurant,
       createdAt: user.createdAt,
       postCount,
       followerCount,
@@ -461,6 +470,23 @@ export class ProfilesService {
     if (!user?.emailVerifiedAt || user.status === AccountStatus.SYSTEM)
       throw new ResourceNotFoundException('NOT_FOUND', 'Profile not found');
     return user;
+  }
+
+  private async restaurantOf(
+    pageUserId: string,
+  ): Promise<RestaurantProfileDto | null> {
+    const workspace = await this.workspaces
+      .findOne({ pageUserId, status: VerificationStatus.APPROVED })
+      .exec();
+    if (!workspace) return null;
+    const [longitude, latitude] = workspace.location.coordinates;
+    return {
+      address: workspace.address,
+      longitude,
+      latitude,
+      phone: workspace.phone,
+      website: workspace.website,
+    };
   }
 
   private summary(user: User): ProfileSummaryDto {

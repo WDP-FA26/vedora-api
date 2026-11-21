@@ -23,6 +23,7 @@ import {
 } from '@nestjs/swagger';
 import { UserRole } from '../mongo/models.js';
 import type { AuthenticatedRequest } from '../auth-core/auth.types.js';
+import { PersonalSessionGuard } from '../auth-core/personal-session.guard.js';
 import { JwtAuthGuard } from '../auth-core/jwt-auth.guard.js';
 import { UserResponseDto } from './dto/user-response.dto.js';
 import {
@@ -86,6 +87,7 @@ export class UsersController {
   }
 
   @Patch(':id')
+  @UseGuards(PersonalSessionGuard)
   @ApiOperation({ summary: 'Update your account, or any account as an admin' })
   update(
     @Req() request: AuthenticatedRequest,
@@ -128,6 +130,7 @@ export class UsersController {
   }
 
   @Delete(':id')
+  @UseGuards(PersonalSessionGuard)
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ summary: 'Delete your account, or any account as an admin' })
   @ApiConflictResponse({

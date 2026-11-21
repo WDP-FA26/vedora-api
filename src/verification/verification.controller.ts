@@ -23,6 +23,7 @@ import {
 } from '@nestjs/swagger';
 import { UserRole } from '../mongo/models.js';
 import type { AuthenticatedRequest } from '../auth-core/auth.types.js';
+import { PersonalSessionGuard } from '../auth-core/personal-session.guard.js';
 import { JwtAuthGuard } from '../auth-core/jwt-auth.guard.js';
 import { Roles } from '../auth-core/roles.decorator.js';
 import { RolesGuard } from '../auth-core/roles.guard.js';
@@ -65,6 +66,7 @@ export class VerificationController {
   }
 
   @Post('proofs/uploads')
+  @UseGuards(PersonalSessionGuard)
   @ApiOperation({ summary: 'Get a presigned upload for a proof image' })
   @ApiCreatedResponse({ type: ProofUploadDto })
   createProofUpload(
@@ -75,6 +77,7 @@ export class VerificationController {
   }
 
   @Post('requests')
+  @UseGuards(PersonalSessionGuard)
   @ApiOperation({
     summary: 'Ask to be verified as a professional',
     description:

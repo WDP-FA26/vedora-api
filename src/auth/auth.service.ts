@@ -8,8 +8,12 @@ import { AccountStatus } from '../mongo/models.js';
 import { assertAccountActive } from '../auth-core/account-access.js';
 import { AccountsService } from '../users/accounts.service.js';
 import { type PublicUser, toPublicUser } from '../users/public-user.js';
-import { JwtPayload } from '../auth-core/auth.types.js';
-import { AuthResponseDto } from './dto/auth-response.dto.js';
+import type { AuthenticatedUser, JwtPayload } from '../auth-core/auth.types.js';
+import {
+  AuthResponseDto,
+  CurrentUserDto,
+  SessionActorDto,
+} from './dto/auth-response.dto.js';
 import {
   ResendVerificationDto,
   VerificationRequiredDto,
@@ -219,10 +223,52 @@ export class AuthService {
     return user;
   }
 
+  /** The account a session acts as, plus the person behind a page session. */
+  async me(current: AuthenticatedUser): Promise<CurrentUserDto> {
+    const [user, actor] = await Promise.all([
+      this.getCurrentUser(current.sub),
+      this.findActor(current.actorId),
+    ]);
+    return { ...user, actor };
+  }
+
   async refresh(refreshToken: string): Promise<AuthResponseDto> {
     const rotatedToken = await this.refreshTokensService.rotate(refreshToken);
     const user = await this.getCurrentUser(rotatedToken.userId);
-    return this.createAuthResponse(user, rotatedToken);
+    return this.createAuthResponse(user, rotatedToken, rotatedToken.actorId);
+  }
+
+  /**
+   * Swaps the current session for one acting as `pageId`, or back to the
+   * person's own account when `pageId` is null. The current refresh token is
+   * revoked, so the browser holds one session at a time.
+   */
+  async switchAccount(
+    current: AuthenticatedUser,
+    refreshToken: string,
+    pageId: string | null,
+  ): Promise<AuthResponseDto> {
+    const personId = current.actorId ?? current.sub;
+    if (pageId === personId)
+      throw new InvalidInputException(
+        'BAD_REQUEST',
+        'Pass null to switch back to your own account',
+      );
+    if (pageId !== null && !(await this.accounts.managesPage(personId, pageId)))
+      throw new AccessDeniedException(
+        'FORBIDDEN',
+        'You do not manage this page',
+      );
+    await this.refreshTokensService.revokeForSwitch(refreshToken, {
+      userId: current.sub,
+      actorId: current.actorId,
+    });
+    if (pageId === null) {
+      return this.createAuthResponse(await this.getCurrentUser(personId));
+    }
+    const page = await this.getCurrentUser(pageId);
+    const issued = await this.refreshTokensService.issue(pageId, personId);
+    return this.createAuthResponse(page, issued, personId);
   }
 
   async logout(refreshToken: string): Promise<void> {
@@ -274,17 +320,36 @@ export class AuthService {
     });
   }
 
+  private async findActor(
+    actorId: string | null,
+  ): Promise<SessionActorDto | null> {
+    if (actorId === null) return null;
+    const actor = await this.getCurrentUser(actorId);
+    return {
+      id: actor.id,
+      username: actor.username,
+      fullName: actor.fullName,
+      avatarUrl: actor.avatarUrl,
+    };
+  }
+
+  /** `actorId` makes it a page session; it must come with the page's own refresh token. */
   private async createAuthResponse(
     user: PublicUser,
     issuedRefreshToken?: IssuedRefreshToken,
+    actorId: string | null = null,
   ): Promise<AuthResponseDto> {
     user = await this.getCurrentUser(user.id);
-    const payload: JwtPayload = { sub: user.id, username: user.username };
-    const [accessToken, refreshToken] = await Promise.all([
+    const payload: JwtPayload =
+      actorId === null
+        ? { sub: user.id, username: user.username }
+        : { sub: user.id, username: user.username, act: actorId };
+    const [accessToken, refreshToken, actor] = await Promise.all([
       this.jwtService.signAsync(payload),
       issuedRefreshToken
         ? Promise.resolve(issuedRefreshToken)
         : this.refreshTokensService.issue(user.id),
+      this.findActor(actorId),
     ]);
 
     return {
@@ -294,6 +359,7 @@ export class AuthService {
       accessTokenExpiresIn: this.accessTokenTtl,
       refreshTokenExpiresIn: refreshToken.expiresIn,
       user,
+      actor,
     };
   }
 }

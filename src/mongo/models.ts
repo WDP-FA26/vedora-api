@@ -12,6 +12,7 @@ export * from './schemas/media.schema.js';
 export * from './schemas/knowledge.schema.js';
 export * from './schemas/moderation.schema.js';
 export * from './schemas/verification.schema.js';
+export * from './schemas/workspace.schema.js';
 export * from './schemas/recipe.schema.js';
 export * from './schemas/meal-plan-chat.schema.js';
 export * from './schemas/payment.schema.js';

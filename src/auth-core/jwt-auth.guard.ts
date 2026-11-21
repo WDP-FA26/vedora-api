@@ -3,10 +3,11 @@ import { JwtService } from '@nestjs/jwt';
 import { InjectModel } from '@nestjs/mongoose';
 import { isUUID } from 'class-validator';
 import type { Model } from 'mongoose';
-import { User } from '../mongo/models.js';
+import { User, WorkspaceMember } from '../mongo/models.js';
 import { AuthenticatedRequest, JwtPayload } from './auth.types.js';
 import { assertAccountActive } from './account-access.js';
 import { extractBearerToken } from './bearer-token.js';
+import { assertPageAccess } from './page-access.js';
 import { UnauthenticatedException } from '../common/exceptions/unauthenticated.exception.js';
 
 @Injectable()
@@ -14,6 +15,8 @@ export class JwtAuthGuard implements CanActivate {
   constructor(
     private readonly jwtService: JwtService,
     @InjectModel(User.name) private readonly users: Model<User>,
+    @InjectModel(WorkspaceMember.name)
+    private readonly members: Model<WorkspaceMember>,
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
@@ -34,7 +37,9 @@ export class JwtAuthGuard implements CanActivate {
         typeof payload.sub !== 'string' ||
         !isUUID(payload.sub) ||
         typeof payload.username !== 'string' ||
-        !payload.username
+        !payload.username ||
+        (payload.act !== undefined &&
+          (typeof payload.act !== 'string' || !isUUID(payload.act)))
       ) {
         throw new UnauthenticatedException(
           'UNAUTHORIZED',
@@ -59,7 +64,15 @@ export class JwtAuthGuard implements CanActivate {
       );
     }
     assertAccountActive(user.status);
-    request.user = { sub: user.id, username: user.username, role: user.role };
+    const actorId = payload.act ?? null;
+    if (actorId !== null)
+      await assertPageAccess(this.users, this.members, user.id, actorId);
+    request.user = {
+      sub: user.id,
+      username: user.username,
+      role: user.role,
+      actorId,
+    };
     return true;
   }
 }

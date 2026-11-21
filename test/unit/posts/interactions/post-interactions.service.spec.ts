@@ -243,6 +243,7 @@ describe('PostInteractionsService', () => {
       sub: user.id,
       username: user.username,
       role: user.role,
+      actorId: null,
     });
 
     it('flattens replies, addresses the selected author, counts roots, and preserves post timestamps', async () => {

@@ -26,6 +26,7 @@ import { createUser } from '../support/fixtures.js';
  */
 
 const PUBLIC_USER_KEYS = [
+  'accountType',
   'accountVersion',
   'avatarUrl',
   'createdAt',
@@ -1010,7 +1011,8 @@ describe('Auth flows (e2e)', () => {
         Object.keys(
           z.record(z.string(), z.unknown()).parse(response.body),
         ).sort(),
-      ).toEqual(PUBLIC_USER_KEYS);
+      ).toEqual([...PUBLIC_USER_KEYS, 'actor'].sort());
+      expect(response.body).toMatchObject({ actor: null });
     });
 
     it('accepts a lowercase bearer scheme', async () => {

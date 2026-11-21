@@ -23,11 +23,13 @@ import {
   ApiUnauthorizedResponse,
 } from '@nestjs/swagger';
 import { TurnstileService } from '../captcha/turnstile.service.js';
-import { type PublicUser } from '../users/public-user.js';
 import { AuthService } from './auth.service.js';
 import { AuthenticatedRequest } from '../auth-core/auth.types.js';
-import { AuthResponseDto } from './dto/auth-response.dto.js';
-import { UserResponseDto } from '../users/dto/user-response.dto.js';
+import {
+  AuthResponseDto,
+  CurrentUserDto,
+  SwitchAccountDto,
+} from './dto/auth-response.dto.js';
 import { AccessDeniedException } from '../common/exceptions/access-denied.exception.js';
 import {
   ResendVerificationDto,
@@ -189,6 +191,35 @@ export class AuthController {
     return this.authService.refresh(dto.refreshToken);
   }
 
+  @Post('switch')
+  @HttpCode(HttpStatus.OK)
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'Act as a page you manage, or go back to your own account',
+    description:
+      'Send the current refresh token: it is revoked and a new token pair for the chosen identity is returned.',
+  })
+  @ApiOkResponse({ type: AuthResponseDto })
+  @ApiUnauthorizedResponse({
+    type: ErrorBodyDto,
+    description: 'Invalid access or refresh token',
+  })
+  @ApiForbiddenResponse({
+    type: ErrorBodyDto,
+    description: 'You do not manage this page',
+  })
+  switchAccount(
+    @Req() request: AuthenticatedRequest,
+    @Body() dto: SwitchAccountDto,
+  ): Promise<AuthResponseDto> {
+    return this.authService.switchAccount(
+      request.user,
+      dto.refreshToken,
+      dto.pageId,
+    );
+  }
+
   @Post('logout')
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ summary: 'Revoke the refresh-token family' })
@@ -237,12 +268,12 @@ export class AuthController {
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Get the current authenticated user' })
-  @ApiOkResponse({ type: UserResponseDto })
+  @ApiOkResponse({ type: CurrentUserDto })
   @ApiUnauthorizedResponse({
     type: ErrorBodyDto,
     description: 'Invalid or missing access token',
   })
-  me(@Req() request: AuthenticatedRequest): Promise<PublicUser> {
-    return this.authService.getCurrentUser(request.user.sub);
+  me(@Req() request: AuthenticatedRequest): Promise<CurrentUserDto> {
+    return this.authService.me(request.user);
   }
 }

@@ -17,7 +17,12 @@ import { UserThrottlerGuard } from '../../../src/auth-core/user-throttler.guard.
 import { AccessDeniedException } from '../../../src/common/exceptions/access-denied.exception.js';
 import { InvalidInputException } from '../../../src/common/exceptions/invalid-input.exception.js';
 import { UnauthenticatedException } from '../../../src/common/exceptions/unauthenticated.exception.js';
-import { AccountStatus, User, UserRole } from '../../../src/mongo/models.js';
+import {
+  AccountStatus,
+  User,
+  UserRole,
+  WorkspaceMember,
+} from '../../../src/mongo/models.js';
 
 function createHttpContext(request: Record<string, unknown>): ExecutionContext {
   return {
@@ -65,8 +70,13 @@ describe('auth-core', () => {
     const findOne = vi.fn(() => ({ select }));
     const jwtService = { verifyAsync } as unknown as JwtService;
     const usersModel = { findOne } as unknown as never;
-    const guard = new JwtAuthGuard(jwtService, usersModel);
-    const optionalGuard = new OptionalJwtAuthGuard(jwtService, usersModel);
+    const membersModel = { exists: vi.fn() } as unknown as never;
+    const guard = new JwtAuthGuard(jwtService, usersModel, membersModel);
+    const optionalGuard = new OptionalJwtAuthGuard(
+      jwtService,
+      usersModel,
+      membersModel,
+    );
 
     beforeEach(() => {
       vi.clearAllMocks();
@@ -156,6 +166,7 @@ describe('auth-core', () => {
         sub,
         username: 'current-name',
         role: UserRole.ADMIN,
+        actorId: null,
       });
     });
 
@@ -257,8 +268,14 @@ describe('auth-core', () => {
     it('configures JwtModule using ConfigService JWT_SECRET and JWT_ACCESS_TTL', async () => {
       @Global()
       @Module({
-        providers: [{ provide: getModelToken(User.name), useValue: {} }],
-        exports: [getModelToken(User.name)],
+        providers: [
+          { provide: getModelToken(User.name), useValue: {} },
+          { provide: getModelToken(WorkspaceMember.name), useValue: {} },
+        ],
+        exports: [
+          getModelToken(User.name),
+          getModelToken(WorkspaceMember.name),
+        ],
       })
       class FakeMongoModule {}
 

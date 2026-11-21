@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { AccountStatus, UserRole } from '../../mongo/models.js';
+import { AccountStatus, AccountType, UserRole } from '../../mongo/models.js';
 
 export class UserResponseDto {
   @ApiProperty({ format: 'uuid' })
@@ -22,6 +22,12 @@ export class UserResponseDto {
 
   @ApiProperty({ enum: AccountStatus })
   status!: AccountStatus;
+
+  @ApiProperty({
+    enum: AccountType,
+    description: 'PAGE for a restaurant page account',
+  })
+  accountType!: AccountType;
 
   @ApiProperty({ minimum: 0 })
   accountVersion!: number;

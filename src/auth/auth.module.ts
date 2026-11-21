@@ -19,5 +19,6 @@ import { RefreshTokensService } from './refresh-tokens.service.js';
     EmailVerificationService,
     PasswordResetService,
   ],
+  exports: [RefreshTokensService],
 })
 export class AuthModule {}

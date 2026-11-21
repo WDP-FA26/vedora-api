@@ -1,6 +1,6 @@
 import { runtimeConfig } from '../../config/runtime-config.js';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { ProfileImageKind } from '../../mongo/models.js';
+import { AccountType, ProfileImageKind } from '../../mongo/models.js';
 import {
   IsEnum,
   IsIn,
@@ -28,7 +28,22 @@ export class ProfileSummaryDto {
   @ApiProperty() isProfessional!: boolean;
 }
 
+export class RestaurantProfileDto {
+  @ApiProperty() address!: string;
+  @ApiProperty() longitude!: number;
+  @ApiProperty() latitude!: number;
+  @ApiProperty({ type: String, nullable: true }) phone!: string | null;
+  @ApiProperty({ type: String, nullable: true }) website!: string | null;
+}
+
 export class ProfileDto extends ProfileSummaryDto {
+  @ApiProperty({ enum: AccountType }) accountType!: AccountType;
+  @ApiProperty({
+    type: RestaurantProfileDto,
+    nullable: true,
+    description: 'Where a restaurant page is; null for a personal account',
+  })
+  restaurant!: RestaurantProfileDto | null;
   @ApiProperty() createdAt!: Date;
   @ApiProperty() postCount!: number;
   @ApiProperty() followerCount!: number;

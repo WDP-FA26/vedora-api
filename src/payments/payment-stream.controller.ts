@@ -29,6 +29,7 @@ import {
 } from 'rxjs';
 import type { AuthenticatedRequest } from '../auth-core/auth.types.js';
 import { extractBearerToken } from '../auth-core/bearer-token.js';
+import { PersonalSessionGuard } from '../auth-core/personal-session.guard.js';
 import { JwtAuthGuard } from '../auth-core/jwt-auth.guard.js';
 import { AccountStatus, User } from '../mongo/models.js';
 import { PaymentEventsService } from './payment-events.service.js';
@@ -38,7 +39,7 @@ import { ErrorBodyDto } from '../common/exceptions/error-body.dto.js';
 
 @ApiTags('billing')
 @ApiBearerAuth()
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, PersonalSessionGuard)
 @Controller('payment-intents')
 export class PaymentStreamController {
   constructor(

@@ -11,7 +11,8 @@ export type LockKind =
   | 'ticket'
   | 'account-gate'
   | 'payer'
-  | 'transaction';
+  | 'transaction'
+  | 'workspace';
 
 @Schema(collectionSchema('document_locks', 'none'))
 export class DocumentLock extends Identified {

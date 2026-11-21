@@ -37,6 +37,7 @@ import { QdrantModule } from './qdrant/qdrant.module.js';
 import { RecipesModule } from './recipes/recipes.module.js';
 import { UsersModule } from './users/users.module.js';
 import { VerificationModule } from './verification/verification.module.js';
+import { WorkspacesModule } from './workspaces/workspaces.module.js';
 
 @Module({
   imports: [
@@ -76,6 +77,7 @@ import { VerificationModule } from './verification/verification.module.js';
     KnowledgeModule,
     ProfilesModule,
     VerificationModule,
+    WorkspacesModule,
     StorageWebhookModule,
   ],
   controllers: [AppController, PublicConfigController],
