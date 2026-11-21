@@ -95,6 +95,8 @@ WorkspaceSchema.index({ location: '2dsphere' });
 cascadeOnDelete(WorkspaceSchema, [
   { model: 'WorkspaceMember', field: 'workspaceId', action: 'delete' },
   { model: 'WorkspaceProof', field: 'workspaceId', action: 'unset' },
+  { model: 'RestaurantMenuItem', field: 'workspaceId', action: 'delete' },
+  { model: 'RestaurantReview', field: 'workspaceId', action: 'delete' },
 ]);
 
 @Schema(collectionSchema('workspace_members', 'created'))
@@ -156,3 +158,106 @@ export const WorkspaceProofSchema =
 WorkspaceProofSchema.index({ storageKey: 1 }, { unique: true });
 WorkspaceProofSchema.index({ ownerId: 1, workspaceId: 1 });
 WorkspaceProofSchema.index({ workspaceId: 1, createdAt: 1 });
+
+@Schema(collectionSchema('restaurant_menu_items'))
+export class RestaurantMenuItem extends Identified {
+  @Prop({ type: String, default: () => randomUUID() })
+  _id!: string;
+
+  @Prop({ type: String, required: true })
+  workspaceId!: string;
+
+  @Prop({ type: String, default: null })
+  pageUserId!: string | null;
+
+  @Prop({ type: String, required: true })
+  name!: string;
+
+  @Prop({ type: String, default: null })
+  description!: string | null;
+
+  @Prop({ type: String, default: null })
+  category!: string | null;
+
+  @Prop({ type: Number, default: null })
+  priceVnd!: number | null;
+
+  @Prop({ type: String, default: null })
+  imageUrl!: string | null;
+
+  @Prop({ type: Boolean, required: true, default: true })
+  isAvailable!: boolean;
+
+  @Prop({ type: Number, required: true, default: 0 })
+  position!: number;
+
+  @Prop({ type: Date, default: null })
+  searchIndexedAt!: Date | null;
+
+  @Prop({ type: Date })
+  createdAt!: Date;
+
+  @Prop({ type: Date })
+  updatedAt!: Date;
+}
+
+export const RestaurantMenuItemSchema =
+  SchemaFactory.createForClass(RestaurantMenuItem);
+RestaurantMenuItemSchema.index({
+  workspaceId: 1,
+  position: 1,
+  createdAt: 1,
+  _id: 1,
+});
+RestaurantMenuItemSchema.index({
+  pageUserId: 1,
+  isAvailable: 1,
+  position: 1,
+  createdAt: 1,
+  _id: 1,
+});
+RestaurantMenuItemSchema.index({
+  pageUserId: 1,
+  isAvailable: 1,
+  searchIndexedAt: 1,
+});
+
+@Schema(collectionSchema('restaurant_reviews'))
+export class RestaurantReview extends Identified {
+  @Prop({ type: String, default: () => randomUUID() })
+  _id!: string;
+
+  @Prop({ type: String, required: true })
+  workspaceId!: string;
+
+  @Prop({ type: String, required: true })
+  pageUserId!: string;
+
+  @Prop({ type: String, required: true })
+  authorId!: string;
+
+  @Prop({ type: Number, required: true })
+  rating!: number;
+
+  @Prop({ type: String, default: null })
+  comment!: string | null;
+
+  @Prop({ type: Date })
+  createdAt!: Date;
+
+  @Prop({ type: Date })
+  updatedAt!: Date;
+}
+
+export const RestaurantReviewSchema =
+  SchemaFactory.createForClass(RestaurantReview);
+RestaurantReviewSchema.index({ pageUserId: 1, authorId: 1 }, { unique: true });
+RestaurantReviewSchema.index({ pageUserId: 1, createdAt: -1, _id: -1 });
+RestaurantReviewSchema.index({
+  pageUserId: 1,
+  rating: -1,
+  createdAt: -1,
+  _id: -1,
+});
+RestaurantReviewSchema.index({ workspaceId: 1 });
+RestaurantReviewSchema.index({ authorId: 1 });

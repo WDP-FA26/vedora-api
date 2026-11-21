@@ -202,7 +202,7 @@ export class MealPlanController {
   @ApiOperation({
     summary: 'Talk to the assistant: meal planning and nutrition questions',
     description:
-      'Streams the reply as an AI SDK UI message stream (SSE) for `useChat`. `weekStart` is the week on screen and only the default: the assistant may propose for any week from this one to `maxWeekStart`. Its `fillSlots` and `editDraft` tool outputs are checked proposals with the same shape (`weekStart`, `days`, `problems`, `ok`), each the whole draft of its week; save one with `PUT /meal-plan/days` and its own `weekStart`.',
+      'Streams the reply as an AI SDK UI message stream (SSE) for `useChat`. `weekStart` is the week on screen and only the default: the assistant may propose for any week from this one to `maxWeekStart`. Its `fillSlots` and `editDraft` tool outputs are checked proposals with the same shape (`weekStart`, `days`, `problems`, `ok`), each the whole draft of its week; save one with `PUT /meal-plan/days` and its own `weekStart`. Web search runs only with `allowWebSearch: true`; without it the assistant may call `requestWebSearch` (no output) to ask the user first, and web results arrive as `source-url` parts.',
   })
   @ApiTooManyRequestsResponse({
     type: ErrorBodyDto,
@@ -228,7 +228,8 @@ export class MealPlanController {
         abort.signal,
         dto.weekStart,
         dto.requestId,
-        ...(dto.threadId ? [dto.threadId] : []),
+        dto.threadId,
+        { allowWebSearch: dto.allowWebSearch === true },
       ),
     });
   }

@@ -35,6 +35,8 @@ export const MODEL_NAMES = [
   'Workspace',
   'WorkspaceMember',
   'WorkspaceProof',
+  'RestaurantMenuItem',
+  'RestaurantReview',
   'Ingredient',
   'IngredientGroup',
   'IncompatibilityRule',

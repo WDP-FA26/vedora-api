@@ -23,6 +23,7 @@ export const INVALID_INPUT_CODES = [
   'TICKET_POST_REQUIRED',
   'TICKET_MESSAGE_EMPTY',
   'UNKNOWN_ATTACHMENT',
+  'EMPTY_RECIPE_SOURCE',
 ] as const;
 
 export type InvalidInputCode = (typeof INVALID_INPUT_CODES)[number];

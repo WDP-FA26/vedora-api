@@ -20,10 +20,8 @@ import { MealPlannerChatService } from '../../../src/meal-plan/meal-planner-chat
 import { ModerationSettingsService } from '../../../src/moderation/moderation-settings.service.js';
 import { AiFeature, MealSection, Weekday } from '../../../src/mongo/models.js';
 import { DietaryService } from '../../../src/recipes/dietary.service.js';
-import {
-  AiUsageService,
-  type UsageTicket,
-} from '../../../src/subscriptions/ai-usage.service.js';
+import { AiUsageService, type UsageTicket } from '../../../src/subscriptions/ai-usage.service.js';
+import { RestaurantMenuService } from '../../../src/workspaces/restaurant-menu.service.js';
 
 type StreamPart =
   Awaited<
@@ -130,6 +128,7 @@ describe('MealPlannerChatService', () => {
   let knowledge: DeepMockProxy<KnowledgeSearchService>;
   let aiUsage: DeepMockProxy<AiUsageService>;
   let history: DeepMockProxy<MealPlannerChatHistoryService>;
+  let restaurantMenu: DeepMockProxy<RestaurantMenuService>;
 
   beforeEach(() => {
     mealPlan = mockDeep<MealPlanService>();
@@ -137,6 +136,8 @@ describe('MealPlannerChatService', () => {
     knowledge = mockDeep<KnowledgeSearchService>();
     aiUsage = mockDeep<AiUsageService>();
     history = mockDeep<MealPlannerChatHistoryService>();
+    restaurantMenu = mockDeep<RestaurantMenuService>();
+    restaurantMenu.suggestForPlanner.mockResolvedValue([]);
 
     aiUsage.consume.mockResolvedValue(TICKET);
     aiUsage.complete.mockResolvedValue(undefined);
@@ -210,6 +211,7 @@ describe('MealPlannerChatService', () => {
         { provide: KnowledgeSearchService, useValue: knowledge },
         { provide: AiUsageService, useValue: aiUsage },
         { provide: MealPlannerChatHistoryService, useValue: history },
+        { provide: RestaurantMenuService, useValue: restaurantMenu },
       ],
     })
       .overrideProvider(AiCostTransportService)
@@ -300,7 +302,7 @@ describe('MealPlannerChatService', () => {
     expect(aiUsage.refund).toHaveBeenCalledWith(TICKET);
   });
 
-  it('loads user profile + meal plan, streams with all 6 tools, and completes the ticket', async () => {
+  it('loads user profile + meal plan, streams with the planner tools, and completes the ticket', async () => {
     const service = await createService();
 
     const chunks = await convertReadableStreamToArray(
@@ -330,9 +332,101 @@ describe('MealPlannerChatService', () => {
       'getPlan',
       'fillSlots',
       'editDraft',
+      'searchRestaurantDishes',
+      'requestWebSearch',
     ]);
     expect(aiUsage.complete).toHaveBeenCalledWith(TICKET);
     expect(aiUsage.refund).not.toHaveBeenCalled();
+  });
+
+  it('only asks for web search until the user allows it', async () => {
+    const service = await createService();
+
+    await convertReadableStreamToArray(
+      await service.stream(
+        USER_ID,
+        [{ role: 'user', text: 'Tempeh mua ở đâu?' }],
+        new AbortController().signal,
+        WEEK,
+      ),
+    );
+    const tools = model.doStreamCalls[0].tools ?? [];
+    expect(tools.some((t) => t.type === 'provider')).toBe(false);
+    const [system] = model.doStreamCalls[0].prompt;
+    expect(system.role === 'system' && system.content).toContain(
+      'CHƯA cho phép',
+    );
+  });
+
+  it('adds the OpenRouter web search server tool once the user allows it', async () => {
+    const service = await createService();
+
+    await convertReadableStreamToArray(
+      await service.stream(
+        USER_ID,
+        [{ role: 'user', text: 'Đồng ý, bạn cứ tìm trên web.' }],
+        new AbortController().signal,
+        WEEK,
+        undefined,
+        undefined,
+        { allowWebSearch: true },
+      ),
+    );
+    const tools = model.doStreamCalls[0].tools ?? [];
+    expect(tools.map((t) => t.name)).not.toContain('requestWebSearch');
+    expect(tools).toContainEqual(
+      expect.objectContaining({
+        type: 'provider',
+        id: 'openrouter.web_search',
+        args: {
+          parameters: {
+            engine: 'parallel',
+            mode: 'fast',
+            search_context_size: 'low',
+            max_results: 3,
+            max_total_results: 6,
+            max_uses: 2,
+          },
+        },
+      }),
+    );
+    const [system] = model.doStreamCalls[0].prompt;
+    expect(system.role === 'system' && system.content).toContain('ĐÃ cho phép');
+  });
+
+  it('forwards web citations to the client as source parts', async () => {
+    steps = [
+      [
+        {
+          type: 'source',
+          sourceType: 'url',
+          id: 'https://example.com/tempeh',
+          url: 'https://example.com/tempeh',
+          title: 'Tempeh',
+        },
+        ...textChunks,
+      ],
+    ];
+    const service = await createService();
+
+    const chunks = await convertReadableStreamToArray(
+      await service.stream(
+        USER_ID,
+        [{ role: 'user', text: 'Tempeh mua ở đâu?' }],
+        new AbortController().signal,
+        WEEK,
+        undefined,
+        undefined,
+        { allowWebSearch: true },
+      ),
+    );
+    expect(chunks).toContainEqual(
+      expect.objectContaining({
+        type: 'source-url',
+        url: 'https://example.com/tempeh',
+        title: 'Tempeh',
+      }),
+    );
   });
 
   it('keeps the drafts while a conversation goes on', async () => {
@@ -530,5 +624,67 @@ describe('MealPlannerChatService', () => {
         metadata: { refused: true },
       }),
     );
+  });
+
+  it('calls RestaurantMenuService when the planner invokes searchRestaurantDishes', async () => {
+    dietary.find.mockResolvedValue({
+      ingredients: [{ id: 'ing-1', name: 'Đậu phộng' }],
+      groups: [],
+      liked: [],
+      terms: ['Đậu phộng'],
+    });
+    restaurantMenu.suggestForPlanner.mockResolvedValue([
+      {
+        id: 'dish-1',
+        name: 'Bún bò chay Huế',
+        category: 'Món nước',
+        priceVnd: 45000,
+        description: 'Đậm vị sả ớt',
+        imageUrl: null,
+        restaurant: {
+          pageUserId: 'page-1',
+          username: 'chay.hue',
+          name: 'Chay An Nhiên',
+          avatarUrl: null,
+          address: '10 Quang Trung, Hà Nội',
+          averageRating: 4.9,
+          reviewCount: 15,
+        },
+        avoidedMatches: [],
+      },
+    ]);
+    steps = [
+      [
+        {
+          type: 'tool-call',
+          toolCallId: 'call-rest',
+          toolName: 'searchRestaurantDishes',
+          input: JSON.stringify({ query: 'bún bò chay', limit: 5 }),
+        },
+        {
+          type: 'finish',
+          finishReason: { unified: 'tool-calls', raw: undefined },
+          usage,
+        },
+      ],
+      textChunks,
+    ];
+
+    const service = await createService();
+    const chunks = await convertReadableStreamToArray(
+      await service.stream(
+        USER_ID,
+        [{ role: 'user', text: 'Gợi ý món bún bò chay ở nhà hàng' }],
+        new AbortController().signal,
+        WEEK,
+      ),
+    );
+
+    expect(restaurantMenu.suggestForPlanner).toHaveBeenCalledWith(
+      'bún bò chay',
+      5,
+      ['Đậu phộng'],
+    );
+    expect(replyText(chunks)).toBe('Mình đã gợi ý thực đơn.');
   });
 });

@@ -305,7 +305,7 @@ export class ReviewWorkspaceDto {
   note?: string;
 }
 
-/** A map viewport: south-west and north-east corners. */
+/** A map viewport: south-west and north-east corners, plus optional user point for proximity sorting. */
 export class RestaurantsInViewQueryDto {
   @ApiProperty({ minimum: -180, maximum: 180 })
   @Type(() => Number)
@@ -326,6 +326,24 @@ export class RestaurantsInViewQueryDto {
   @Type(() => Number)
   @IsLatitude()
   maxLat!: number;
+
+  @ApiPropertyOptional({ minimum: -180, maximum: 180 })
+  @ValidateIf(
+    (dto: RestaurantsInViewQueryDto) =>
+      dto.userLng !== undefined || dto.userLat !== undefined,
+  )
+  @Type(() => Number)
+  @IsLongitude()
+  userLng?: number;
+
+  @ApiPropertyOptional({ minimum: -90, maximum: 90 })
+  @ValidateIf(
+    (dto: RestaurantsInViewQueryDto) =>
+      dto.userLng !== undefined || dto.userLat !== undefined,
+  )
+  @Type(() => Number)
+  @IsLatitude()
+  userLat?: number;
 }
 
 export class RestaurantPinDto {
@@ -337,6 +355,16 @@ export class RestaurantPinDto {
   @ApiProperty() address!: string;
   @ApiProperty() longitude!: number;
   @ApiProperty() latitude!: number;
+  @ApiProperty({
+    type: Number,
+    nullable: true,
+    description: 'Distance in meters when user coordinates were sent; else null',
+  })
+  distanceMeters!: number | null;
+  @ApiProperty({ type: Number, nullable: true })
+  averageRating!: number | null;
+  @ApiProperty({ minimum: 0 })
+  reviewCount!: number;
 }
 
 export class RestaurantPinListDto {

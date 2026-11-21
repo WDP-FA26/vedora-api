@@ -9,6 +9,7 @@ import {
   ParseUUIDPipe,
   Patch,
   Post,
+  Put,
   Query,
   Req,
   UseGuards,
@@ -28,8 +29,10 @@ import { UserRole } from '../mongo/models.js';
 import type {
   AuthenticatedRequest,
   AuthenticatedUser,
+  OptionalAuthenticatedRequest,
 } from '../auth-core/auth.types.js';
 import { JwtAuthGuard } from '../auth-core/jwt-auth.guard.js';
+import { OptionalJwtAuthGuard } from '../auth-core/optional-jwt-auth.guard.js';
 import { Roles } from '../auth-core/roles.decorator.js';
 import { RolesGuard } from '../auth-core/roles.guard.js';
 import { PersonalSessionGuard } from '../auth-core/personal-session.guard.js';
@@ -53,6 +56,25 @@ import {
   WorkspaceProofUploadDto,
   WorkspacesQueryDto,
 } from './dto/workspace.dto.js';
+import {
+  CreateMenuImageUploadDto,
+  CreateRestaurantMenuItemDto,
+  MenuImageUploadDto,
+  RestaurantMenuItemDto,
+  RestaurantMenuListDto,
+  RestaurantMenuSearchPageDto,
+  SearchRestaurantMenuQueryDto,
+  UpdateRestaurantMenuItemDto,
+} from './dto/restaurant-menu.dto.js';
+import {
+  ListRestaurantReviewsQueryDto,
+  RestaurantReviewMutationResponseDto,
+  RestaurantReviewPageDto,
+  RestaurantReviewSummaryDto,
+  UpsertRestaurantReviewDto,
+} from './dto/restaurant-review.dto.js';
+import { RestaurantMenuService } from './restaurant-menu.service.js';
+import { RestaurantReviewsService } from './restaurant-reviews.service.js';
 import { WorkspacesService } from './workspaces.service.js';
 
 /** Pages are managed by the person, also while they act as one of their pages. */
@@ -67,7 +89,10 @@ const personOf = (user: AuthenticatedUser): string => user.actorId ?? user.sub;
 @UseGuards(JwtAuthGuard)
 @Controller('workspaces')
 export class WorkspacesController {
-  constructor(private readonly workspaces: WorkspacesService) {}
+  constructor(
+    private readonly workspaces: WorkspacesService,
+    private readonly menu: RestaurantMenuService,
+  ) {}
 
   @Get('mine')
   @ApiOperation({ summary: 'Pages you own or manage, newest first' })
@@ -92,12 +117,12 @@ export class WorkspacesController {
   @ApiOperation({
     summary: 'Apply to open a restaurant page',
     description:
-      'The page stays PENDING until an admin approves it; only then does the page account exist. One application can be pending per person.',
+      'The page stays PENDING until an admin approves it; only then does the page account exist.',
   })
   @ApiCreatedResponse({ type: WorkspaceDetailDto })
   @ApiConflictResponse({
     type: ErrorBodyDto,
-    description: 'USERNAME_TAKEN, REQUEST_PENDING or PROOF_NOT_UPLOADED',
+    description: 'USERNAME_TAKEN or PROOF_NOT_UPLOADED',
   })
   create(
     @Req() request: AuthenticatedRequest,
@@ -177,6 +202,62 @@ export class WorkspacesController {
   ): Promise<void> {
     await this.workspaces.removeMember(personOf(request.user), id, userId);
   }
+
+  @Get(':id/menu')
+  @ApiOperation({ summary: 'List menu items for a restaurant page you manage' })
+  @ApiOkResponse({ type: RestaurantMenuListDto })
+  listMenu(
+    @Req() request: AuthenticatedRequest,
+    @Param('id', ParseUUIDPipe) id: string,
+  ): Promise<RestaurantMenuListDto> {
+    return this.menu.listForWorkspace(personOf(request.user), id);
+  }
+
+  @Post(':id/menu/image-uploads')
+  @ApiOperation({ summary: 'Get a presigned upload for a menu dish photo' })
+  @ApiCreatedResponse({ type: MenuImageUploadDto })
+  createMenuImageUpload(
+    @Req() request: AuthenticatedRequest,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: CreateMenuImageUploadDto,
+  ): Promise<MenuImageUploadDto> {
+    return this.menu.createImageUpload(personOf(request.user), id, dto);
+  }
+
+  @Post(':id/menu')
+  @ApiOperation({ summary: 'Create a dish on the restaurant menu' })
+  @ApiCreatedResponse({ type: RestaurantMenuItemDto })
+  createMenuItem(
+    @Req() request: AuthenticatedRequest,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: CreateRestaurantMenuItemDto,
+  ): Promise<RestaurantMenuItemDto> {
+    return this.menu.create(personOf(request.user), id, dto);
+  }
+
+  @Patch(':id/menu/:itemId')
+  @ApiOperation({ summary: 'Update a dish on the restaurant menu' })
+  @ApiOkResponse({ type: RestaurantMenuItemDto })
+  updateMenuItem(
+    @Req() request: AuthenticatedRequest,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('itemId', ParseUUIDPipe) itemId: string,
+    @Body() dto: UpdateRestaurantMenuItemDto,
+  ): Promise<RestaurantMenuItemDto> {
+    return this.menu.update(personOf(request.user), id, itemId, dto);
+  }
+
+  @Delete(':id/menu/:itemId')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiOperation({ summary: 'Delete a dish from the restaurant menu' })
+  @ApiNoContentResponse()
+  async removeMenuItem(
+    @Req() request: AuthenticatedRequest,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('itemId', ParseUUIDPipe) itemId: string,
+  ): Promise<void> {
+    await this.menu.remove(personOf(request.user), id, itemId);
+  }
 }
 
 @ApiTags('workspaces')
@@ -238,7 +319,11 @@ export class AdminWorkspacesController {
 @ApiTags('workspaces')
 @Controller('restaurants')
 export class RestaurantsController {
-  constructor(private readonly workspaces: WorkspacesService) {}
+  constructor(
+    private readonly workspaces: WorkspacesService,
+    private readonly menu: RestaurantMenuService,
+    private readonly reviews: RestaurantReviewsService,
+  ) {}
 
   @Get()
   @ApiOperation({
@@ -249,5 +334,63 @@ export class RestaurantsController {
     @Query() query: RestaurantsInViewQueryDto,
   ): Promise<RestaurantPinListDto> {
     return this.workspaces.inView(query);
+  }
+
+  @Get('menu/search')
+  @ApiOperation({ summary: 'Search available restaurant dishes (public)' })
+  @ApiOkResponse({ type: RestaurantMenuSearchPageDto })
+  searchMenu(
+    @Query() query: SearchRestaurantMenuQueryDto,
+  ): Promise<RestaurantMenuSearchPageDto> {
+    return this.menu.search(query);
+  }
+
+  @Get(':pageUserId/menu')
+  @ApiOperation({ summary: 'Public menu of a restaurant page' })
+  @ApiOkResponse({ type: RestaurantMenuListDto })
+  publicMenu(
+    @Param('pageUserId', ParseUUIDPipe) pageUserId: string,
+  ): Promise<RestaurantMenuListDto> {
+    return this.menu.listPublic(pageUserId);
+  }
+
+  @Get(':pageUserId/reviews')
+  @UseGuards(OptionalJwtAuthGuard)
+  @ApiOperation({
+    summary: 'Star rating summary and reviews of a restaurant page',
+    security: [{}, { bearer: [] }],
+  })
+  @ApiOkResponse({ type: RestaurantReviewPageDto })
+  listReviews(
+    @Param('pageUserId', ParseUUIDPipe) pageUserId: string,
+    @Query() query: ListRestaurantReviewsQueryDto,
+    @Req() request: OptionalAuthenticatedRequest,
+  ): Promise<RestaurantReviewPageDto> {
+    return this.reviews.list(pageUserId, query, request.user?.sub);
+  }
+
+  @Put(':pageUserId/reviews/me')
+  @UseGuards(JwtAuthGuard, PersonalSessionGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Create or update your review for a restaurant' })
+  @ApiOkResponse({ type: RestaurantReviewMutationResponseDto })
+  upsertMyReview(
+    @Param('pageUserId', ParseUUIDPipe) pageUserId: string,
+    @Req() request: AuthenticatedRequest,
+    @Body() dto: UpsertRestaurantReviewDto,
+  ): Promise<RestaurantReviewMutationResponseDto> {
+    return this.reviews.upsertMine(pageUserId, request.user.sub, dto);
+  }
+
+  @Delete(':pageUserId/reviews/me')
+  @UseGuards(JwtAuthGuard, PersonalSessionGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Delete your review for a restaurant' })
+  @ApiOkResponse({ type: RestaurantReviewSummaryDto })
+  deleteMyReview(
+    @Param('pageUserId', ParseUUIDPipe) pageUserId: string,
+    @Req() request: AuthenticatedRequest,
+  ): Promise<RestaurantReviewSummaryDto> {
+    return this.reviews.deleteMine(pageUserId, request.user.sub);
   }
 }

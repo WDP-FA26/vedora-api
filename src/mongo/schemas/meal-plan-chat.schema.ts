@@ -67,7 +67,9 @@ export class MealPlanChatMessage extends Identified {
   @Prop({ type: String, required: true, enum: ['user', 'assistant'] })
   role!: 'user' | 'assistant';
 
-  @Prop({ type: String, required: true, default: '' })
+  // Not `required`: Mongoose rejects '' for required strings, and a turn that
+  // only calls a tool (such as requestWebSearch) has no text.
+  @Prop({ type: String, default: '' })
   text!: string;
 
   @Prop({ type: [Object], required: true, default: [] })

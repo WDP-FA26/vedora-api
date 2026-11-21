@@ -167,6 +167,9 @@ Values below are defaults matched to the original source. All values are read at
 | `PLANNER_CHAT_MAX_MESSAGE_LENGTH` | `4000` |
 | `PLANNER_CHAT_MAX_OUTPUT_TOKENS` | `4000` |
 | `PLANNER_CHAT_MAX_STEPS` | `10` |
+| `PLANNER_WEB_SEARCH_MAX_RESULTS` | `3` |
+| `PLANNER_WEB_SEARCH_MAX_TOTAL_RESULTS` | `6` |
+| `PLANNER_WEB_SEARCH_MAX_USES` | `2` |
 | `POST_MAX_LENGTH` | `2000` |
 | `POST_MAX_MEDIA` | `4` |
 | `POST_MAX_WORDS` | `250` |
@@ -200,6 +203,9 @@ Values below are defaults matched to the original source. All values are read at
 | `RECIPE_MAX_MINUTES` | `1440` |
 | `RECIPE_MAX_SERVINGS` | `100` |
 | `RECIPE_MAX_STEPS` | `50` |
+| `RECIPE_DRAFT_MAX_CATALOG_INGREDIENTS` | `1500` |
+| `RECIPE_DRAFT_MAX_TEXT_LENGTH` | `20000` |
+| `RECIPE_DRAFT_TIMEOUT_MS` | `90000` |
 | `RECIPE_STEP_MAX_LENGTH` | `1000` |
 | `REPORT_MAX_DETAILS_LENGTH` | `500` |
 | `SEARCH_QUERY_MAX_LENGTH` | `200` |
@@ -248,6 +254,9 @@ Values below are defaults matched to the original source. All values are read at
 | `OPENROUTER_API_BASE_URL` | `https://openrouter.ai/api/v1` |
 | `PAYMENT_EXPIRATION_CRON` | `*/10 * * * * *` |
 | `PLANNER_SYSTEM_PROMPT_FILE` | `config/prompts/meal-planner.md` |
+| `PLANNER_WEB_SEARCH_CONTEXT_SIZE` | `low` |
+| `PLANNER_WEB_SEARCH_ENGINE` | `parallel` |
+| `PLANNER_WEB_SEARCH_MODE` | `fast` |
 | `PROFILE_IMAGE_CLEANUP_CRON` | `0 0 * * * *` |
 | `SEPAY_QR_IMAGE_BASE_URL` | `https://vietqr.app/img` |
 | `TURNSTILE_VERIFY_URL` | `https://challenges.cloudflare.com/turnstile/v0/siteverify` |
@@ -278,4 +287,5 @@ Values below are defaults matched to the original source. All values are read at
 | `POST_SEARCH_INDEX_CRON` | `0 * * * * *` |
 | `POST_SUMMARY_CRON` | `*/10 * * * * *` |
 | `POST_SUMMARY_PROMPT_FILE` | `config/prompts/post-summary.md` |
+| `RECIPE_DRAFT_PROMPT_FILE` | `config/prompts/recipe-draft.md` |
 | `AI_IMAGE_DEFAULT_ASPECT_RATIO` | `4:3` |

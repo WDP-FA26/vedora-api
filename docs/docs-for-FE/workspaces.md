@@ -25,7 +25,7 @@ nội bộ không nhận được thư.
 4. Đơn bị từ chối có thể gửi lại (`POST /workspaces/:id/resubmit`) với thông
    tin và minh chứng mới.
 
-Mỗi người chỉ có **một đơn `PENDING`** tại một thời điểm. Page được duyệt là
+Một người có thể gửi nhiều đơn mở page (kể cả khi đang có đơn `PENDING` khác). Page được duyệt là
 trạng thái cuối, hiện chưa có thao tác thu hồi.
 
 Huy hiệu đầu bếp (`isProfessional`) là chuyện riêng, không liên quan và không
@@ -143,8 +143,7 @@ POST /workspaces
 - `statement`: độ dài như yêu cầu huy hiệu đầu bếp.
 
 Lỗi: `409 USERNAME_TAKEN` (username đã có account hoặc đang chờ duyệt),
-`409 REQUEST_PENDING`, `409 PROOF_NOT_UPLOADED`, `400 BAD_REQUEST` (proof không
-hợp lệ).
+`409 PROOF_NOT_UPLOADED`, `400 BAD_REQUEST` (proof không hợp lệ).
 
 `PATCH /workspaces/:id/details` nhận `address`, `longitude`, `latitude`,
 `phone`, `website` (gửi đủ cả object).
@@ -208,11 +207,14 @@ chối kèm ghi chú để owner chọn username khác.
 {
   "accountType": "PAGE",
   "restaurant": {
+    "workspaceId": "…",
     "address": "…",
     "longitude": 105.8482,
     "latitude": 21.0302,
     "phone": "…" | null,
-    "website": "…" | null
+    "website": "…" | null,
+    "averageRating": 4.8,
+    "reviewCount": 12
   }
 }
 ```
@@ -222,10 +224,10 @@ Account cá nhân có `accountType: "PERSONAL"` và `restaurant: null`.
 ## Bản đồ nhà hàng (public)
 
 ```http
-GET /restaurants?minLng=105.7&minLat=20.9&maxLng=106&maxLat=21.1
+GET /restaurants?minLng=105.7&minLat=20.9&maxLng=106&maxLat=21.1&userLng=105.85&userLat=21.03
 ```
 
-Trả về các page đã duyệt nằm trong khung nhìn bản đồ (góc tây nam và đông bắc):
+Trả về các page đã duyệt nằm trong khung nhìn bản đồ (góc tây nam và đông bắc). Khi gửi đủ `userLng` và `userLat`, API sắp xếp gần người dùng nhất trước và trả thêm `distanceMeters` (mét):
 
 ```json
 {
@@ -237,7 +239,10 @@ Trả về các page đã duyệt nằm trong khung nhìn bản đồ (góc tây
       "avatarUrl": null,
       "address": "…",
       "longitude": 105.8482,
-      "latitude": 21.0302
+      "latitude": 21.0302,
+      "distanceMeters": 350,
+      "averageRating": 4.8,
+      "reviewCount": 12
     }
   ],
   "truncated": false
@@ -246,7 +251,34 @@ Trả về các page đã duyệt nằm trong khung nhìn bản đồ (góc tây
 
 Tối đa 200 điểm; `truncated: true` nghĩa là còn nữa, cần zoom vào. Khung rộng
 hơn nửa địa cầu (hoặc vắt qua kinh tuyến 180) bỏ qua lọc vị trí và trả danh
-sách giới hạn. `minLat > maxLat` → `400`.
+sách giới hạn. `minLat > maxLat` hoặc gửi thiếu một trong hai `userLng`/`userLat` → `400`.
+
+## Thực đơn nhà hàng
+
+Thành viên page (chủ/quản lý) quản lý thực đơn qua:
+
+| Method | Endpoint                          | Mô tả                                  |
+| ------ | --------------------------------- | -------------------------------------- |
+| GET    | `/workspaces/:id/menu`            | Danh sách món (kể cả món tạm hết)      |
+| POST   | `/workspaces/:id/menu/image-uploads` | Presigned upload ảnh món ăn         |
+| POST   | `/workspaces/:id/menu`            | Thêm món mới (tự index Qdrant)         |
+| PATCH  | `/workspaces/:id/menu/:itemId`    | Cập nhật món / trạng thái phục vụ      |
+| DELETE | `/workspaces/:id/menu/:itemId`    | Xóa món khỏi thực đơn và Qdrant        |
+
+Public endpoints:
+
+- `GET /restaurants/:pageUserId/menu` — thực đơn công khai của nhà hàng.
+- `GET /restaurants/menu/search?q=…&limit=20&cursor=0` — tìm món ăn đang phục vụ qua Qdrant (dense + BM25 có/không dấu), trả về món kèm `restaurant` (`pageUserId`, `username`, `name`, `avatarUrl`, `address`, `longitude`, `latitude`, `averageRating`, `reviewCount`) và `nextCursor`.
+
+## Đánh giá sao & bình luận nhà hàng
+
+| Method | Endpoint                         | Mô tả                                                    |
+| ------ | -------------------------------- | -------------------------------------------------------- |
+| GET    | `/restaurants/:pageUserId/reviews?sort=newest\|highest\|lowest&page=1&limit=20` | Tóm tắt sao (1–5) + `myReview` (nếu đã đăng nhập) + danh sách bình luận |
+| PUT    | `/restaurants/:pageUserId/reviews/me` | Tạo hoặc cập nhật đánh giá của bản thân (`rating`: 1..5, `comment`?: string) |
+| DELETE | `/restaurants/:pageUserId/reviews/me` | Xóa đánh giá của bản thân                           |
+
+Chỉ tài khoản cá nhân đã xác minh email và không phải thành viên quản lý nhà hàng đó mới gửi được đánh giá (thành viên nhận `403 SELF_RATING_NOT_ALLOWED`, phiên page nhận `403 PAGE_SESSION_NOT_ALLOWED`).
 
 ## Mã lỗi mới
 

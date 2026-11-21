@@ -14,6 +14,7 @@ import {
   AiCostCall,
   ModerationSettings,
   User,
+  WorkspaceMember,
 } from '../../../src/mongo/models.js';
 
 describe('ModerationModule', () => {
@@ -34,6 +35,7 @@ describe('ModerationModule', () => {
         if (token === getModelToken(AiCostCall.name)) return {};
         if (token === getModelToken(ModerationSettings.name)) return {};
         if (token === getModelToken(User.name)) return {};
+        if (token === getModelToken(WorkspaceMember.name)) return {};
         if (token === JwtService) return {};
         return undefined;
       })

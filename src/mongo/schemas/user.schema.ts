@@ -107,6 +107,7 @@ cascadeOnDelete(UserSchema, [
   { model: 'VerificationRequest', field: 'userId', action: 'delete' },
   { model: 'WorkspaceMember', field: 'userId', action: 'delete' },
   { model: 'Workspace', field: 'pageUserId', action: 'delete' },
+  { model: 'RestaurantReview', field: 'authorId', action: 'delete' },
   { model: 'Conversation', field: 'lowId', action: 'delete' },
   { model: 'Conversation', field: 'highId', action: 'delete' },
   { model: 'MessagingEvent', field: 'userIds', action: 'delete' },

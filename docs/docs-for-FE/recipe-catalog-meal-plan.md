@@ -240,6 +240,29 @@ trong khoảng đó mà người dùng không cần chuyển trang. Khi tuần �
 - Tin nhắn đầu của một đoạn chat mới xóa nháp của mọi tuần. `'staged'` chỉ còn trong đoạn chat cũ;
   FE coi như chưa quyết định.
 
+#### Tìm trên web (cần người dùng cho phép)
+
+Trợ lý chỉ được tìm trên web khi người dùng đã đồng ý trong đoạn chat đó. Backend quyết định theo cờ trong body,
+không theo prompt:
+
+- `allowWebSearch` (boolean, tùy chọn, mặc định `false`) trong body `POST /meal-plan/chat`.
+- **Chưa cho phép** (`false`/bỏ trống): trợ lý chỉ có công cụ `requestWebSearch` với input `{ reason: string }`
+  (≤ 200 ký tự). Công cụ này **không có output**: luồng dừng ở part `tool-requestWebSearch` với
+  `state: 'input-available'`. FE hiện thẻ xin phép gồm `reason` và cảnh báo rằng thông tin trên web có thể sai
+  hoặc không thống nhất, Vedora không kiểm chứng.
+  - **Cho phép**: FE gắn output `{ approved: true }` vào part đó (`addToolOutput`), rồi gửi một lượt người dùng
+    ngắn với `allowWebSearch: true`. Các lượt sau trong đoạn chat đó tiếp tục gửi `allowWebSearch: true`.
+  - **Không**: gắn `{ approved: false }` rồi gửi một lượt "không"; trợ lý không hỏi lại trong đoạn chat đó trừ khi
+    người dùng tự yêu cầu.
+  - Quyết định được lưu cùng `parts` của tin nhắn (đồng bộ qua `PATCH /meal-plan/chat/threads/:threadId`), nên FE
+    dựng lại trạng thái đồng ý từ quyết định mới nhất khi mở lại đoạn chat. Đoạn chat mới luôn bắt đầu chưa cho phép.
+- **Đã cho phép** (`true`): trợ lý có công cụ server `openrouter:web_search` của OpenRouter, tự quyết định có tìm
+  hay không (mặc định engine Parallel chế độ `fast`, tối đa `PLANNER_WEB_SEARCH_MAX_USES` = 2 lần, 3 kết quả mỗi lần). Việc tìm
+  chạy ở OpenRouter nên **không có part công cụ** nào; nguồn đến dưới dạng part `source-url`
+  (`{ sourceId, url, title }`). Văn bản trả lời không chứa link (bộ lọc xóa URL), nên FE hiện danh sách nguồn từ
+  các part `source-url`.
+- Món trong thực đơn vẫn chỉ lấy từ kho món của Vedora. Phí tìm web nằm trong cùng một lượt AI (một ticket quota).
+
 ### Danh sách đi chợ
 
 `GET /meal-plan/shopping-list?weekStart=` tính trên một tuần; xem [meal-plan-shopping-list.md](meal-plan-shopping-list.md).

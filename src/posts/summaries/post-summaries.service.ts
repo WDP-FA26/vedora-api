@@ -20,7 +20,6 @@ import {
   PostStatus,
   PostSummary,
   PostSummaryStatus,
-  PostType,
   type SummaryRecipe,
   User,
 } from '../../mongo/models.js';
@@ -35,10 +34,10 @@ import {
   type SummarySourcePart,
 } from './post-summary.generator.js';
 import { formatSummaryComment } from './summary-comment.js';
+import { readPostSource, type PostSource } from './post-source.js';
 
 const BATCH_SIZE = runtimeConfig.POST_SUMMARY_BATCH_SIZE;
 const MAX_ATTEMPTS = runtimeConfig.POST_SUMMARY_MAX_ATTEMPTS;
-const MAX_INPUT_CHARS = runtimeConfig.POST_SUMMARY_MAX_INPUT_CHARS;
 const MIN_TEXT_LENGTH = runtimeConfig.POST_SUMMARY_MIN_TEXT_LENGTH;
 const STALE_AFTER_MS = runtimeConfig.POST_SUMMARY_STALE_AFTER_SECONDS * 1000;
 const WINDOW_MS = runtimeConfig.POST_SUMMARY_WINDOW_SECONDS * 1000;
@@ -501,57 +500,9 @@ export class PostSummariesService {
   }
 
   /** The text to summarize, and a one-line description of it for the log. */
-  private async sourceOf(post: Post): Promise<SummarySource> {
-    if (post.type === PostType.BLOG) {
-      const blog = post.blog;
-      if (!blog) return { parts: [], description: 'BLOG without content' };
-      return {
-        parts: clip([
-          { label: 'Blog title', text: blog.title },
-          { label: 'Blog content', text: blog.content },
-        ]),
-        description: `BLOG, title ${blog.title.length} chars, content ${blog.content.length} chars`,
-      };
-    }
-    const parts: SummarySourcePart[] = [];
-    const body = post.body ?? '';
-    if (body) parts.push({ label: 'Post text', text: body });
-    const videos = await this.mediaAssets
-      .find({ postId: post.id, status: MediaStatus.READY, discardedAt: null })
-      .sort({ position: 1 })
-      .select('transcript durationSec captionStatus')
-      .exec();
-    const described: string[] = [`POST, body ${body.length} chars`];
-    videos.forEach((video, index) => {
-      described.push(describeVideo(video));
-      if (!video.transcript) return;
-      parts.push({
-        label: `What video ${index + 1} says`,
-        text: video.transcript,
-      });
-    });
-    if (videos.length === 0) described.push('no video');
-    return { parts: clip(parts), description: described.join(', ') };
+  private sourceOf(post: Post): Promise<PostSource> {
+    return readPostSource(post, this.mediaAssets);
   }
-}
-
-interface SummarySource {
-  parts: SummarySourcePart[];
-  description: string;
-}
-
-function describeVideo(
-  video: Pick<
-    MediaAsset,
-    'id' | 'durationSec' | 'captionStatus' | 'transcript'
-  >,
-): string {
-  const duration =
-    video.durationSec === null ? '?s' : `${Math.round(video.durationSec)}s`;
-  const transcript = video.transcript
-    ? `transcript ${video.transcript.length} chars`
-    : 'no transcript';
-  return `video ${video.id} ${duration} ${video.captionStatus} ${transcript}`;
 }
 
 function describeRecipe(recipe: SummaryRecipe | null): string {
@@ -563,19 +514,6 @@ function textLength(parts: SummarySourcePart[]): number {
   let length = 0;
   for (const part of parts) length += part.text.trim().length;
   return length;
-}
-
-/** Keeps the whole source within MAX_INPUT_CHARS, cutting the last parts first. */
-function clip(parts: SummarySourcePart[]): SummarySourcePart[] {
-  const clipped: SummarySourcePart[] = [];
-  let room = MAX_INPUT_CHARS;
-  for (const part of parts) {
-    if (room <= 0) break;
-    const text = part.text.trim().slice(0, room);
-    room -= text.length;
-    if (text) clipped.push({ label: part.label, text });
-  }
-  return clipped;
 }
 
 function hashParts(parts: SummarySourcePart[]): string {

@@ -472,6 +472,16 @@ export class MealPlannerChatDto {
   @MinLength(1)
   @MaxLength(100)
   requestId?: string;
+
+  @ApiPropertyOptional({
+    default: false,
+    description:
+      'The user allowed web search in this chat. Without it the assistant may only ask for permission through the `requestWebSearch` tool.',
+  })
+  @IsOptional()
+  @IsBoolean()
+  allowWebSearch?: boolean;
+
   @ApiProperty({
     type: [PlannerMessageDto],
     maxItems: MAX_PLANNER_MESSAGES,

@@ -23,6 +23,7 @@ export const AI_COST_FEATURES = [
   'CONTENT_MODERATION',
   'KNOWLEDGE',
   'POSTS',
+  'RECIPE_DRAFT',
   'TRANSCRIPTION',
   'SYSTEM',
 ] as const;

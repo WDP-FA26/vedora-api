@@ -44,6 +44,11 @@ import {
 } from './dto/recipe.dto.js';
 import { IncompatibilityRulesService } from './incompatibility-rules.service.js';
 import { RecipesService } from './recipes.service.js';
+import { RecipeDraftsService } from './drafts/recipe-drafts.service.js';
+import {
+  CreateRecipeDraftDto,
+  RecipeDraftDto,
+} from './dto/recipe-draft.dto.js';
 import { ErrorBodyDto } from '../common/exceptions/error-body.dto.js';
 
 @ApiTags('admin')
@@ -64,7 +69,24 @@ export class AdminRecipesController {
     private readonly recipes: RecipesService,
     private readonly rules: IncompatibilityRulesService,
     private readonly cloudinary: CloudinaryService,
+    private readonly drafts: RecipeDraftsService,
   ) {}
+
+  @Post('drafts')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary:
+      'Read a post or a pasted caption with AI into a recipe form prefill',
+    description:
+      'Send `postId` or `text`. Nothing is saved: ingredients come back matched to the catalog, or with a suggestion for a new catalog ingredient. Answers 400 `EMPTY_RECIPE_SOURCE` when there is no text to read.',
+  })
+  @ApiOkResponse({ type: RecipeDraftDto })
+  createDraft(
+    @Req() request: AuthenticatedRequest,
+    @Body() dto: CreateRecipeDraftDto,
+  ): Promise<RecipeDraftDto> {
+    return this.drafts.create(request.user.sub, dto);
+  }
 
   @Post('image-uploads')
   @ApiOperation({

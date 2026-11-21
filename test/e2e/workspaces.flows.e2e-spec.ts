@@ -266,6 +266,9 @@ describe('Restaurant page flows (e2e)', () => {
         note: 'Ảnh giấy phép bị mờ',
       }).expect(200);
 
+      // Resubmitting still succeeds while another application is PENDING.
+      await apply(ownerToken, owner.id, 201, { username: 'second.pending' });
+
       const resubmitted = await request(server())
         .post(`/api/v1/workspaces/${applied.id}/resubmit`)
         .auth(ownerToken, { type: 'bearer' })
@@ -284,12 +287,23 @@ describe('Restaurant page flows (e2e)', () => {
       expect(adminDetailSchema.parse(detail.body).proofs).toHaveLength(2);
     });
 
-    it('allows one pending application per person and unique usernames', async () => {
-      await apply(ownerToken, owner.id, 201);
-      const second = await apply(ownerToken, owner.id, 409, {
+    it('allows multiple pending applications per person while keeping usernames unique', async () => {
+      const first = workspaceSchema.parse(
+        (await apply(ownerToken, owner.id, 201)).body,
+      );
+      const second = workspaceSchema.parse(
+        (await apply(ownerToken, owner.id, 201, { username: 'another.page' }))
+          .body,
+      );
+      expect(first.status).toBe(VerificationStatus.PENDING);
+      expect(second.status).toBe(VerificationStatus.PENDING);
+
+      const duplicateSecond = await apply(ownerToken, owner.id, 409, {
         username: 'another.page',
       });
-      expect(errorSchema.parse(second.body).code).toBe('REQUEST_PENDING');
+      expect(errorSchema.parse(duplicateSecond.body).code).toBe(
+        'USERNAME_TAKEN',
+      );
 
       const clash = await apply(managerToken, manager.id, 409);
       expect(errorSchema.parse(clash.body).code).toBe('USERNAME_TAKEN');

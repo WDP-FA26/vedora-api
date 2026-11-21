@@ -16,6 +16,8 @@ import { RecipesController } from './recipes.controller.js';
 import { RecipeFavoritesService } from './recipe-favorites.service.js';
 import { RecipeRatingsController } from './recipe-ratings.controller.js';
 import { RecipeRatingsService } from './recipe-ratings.service.js';
+import { RecipeDraftGenerator } from './drafts/recipe-draft.generator.js';
+import { RecipeDraftsService } from './drafts/recipe-drafts.service.js';
 
 @Module({
   controllers: [
@@ -36,6 +38,8 @@ import { RecipeRatingsService } from './recipe-ratings.service.js';
     RecipeFavoritesService,
     DietaryService,
     RecipeRatingsService,
+    RecipeDraftsService,
+    RecipeDraftGenerator,
   ],
   exports: [IncompatibilityRulesService, DietaryService],
 })

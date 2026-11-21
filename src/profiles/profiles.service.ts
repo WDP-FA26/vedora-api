@@ -23,6 +23,8 @@ import {
   ProfileImageKind,
   ProfileImageStatus,
   ProfileImageUpload,
+  RestaurantMenuItem,
+  RestaurantReview,
   User,
   VerificationStatus,
   Workspace,
@@ -82,6 +84,12 @@ export class ProfilesService {
     @Optional() private readonly messagingEvents?: MessagingEventsService,
     @Optional() private readonly profileSearch?: ProfileSearchService,
     @Optional() private readonly profileSearchIndex?: ProfileSearchIndexService,
+    @Optional()
+    @InjectModel(RestaurantReview.name)
+    private readonly restaurantReviews?: Model<RestaurantReview>,
+    @Optional()
+    @InjectModel(RestaurantMenuItem.name)
+    private readonly menuItems?: Model<RestaurantMenuItem>,
   ) {}
 
   async search(
@@ -190,6 +198,11 @@ export class ProfilesService {
         },
       },
     );
+    if (fullName !== undefined && this.menuItems) {
+      await this.menuItems
+        .updateMany({ pageUserId: id }, { $set: { searchIndexedAt: null } })
+        .exec();
+    }
     this.profileSearchIndex?.schedule();
     return this.findOne(id);
   }
@@ -480,12 +493,52 @@ export class ProfilesService {
       .exec();
     if (!workspace) return null;
     const [longitude, latitude] = workspace.location.coordinates;
+    const [stats] = this.restaurantReviews
+      ? await this.restaurantReviews
+          .aggregate<{ count: number; sum: number }>([
+            { $match: { pageUserId } },
+            {
+              $lookup: {
+                from: this.users.collection.name,
+                localField: 'authorId',
+                foreignField: '_id',
+                pipeline: [
+                  {
+                    $match: {
+                      status: AccountStatus.ACTIVE,
+                      emailVerifiedAt: { $ne: null },
+                    },
+                  },
+                  { $project: { _id: 1 } },
+                ],
+                as: 'author',
+              },
+            },
+            { $match: { 'author.0': { $exists: true } } },
+            {
+              $group: {
+                _id: null,
+                count: { $sum: 1 },
+                sum: { $sum: '$rating' },
+              },
+            },
+          ])
+          .exec()
+      : [];
+    const reviewCount = stats?.count ?? 0;
+    const averageRating =
+      reviewCount === 0
+        ? null
+        : Math.round((stats.sum * 10) / reviewCount) / 10;
     return {
+      workspaceId: workspace.id,
       address: workspace.address,
       longitude,
       latitude,
       phone: workspace.phone,
       website: workspace.website,
+      averageRating,
+      reviewCount,
     };
   }
 

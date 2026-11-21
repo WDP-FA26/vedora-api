@@ -27,6 +27,11 @@ import { ProfileSearchIndexService } from '../profiles/search/profile-search-ind
 import { StorageService, StorageTarget } from '../storage/storage.service.js';
 import { RefreshTokensService } from '../auth/refresh-tokens.service.js';
 import { isSystemAccount } from '../users/system-account.js';
+import { RestaurantMenuService } from './restaurant-menu.service.js';
+import {
+  RestaurantReviewsService,
+  type RestaurantRatingStats,
+} from './restaurant-reviews.service.js';
 import {
   AddWorkspaceMemberDto,
   AdminWorkspaceDetailDto,
@@ -89,6 +94,8 @@ export class WorkspacesService {
     private readonly storage: StorageService,
     private readonly refreshTokens: RefreshTokensService,
     @Optional() private readonly profileSearchIndex?: ProfileSearchIndexService,
+    @Optional() private readonly reviews?: RestaurantReviewsService,
+    @Optional() private readonly menu?: RestaurantMenuService,
   ) {}
 
   async createProofUpload(
@@ -130,7 +137,6 @@ export class WorkspacesService {
     const workspaceId = randomUUID();
     await this.mongo.withTransaction(async (session) => {
       await lockDocument(this.mongo, session, 'user', personId);
-      await this.assertNoPendingApplication(session, personId);
       await this.assertUsernameFree(session, dto.username, null);
       await this.workspaces.create(
         [
@@ -178,7 +184,6 @@ export class WorkspacesService {
           'WORKSPACE_NOT_REVIEWABLE',
           'Only a rejected page can be sent for review again',
         );
-      await this.assertNoPendingApplication(session, personId);
       await this.assertUsernameFree(session, dto.username, workspace.id);
       await this.workspaces.updateOne(
         { _id: workspace.id },
@@ -244,10 +249,16 @@ export class WorkspacesService {
       .exec();
     if (!membership)
       throw new ResourceNotFoundException('NOT_FOUND', 'Page not found');
-    await this.workspaces.updateOne(
-      { _id: workspaceId },
-      { $set: this.restaurantFields(dto) },
-    );
+    const updated = await this.workspaces
+      .findOneAndUpdate(
+        { _id: workspaceId },
+        { $set: this.restaurantFields(dto) },
+        { returnDocument: 'after' },
+      )
+      .exec();
+    if (updated?.status === VerificationStatus.APPROVED) {
+      await this.menu?.markWorkspaceDirty(workspaceId);
+    }
     return this.detail(personId, workspaceId);
   }
 
@@ -403,43 +414,52 @@ export class WorkspacesService {
     reviewerId: string,
     dto: ReviewWorkspaceDto,
   ): Promise<AdminWorkspaceDto> {
-    const approved = await this.mongo.withTransaction(async (session) => {
-      await lockDocument(this.mongo, session, 'workspace', workspaceId);
-      const workspace = await this.findWorkspace(session, workspaceId);
-      if (workspace.status !== VerificationStatus.PENDING)
-        throw new StateConflictException(
-          'WORKSPACE_NOT_REVIEWABLE',
-          'This page was already reviewed',
+    const approvedPageUserId = await this.mongo.withTransaction(
+      async (session) => {
+        await lockDocument(this.mongo, session, 'workspace', workspaceId);
+        const workspace = await this.findWorkspace(session, workspaceId);
+        if (workspace.status !== VerificationStatus.PENDING)
+          throw new StateConflictException(
+            'WORKSPACE_NOT_REVIEWABLE',
+            'This page was already reviewed',
+          );
+        const now = new Date();
+        const decision = {
+          status: dto.decision,
+          reviewNote: dto.note || null,
+          reviewedById: reviewerId,
+          reviewedAt: now,
+        };
+        if (dto.decision === VerificationStatus.REJECTED) {
+          await this.workspaces.updateOne(
+            { _id: workspace.id },
+            { $set: decision },
+            { session },
+          );
+          return null;
+        }
+        const pageUserId = await this.createPageAccount(
+          session,
+          workspace,
+          now,
         );
-      const now = new Date();
-      const decision = {
-        status: dto.decision,
-        reviewNote: dto.note || null,
-        reviewedById: reviewerId,
-        reviewedAt: now,
-      };
-      if (dto.decision === VerificationStatus.REJECTED) {
         await this.workspaces.updateOne(
           { _id: workspace.id },
-          { $set: decision },
+          { $set: { ...decision, pageUserId } },
           { session },
         );
-        return false;
-      }
-      const pageUserId = await this.createPageAccount(session, workspace, now);
-      await this.workspaces.updateOne(
-        { _id: workspace.id },
-        { $set: { ...decision, pageUserId } },
-        { session },
-      );
-      await this.members.updateMany(
-        { workspaceId: workspace.id },
-        { $set: { pageUserId } },
-        { session },
-      );
-      return true;
-    });
-    if (approved) this.profileSearchIndex?.schedule();
+        await this.members.updateMany(
+          { workspaceId: workspace.id },
+          { $set: { pageUserId } },
+          { session },
+        );
+        return pageUserId;
+      },
+    );
+    if (approvedPageUserId) {
+      this.profileSearchIndex?.schedule();
+      await this.menu?.markWorkspaceDirty(workspaceId, approvedPageUserId);
+    }
     const row = await this.workspaces.findOne({ _id: workspaceId }).exec();
     if (!row)
       throw new ResourceNotFoundException('NOT_FOUND', 'Page not found');
@@ -447,7 +467,7 @@ export class WorkspacesService {
     return reviewed;
   }
 
-  /** Approved restaurants inside a map viewport, capped at MAX_RESTAURANTS_IN_VIEW. */
+  /** Approved restaurants inside a map viewport, sorted nearest-first when userLng/userLat are provided. */
   async inView(
     query: RestaurantsInViewQueryDto,
   ): Promise<RestaurantPinListDto> {
@@ -456,46 +476,112 @@ export class WorkspacesService {
         'BAD_REQUEST',
         'minLat must not be greater than maxLat',
       );
-    const filter: QueryFilter<Workspace> = {
-      status: VerificationStatus.APPROVED,
-      pageUserId: { $type: 'string' },
-    };
     const wrapsAntimeridian = query.minLng > query.maxLng;
     const spansHemisphere = query.maxLng - query.minLng >= 180;
     // A box wider than half the globe has no well-defined GeoJSON polygon,
     // so a zoomed-out map just gets the capped list.
-    if (!wrapsAntimeridian && !spansHemisphere) {
-      filter.location = {
-        $geoWithin: {
-          $geometry: {
-            type: 'Polygon',
-            coordinates: [
-              [
-                [query.minLng, query.minLat],
-                [query.maxLng, query.minLat],
-                [query.maxLng, query.maxLat],
-                [query.minLng, query.maxLat],
-                [query.minLng, query.minLat],
-              ],
-            ],
+    const viewportLocationFilter =
+      !wrapsAntimeridian && !spansHemisphere
+        ? {
+            $geoWithin: {
+              $geometry: {
+                type: 'Polygon' as const,
+                coordinates: [
+                  [
+                    [query.minLng, query.minLat],
+                    [query.maxLng, query.minLat],
+                    [query.maxLng, query.maxLat],
+                    [query.minLng, query.maxLat],
+                    [query.minLng, query.minLat],
+                  ],
+                ],
+              },
+            },
+          }
+        : undefined;
+
+    type PinSource = {
+      pageUserId: string | null;
+      address: string;
+      location: { coordinates: [number, number] };
+      distanceMeters: number | null;
+    };
+
+    const userLng = query.userLng;
+    const userLat = query.userLat;
+    let rows: PinSource[];
+
+    if (userLng !== undefined && userLat !== undefined) {
+      const aggregated = await this.workspaces
+        .aggregate<Workspace & { distanceMeters: number }>([
+          {
+            $geoNear: {
+              near: { type: 'Point', coordinates: [userLng, userLat] },
+              distanceField: 'distanceMeters',
+              spherical: true,
+              query: {
+                status: VerificationStatus.APPROVED,
+                pageUserId: { $type: 'string' },
+              },
+            },
           },
-        },
+          ...(viewportLocationFilter
+            ? [{ $match: { location: viewportLocationFilter } }]
+            : []),
+          { $limit: MAX_RESTAURANTS_IN_VIEW + 1 },
+        ])
+        .exec();
+      rows = aggregated.map((doc) => ({
+        pageUserId: doc.pageUserId,
+        address: doc.address,
+        location: doc.location,
+        distanceMeters: Math.round(doc.distanceMeters),
+      }));
+    } else {
+      const filter: QueryFilter<Workspace> = {
+        status: VerificationStatus.APPROVED,
+        pageUserId: { $type: 'string' },
+        ...(viewportLocationFilter ? { location: viewportLocationFilter } : {}),
       };
+      const found = await this.workspaces
+        .find(filter)
+        .sort({ _id: 1 })
+        .limit(MAX_RESTAURANTS_IN_VIEW + 1)
+        .exec();
+      rows = found.map((doc) => ({
+        pageUserId: doc.pageUserId,
+        address: doc.address,
+        location: doc.location,
+        distanceMeters: null,
+      }));
     }
-    const rows = await this.workspaces
-      .find(filter)
-      .sort({ _id: 1 })
-      .limit(MAX_RESTAURANTS_IN_VIEW + 1)
-      .exec();
+
     const truncated = rows.length > MAX_RESTAURANTS_IN_VIEW;
     const visible = rows.slice(0, MAX_RESTAURANTS_IN_VIEW);
-    const pages = await this.pageUsers(visible);
+    const pageUserIds = visible
+      .map((row) => row.pageUserId)
+      .filter((id): id is string => typeof id === 'string');
+
+    const [pageUserRows, ratingStats] = await Promise.all([
+      pageUserIds.length > 0
+        ? this.users
+            .find({ _id: { $in: pageUserIds } })
+            .select('username fullName avatarUrl status')
+            .exec()
+        : Promise.resolve([]),
+      this.reviews
+        ? this.reviews.summariesByPageUserIds(pageUserIds)
+        : Promise.resolve(new Map<string, RestaurantRatingStats>()),
+    ]);
+    const pages = new Map(pageUserRows.map((user) => [user.id, user]));
+
     const items: RestaurantPinListDto['items'] = [];
     for (const workspace of visible) {
       if (!workspace.pageUserId) continue;
       const page = pages.get(workspace.pageUserId);
       if (!page || page.status !== AccountStatus.ACTIVE) continue;
       const [longitude, latitude] = workspace.location.coordinates;
+      const stats = ratingStats.get(page.id);
       items.push({
         pageUserId: page.id,
         username: page.username,
@@ -504,6 +590,9 @@ export class WorkspacesService {
         address: workspace.address,
         longitude,
         latitude,
+        distanceMeters: workspace.distanceMeters,
+        averageRating: stats?.averageRating ?? null,
+        reviewCount: stats?.reviewCount ?? 0,
       });
     }
     return { items, truncated };
@@ -634,30 +723,6 @@ export class WorkspacesService {
     );
     if (claimed.modifiedCount !== proofIds.length)
       throw new InvalidInputException('BAD_REQUEST', 'Unknown proof image');
-  }
-
-  /** One application under review per person keeps the admin queue honest. */
-  private async assertNoPendingApplication(
-    session: ClientSession,
-    personId: string,
-  ): Promise<void> {
-    const owned = await this.members
-      .find({ userId: personId, role: WorkspaceMemberRole.OWNER })
-      .select('workspaceId')
-      .session(session)
-      .exec();
-    const pending = await this.workspaces
-      .exists({
-        _id: { $in: owned.map((row) => row.workspaceId) },
-        status: VerificationStatus.PENDING,
-      })
-      .session(session)
-      .exec();
-    if (pending)
-      throw new StateConflictException(
-        'REQUEST_PENDING',
-        'You already have a page waiting for review',
-      );
   }
 
   private async assertUsernameFree(

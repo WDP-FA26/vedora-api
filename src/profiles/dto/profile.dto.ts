@@ -29,11 +29,14 @@ export class ProfileSummaryDto {
 }
 
 export class RestaurantProfileDto {
+  @ApiProperty({ format: 'uuid' }) workspaceId!: string;
   @ApiProperty() address!: string;
   @ApiProperty() longitude!: number;
   @ApiProperty() latitude!: number;
   @ApiProperty({ type: String, nullable: true }) phone!: string | null;
   @ApiProperty({ type: String, nullable: true }) website!: string | null;
+  @ApiProperty({ type: Number, nullable: true }) averageRating!: number | null;
+  @ApiProperty({ minimum: 0 }) reviewCount!: number;
 }
 
 export class ProfileDto extends ProfileSummaryDto {

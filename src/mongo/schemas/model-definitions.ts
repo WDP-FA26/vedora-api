@@ -58,6 +58,8 @@ import {
   VerificationRequestSchema,
 } from './verification.schema.js';
 import {
+  RestaurantMenuItemSchema,
+  RestaurantReviewSchema,
   WorkspaceMemberSchema,
   WorkspaceProofSchema,
   WorkspaceSchema,
@@ -107,6 +109,8 @@ export const MODEL_DEFINITIONS = [
   { name: 'Workspace', schema: WorkspaceSchema },
   { name: 'WorkspaceMember', schema: WorkspaceMemberSchema },
   { name: 'WorkspaceProof', schema: WorkspaceProofSchema },
+  { name: 'RestaurantMenuItem', schema: RestaurantMenuItemSchema },
+  { name: 'RestaurantReview', schema: RestaurantReviewSchema },
   { name: 'Ingredient', schema: IngredientSchema },
   { name: 'IngredientGroup', schema: IngredientGroupSchema },
   { name: 'IncompatibilityRule', schema: IncompatibilityRuleSchema },

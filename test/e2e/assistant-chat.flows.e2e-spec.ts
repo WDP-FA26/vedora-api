@@ -189,6 +189,19 @@ describe('Assistant chat flows (e2e)', () => {
       expect((response.body as ErrorBody).code).toBe('IDEMPOTENCY_CONFLICT');
     });
 
+    it('accepts allowWebSearch as a boolean and rejects anything else', async () => {
+      const { token } = await signedUser();
+      const response = await chat(token, {
+        allowWebSearch: true,
+        messages: userTurn('Tempeh mua ở đâu?'),
+      }).expect(200);
+      expect(replyText(response.text)).toBe(REPLY);
+      await chat(token, {
+        allowWebSearch: 'yes',
+        messages: userTurn('Tempeh mua ở đâu?'),
+      }).expect(400);
+    });
+
     it('scopes a request id to its user', async () => {
       const first = await signedUser();
       const second = await signedUser();
@@ -323,6 +336,79 @@ describe('Assistant chat flows (e2e)', () => {
         .post('/api/v1/meal-plan/chat')
         .set('Authorization', `Bearer ${token}`)
         .send({ weekStart: NEXT_WEEK, ...body });
+
+    it('saves a turn that only asks for web search, and the answer synced to it', async () => {
+      const { token } = await signedUser();
+      const threadId = randomUUID();
+      nextChunks = [
+        {
+          type: 'tool-call',
+          toolCallId: 'call-web',
+          toolName: 'requestWebSearch',
+          input: JSON.stringify({ reason: 'Cần giá tempeh ở Hà Nội' }),
+        },
+        {
+          type: 'finish',
+          finishReason: { unified: 'tool-calls', raw: undefined },
+          usage,
+        },
+      ];
+      await chat(token, {
+        threadId,
+        requestId: 'u-web',
+        messages: userTurn('Tempeh giá bao nhiêu?'),
+      }).expect(200);
+
+      const detail = async () => {
+        const res = await request(server())
+          .get(`/api/v1/meal-plan/chat/threads/${threadId}`)
+          .set('Authorization', `Bearer ${token}`)
+          .expect(200);
+        return res.body as {
+          messageCount: number;
+          messages: {
+            id: string;
+            role: string;
+            text: string;
+            parts: Record<string, unknown>[];
+          }[];
+        };
+      };
+      const saved = await detail();
+      expect(saved.messageCount).toBe(2);
+      const asked = saved.messages[1];
+      expect(asked).toMatchObject({ role: 'assistant', text: '' });
+      expect(asked.parts).toContainEqual(
+        expect.objectContaining({
+          type: 'tool-requestWebSearch',
+          toolCallId: 'call-web',
+          state: 'input-available',
+        }),
+      );
+
+      const answered = asked.parts.map((part) =>
+        part.type === 'tool-requestWebSearch'
+          ? { ...part, state: 'output-available', output: { approved: true } }
+          : part,
+      );
+      await request(server())
+        .patch(`/api/v1/meal-plan/chat/threads/${threadId}`)
+        .set('Authorization', `Bearer ${token}`)
+        .send({
+          messages: [
+            { id: asked.id, role: 'assistant', text: '', parts: answered },
+          ],
+        })
+        .expect(200);
+      const synced = await detail();
+      expect(synced.messageCount).toBe(2);
+      expect(synced.messages[1].parts).toContainEqual(
+        expect.objectContaining({
+          type: 'tool-requestWebSearch',
+          output: { approved: true },
+        }),
+      );
+    });
 
     it('persists normal turns, refused turns, and >10 messages in chronological order without loss', async () => {
       const admin = await createUser(e2e.mongo, { role: UserRole.ADMIN });

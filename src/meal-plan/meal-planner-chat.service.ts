@@ -7,6 +7,7 @@ import {
   isStepCount,
   type LanguageModel,
   ToolLoopAgent,
+  type ToolSet,
   toUIMessageStream,
 } from 'ai';
 import { cannedReply } from '../ai/chat/canned-reply.js';
@@ -32,14 +33,34 @@ import { fillSlotsTool } from './tools/fill-slots.tool.js';
 import { getPlanTool } from './tools/get-plan.tool.js';
 import { getRecipeTool } from './tools/get-recipe.tool.js';
 import { searchRecipesTool } from './tools/search-recipes.tool.js';
+import { searchRestaurantDishesTool } from './tools/search-restaurant-dishes.tool.js';
+import {
+  requestWebSearchTool,
+  webSearchTool,
+} from './tools/web-search.tool.js';
 import { FeatureUnavailableException } from '../common/exceptions/feature-unavailable.exception.js';
 import { AiFeature } from '../mongo/models.js';
 import { AiUsageService } from '../subscriptions/ai-usage.service.js';
 import { quotaStream } from '../subscriptions/quota-stream.js';
 import { QuotaReachedException } from '../common/exceptions/quota-reached.exception.js';
+import { RestaurantMenuService } from '../workspaces/restaurant-menu.service.js';
 
 const MAX_STEPS = runtimeConfig.PLANNER_CHAT_MAX_STEPS;
 const SEARCH_TIMEOUT_MS = runtimeConfig.AI_KNOWLEDGE_TOOL_TIMEOUT_MS;
+
+export interface PlannerChatOptions {
+  /** The user allowed web search in this chat. */
+  allowWebSearch?: boolean;
+}
+
+/**
+ * Web search is the user's choice: without consent the planner only gets the
+ * tool that asks for it, so the prompt alone never decides whether it searches.
+ */
+function webTools(allowWebSearch: boolean): ToolSet {
+  if (allowWebSearch) return { webSearch: webSearchTool() };
+  return { requestWebSearch: requestWebSearchTool() };
+}
 
 @Injectable()
 export class MealPlannerChatService {
@@ -54,6 +75,7 @@ export class MealPlannerChatService {
     private readonly knowledge: KnowledgeSearchService,
     private readonly usage: AiUsageService,
     @Optional() private readonly history?: MealPlannerChatHistoryService,
+    @Optional() private readonly restaurantMenu?: RestaurantMenuService,
   ) {}
 
   async stream(
@@ -63,6 +85,7 @@ export class MealPlannerChatService {
     weekStart: string,
     requestId?: string,
     threadId?: string,
+    { allowWebSearch = false }: PlannerChatOptions = {},
   ) {
     assertLastMessageFromUser(messages);
     if (threadId) {
@@ -132,9 +155,18 @@ export class MealPlannerChatService {
         plan.weekStart < plan.currentWeekStart
           ? plan.currentWeekStart
           : plan.weekStart;
+      const avoidedTerms = [
+        ...restrictions.ingredients.map(({ name }) => name),
+        ...restrictions.groups.map(({ name }) => name),
+      ];
       const agent = new ToolLoopAgent({
         model: this.model,
-        instructions: plannerInstructions(restrictions, plan, draft),
+        instructions: plannerInstructions(
+          restrictions,
+          plan,
+          draft,
+          allowWebSearch,
+        ),
         maxOutputTokens: runtimeConfig.PLANNER_CHAT_MAX_OUTPUT_TOKENS,
         tools: {
           searchKnowledge: searchKnowledgeTool(this.knowledge),
@@ -143,6 +175,15 @@ export class MealPlannerChatService {
           getPlan: getPlanTool(this.mealPlan, userId, toolWeek),
           fillSlots: fillSlotsTool(this.mealPlan, userId, toolWeek),
           editDraft: editDraftTool(this.mealPlan, userId, toolWeek),
+          ...(this.restaurantMenu
+            ? {
+                searchRestaurantDishes: searchRestaurantDishesTool(
+                  this.restaurantMenu,
+                  avoidedTerms,
+                ),
+              }
+            : {}),
+          ...webTools(allowWebSearch),
         },
         stopWhen: isStepCount(MAX_STEPS),
         prepareStep: ({ stepNumber }) =>
@@ -152,7 +193,12 @@ export class MealPlannerChatService {
       const result = await agent.stream({
         messages: messages.map(({ role, text }) => ({ role, content: text })),
         abortSignal,
-        timeout: { tools: { searchKnowledgeMs: SEARCH_TIMEOUT_MS } },
+        timeout: {
+          tools: {
+            searchKnowledgeMs: SEARCH_TIMEOUT_MS,
+            searchRestaurantDishesMs: SEARCH_TIMEOUT_MS,
+          },
+        },
         experimental_transform: replyFilter(),
       });
       const assistantMessageId = randomUUID();
@@ -160,6 +206,9 @@ export class MealPlannerChatService {
         toUIMessageStream({
           stream: result.stream,
           tools: agent.tools,
+          sendSources: true,
+          // Reasoning is excluded from the model, but some routes (web search) still stream it.
+          sendReasoning: false,
           generateMessageId: () => assistantMessageId,
           onEnd: async ({ responseMessage }) => {
             try {

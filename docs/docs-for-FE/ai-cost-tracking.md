@@ -26,7 +26,7 @@ Query tùy chọn:
 | Trường       | Quy tắc                                                                                                            |
 | ------------ | ------------------------------------------------------------------------------------------------------------------ |
 | `from`, `to` | Cần cả hai hoặc không có; YYYY-MM-DD hợp lệ, tăng dần, tối đa 90 ngày tính cả hai đầu                              |
-| `feature`    | `MEAL_PLAN_CHAT`, `BLOG_CHAT`, `GUEST_CHAT`, `CONTENT_MODERATION`, `KNOWLEDGE`, `POSTS`, `TRANSCRIPTION`, `SYSTEM` |
+| `feature`    | `MEAL_PLAN_CHAT`, `BLOG_CHAT`, `GUEST_CHAT`, `CONTENT_MODERATION`, `KNOWLEDGE`, `POSTS`, `RECIPE_DRAFT`, `TRANSCRIPTION`, `SYSTEM` |
 | `model`      | So khớp chính xác resolved model; nếu chưa biết thì requested model; tối đa 200 ký tự                              |
 
 Mặc định 30 ngày gần nhất theo Asia/Bangkok (UTC+7). Lọc theo thời điểm bắt đầu attempt, từ đầu ngày `from` đến trước đầu ngày kế tiếp `to`. Trường query lạ bị từ chối.

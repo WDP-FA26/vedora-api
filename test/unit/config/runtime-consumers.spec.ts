@@ -98,18 +98,19 @@ describe('environment overrides reach actual backend consumers', () => {
     const uploads = {
       find,
       deleteOne: vi.fn().mockResolvedValue({}),
-    } as unknown as Args[3];
-    const storage = mockDeep<Args[4]>();
+    } as unknown as Args[4];
+    const storage = mockDeep<Args[5]>();
     storage.isConfigured.mockReturnValue(true);
     storage.publicObjectUrl.mockReturnValue('https://fixture.test/image.webp');
     const service = new ProfilesService(
       users,
       mockDeep<Args[1]>(),
       mockDeep<Args[2]>(),
+      mockDeep<Args[3]>(),
       uploads,
       storage,
-      mockDeep<Args[5]>(),
       mockDeep<Args[6]>(),
+      mockDeep<Args[7]>(),
     );
     await service.purgeUnusedImages();
     expect(limit).toHaveBeenCalledWith(2);

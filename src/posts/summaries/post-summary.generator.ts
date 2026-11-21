@@ -6,6 +6,7 @@ import { z } from 'zod';
 import { loadTextConfig } from '../../config/config-files.js';
 import { DEFAULT_CHAT_MODEL } from '../../ai/openrouter.js';
 import { RecipeTag } from '../../mongo/models.js';
+import type { PostSourcePart } from './post-source.js';
 
 const INSTRUCTIONS = loadTextConfig(runtimeConfig.POST_SUMMARY_PROMPT_FILE);
 const TIMEOUT_MS = runtimeConfig.POST_SUMMARY_TIMEOUT_MS;
@@ -38,10 +39,7 @@ export const summaryOutput = z.object({
 export type SummaryOutput = z.infer<typeof summaryOutput>;
 
 /** A labelled piece of a post, e.g. its body or one video's transcript. */
-export interface SummarySourcePart {
-  label: string;
-  text: string;
-}
+export type SummarySourcePart = PostSourcePart;
 
 /** Asks the chat model for a summary (and recipe draft) of a post. */
 @Injectable()

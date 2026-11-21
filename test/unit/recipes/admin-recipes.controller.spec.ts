@@ -5,6 +5,7 @@ import { UserRole } from '../../../src/mongo/models.js';
 import { AdminRecipesController } from '../../../src/recipes/admin-recipes.controller.js';
 import type { IncompatibilityRulesService } from '../../../src/recipes/incompatibility-rules.service.js';
 import type { RecipesService } from '../../../src/recipes/recipes.service.js';
+import type { RecipeDraftsService } from '../../../src/recipes/drafts/recipe-drafts.service.js';
 
 describe('AdminRecipesController', () => {
   const adminId = '4a1e32e4-e18e-4dd7-8b4a-246ef2113ff2';
@@ -16,13 +17,27 @@ describe('AdminRecipesController', () => {
   let recipes: DeepMockProxy<RecipesService>;
   let rules: DeepMockProxy<IncompatibilityRulesService>;
   let cloudinary: DeepMockProxy<CloudinaryService>;
+  let drafts: DeepMockProxy<RecipeDraftsService>;
   let controller: AdminRecipesController;
 
   beforeEach(() => {
     recipes = mockDeep<RecipesService>();
     rules = mockDeep<IncompatibilityRulesService>();
     cloudinary = mockDeep<CloudinaryService>();
-    controller = new AdminRecipesController(recipes, rules, cloudinary);
+    drafts = mockDeep<RecipeDraftsService>();
+    controller = new AdminRecipesController(recipes, rules, cloudinary, drafts);
+  });
+
+  it('passes the admin and the source on to the draft service', async () => {
+    const draft = { recipe: null, untranscribedVideos: 0 };
+    drafts.create.mockResolvedValue(draft);
+
+    await expect(
+      controller.createDraft(req, { text: 'Đậu hũ sốt cà' }),
+    ).resolves.toBe(draft);
+    expect(drafts.create).toHaveBeenCalledWith(adminId, {
+      text: 'Đậu hũ sốt cà',
+    });
   });
 
   it('creates a signed recipe image upload', () => {

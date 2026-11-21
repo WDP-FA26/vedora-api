@@ -7,8 +7,9 @@ AI còn rút ra **công thức** (nguyên liệu, các bước, khẩu phần, t
 
 Kết quả được:
 
-1. **Lưu vào database** (collection `post_summaries`, một dòng mỗi bài), để sau này
-   dùng tự điền form công thức.
+1. **Lưu vào database** (collection `post_summaries`, một dòng mỗi bài). Form công thức
+   của admin không đọc bản này mà gọi `POST /admin/recipes/drafts` (khớp sẵn danh mục
+   nguyên liệu) — xem [recipe-ai-draft.md](recipe-ai-draft.md).
 2. **Bình luận vào bài** bởi tài khoản hệ thống **Vedora AI** (`author.isSystem: true`).
 
 Không có thông báo nào được gửi cho chủ bài. Chủ bài (hoặc admin) có thể xóa bình luận

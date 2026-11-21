@@ -173,6 +173,7 @@ describe('MealPlanController', () => {
         messages,
         requestId: 'req-1',
         threadId: 'thread-1',
+        allowWebSearch: true,
       },
       response,
     );
@@ -184,6 +185,7 @@ describe('MealPlanController', () => {
       '2026-11-16',
       'req-1',
       'thread-1',
+      { allowWebSearch: true },
     );
     expect(pipeUIMessageStreamToResponse).toHaveBeenCalledWith({
       response,
