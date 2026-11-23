@@ -1,4 +1,5 @@
 import { runtimeConfig } from '../../config/runtime-config.js';
+import { isOpenAI } from '../../ai/provider.js';
 import {
   Injectable,
   Logger,
@@ -33,6 +34,7 @@ export class MenuSearchIndexService implements OnApplicationBootstrap {
   private readonly logger = new Logger(MenuSearchIndexService.name);
   readonly collection: string;
   readonly dimensions: number;
+  readonly sparseOnly: boolean;
   private collectionReady: Promise<void> | null = null;
   private draining: Promise<void> | null = null;
   private drainAgain = false;
@@ -48,6 +50,7 @@ export class MenuSearchIndexService implements OnApplicationBootstrap {
     @InjectModel(User.name)
     private readonly users: Model<User>,
   ) {
+    this.sparseOnly = isOpenAI(configService);
     this.collection = configService.get<string>(
       'QDRANT_MENU_ITEMS_COLLECTION',
       'vedora_menu_items_v1',
@@ -190,14 +193,16 @@ export class MenuSearchIndexService implements OnApplicationBootstrap {
     if (eligible.length > 0) {
       let denseVectors: number[][] | null = null;
       try {
-        const result = await this.ai.embedMany({
-          model: 'posts',
-          label: 'index-menu-items',
-          values: eligible.map(
-            ({ item, text }) => `title: ${item.name} | text: ${text}`,
-          ),
-        });
-        denseVectors = result.embeddings;
+        if (!this.sparseOnly) {
+          const result = await this.ai.embedMany({
+            model: 'posts',
+            label: 'index-menu-items',
+            values: eligible.map(
+              ({ item, text }) => `title: ${item.name} | text: ${text}`,
+            ),
+          });
+          denseVectors = result.embeddings;
+        }
       } catch (error) {
         this.logger.warn(
           `Menu item embedding failed, indexing sparse BM25 only: ${String(error)}`,

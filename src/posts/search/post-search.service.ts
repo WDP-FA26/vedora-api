@@ -37,19 +37,28 @@ export class PostSearchService {
     limit: number,
   ): Promise<PostSearchPage> {
     await this.index.ensureCollection();
-    const { embedding: dense } = await this.ai.embed({
-      model: 'posts',
-      label: 'search-posts',
-      value: `task: search result | query: ${query}`,
-    });
+    const dense =
+      this.index.sparseOnly === true
+        ? null
+        : (
+            await this.ai.embed({
+              model: 'posts',
+              label: 'search-posts',
+              value: `task: search result | query: ${query}`,
+            })
+          ).embedding;
     const { points } = await this.qdrant.query(this.index.collection, {
       prefetch: [
-        {
-          query: dense,
-          using: DENSE_VECTOR,
-          limit: MAX_SEARCH_RESULTS,
-          score_threshold: this.minScore,
-        },
+        ...(dense
+          ? [
+              {
+                query: dense,
+                using: DENSE_VECTOR,
+                limit: MAX_SEARCH_RESULTS,
+                score_threshold: this.minScore,
+              },
+            ]
+          : []),
         {
           query: bm25(query, false),
           using: BM25_VECTOR,

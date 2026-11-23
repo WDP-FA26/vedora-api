@@ -1,4 +1,5 @@
 import { runtimeConfig } from '../../config/runtime-config.js';
+import { isOpenAI } from '../../ai/provider.js';
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { AiService } from '@nestjs/ai';
@@ -29,6 +30,7 @@ export class PostSearchIndexService {
   private readonly logger = new Logger(PostSearchIndexService.name);
   readonly collection: string;
   readonly dimensions: number;
+  readonly sparseOnly: boolean;
   private collectionReady: Promise<void> | null = null;
   private draining: Promise<void> | null = null;
   private drainAgain = false;
@@ -40,6 +42,7 @@ export class PostSearchIndexService {
     @InjectModel(Post.name) private readonly posts: Model<Post>,
     @InjectModel(MediaAsset.name) private readonly media: Model<MediaAsset>,
   ) {
+    this.sparseOnly = isOpenAI(configService);
     this.collection = configService.get<string>(
       'QDRANT_POSTS_COLLECTION',
       'vedora_posts_v2',
@@ -134,17 +137,23 @@ export class PostSearchIndexService {
       })
       .filter(({ chunks }) => chunks.length > 0);
     if (texts.length > 0) {
-      const { embeddings: chunkVectors } = await this.ai.embedMany({
-        model: 'posts',
-        label: 'index-posts',
-        values: texts.flatMap(({ chunks }) =>
-          chunks.map((chunk) => `title: none | text: ${chunk}`),
-        ),
-      });
+      const chunkVectors = this.sparseOnly
+        ? []
+        : (
+            await this.ai.embedMany({
+              model: 'posts',
+              label: 'index-posts',
+              values: texts.flatMap(({ chunks }) =>
+                chunks.map((chunk) => `title: none | text: ${chunk}`),
+              ),
+            })
+          ).embeddings;
       let next = 0;
-      const vectors = texts.map(({ chunks }) =>
-        meanVector(chunkVectors.slice(next, (next += chunks.length))),
-      );
+      const vectors = this.sparseOnly
+        ? []
+        : texts.map(({ chunks }) =>
+            meanVector(chunkVectors.slice(next, (next += chunks.length))),
+          );
       await this.qdrant.upsert(this.collection, {
         wait: true,
         points: texts.map(
@@ -152,7 +161,7 @@ export class PostSearchIndexService {
             ({
               id: post.id,
               vector: {
-                [DENSE_VECTOR]: vectors[index],
+                ...(!this.sparseOnly ? { [DENSE_VECTOR]: vectors[index] } : {}),
                 [BM25_VECTOR]: bm25(text, false),
                 [BM25_FOLDED_VECTOR]: bm25(text, true),
               },

@@ -44,12 +44,14 @@ export class MenuSearchService {
 
     let dense: number[] | null = null;
     try {
-      const { embedding } = await this.ai.embed({
-        model: 'posts',
-        label: 'search-menu-items',
-        value: `task: search result | query: ${trimmed}`,
-      });
-      dense = embedding;
+      if (this.index.sparseOnly !== true) {
+        const { embedding } = await this.ai.embed({
+          model: 'posts',
+          label: 'search-menu-items',
+          value: `task: search result | query: ${trimmed}`,
+        });
+        dense = embedding;
+      }
     } catch (error) {
       this.logger.warn(
         `Menu query embedding failed, falling back to BM25: ${String(error)}`,

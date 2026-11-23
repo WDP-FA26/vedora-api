@@ -98,6 +98,30 @@ describe('PostSearchIndexService', () => {
     await app.close();
   });
 
+  it('indexes new posts as BM25 only in backup mode, preserving the existing vector space', async () => {
+    service = new PostSearchIndexService(
+      qdrant,
+      ai,
+      new ConfigService({
+        AI_PROVIDER: 'openai',
+        QDRANT_POSTS_COLLECTION: 'test_posts',
+        POST_SEARCH_EMBEDDING_DIMENSIONS: 4,
+      }),
+      posts,
+      app.get<Model<MediaAsset>>(getModelToken(MediaAsset.name)),
+    );
+    await service.drain();
+    expect(ai.embedMany).not.toHaveBeenCalled();
+    const operation = qdrant.upsert.mock.calls[0][1];
+    if (!('points' in operation)) throw new Error('Expected points');
+    expect(operation.points[0].vector).toMatchObject({
+      bm25: { text: post.body },
+      bm25_folded: { text: post.body },
+    });
+    expect(operation.points[0].vector).not.toHaveProperty('dense');
+    expect((await reload()).searchIndexedAt).toBeInstanceOf(Date);
+  });
+
   it('indexes published posts that are not indexed yet, keyed by post id', async () => {
     await service.drain();
 

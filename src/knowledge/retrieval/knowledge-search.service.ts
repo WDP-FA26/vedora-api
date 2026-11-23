@@ -37,10 +37,15 @@ export class KnowledgeSearchService {
   ) {}
 
   async search(query: string, signal?: AbortSignal): Promise<KnowledgeHit[]> {
-    const dense = await this.models.embedQuery(query, signal);
+    const dense =
+      this.models.sparseOnly === true
+        ? null
+        : await this.models.embedQuery(query, signal);
     const { points } = await this.qdrant.query(this.index.collection, {
       prefetch: [
-        { query: dense, using: DENSE_VECTOR, limit: PREFETCH_LIMIT },
+        ...(dense
+          ? [{ query: dense, using: DENSE_VECTOR, limit: PREFETCH_LIMIT }]
+          : []),
         {
           query: bm25(query, false),
           using: BM25_VECTOR,

@@ -78,22 +78,30 @@ export class KnowledgeIndexService {
       }
       previousHeading = pageHeadings.at(-1) ?? previousHeading;
     });
-    const images = sections.flatMap(({ text, images }, index) =>
-      images.map((jpeg) => ({ page: index + 1, jpeg, text })),
-    );
+    const images =
+      this.models.sparseOnly === true
+        ? []
+        : sections.flatMap(({ text, images }, index) =>
+            images.map((jpeg) => ({ page: index + 1, jpeg, text })),
+          );
 
-    const [chunkVectors, imageVectors] = await Promise.all([
-      this.models.embed(
-        chunks.map(({ text }) => documentText(document.title, text)),
-      ),
-      this.models.embed(images.map(({ jpeg }) => ({ image: jpeg }))),
-    ]);
+    const [chunkVectors, imageVectors] =
+      this.models.sparseOnly === true
+        ? [[], []]
+        : await Promise.all([
+            this.models.embed(
+              chunks.map(({ text }) => documentText(document.title, text)),
+            ),
+            this.models.embed(images.map(({ jpeg }) => ({ image: jpeg }))),
+          ]);
 
     const points = [
       ...chunks.map(({ page, text }, index) => ({
         id: randomUUID(),
         vector: {
-          [DENSE_VECTOR]: chunkVectors[index],
+          ...(this.models.sparseOnly !== true
+            ? { [DENSE_VECTOR]: chunkVectors[index] }
+            : {}),
           [BM25_VECTOR]: bm25(text, false),
           [BM25_FOLDED_VECTOR]: bm25(text, true),
         },
