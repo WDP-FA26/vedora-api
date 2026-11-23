@@ -149,7 +149,6 @@ describe('MealPlannerChatService', () => {
     dietary.find.mockResolvedValue({
       ingredients: [],
       groups: [],
-      liked: [],
       terms: [],
     });
     mealPlan.find.mockResolvedValue({
@@ -633,7 +632,6 @@ describe('MealPlannerChatService', () => {
     dietary.find.mockResolvedValue({
       ingredients: [{ id: 'ing-1', name: 'Đậu phộng' }],
       groups: [],
-      liked: [],
       terms: ['Đậu phộng'],
     });
     restaurantMenu.suggestForPlanner.mockResolvedValue([

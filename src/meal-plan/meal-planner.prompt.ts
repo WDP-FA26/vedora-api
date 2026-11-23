@@ -249,11 +249,6 @@ Mô tả dị ứng & lưu ý ăn uống tự nhiên của người dùng (luôn
       ? restrictions.allergyNote.trim()
       : 'chưa mô tả thêm'
   }.
-Nguyên liệu người dùng thích: ${
-    restrictions.liked.length > 0
-      ? restrictions.liked.map(({ name }) => name).join(', ')
-      : 'chưa khai báo gì'
-  }.
 
 Thực đơn đang lưu của tuần người dùng đang xem (weekStart ${plan.weekStart}, gọi getPlan để xem tuần khác):
 ${days.join('\n')}${draftSummary(draft)}`;

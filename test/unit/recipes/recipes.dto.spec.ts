@@ -4,7 +4,6 @@ import { validate } from 'class-validator';
 import {
   MAX_AVOIDED_GROUPS,
   MAX_AVOIDED_INGREDIENTS,
-  MAX_LIKED_INGREDIENTS,
   SaveDietaryRestrictionsDto,
   SaveNutritionProfileDto,
   WeightCheckInDto,
@@ -43,7 +42,6 @@ describe('Recipes DTOs', () => {
       const dto = plainToInstance(SaveDietaryRestrictionsDto, {
         ingredientIds: [uuid(1)],
         groupIds: [uuid(2)],
-        likedIngredientIds: [uuid(3)],
         allergyNote: '  Dị ứng đậu phộng và mè đen  ',
       });
       expect(await validate(dto)).toHaveLength(0);
@@ -56,7 +54,6 @@ describe('Recipes DTOs', () => {
           plainToInstance(SaveDietaryRestrictionsDto, {
             ingredientIds: [uuid(1), uuid(1)],
             groupIds: [],
-            likedIngredientIds: [],
           }),
         ),
       ).not.toHaveLength(0);
@@ -66,7 +63,6 @@ describe('Recipes DTOs', () => {
           plainToInstance(SaveDietaryRestrictionsDto, {
             ingredientIds: ['bad-id'],
             groupIds: [],
-            likedIngredientIds: [],
           }),
         ),
       ).not.toHaveLength(0);
@@ -80,10 +76,6 @@ describe('Recipes DTOs', () => {
             ),
             groupIds: Array.from({ length: MAX_AVOIDED_GROUPS + 1 }, (_, i) =>
               uuid(i + 1),
-            ),
-            likedIngredientIds: Array.from(
-              { length: MAX_LIKED_INGREDIENTS + 1 },
-              (_, i) => uuid(i + 1),
             ),
           }),
         ),

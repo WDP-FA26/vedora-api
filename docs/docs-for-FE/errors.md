@@ -38,7 +38,6 @@ Thay đổi so với body mặc định của NestJS trước đây: không còn
 | `BLOG_MEDIA_NOT_ALLOWED` | Ảnh hoặc video trong nội dung blog không thuộc kho media của hệ thống | — |
 | `BLOG_RECIPE_NOT_FOUND` | Có công thức liên kết không tồn tại | `recipeIds: string[]` — các ID không tồn tại |
 | `UNKNOWN_REFERENCE` | Có ID nguyên liệu/nhóm/công thức không tồn tại | — |
-| `CONFLICTING_PREFERENCE` | Nguyên liệu vừa thích vừa tránh | — |
 | `SAME_INGREDIENT` | Quy tắc xung đột với chính nguyên liệu đó | — |
 | `EMPTY_RECIPE_SOURCE` | Bài đăng không có chữ hay transcript nào để AI đọc công thức (xem [recipe-ai-draft.md](recipe-ai-draft.md)) | `untranscribedVideos: number` — số video còn chờ transcript |
 | `CONTENT_REJECTED` (HTTP 422) | Bình luận vi phạm quy tắc cộng đồng, chưa được lưu | `category`: `sexual`, `violence`, `hate`, `harassment`, `self_harm`, `illegal`, `spam` |

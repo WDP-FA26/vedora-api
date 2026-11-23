@@ -75,11 +75,7 @@ export class DietaryService {
     const user = await this.preferences(userId);
     const [ingredients, groups] = await Promise.all([
       this.ingredients
-        .find({
-          _id: {
-            $in: [...user.avoidedIngredientIds, ...user.likedIngredientIds],
-          },
-        })
+        .find({ _id: { $in: [...user.avoidedIngredientIds] } })
         .select('name')
         .sort({ name: 1 })
         .exec(),
@@ -89,15 +85,9 @@ export class DietaryService {
         .sort({ name: 1 })
         .exec(),
     ]);
-    const liked = new Set(user.likedIngredientIds);
     return {
-      ingredients: ingredients
-        .filter(({ id }) => !liked.has(id))
-        .map(({ id, name }) => ({ id, name })),
+      ingredients: ingredients.map(({ id, name }) => ({ id, name })),
       groups: groups.map(({ id, name }) => ({ id, name })),
-      liked: ingredients
-        .filter(({ id }) => liked.has(id))
-        .map(({ id, name }) => ({ id, name })),
       ...(user.allergyNote ? { allergyNote: user.allergyNote } : {}),
     };
   }
@@ -118,18 +108,8 @@ export class DietaryService {
     userId: string,
     dto: SaveDietaryRestrictionsDto,
   ): Promise<DietaryRestrictionsDto> {
-    const avoided = new Set(dto.ingredientIds);
-    if (dto.likedIngredientIds.some((id) => avoided.has(id))) {
-      throw new InvalidInputException(
-        'CONFLICTING_PREFERENCE',
-        'An ingredient cannot be both liked and avoided',
-      );
-    }
     const [ingredients, groups] = await Promise.all([
-      allExist(this.ingredients, [
-        ...dto.ingredientIds,
-        ...dto.likedIngredientIds,
-      ]),
+      allExist(this.ingredients, dto.ingredientIds),
       allExist(this.groups, dto.groupIds),
     ]);
     if (!ingredients || !groups) {
@@ -141,7 +121,6 @@ export class DietaryService {
     const updateSet: Record<string, unknown> = {
       avoidedIngredientIds: dto.ingredientIds,
       avoidedGroupIds: dto.groupIds,
-      likedIngredientIds: dto.likedIngredientIds,
     };
     if (dto.allergyNote !== undefined) {
       const normalizedNote = dto.allergyNote?.trim() ?? null;
@@ -382,14 +361,13 @@ export class DietaryService {
     const user = await this.users
       .findOne({ _id: userId })
       .select(
-        'avoidedIngredientIds avoidedGroupIds likedIngredientIds allergyNote',
+        'avoidedIngredientIds avoidedGroupIds allergyNote',
       )
       .exec();
     return (
       user ?? {
         avoidedIngredientIds: [],
         avoidedGroupIds: [],
-        likedIngredientIds: [],
         allergyNote: null,
       }
     );

@@ -29,7 +29,7 @@ describe('backend operational environment settings', () => {
       multiplier: number;
     }[];
     const defaults = parseRuntimeSettings({});
-    expect(audit).toHaveLength(156);
+    expect(audit).toHaveLength(155);
     for (const entry of audit) {
       const value = defaults[entry.env];
       expect(

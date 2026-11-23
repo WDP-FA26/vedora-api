@@ -7,8 +7,8 @@ Swagger mô tả đầy đủ request/response tại `/docs`. Thực đơn lưu 
 
 | Method | Endpoint             | Đăng nhập                                | Kết quả                                       |
 | ------ | -------------------- | ---------------------------------------- | --------------------------------------------- |
-| `GET`  | `/dietary/me`         | Có                                       | Nguyên liệu/nhóm tránh, nguyên liệu thích và mô tả dị ứng tự nhiên (`allergyNote`) |
-| `PUT`  | `/dietary/me`         | Có                                       | Cập nhật thực phẩm tránh, thích và mô tả dị ứng tự nhiên (`allergyNote`) |
+| `GET`  | `/dietary/me`         | Có                                       | Nguyên liệu/nhóm tránh và mô tả dị ứng tự nhiên (`allergyNote`) |
+| `PUT`  | `/dietary/me`         | Có                                       | Cập nhật thực phẩm tránh và mô tả dị ứng tự nhiên (`allergyNote`) |
 | `GET`  | `/dietary/nutrition`  | Có                                       | Hồ sơ BMI chuẩn Châu Á, mục tiêu năng lượng (TDEE ±15%) và lịch sử check-in cân nặng |
 | `PUT`  | `/dietary/nutrition`  | Có                                       | Cập nhật chiều cao, cân nặng, mục tiêu BMI, năm sinh, giới tính, mức vận động |
 | `POST` | `/dietary/nutrition/check-in` | Có                               | Ghi nhận cân nặng & cảm giác cơ thể theo ngày (`YYYY-MM-DD`, tối đa 1 bản ghi/ngày) |
@@ -61,8 +61,7 @@ theo `updatedAt DESC`, rồi `id DESC`. Bộ lọc được áp dụng **trướ
 `suitableForMe=true` loại các món có nguyên liệu người dùng tránh, trực tiếp hoặc
 qua nhóm, và món có cặp nguyên liệu vi phạm quy tắc kỵ nhau trong database. Đây
 chỉ là kiểm tra từng công thức: một món có thể xung đột với món khác đã chọn trong
-cùng bữa. Luôn xem trước và kiểm tra lại khi lưu. Nguyên liệu yêu thích không
-phải điều kiện bắt buộc. Kết quả cá nhân có `Cache-Control: private, no-store`;
+cùng bữa. Luôn xem trước và kiểm tra lại khi lưu. Kết quả cá nhân có `Cache-Control: private, no-store`;
 FE cần cache theo tài khoản và xóa cache khi đổi tài khoản/hồ sơ ăn uống.
 
 Các item gồm `id`, `title`, `imageUrl`, `tag`, `servings`, `prepMinutes`, `cookMinutes`,
@@ -121,7 +120,7 @@ cho kết quả tuân theo ràng buộc. Body:
 | `pinned` | Không | Danh sách `{ day, section, recipeIds? }` giữ nguyên ô đó (hoặc gán `recipeIds` trước khi điền các ô còn lại) |
 
 Món được xếp hạng theo: `tag` hợp với bữa (ví dụ `BREAD` cho bữa sáng, `DRINK` chỉ
-hợp phần Khác), nguyên liệu người dùng thích, khớp `query`; món không lặp trong cùng một
+hợp phần Khác), khớp `query`; món không lặp trong cùng một
 bữa (ví dụ các bữa sáng của cả tuần) trừ khi hết món khác; giữa các bữa khác nhau,
 kể cả cùng một ngày, một món vẫn được dùng lại (chỉ bị trừ điểm nhẹ). Món chứa nguyên liệu người dùng không ăn, món tự xung đột và
 món gây xung đột nguyên liệu với các món khác cùng bữa đều bị loại. Món chưa có

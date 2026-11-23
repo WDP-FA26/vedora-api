@@ -38,7 +38,6 @@ export function createUser(
     emailVerifiedAt: new Date(),
     avoidedIngredientIds: [],
     avoidedGroupIds: [],
-    likedIngredientIds: [],
     ...rest,
   });
 }

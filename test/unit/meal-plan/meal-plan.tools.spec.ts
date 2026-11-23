@@ -737,7 +737,6 @@ describe('Meal planner AI tools', () => {
         {
           ingredients: [],
           groups: [],
-          liked: [],
           allergyNote: 'Dị ứng đậu phộng nặng',
         },
       );

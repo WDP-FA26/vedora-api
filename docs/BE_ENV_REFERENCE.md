@@ -70,7 +70,6 @@ Values below are defaults matched to the original source. All values are read at
 | `COMMENT_MAX_LENGTH` | `1000` |
 | `DIETARY_MAX_AVOIDED_GROUPS` | `50` |
 | `DIETARY_MAX_AVOIDED_INGREDIENTS` | `200` |
-| `DIETARY_MAX_LIKED_INGREDIENTS` | `100` |
 | `FEED_EXPLORE_EVERY` | `5` |
 | `FEED_FRESHNESS_WEIGHT` | `0.05` |
 | `FEED_FRESH_WINDOW_SECONDS` | `604800` |

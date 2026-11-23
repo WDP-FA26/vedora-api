@@ -143,7 +143,6 @@ describe('Recipes and ingredients (e2e)', () => {
     const dietary = {
       ingredientIds: [tofu.id],
       groupIds: [],
-      likedIngredientIds: [honey.id],
     };
     await request(server()).put('/api/v1/dietary/me').send(dietary).expect(401);
     const response = await request(server())
@@ -154,24 +153,10 @@ describe('Recipes and ingredients (e2e)', () => {
     expect(response.body).toEqual({
       ingredients: [{ id: tofu.id, name: 'Đậu hũ' }],
       groups: [],
-      liked: [{ id: honey.id, name: 'Mật ong' }],
     });
     const stored = await e2e.mongo.connection
       .model<User>('User')
       .findOne({ _id: member.id });
     expect(stored?.avoidedIngredientIds).toEqual([tofu.id]);
-  });
-
-  it('refuses an ingredient that is both liked and avoided', async () => {
-    const response = await request(server())
-      .put('/api/v1/dietary/me')
-      .set('Authorization', `Bearer ${memberToken}`)
-      .send({
-        ingredientIds: [tofu.id],
-        groupIds: [],
-        likedIngredientIds: [tofu.id],
-      })
-      .expect(400);
-    expect(response.body).toMatchObject({ code: 'CONFLICTING_PREFERENCE' });
   });
 });

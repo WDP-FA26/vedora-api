@@ -57,7 +57,6 @@ export async function seedDatabase(mongo: MongoService): Promise<void> {
       isProfessional: false,
       avoidedIngredientIds: [],
       avoidedGroupIds: [],
-      likedIngredientIds: [],
     });
   }
 }

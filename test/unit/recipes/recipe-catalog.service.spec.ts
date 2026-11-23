@@ -81,7 +81,6 @@ describe('RecipeCatalogService', () => {
       username: 'reader',
       avoidedIngredientIds: [SPINACH_ID],
       avoidedGroupIds: [GROUP_ALLIUM],
-      likedIngredientIds: [MUSHROOM_ID],
     });
     await createIngredient(mongo, {
       id: TOFU_ID,
@@ -236,7 +235,7 @@ describe('RecipeCatalogService', () => {
     expect(quick.items.map((i) => i.id)).not.toContain(noTime.id);
     expect(quick.items.map((i) => i.id)).toContain(safe.id);
 
-    // suitableForMe excludes direct avoided, group avoided, and internal conflicts; keeps safe & liked
+    // suitableForMe excludes direct avoided, group avoided, and internal conflicts; keeps safe ones
     const suitable = await service.list(
       { page: 1, limit: 1, suitableForMe: true },
       USER_ID,

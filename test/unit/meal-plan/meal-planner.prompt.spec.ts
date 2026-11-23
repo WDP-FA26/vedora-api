@@ -42,7 +42,6 @@ describe('meal-planner prompt & refusals', () => {
     const restrictions: DietaryRestrictionsDto = {
       ingredients: [],
       groups: [],
-      liked: [],
       terms: [],
     };
 
@@ -58,7 +57,6 @@ describe('meal-planner prompt & refusals', () => {
     const restrictions: DietaryRestrictionsDto = {
       ingredients: [],
       groups: [],
-      liked: [],
       terms: [],
     };
 
@@ -80,7 +78,6 @@ describe('meal-planner prompt & refusals', () => {
     const restrictions: DietaryRestrictionsDto = {
       ingredients: [],
       groups: [],
-      liked: [],
       terms: [],
     };
     const output = plannerInstructions(restrictions, {
@@ -100,7 +97,6 @@ describe('meal-planner prompt & refusals', () => {
     const restrictions: DietaryRestrictionsDto = {
       ingredients: [],
       groups: [],
-      liked: [],
       terms: [],
     };
     const plan = { ...emptyPlan(), weekStart: '2026-11-09', editable: false };
@@ -116,7 +112,6 @@ describe('meal-planner prompt & refusals', () => {
     const restrictions: DietaryRestrictionsDto = {
       ingredients: [],
       groups: [],
-      liked: [],
       terms: [],
     };
     const output = plannerInstructions(restrictions, {
@@ -130,11 +125,10 @@ describe('meal-planner prompt & refusals', () => {
     );
   });
 
-  it('formats avoided groups, avoided ingredients, liked ingredients, and scheduled dishes', () => {
+  it('formats avoided groups, avoided ingredients, and scheduled dishes', () => {
     const restrictions: DietaryRestrictionsDto = {
       ingredients: [{ id: 'ing-1', name: 'Hành' }],
       groups: [{ id: 'grp-1', name: 'Ngũ vị tân' }],
-      liked: [{ id: 'ing-2', name: 'Đậu hũ' }],
       terms: ['tôm khô'],
     };
     const plan = emptyPlan();
@@ -164,7 +158,6 @@ describe('meal-planner prompt & refusals', () => {
     const output = plannerInstructions(restrictions, plan);
 
     expect(output).toContain('nhóm Ngũ vị tân, Hành');
-    expect(output).toContain('Nguyên liệu người dùng thích: Đậu hũ.');
     expect(output).toContain(
       `- ${DAY_NAMES.MON}: ${SECTION_NAMES.LUNCH}: Đậu hũ sốt cà (id rec-1); ${SECTION_NAMES.OTHER}: Sữa đậu nành (id rec-2)`,
     );
@@ -174,7 +167,6 @@ describe('meal-planner prompt & refusals', () => {
     const restrictions: DietaryRestrictionsDto = {
       ingredients: [],
       groups: [],
-      liked: [],
       terms: [],
     };
     const output = plannerInstructions(restrictions, emptyPlan(), {
@@ -218,7 +210,6 @@ describe('meal-planner prompt & refusals', () => {
     const restrictions: DietaryRestrictionsDto = {
       ingredients: [],
       groups: [],
-      liked: [],
       terms: [],
     };
     const nutrition: NutritionProfileDto = {

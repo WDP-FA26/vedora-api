@@ -143,7 +143,7 @@ export class MealPlanController {
   @ApiOperation({
     summary: 'Pick dishes for chosen slots with an algorithm, without saving',
     description:
-      'No AI: dishes are ranked by tag fit, liked ingredients and the optional `query`; a dish is not repeated within one meal across the week but may appear in different meals. Avoided ingredients, over-long dishes and same-day clashes are left out. Returns the same checked preview as `POST /meal-plan/preview` (only days that change, each with all four sections); save it with `PUT /meal-plan/days`. `days` is empty when no dish fits.',
+      'No AI: dishes are ranked by tag fit and the optional `query`; a dish is not repeated within one meal across the week but may appear in different meals. Avoided ingredients, over-long dishes and same-day clashes are left out. Returns the same checked preview as `POST /meal-plan/preview` (only days that change, each with all four sections); save it with `PUT /meal-plan/days`. `days` is empty when no dish fits.',
   })
   @ApiOkResponse({ type: MealPlanPreviewDto })
   generate(

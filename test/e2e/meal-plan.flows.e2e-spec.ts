@@ -357,7 +357,6 @@ describe('Meal plan and shopping list flows (e2e)', () => {
         .send({
           ingredientIds: [tofu.id],
           groupIds: [],
-          likedIngredientIds: [],
         })
         .expect(200);
       const plan = await getPlan(token);

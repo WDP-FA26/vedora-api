@@ -23,7 +23,6 @@ function candidate(
     tag,
     minutes: 30,
     ingredientIds: [],
-    likedCount: 0,
     matchesQuery: false,
     ...extra,
   };

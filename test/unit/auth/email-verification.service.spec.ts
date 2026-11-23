@@ -71,7 +71,6 @@ describe('EmailVerificationService', () => {
       emailVerifiedAt: null,
       avoidedIngredientIds: [],
       avoidedGroupIds: [],
-      likedIngredientIds: [],
       ...fields,
     });
 

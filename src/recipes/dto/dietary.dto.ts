@@ -29,8 +29,6 @@ import { NamedRefDto } from './ingredient.dto.js';
 export const MAX_AVOIDED_INGREDIENTS =
   runtimeConfig.DIETARY_MAX_AVOIDED_INGREDIENTS;
 export const MAX_AVOIDED_GROUPS = runtimeConfig.DIETARY_MAX_AVOIDED_GROUPS;
-export const MAX_LIKED_INGREDIENTS =
-  runtimeConfig.DIETARY_MAX_LIKED_INGREDIENTS;
 export const MAX_ALLERGY_NOTE_LENGTH = 1000;
 
 const trim = ({ value }: { value: unknown }): unknown =>
@@ -57,12 +55,6 @@ export class DietaryRestrictionsDto {
   @ApiProperty({ type: [NamedRefDto] }) ingredients!: NamedRefDto[];
   @ApiProperty({ type: [NamedRefDto] }) groups!: NamedRefDto[];
 
-  @ApiProperty({
-    type: [NamedRefDto],
-    description: 'Ingredients the user likes; a taste, never a rule',
-  })
-  liked!: NamedRefDto[];
-
   @ApiPropertyOptional({
     nullable: true,
     type: String,
@@ -87,17 +79,6 @@ export class SaveDietaryRestrictionsDto {
   @ArrayUnique()
   @IsUUID('4', { each: true })
   groupIds!: string[];
-
-  @ApiProperty({
-    type: [String],
-    format: 'uuid',
-    description: 'May not repeat an id from ingredientIds',
-  })
-  @IsArray()
-  @ArrayMaxSize(MAX_LIKED_INGREDIENTS)
-  @ArrayUnique()
-  @IsUUID('4', { each: true })
-  likedIngredientIds!: string[];
 
   @ApiPropertyOptional({
     nullable: true,

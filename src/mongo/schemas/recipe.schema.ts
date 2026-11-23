@@ -30,7 +30,6 @@ cascadeOnDelete(IngredientSchema, [
   { model: 'IncompatibilityRule', field: 'aIngredientId', action: 'delete' },
   { model: 'IncompatibilityRule', field: 'bIngredientId', action: 'delete' },
   { model: 'User', field: 'avoidedIngredientIds', action: 'pull' },
-  { model: 'User', field: 'likedIngredientIds', action: 'pull' },
 ]);
 
 @Schema(collectionSchema('ingredient_groups'))

@@ -372,7 +372,6 @@ export class MealPlanService {
       ingredientsById.set(recipe.id, ingredientIds(recipe));
       caloriesById.set(recipe.id, recipeNutrition(recipe).caloriesPerServing);
     }
-    const liked = new Set(restrictions.liked.map(({ id }) => id));
     const allergyKeywords = extractAllergyKeywords(restrictions.allergyNote);
     const text = dto.query?.trim().toLowerCase() ?? '';
     const excluded = (dto.exclude ?? [])
@@ -417,9 +416,6 @@ export class MealPlanService {
         caloriesPerServing: nutritionMeta.caloriesPerServing,
         nutritionPillars: nutritionMeta.nutritionPillars,
         ingredientIds: ingredientIds(recipe),
-        likedCount: recipe.ingredients.filter(({ ingredientId }) =>
-          liked.has(ingredientId),
-        ).length,
         matchesQuery: text !== '' && matchesQuery(recipe, text),
       });
     });

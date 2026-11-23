@@ -1,6 +1,5 @@
 import type { INestApplication } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
-import { InvalidInputException } from '../../../src/common/exceptions/invalid-input.exception.js';
 import {
   ActivityLevel,
   BiologicalSex,
@@ -108,7 +107,6 @@ describe('DietaryService', () => {
     ).resolves.toEqual({
       ingredients: [],
       groups: [],
-      liked: [],
     });
   });
 
@@ -116,14 +114,12 @@ describe('DietaryService', () => {
     const saved = await service.replace(USER_ID, {
       ingredientIds: [ONION_ID],
       groupIds: [ALLIUM_GROUP],
-      likedIngredientIds: [TOFU_ID],
       allergyNote: '  Dị ứng đậu phộng và kiêng ăn cay  ',
     });
 
     expect(saved).toEqual({
       ingredients: [{ id: ONION_ID, name: 'Hành' }],
       groups: [{ id: ALLIUM_GROUP, name: 'Ngũ vị tân' }],
-      liked: [{ id: TOFU_ID, name: 'Đậu hũ' }],
       allergyNote: 'Dị ứng đậu phộng và kiêng ăn cay',
     });
 
@@ -132,31 +128,15 @@ describe('DietaryService', () => {
     const cleared = await service.replace(USER_ID, {
       ingredientIds: [ONION_ID],
       groupIds: [ALLIUM_GROUP],
-      likedIngredientIds: [TOFU_ID],
       allergyNote: null,
     });
     expect(cleared).toEqual({
       ingredients: [{ id: ONION_ID, name: 'Hành' }],
       groups: [{ id: ALLIUM_GROUP, name: 'Ngũ vị tân' }],
-      liked: [{ id: TOFU_ID, name: 'Đậu hũ' }],
     });
 
     const avoided = await service.avoidedIngredientIds(USER_ID);
     expect([...avoided].sort()).toEqual([GARLIC_ID, ONION_ID].sort());
-  });
-
-  it('rejects an ingredient that is both avoided and liked', async () => {
-    await expect(
-      service.replace(USER_ID, {
-        ingredientIds: [TOFU_ID],
-        groupIds: [],
-        likedIngredientIds: [TOFU_ID],
-      }),
-    ).rejects.toSatisfy(
-      (err: unknown) =>
-        err instanceof InvalidInputException &&
-        err.code === 'CONFLICTING_PREFERENCE',
-    );
   });
 
   it('rejects unknown ingredient or group references', async () => {
@@ -164,7 +144,6 @@ describe('DietaryService', () => {
       service.replace(USER_ID, {
         ingredientIds: ['a1a2d3e4-0000-4000-8000-000000000099'],
         groupIds: [],
-        likedIngredientIds: [],
       }),
     ).rejects.toMatchObject({ code: 'UNKNOWN_REFERENCE' });
 
@@ -172,7 +151,6 @@ describe('DietaryService', () => {
       service.replace(USER_ID, {
         ingredientIds: [],
         groupIds: ['b1a2d3e4-0000-4000-8000-000000000099'],
-        likedIngredientIds: [],
       }),
     ).rejects.toMatchObject({ code: 'UNKNOWN_REFERENCE' });
   });

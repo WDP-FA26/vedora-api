@@ -84,9 +84,6 @@ export class User extends Identified {
   @Prop({ type: [String], required: true, default: [] })
   avoidedGroupIds!: string[];
 
-  @Prop({ type: [String], required: true, default: [] })
-  likedIngredientIds!: string[];
-
   @Prop({ type: String, default: null })
   allergyNote!: string | null;
 

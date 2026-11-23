@@ -618,14 +618,6 @@
     "multiplier": 1
   },
   {
-    "file": "recipes/dto/dietary.dto.ts",
-    "constant": "MAX_LIKED_INGREDIENTS",
-    "env": "DIETARY_MAX_LIKED_INGREDIENTS",
-    "original": 100,
-    "default": 100,
-    "multiplier": 1
-  },
-  {
     "file": "meal-plan/dto/meal-plan.dto.ts",
     "constant": "MAX_DISHES_PER_SECTION",
     "env": "MEAL_PLAN_MAX_DISHES_PER_SECTION",

@@ -15,8 +15,6 @@ export interface GeneratorCandidate {
   caloriesPerServing?: number | null;
   nutritionPillars?: readonly NutritionPillar[];
   ingredientIds: string[];
-  /** How many of the user's liked ingredients the recipe uses. */
-  likedCount: number;
   /** Whether the recipe matches the free-text wish of the request. */
   matchesQuery: boolean;
 }
@@ -88,7 +86,6 @@ const REPEAT_PENALTY = 2;
 const FIT_BONUS = 4;
 const MISFIT_PENALTY = 6;
 const QUERY_BONUS = 5;
-const LIKED_BONUS = 1.5;
 const PROTEIN_NEEDED_BONUS = 2.5;
 const PILLAR_NEEDED_BONUS = 1.0;
 const SHORTLIST_SIZE = 8;
@@ -275,7 +272,7 @@ function sameIds(a: readonly string[], b: readonly string[]): boolean {
 
 /**
  * Fills the chosen slots with one dish each. A dish is ranked by how well its
- * tag fits the meal, the user's wishes and liked ingredients, and is pushed
+ * tag fits the meal, and the user's wishes, and is pushed
  * down for every time it already appears in the week. The best few are then
  * checked against the dishes already picked for the same meal for incompatible
  * ingredients; other meals of the day do not matter.
@@ -487,7 +484,6 @@ async function pickDish(
       score:
         (input.ignoreFit ? 0 : fitScore(recipe.tag, section)) +
         (recipe.matchesQuery ? QUERY_BONUS : 0) +
-        recipe.likedCount * LIKED_BONUS +
         nutritionFitScore(
           recipe,
           section,

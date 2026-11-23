@@ -742,7 +742,6 @@ export class WorkspacesService {
             emailVerifiedAt: now,
             avoidedIngredientIds: [],
             avoidedGroupIds: [],
-            likedIngredientIds: [],
           },
         ],
         { session },

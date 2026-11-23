@@ -145,7 +145,6 @@ export class PostSummariesService {
             accountVersion: 0,
             avoidedIngredientIds: [],
             avoidedGroupIds: [],
-            likedIngredientIds: [],
           },
         },
         { upsert: true },

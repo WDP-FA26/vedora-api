@@ -352,7 +352,6 @@ describe('Recipe catalog and admin flows (e2e)', () => {
         .send({
           ingredientIds: [doomed.id],
           groupIds: [],
-          likedIngredientIds: [kept.id],
         })
         .expect(200);
 
@@ -368,7 +367,6 @@ describe('Recipe catalog and admin flows (e2e)', () => {
         .findOne({ _id: user.id })
         .exec();
       expect(storedUser?.avoidedIngredientIds).toEqual([]);
-      expect(storedUser?.likedIngredientIds).toEqual([kept.id]);
     });
 
     it('counts the recipes that use an ingredient in the admin list', async () => {

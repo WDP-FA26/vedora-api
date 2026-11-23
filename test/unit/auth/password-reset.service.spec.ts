@@ -75,7 +75,6 @@ describe('PasswordResetService', () => {
       emailVerifiedAt: user.emailVerifiedAt,
       avoidedIngredientIds: [],
       avoidedGroupIds: [],
-      likedIngredientIds: [],
       ...fields,
     });
 

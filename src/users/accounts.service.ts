@@ -46,7 +46,6 @@ export class AccountsService {
         isProfessional: false,
         avoidedIngredientIds: [],
         avoidedGroupIds: [],
-        likedIngredientIds: [],
         ...data,
       });
       if (user.status === AccountStatus.ACTIVE && user.emailVerifiedAt) {

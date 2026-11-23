@@ -412,7 +412,6 @@ describe('Restaurant page flows (e2e)', () => {
           request(server()).put('/api/v1/dietary/me').send({
             groupIds: [],
             ingredientIds: [],
-            likedIngredientIds: [],
           }),
         () => request(server()).get('/api/v1/dietary/nutrition'),
         () =>
