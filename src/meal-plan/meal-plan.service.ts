@@ -129,12 +129,36 @@ const MAX_SUGGESTIONS = runtimeConfig.MEAL_PLAN_SUGGESTIONS_LIMIT;
 
 type SlotKey = { day: Weekday; section: MealSection };
 
-function hasFatalProblem(problems: readonly MealPlanProblemDto[]): boolean {
-  return problems.some(
-    (problem) =>
-      problem.code === 'UNKNOWN_RECIPE' ||
-      problem.code === 'AVOIDED_INGREDIENT',
+/** A dish that no longer exists or that the user avoids can never be saved. */
+function isBlockingProblem(problem: MealPlanProblemDto): boolean {
+  return (
+    problem.code === 'UNKNOWN_RECIPE' || problem.code === 'AVOIDED_INGREDIENT'
   );
+}
+
+function hasFatalProblem(problems: readonly MealPlanProblemDto[]): boolean {
+  return problems.some(isBlockingProblem);
+}
+
+function blockedRecipeIds(
+  problems: readonly MealPlanProblemDto[],
+): Set<string> {
+  const blocked = new Set<string>();
+  for (const problem of problems) {
+    if (!isBlockingProblem(problem)) continue;
+    for (const id of problem.recipeIds) blocked.add(id);
+  }
+  return blocked;
+}
+
+function withoutRecipes(week: WeekIds, blocked: ReadonlySet<string>): WeekIds {
+  const kept = cloneWeekIds(week);
+  for (const slots of kept.values()) {
+    for (const section of MEAL_SECTIONS) {
+      slots[section] = slots[section].filter((id) => !blocked.has(id));
+    }
+  }
+  return kept;
 }
 
 function applyPinnedSlots(
@@ -691,11 +715,7 @@ export class MealPlanService {
     }
 
     const preview = await this.preview(userId, week.weekStart, editable);
-    const blocked = new Set<string>();
-    for (const problem of preview.problems) {
-      if (problem.code === 'DAY_CONFLICT') continue;
-      for (const id of problem.recipeIds) blocked.add(id);
-    }
+    const blocked = blockedRecipeIds(preview.problems);
     let droppedDishes = 0;
     const keep = (ids: string[]): string[] => {
       const kept = ids.filter((id) => !blocked.has(id));
@@ -740,11 +760,44 @@ export class MealPlanService {
     next: WeekIds,
     savedIds: WeekIds,
   ): Promise<PlanChange> {
+    const preview = await this.previewChange(userId, week, next, savedIds);
+    if (!preview) return noChange(week.weekStart);
+    const blocked = blockedRecipeIds(preview.problems);
+    if (blocked.size === 0) {
+      await this.writeDays(userId, week, preview);
+      return { ...preview, applied: true };
+    }
+
+    // A dish that no longer exists or that the user avoids is left out; the
+    // rest of the change is still saved, and the problems say what was dropped.
+    const leftOut = preview.problems.filter(isBlockingProblem);
+    const kept = await this.previewChange(
+      userId,
+      week,
+      withoutRecipes(next, blocked),
+      savedIds,
+    );
+    if (!kept) return { ...preview, applied: false };
+    await this.writeDays(userId, week, kept);
+    return {
+      ...kept,
+      problems: [...leftOut, ...kept.problems],
+      applied: true,
+    };
+  }
+
+  /** Previews the days where `next` differs from what is saved, or null when none does. */
+  private async previewChange(
+    userId: string,
+    week: MealWeek,
+    next: WeekIds,
+    savedIds: WeekIds,
+  ): Promise<MealPlanPreview | null> {
     const changed = changedSlots(next, savedIds, MEAL_SECTIONS);
     const days = WEEKDAYS.filter((day) =>
       changed.some((slot) => slot.day === day),
     );
-    if (days.length === 0) return noChange(week.weekStart);
+    if (days.length === 0) return null;
 
     const inputs: SaveMealDayDto[] = days.map((day) => {
       const slots = next.get(day);
@@ -756,12 +809,7 @@ export class MealPlanService {
         others: slots?.OTHER ?? [],
       };
     });
-    const preview = await this.preview(userId, week.weekStart, inputs);
-    if (hasFatalProblem(preview.problems)) {
-      return { ...preview, applied: false };
-    }
-    await this.writeDays(userId, week, preview);
-    return { ...preview, applied: true };
+    return this.preview(userId, week.weekStart, inputs);
   }
 
   async apply(

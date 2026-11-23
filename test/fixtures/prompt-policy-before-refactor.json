@@ -8,7 +8,7 @@
     "file": "config/prompts/meal-planner.md",
     "source": "meal-plan/meal-planner.prompt.ts",
     "sha256": "0fde39af970877b1115317ef8d7e6ad2dcb09637de5bf752b17a09a14d5d9309",
-    "upstreamSha256": "818cf4b100c007ce733564f44789f53069d7306c76ceb2d1afd00f3f61395cdc",
+    "upstreamSha256": "f93a73fdfddeeb304592356a589531993d535b77b4d8c7e0b8b6c5752a5507a0",
     "upstreamCommit": "e94efb56885155b31f62d099b3e293c38703f10f"
   },
   {
@@ -21,7 +21,8 @@
   {
     "file": "config/policies/nutrition.json",
     "source": "ai/guardrails/policies/nutrition.ts",
-    "sha256": "35b214ab2b6ac20a57a82a6efd667775e6a8e31d000668c6e120181dfcc04d87"
+    "sha256": "35b214ab2b6ac20a57a82a6efd667775e6a8e31d000668c6e120181dfcc04d87",
+    "upstreamSha256": "be9f6764eb2d2c64207fea93e1e10711f885e356d9a1078b434ba050a11123d1"
   },
   {
     "file": "config/policies/blog-assistant.json",

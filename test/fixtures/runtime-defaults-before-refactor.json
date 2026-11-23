@@ -633,7 +633,8 @@
     "env": "PLANNER_CHAT_MAX_MESSAGES",
     "original": 10,
     "default": 10,
-    "multiplier": 1
+    "multiplier": 1,
+    "upstreamOriginal": 40
   },
   {
     "file": "meal-plan/dto/meal-plan.dto.ts",
@@ -641,7 +642,8 @@
     "env": "PLANNER_CHAT_MAX_MESSAGE_LENGTH",
     "original": 4000,
     "default": 4000,
-    "multiplier": 1
+    "multiplier": 1,
+    "upstreamOriginal": 8000
   },
   {
     "file": "meal-plan/meal-plan.service.ts",
@@ -660,8 +662,7 @@
     "original": 8,
     "default": 8,
     "multiplier": 1,
-    "upstreamOriginal": 10,
-    "upstreamCommit": "b6d221715fc61166f82e16b88d5add0b87047319"
+    "upstreamOriginal": 20
   },
   {
     "file": "meal-plan/meal-planner-chat.service.ts",

@@ -14,6 +14,11 @@ import {
   mergeChanges,
 } from '../../../src/meal-plan/tools/proposal-text.js';
 import { searchRecipesTool } from '../../../src/meal-plan/tools/search-recipes.tool.js';
+import {
+  updateAllergyNoteTool,
+  updatePreferencesTool,
+} from '../../../src/meal-plan/tools/dietary-notes.tool.js';
+import type { DietaryService } from '../../../src/recipes/dietary.service.js';
 import { MealSection, RecipeTag, Weekday } from '../../../src/mongo/models.js';
 
 type ExecOptions = Parameters<
@@ -954,6 +959,89 @@ describe('Meal planner AI tools', () => {
       expect(output.applied).toBeUndefined();
       expect(mealPlan.editPlan).not.toHaveBeenCalled();
       expect(mealPlan.fillPlan).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('changeFeedback', () => {
+    it('lists the dishes left out of a saved change', () => {
+      const ref = (id: string) => ({ id, title: id, tag: null });
+      const text = changeFeedback({
+        weekStart: WEEK,
+        days: [
+          {
+            day: Weekday.MON,
+            sections: [
+              {
+                section: MealSection.LUNCH,
+                previous: [],
+                recipes: [ref('rec-1')],
+              },
+            ],
+          },
+        ],
+        problems: [
+          {
+            code: 'AVOIDED_INGREDIENT',
+            day: Weekday.TUE,
+            recipes: ['Canh hành'],
+            recipeIds: ['rec-2'],
+            ingredients: ['Hành'],
+            reason: null,
+          },
+        ],
+        applied: true,
+      });
+      expect(text).toContain("Saved to the user's plan");
+      expect(text).toContain(
+        'Left out, not saved (tell the user why, or pick other dishes):\n- Thứ Ba: "Canh hành" has Hành, which the user does not eat.',
+      );
+    });
+  });
+
+  describe('updatePreferencesTool', () => {
+    it('replaces the note and shows the model the new text', async () => {
+      const dietary = mockDeep<DietaryService>();
+      dietary.savePreferenceNote.mockResolvedValue('Không thích nấm');
+      const toolDef = updatePreferencesTool(dietary, userId);
+
+      const output = await toolDef.execute?.(
+        { note: 'Không thích nấm' },
+        execOptions,
+      );
+      expect(dietary.savePreferenceNote).toHaveBeenCalledWith(
+        userId,
+        'Không thích nấm',
+      );
+      expect(output).toEqual({ preferenceNote: 'Không thích nấm' });
+      const modelOut = await toolDef.toModelOutput?.({
+        input: { note: '' },
+        toolCallId: 'call-1',
+        output: { preferenceNote: null },
+      });
+      expect(modelOut).toEqual({
+        type: 'text',
+        value: 'Saved. The note is now empty.',
+      });
+    });
+  });
+
+  describe('updateAllergyNoteTool', () => {
+    it('saves the note and hands it to the rest of the turn', async () => {
+      const dietary = mockDeep<DietaryService>();
+      dietary.saveAllergyNote.mockResolvedValue('Dị ứng đậu phộng, mè');
+      const onSaved = vi.fn();
+      const toolDef = updateAllergyNoteTool(dietary, userId, onSaved);
+
+      const output = await toolDef.execute?.(
+        { note: 'Dị ứng đậu phộng, mè' },
+        execOptions,
+      );
+      expect(dietary.saveAllergyNote).toHaveBeenCalledWith(
+        userId,
+        'Dị ứng đậu phộng, mè',
+      );
+      expect(onSaved).toHaveBeenCalledWith('Dị ứng đậu phộng, mè');
+      expect(output).toEqual({ allergyNote: 'Dị ứng đậu phộng, mè' });
     });
   });
 

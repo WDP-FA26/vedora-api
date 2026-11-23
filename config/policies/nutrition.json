@@ -7,6 +7,6 @@
     "harmful": "Weapons, drugs, malware or hacking, sexual content, hate or harassment, dangerous non-food substances.",
     "unsupported_language": "The message is mainly written in a language other than Vietnamese or English.",
     "off_topic": "Anything not about food or eating (coding, AI, maths, homework, translation, writing, politics, news, other health topics), including a nutrition question mixed with such a request.",
-    "allow": "Questions about food, nutrients, diets, recipes, meals, supplements, fasting, weight, pregnancy, children's or elderly nutrition (even when they sound risky), greetings, thanks, questions about what the assistant can do, follow-ups assumed to continue a nutrition question, or when unsure whether a supported-language message is about food or eating."
+    "allow": "Questions about food, nutrients, diets, recipes, meals, supplements, fasting, weight, pregnancy, children's or elderly nutrition (even when they sound risky), greetings, thanks, small talk around meals (feeling tired or busy, budget, cooking skills, household), questions about what the assistant can do, follow-ups assumed to continue a nutrition question, or when unsure whether a supported-language message is about food or eating."
   }
 }

@@ -31,6 +31,10 @@ import { PLANNER_REFUSALS } from './meal-planner.refusals.js';
 import { editPlanTool } from './tools/edit-plan.tool.js';
 import { verifyMealPlanAllergiesTool } from './tools/allergy-verifier-subagent.tool.js';
 import { askUserTool } from './tools/ask-user.tool.js';
+import {
+  updateAllergyNoteTool,
+  updatePreferencesTool,
+} from './tools/dietary-notes.tool.js';
 import { autoBalancePlanTool } from './tools/auto-balance-plan.tool.js';
 import { fillSlotsTool } from './tools/fill-slots.tool.js';
 import { getPlanTool } from './tools/get-plan.tool.js';
@@ -51,6 +55,11 @@ import { RestaurantMenuService } from '../workspaces/restaurant-menu.service.js'
 
 const MAX_STEPS = runtimeConfig.PLANNER_CHAT_MAX_STEPS;
 const SEARCH_TIMEOUT_MS = runtimeConfig.AI_KNOWLEDGE_TOOL_TIMEOUT_MS;
+
+/** Added on the last step, when tools are off, so the turn ends with a handover instead of a cut. */
+const LAST_STEP_NOTE = `
+
+Đây là bước cuối của lượt này nên bạn không gọi được công cụ nữa. Tóm tắt ngắn những gì đã làm và đã lưu, nói rõ phần nào chưa xong, rồi hỏi người dùng có muốn bạn làm tiếp không.`;
 
 export interface PlannerChatOptions {
   /** The user allowed web search in this chat. */
@@ -161,14 +170,24 @@ export class MealPlannerChatService {
         ...restrictions.groups.map(({ name }) => name),
         ...(restrictions.allergyNote ? [restrictions.allergyNote] : []),
       ];
+      // A note the user adds mid-chat applies to the rest of this turn too:
+      // the allergy check and the restaurant/consult filters read these.
+      const onAllergyNoteSaved = (note: string | null) => {
+        const previous = restrictions.allergyNote;
+        restrictions.allergyNote = note;
+        const index = previous ? avoidedTerms.indexOf(previous) : -1;
+        if (index >= 0) avoidedTerms.splice(index, 1);
+        if (note) avoidedTerms.push(note);
+      };
+      const instructions = plannerInstructions(
+        restrictions,
+        plan,
+        allowWebSearch,
+        nutrition,
+      );
       const agent = new ToolLoopAgent({
         model: this.model,
-        instructions: plannerInstructions(
-          restrictions,
-          plan,
-          allowWebSearch,
-          nutrition,
-        ),
+        instructions,
         maxOutputTokens: runtimeConfig.PLANNER_CHAT_MAX_OUTPUT_TOKENS,
         tools: {
           searchKnowledge: searchKnowledgeTool(this.knowledge),
@@ -179,6 +198,12 @@ export class MealPlannerChatService {
           autoBalancePlan: autoBalancePlanTool(this.mealPlan, userId, toolWeek),
           editPlan: editPlanTool(this.mealPlan, userId, toolWeek),
           askUser: askUserTool(),
+          updatePreferences: updatePreferencesTool(this.dietary, userId),
+          updateAllergyNote: updateAllergyNoteTool(
+            this.dietary,
+            userId,
+            onAllergyNoteSaved,
+          ),
           consultNutritionSubagent: consultNutritionSubagentTool(
             this.model,
             this.mealPlan,
@@ -205,8 +230,13 @@ export class MealPlannerChatService {
           ...webTools(allowWebSearch),
         },
         stopWhen: isStepCount(MAX_STEPS),
-        prepareStep: ({ stepNumber }) =>
-          stepNumber === MAX_STEPS - 1 ? { toolChoice: 'none' } : {},
+        prepareStep: ({ stepNumber }) => {
+          if (stepNumber < MAX_STEPS - 1) return {};
+          return {
+            toolChoice: 'none',
+            instructions: `${instructions}${LAST_STEP_NOTE}`,
+          };
+        },
       });
 
       const result = await agent.stream({

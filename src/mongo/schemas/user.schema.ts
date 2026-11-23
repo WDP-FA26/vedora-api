@@ -87,6 +87,9 @@ export class User extends Identified {
   @Prop({ type: String, default: null })
   allergyNote!: string | null;
 
+  @Prop({ type: String, default: null })
+  preferenceNote!: string | null;
+
   @Prop({ type: Number, default: null })
   heightCm!: number | null;
 

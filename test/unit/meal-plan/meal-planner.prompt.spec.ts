@@ -50,6 +50,25 @@ describe('meal-planner prompt & refusals', () => {
     expect(output).toContain('chưa khai báo gì');
     expect(output).toContain('- Thứ Hai: (trống)');
     expect(output).toContain('- Chủ nhật: (trống)');
+    expect(output).toContain('Sở thích và thói quen người dùng');
+    expect(output).toContain(
+      'Hồ sơ ăn uống, bạn cập nhật bằng updatePreferences',
+    );
+  });
+
+  it('includes the saved taste and habit note', () => {
+    const output = plannerInstructions(
+      {
+        ingredients: [],
+        groups: [],
+        preferenceNote: '  Không thích nấm\nChỉ nấu bữa tối  ',
+      },
+      emptyPlan(),
+    );
+
+    expect(output).toContain(
+      'tôn trọng khi lên món): Không thích nấm\nChỉ nấu bữa tối.',
+    );
   });
 
   it('lays out every plannable week with real dates and the passed days', () => {

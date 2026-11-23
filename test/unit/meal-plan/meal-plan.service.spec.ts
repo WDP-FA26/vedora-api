@@ -667,7 +667,7 @@ describe('MealPlanService', () => {
       ]);
     });
 
-    it('editPlan with an unknown recipe saves nothing, not even its valid operations', async () => {
+    it('editPlan leaves out an unknown recipe and saves the valid operations', async () => {
       await saved(Weekday.MON, MealSection.LUNCH, TOFU_RECIPE);
 
       const result = await service.editPlan(USER_ID, WEEK, [
@@ -685,14 +685,32 @@ describe('MealPlanService', () => {
         },
       ]);
 
+      expect(result.applied).toBe(true);
+      expect(result.problems.map(({ code }) => code)).toEqual([
+        'UNKNOWN_RECIPE',
+      ]);
+      expect(result.days.map(({ day }) => day)).toEqual([Weekday.MON]);
+      expect(await savedIds(WEEK, Weekday.MON, MealSection.LUNCH)).toEqual([
+        RICE_RECIPE,
+      ]);
+      expect(await savedIds(WEEK, Weekday.TUE, MealSection.LUNCH)).toEqual([]);
+    });
+
+    it('editPlan saves nothing when every new dish is left out', async () => {
+      const result = await service.editPlan(USER_ID, WEEK, [
+        {
+          op: 'set',
+          day: Weekday.TUE,
+          section: MealSection.LUNCH,
+          recipeIds: ['d1a2d3e4-0000-4000-8000-000000000099'],
+        },
+      ]);
+
       expect(result.applied).toBe(false);
       expect(result.problems.map(({ code }) => code)).toEqual([
         'UNKNOWN_RECIPE',
       ]);
-      expect(await savedIds(WEEK, Weekday.MON, MealSection.LUNCH)).toEqual([
-        TOFU_RECIPE,
-      ]);
-      expect(await entries().countDocuments({ userId: USER_ID })).toBe(1);
+      expect(await entries().countDocuments({ userId: USER_ID })).toBe(0);
     });
 
     it('editPlan reports applied: false with no days when nothing changes', async () => {

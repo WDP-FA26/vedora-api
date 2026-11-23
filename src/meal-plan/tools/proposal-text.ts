@@ -81,11 +81,16 @@ export function changeFeedback(
     return `No slot changed.${notes}`;
   }
   const clashes = change.problems.filter(({ code }) => code === 'DAY_CONFLICT');
+  const leftOut = change.problems.filter(({ code }) => code !== 'DAY_CONFLICT');
+  const leftOutNote =
+    leftOut.length > 0
+      ? `\nLeft out, not saved (tell the user why, or pick other dishes):\n${leftOut.map(describeProblem).join('\n')}`
+      : '';
   const clashNote =
     clashes.length > 0
       ? `\nSaved with same-day clash warnings (fix them unless the user wants them):\n${clashes.map(describeProblem).join('\n')}`
       : '';
-  return `Saved to the user's plan for the week of ${change.weekStart}; the app shows the change in the chat and the user can rewind it. Changes:\n${describeChange(change)}${clashNote}${notes}`;
+  return `Saved to the user's plan for the week of ${change.weekStart}; the app shows the change in the chat and the user can rewind it. Changes:\n${describeChange(change)}${leftOutNote}${clashNote}${notes}`;
 }
 
 /**

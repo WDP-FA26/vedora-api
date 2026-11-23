@@ -213,10 +213,15 @@ ${nutritionSummary(nutrition)}
 Thực phẩm người dùng không ăn (searchRecipes và getRecipe vẫn trả món chứa chúng, đánh dấu AVOIDED): ${
     avoided.length > 0 ? avoided.join(', ') : 'chưa khai báo gì'
   }.
-Mô tả dị ứng & lưu ý ăn uống của người dùng: ${
+Mô tả dị ứng & lưu ý ăn uống của người dùng (mục Dị ứng trong Hồ sơ ăn uống, bạn bổ sung bằng updateAllergyNote): ${
     restrictions.allergyNote?.trim()
       ? restrictions.allergyNote.trim()
       : 'chưa mô tả thêm'
+  }.
+Sở thích và thói quen người dùng (mục "Sở thích" trong Hồ sơ ăn uống, bạn cập nhật bằng updatePreferences; tôn trọng khi lên món): ${
+    restrictions.preferenceNote?.trim()
+      ? restrictions.preferenceNote.trim()
+      : 'chưa có'
   }.
 
 Thực đơn hiện tại của tuần người dùng đang xem (weekStart ${plan.weekStart}, gọi getPlan để xem tuần khác):

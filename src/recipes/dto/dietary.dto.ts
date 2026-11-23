@@ -30,6 +30,7 @@ export const MAX_AVOIDED_INGREDIENTS =
   runtimeConfig.DIETARY_MAX_AVOIDED_INGREDIENTS;
 export const MAX_AVOIDED_GROUPS = runtimeConfig.DIETARY_MAX_AVOIDED_GROUPS;
 export const MAX_ALLERGY_NOTE_LENGTH = 1000;
+export const MAX_PREFERENCE_NOTE_LENGTH = 1000;
 
 const trim = ({ value }: { value: unknown }): unknown =>
   typeof value === 'string' ? value.trim() : value;
@@ -63,6 +64,15 @@ export class DietaryRestrictionsDto {
       'Natural-language description of allergies, intolerances, and dietary rules',
   })
   allergyNote?: string | null;
+
+  @ApiPropertyOptional({
+    nullable: true,
+    type: String,
+    maxLength: MAX_PREFERENCE_NOTE_LENGTH,
+    description:
+      'Natural-language tastes and habits the meal planner keeps in mind (dislikes, meals cooked at home, budget, household size)',
+  })
+  preferenceNote?: string | null;
 }
 
 export class SaveDietaryRestrictionsDto {
@@ -93,6 +103,20 @@ export class SaveDietaryRestrictionsDto {
   @IsString()
   @MaxLength(MAX_ALLERGY_NOTE_LENGTH)
   allergyNote?: string | null;
+
+  @ApiPropertyOptional({
+    nullable: true,
+    type: String,
+    maxLength: MAX_PREFERENCE_NOTE_LENGTH,
+    description:
+      'Optional free-text tastes and habits for the meal planner; omit to keep the saved one, null or blank clears it',
+  })
+  @IsOptional()
+  @ValidateIf((_, value) => value !== null)
+  @Transform(trim)
+  @IsString()
+  @MaxLength(MAX_PREFERENCE_NOTE_LENGTH)
+  preferenceNote?: string | null;
 }
 
 export class SaveNutritionProfileDto {

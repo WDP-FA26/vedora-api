@@ -1,3 +1,4 @@
+import { runtimeConfig } from '../../../src/config/runtime-config.js';
 import { FakeEmbeddingModel, providerError } from '@nestjs/ai/testing';
 import { ConfigModule } from '@nestjs/config';
 import { Test } from '@nestjs/testing';
@@ -326,6 +327,8 @@ describe('MealPlannerChatService', () => {
       'autoBalancePlan',
       'editPlan',
       'askUser',
+      'updatePreferences',
+      'updateAllergyNote',
       'consultNutritionSubagent',
       'verifyMealPlanAllergies',
       'searchRestaurantDishes',
@@ -443,7 +446,8 @@ describe('MealPlannerChatService', () => {
   });
 
   it('forces an answer on the final step (MAX_STEPS - 1)', async () => {
-    steps = Array.from({ length: 9 }, () => searchRecipesChunk);
+    const maxSteps = runtimeConfig.PLANNER_CHAT_MAX_STEPS;
+    steps = Array.from({ length: maxSteps - 1 }, () => searchRecipesChunk);
     mealPlan.suggestions.mockResolvedValue([]);
     const service = await createService();
 
@@ -456,9 +460,14 @@ describe('MealPlannerChatService', () => {
       ),
     );
 
-    expect(mealPlan.suggestions).toHaveBeenCalledTimes(9);
-    expect(model.doStreamCalls).toHaveLength(10);
-    expect(model.doStreamCalls[9].toolChoice).toEqual({ type: 'none' });
+    expect(mealPlan.suggestions).toHaveBeenCalledTimes(maxSteps - 1);
+    expect(model.doStreamCalls).toHaveLength(maxSteps);
+    const lastCall = model.doStreamCalls[maxSteps - 1];
+    expect(lastCall.toolChoice).toEqual({ type: 'none' });
+    expect(JSON.stringify(lastCall.prompt)).toContain('bước cuối của lượt này');
+    expect(JSON.stringify(model.doStreamCalls[0].prompt)).not.toContain(
+      'bước cuối của lượt này',
+    );
   });
 
   it('refunds the ticket and emits error code when the model stream errors', async () => {

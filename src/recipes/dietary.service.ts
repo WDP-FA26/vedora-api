@@ -16,6 +16,8 @@ import {
   DietaryRestrictionsDto,
   NutritionProfileDto,
   SaveDietaryRestrictionsDto,
+  MAX_ALLERGY_NOTE_LENGTH,
+  MAX_PREFERENCE_NOTE_LENGTH,
   SaveNutritionProfileDto,
   WeightCheckInDto,
 } from './dto/dietary.dto.js';
@@ -89,6 +91,7 @@ export class DietaryService {
       ingredients: ingredients.map(({ id, name }) => ({ id, name })),
       groups: groups.map(({ id, name }) => ({ id, name })),
       ...(user.allergyNote ? { allergyNote: user.allergyNote } : {}),
+      ...(user.preferenceNote ? { preferenceNote: user.preferenceNote } : {}),
     };
   }
 
@@ -125,6 +128,9 @@ export class DietaryService {
     if (dto.allergyNote !== undefined) {
       const normalizedNote = dto.allergyNote?.trim() ?? null;
       updateSet.allergyNote = normalizedNote || null;
+    }
+    if (dto.preferenceNote !== undefined) {
+      updateSet.preferenceNote = dto.preferenceNote?.trim() || null;
     }
     await this.users
       .findOneAndUpdate(
@@ -357,18 +363,38 @@ export class DietaryService {
     return this.findNutrition(userId);
   }
 
+  /** Replaces the free-text allergy note; blank clears it. */
+  async saveAllergyNote(userId: string, note: string): Promise<string | null> {
+    const normalized = note.trim().slice(0, MAX_ALLERGY_NOTE_LENGTH) || null;
+    await this.users
+      .updateOne({ _id: userId }, { $set: { allergyNote: normalized } })
+      .exec();
+    return normalized;
+  }
+
+  /** Replaces the tastes and habits note; blank clears it. */
+  async savePreferenceNote(
+    userId: string,
+    note: string,
+  ): Promise<string | null> {
+    const normalized = note.trim().slice(0, MAX_PREFERENCE_NOTE_LENGTH) || null;
+    await this.users
+      .updateOne({ _id: userId }, { $set: { preferenceNote: normalized } })
+      .exec();
+    return normalized;
+  }
+
   private async preferences(userId: string) {
     const user = await this.users
       .findOne({ _id: userId })
-      .select(
-        'avoidedIngredientIds avoidedGroupIds allergyNote',
-      )
+      .select('avoidedIngredientIds avoidedGroupIds allergyNote preferenceNote')
       .exec();
     return (
       user ?? {
         avoidedIngredientIds: [],
         avoidedGroupIds: [],
         allergyNote: null,
+        preferenceNote: null,
       }
     );
   }

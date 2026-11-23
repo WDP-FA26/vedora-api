@@ -7,8 +7,8 @@ Swagger mô tả đầy đủ request/response tại `/docs`. Thực đơn lưu 
 
 | Method | Endpoint             | Đăng nhập                                | Kết quả                                       |
 | ------ | -------------------- | ---------------------------------------- | --------------------------------------------- |
-| `GET`  | `/dietary/me`         | Có                                       | Nguyên liệu/nhóm tránh và mô tả dị ứng tự nhiên (`allergyNote`) |
-| `PUT`  | `/dietary/me`         | Có                                       | Cập nhật thực phẩm tránh và mô tả dị ứng tự nhiên (`allergyNote`) |
+| `GET`  | `/dietary/me`         | Có                                       | Nguyên liệu/nhóm tránh, mô tả dị ứng tự nhiên (`allergyNote`) và sở thích tự nhiên (`preferenceNote`) |
+| `PUT`  | `/dietary/me`         | Có                                       | Cập nhật thực phẩm tránh, `allergyNote` và `preferenceNote` (bỏ trường thì giữ giá trị cũ, `null`/chuỗi rỗng thì xoá) |
 | `GET`  | `/dietary/nutrition`  | Có                                       | Hồ sơ BMI chuẩn Châu Á, mục tiêu năng lượng (TDEE ±15%) và lịch sử check-in cân nặng |
 | `PUT`  | `/dietary/nutrition`  | Có                                       | Cập nhật chiều cao, cân nặng, mục tiêu BMI, năm sinh, giới tính, mức vận động |
 | `POST` | `/dietary/nutrition/check-in` | Có                               | Ghi nhận cân nặng & cảm giác cơ thể theo ngày (`YYYY-MM-DD`, tối đa 1 bản ghi/ngày) |
@@ -134,14 +134,19 @@ chỉnh từng ô bằng `editPlan` (`set`, `add`, `remove`, `clear`, `move`) v�
 `autoBalancePlan`. Các công cụ này **lưu thẳng vào thực đơn** (không còn bản nháp hay nút "Áp dụng").
 Output của `fillSlots`, `editPlan`, `autoBalancePlan` và `verifyMealPlanAllergies` (khi nó đổi món) có cùng
 dạng thay đổi: `output.weekStart`, `output.days` (chỉ ngày đổi, đủ bốn phần, `previous` là món trước lần gọi,
-`recipes` là món sau), `output.problems` và `output.applied` (`false` khi không lưu gì: không có thay đổi, hoặc
-có món không tồn tại / người dùng tránh). FE hiển thị thẻ "Đã cập nhật thực đơn" và tải lại `GET /meal-plan`.
+`recipes` là món sau), `output.problems` và `output.applied` (`false` khi không lưu gì). Món không tồn tại
+(`UNKNOWN_RECIPE`) hoặc có thành phần người dùng tránh (`AVOIDED_INGREDIENT`) bị **bỏ ra**, phần còn lại vẫn được lưu;
+hai mã đó nằm trong `output.problems` để FE ghi "Không thêm: …". `applied: false` khi không có thay đổi, hoặc mọi món
+mới đều bị bỏ. FE hiển thị thẻ "Đã cập nhật thực đơn" và tải lại `GET /meal-plan`.
 
 Khi gửi `threadId` (UUID v4) lên `POST /meal-plan/chat`, backend tự động lưu tin
 nhắn người dùng, các lượt bị từ chối bởi moderation (`metadata: { refused: true }`)
 và câu trả lời stream xong của trợ lý (đầy đủ `parts`, gồm text, tool trace,
-knowledge sources và các thay đổi thực đơn) vào đoạn chat đó. FE chỉ gửi tối đa 10 tin nhắn gần
-nhất trong `messages` để làm ngữ cảnh cho LLM; toàn bộ tin nhắn trước đó vẫn được
+knowledge sources và các thay đổi thực đơn) vào đoạn chat đó. FE gửi tối đa 40 tin nhắn gần nhất
+(`PLANNER_CHAT_MAX_MESSAGES`, mỗi tin ≤ 8000 ký tự) trong `messages` làm ngữ cảnh cho LLM. Vì `messages` chỉ là
+text, FE nối thêm ghi chú ngắn về kết quả công cụ của tin trợ lý (món đã tìm kèm id và kcal, công thức đã xem, tóm
+tắt của chuyên gia dinh dưỡng, món nhà hàng đã gợi ý, thay đổi đã lưu, câu hỏi đã hỏi), để lượt sau trợ lý vẫn đặt
+đúng món người dùng chọn; toàn bộ tin nhắn trước đó vẫn được
 giữ đầy đủ trong MongoDB và trả về qua `GET /meal-plan/chat/threads/:threadId`.
 `PATCH /meal-plan/chat/threads/:threadId` dùng để cập nhật `title` hoặc đồng bộ thêm tin nhắn theo `id`
 (idempotent). `proposalStatuses` chỉ còn cho đoạn chat cũ từ thời có thẻ đề xuất; FE mới không ghi nữa.
@@ -256,11 +261,30 @@ trong khoảng đó mà người dùng không cần chuyển trang. Khi tuần �
 - Người dùng nhắc ngày đã qua: công cụ báo `DAY_PASSED`, trợ lý nói rõ ngày đó không sửa được và hỏi có muốn lên
   cho đúng thứ đó của tuần sau không.
 - Trùng món kỵ nhau trong ngày (`DAY_CONFLICT`) vẫn được lưu và nằm trong `output.problems` như cảnh báo.
+- Mỗi lượt có tối đa `PLANNER_CHAT_MAX_STEPS` (mặc định 20) bước; ở bước cuối trợ lý không gọi công cụ nữa mà tóm
+  tắt đã làm gì, phần nào chưa xong và hỏi có làm tiếp không.
+- FE có nút Dừng (`stop()` của `useChat`); những gì công cụ đã lưu trước đó vẫn giữ. Tin nhắn gõ trong lúc trợ lý
+  đang chạy được xếp hàng và gửi khi lượt hiện tại kết thúc.
+
+#### Ghi nhớ vào hồ sơ: `updatePreferences`, `updateAllergyNote`
+
+Trợ lý đọc `preferenceNote` (mục "Sở thích") và `allergyNote` (mục "Dị ứng") trong Hồ sơ ăn uống ở đầu mỗi đoạn chat,
+và tự cập nhật khi người dùng kể thêm trong lúc chat:
+
+- `updatePreferences` với input `{ note: string }` (≤ 1000 ký tự, cả ghi chú mới; chuỗi rỗng xoá) khi người dùng nói
+  một sở thích lâu dài ("không thích nấm", "chỉ nấu bữa tối"). Output: `{ preferenceNote: string | null }`.
+- `updateAllergyNote` với input `{ note: string }` (≤ 1000 ký tự) khi người dùng kể thêm dị ứng, không dung nạp hay thứ
+  không được ăn. Trợ lý giữ nguyên các mục cũ, chỉ bỏ một mục khi người dùng nói rõ và đã xác nhận qua `askUser`; sau đó
+  chạy `verifyMealPlanAllergies` nếu lịch đã có món. Ghi chú mới có hiệu lực ngay trong lượt đó. Output:
+  `{ allergyNote: string | null }`.
+
+FE hiện thẻ "Đã cập nhật Sở thích/Dị ứng trong hồ sơ" và tải lại `GET /dietary/me`. Người dùng sửa cùng các ghi chú này
+trong Hồ sơ ăn uống.
 
 #### Hỏi người dùng: `askUser`
 
-Khi yêu cầu còn mở (đổi món nhưng chưa nói đổi sang gì, chưa rõ ngày/bữa), thay đổi sẽ ghi đè nhiều món người dùng
-đã có, hoặc có điểm cần lưu ý (dị ứng, ngày đã qua, Kcal lệch xa), trợ lý gọi `askUser` với input
+Khi yêu cầu còn mở (đổi món nhưng chưa nói đổi sang gì, chưa rõ ngày/bữa), thay đổi trái với điều người dùng nói
+trước đó hoặc với mục Sở thích, hoặc có điểm cần lưu ý (dị ứng, ngày đã qua, Kcal lệch xa), trợ lý gọi `askUser` với input
 `{ question: string; options: string[] (2–6, mỗi cái ≤ 80 ký tự); multiple?: boolean }`. Công cụ **không có output**
 trên server: luồng dừng ở part `tool-askUser` với `state: 'input-available'`. FE hiện `options` thành nút; khi người
 dùng chọn, FE `addToolOutput({ tool: 'askUser', toolCallId, output: { answer } })` rồi gửi `answer` như tin nhắn
