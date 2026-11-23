@@ -14,6 +14,7 @@ import {
 } from 'ai/test';
 import request from 'supertest';
 import { MODERATION_MODEL } from '../../src/ai/guardrails/guardrail.js';
+import { runtimeConfig } from '../../src/config/runtime-config.js';
 import { type AiRequest, type User, UserRole } from '../../src/mongo/models.js';
 import { GuestSessionService } from '../../src/nutrition-chat/guest/guest-session.service.js';
 import { nextWeekStart } from '../support/meal-week.js';
@@ -274,18 +275,25 @@ describe('Assistant chat flows (e2e)', () => {
       ['an empty request id', { requestId: '' }],
       ['no messages', { messages: [] }],
       [
-        'eleven messages',
+        'one message more than allowed',
         {
-          messages: Array.from({ length: 11 }, () => ({
-            role: 'user',
-            text: 'x',
-          })),
+          messages: Array.from(
+            { length: runtimeConfig.PLANNER_CHAT_MAX_MESSAGES + 1 },
+            () => ({
+              role: 'user',
+              text: 'x',
+            }),
+          ),
         },
       ],
       ['a system message', { messages: [{ role: 'system', text: 'x' }] }],
       [
-        'a message of 4001 characters',
-        { messages: userTurn('x'.repeat(4001)) },
+        'a message one character too long',
+        {
+          messages: userTurn(
+            'x'.repeat(runtimeConfig.PLANNER_CHAT_MAX_MESSAGE_LENGTH + 1),
+          ),
+        },
       ],
       ['an empty message', { messages: userTurn('') }],
     ])('rejects %s with 400', async (_name, override) => {
