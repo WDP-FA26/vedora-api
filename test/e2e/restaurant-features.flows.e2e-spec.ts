@@ -216,7 +216,7 @@ describe('Restaurant proximity, menu search & reviews (e2e)', () => {
     await e2e.close();
   });
 
-  it('sorts restaurants nearest-first when user coordinates are provided', async () => {
+  it('sorts restaurants nearest-first when user coordinates are provided and A-Z otherwise', async () => {
     const hoanKiem = await createApprovedRestaurant({
       name: 'Chay Hoàn Kiếm',
       username: 'chay.hoan.kiem',
@@ -231,8 +231,52 @@ describe('Restaurant proximity, menu search & reviews (e2e)', () => {
       longitude: 105.79,
       latitude: 21.036,
     });
+    const saigonDauHu = await createApprovedRestaurant({
+      name: 'Đậu Hũ Sài Gòn',
+      username: 'dau.hu.sai.gon',
+      address: '10 Lê Lợi, Quận 1, TP.HCM',
+      longitude: 106.7009,
+      latitude: 10.7769,
+    });
+    const saigonAnLac = await createApprovedRestaurant({
+      name: 'An Lạc',
+      username: 'an.lac.sg',
+      address: '20 Nguyễn Huệ, Quận 1, TP.HCM',
+      longitude: 106.703,
+      latitude: 10.774,
+    });
 
-    // User is right next to Cầu Giấy.
+    // No bounds and no user coords: returns all restaurants across cities sorted A-Z (Vietnamese).
+    const alphabeticalRes = await request(server())
+      .get('/api/v1/restaurants')
+      .expect(200);
+    const alphabetical = restaurantListSchema.parse(alphabeticalRes.body);
+    expect(alphabetical.items.map((item) => item.pageUserId)).toEqual([
+      saigonAnLac.pageUserId,
+      cauGiay.pageUserId,
+      hoanKiem.pageUserId,
+      saigonDauHu.pageUserId,
+    ]);
+    expect(
+      alphabetical.items.every((item) => item.distanceMeters === null),
+    ).toBe(true);
+
+    // No bounds with user coords: returns all restaurants sorted nearest-first.
+    const nearestAllRes = await request(server())
+      .get('/api/v1/restaurants')
+      .query({ userLng: 105.791, userLat: 21.035 })
+      .expect(200);
+    const nearestAll = restaurantListSchema.parse(nearestAllRes.body);
+    expect(nearestAll.items).toHaveLength(4);
+    expect(nearestAll.items[0].pageUserId).toBe(cauGiay.pageUserId);
+    expect(nearestAll.items[1].pageUserId).toBe(hoanKiem.pageUserId);
+    expect(nearestAll.items[0].distanceMeters).toBeLessThan(1000);
+    expect(nearestAll.items[1].distanceMeters).toBeGreaterThan(5000);
+    expect(
+      nearestAll.items.every((item) => typeof item.distanceMeters === 'number'),
+    ).toBe(true);
+
+    // Viewport + user coords: filters to Hanoi and sorts nearest-first.
     const sortedRes = await request(server())
       .get('/api/v1/restaurants')
       .query({
@@ -251,12 +295,16 @@ describe('Restaurant proximity, menu search & reviews (e2e)', () => {
     expect(sorted.items[0].distanceMeters).toBeLessThan(1000);
     expect(sorted.items[1].distanceMeters).toBeGreaterThan(5000);
 
-    // Without user coords, distanceMeters is null.
+    // Viewport without user coords: distanceMeters is null and sorted A-Z.
     const plainRes = await request(server())
       .get('/api/v1/restaurants')
       .query({ minLng: 105.7, minLat: 20.9, maxLng: 106.0, maxLat: 21.2 })
       .expect(200);
     const plain = restaurantListSchema.parse(plainRes.body);
+    expect(plain.items.map((item) => item.pageUserId)).toEqual([
+      cauGiay.pageUserId,
+      hoanKiem.pageUserId,
+    ]);
     expect(plain.items.every((item) => item.distanceMeters === null)).toBe(
       true,
     );

@@ -1,5 +1,7 @@
 import { type DeepMockProxy, mockDeep } from 'vitest-mock-extended';
 import type { AuthenticatedRequest } from '../../../src/auth-core/auth.types.js';
+import { JwtAuthGuard } from '../../../src/auth-core/jwt-auth.guard.js';
+import { PersonalSessionGuard } from '../../../src/auth-core/personal-session.guard.js';
 import { UserRole } from '../../../src/mongo/models.js';
 import { DietaryController } from '../../../src/recipes/dietary.controller.js';
 import type { DietaryService } from '../../../src/recipes/dietary.service.js';
@@ -16,6 +18,13 @@ describe('DietaryController', () => {
   beforeEach(() => {
     dietary = mockDeep<DietaryService>();
     controller = new DietaryController(dietary);
+  });
+
+  it('requires JwtAuthGuard and PersonalSessionGuard on the controller', () => {
+    const guards = Reflect.getMetadata('__guards__', DietaryController) as
+      | unknown[]
+      | undefined;
+    expect(guards).toEqual([JwtAuthGuard, PersonalSessionGuard]);
   });
 
   it('delegates options, find, and replace to DietaryService', async () => {

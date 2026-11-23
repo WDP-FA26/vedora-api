@@ -73,10 +73,24 @@ const PROOF_URL_TTL_SECONDS = runtimeConfig.VERIFICATION_PROOF_URL_TTL_SECONDS;
 const pageEmail = (workspaceId: string) =>
   `page-${workspaceId}@pages.vedora.invalid`;
 
+const VIETNAMESE_COLLATOR = new Intl.Collator('vi', { numeric: true });
+
 type PageUser = Pick<
   User,
   'id' | 'username' | 'fullName' | 'bio' | 'avatarUrl' | 'status'
 >;
+
+type PinPageSummary = Pick<
+  User,
+  'id' | 'username' | 'fullName' | 'avatarUrl' | 'status'
+>;
+
+type PinSource = {
+  pageUserId: string | null;
+  address: string;
+  location: { coordinates: [number, number] };
+  distanceMeters: number | null;
+};
 
 @Injectable()
 export class WorkspacesService {
@@ -467,105 +481,103 @@ export class WorkspacesService {
     return reviewed;
   }
 
-  /** Approved restaurants inside a map viewport, sorted nearest-first when userLng/userLat are provided. */
+  /** Approved restaurants (optionally filtered by viewport), sorted nearest-first or A–Z by name. */
   async inView(
     query: RestaurantsInViewQueryDto,
   ): Promise<RestaurantPinListDto> {
-    if (query.minLat > query.maxLat)
+    const viewportLocationFilter = this.viewportFilter(query);
+
+    if (query.userLng !== undefined && query.userLat !== undefined) {
+      return this.restaurantsNearest(
+        query.userLng,
+        query.userLat,
+        viewportLocationFilter,
+      );
+    }
+    return this.restaurantsAlphabetical(viewportLocationFilter);
+  }
+
+  private viewportFilter(query: RestaurantsInViewQueryDto) {
+    if (
+      query.minLng === undefined ||
+      query.minLat === undefined ||
+      query.maxLng === undefined ||
+      query.maxLat === undefined
+    ) {
+      return undefined;
+    }
+    if (query.minLat > query.maxLat) {
       throw new InvalidInputException(
         'BAD_REQUEST',
         'minLat must not be greater than maxLat',
       );
+    }
     const wrapsAntimeridian = query.minLng > query.maxLng;
     const spansHemisphere = query.maxLng - query.minLng >= 180;
     // A box wider than half the globe has no well-defined GeoJSON polygon,
-    // so a zoomed-out map just gets the capped list.
-    const viewportLocationFilter =
-      !wrapsAntimeridian && !spansHemisphere
-        ? {
-            $geoWithin: {
-              $geometry: {
-                type: 'Polygon' as const,
-                coordinates: [
-                  [
-                    [query.minLng, query.minLat],
-                    [query.maxLng, query.minLat],
-                    [query.maxLng, query.maxLat],
-                    [query.minLng, query.maxLat],
-                    [query.minLng, query.minLat],
-                  ],
-                ],
-              },
-            },
-          }
-        : undefined;
-
-    type PinSource = {
-      pageUserId: string | null;
-      address: string;
-      location: { coordinates: [number, number] };
-      distanceMeters: number | null;
+    // so a zoomed-out map omits the spatial bounds filter.
+    if (wrapsAntimeridian || spansHemisphere) return undefined;
+    return {
+      $geoWithin: {
+        $geometry: {
+          type: 'Polygon' as const,
+          coordinates: [
+            [
+              [query.minLng, query.minLat],
+              [query.maxLng, query.minLat],
+              [query.maxLng, query.maxLat],
+              [query.minLng, query.maxLat],
+              [query.minLng, query.minLat],
+            ],
+          ],
+        },
+      },
     };
+  }
 
-    const userLng = query.userLng;
-    const userLat = query.userLat;
-    let rows: PinSource[];
-
-    if (userLng !== undefined && userLat !== undefined) {
-      const aggregated = await this.workspaces
-        .aggregate<Workspace & { distanceMeters: number }>([
-          {
-            $geoNear: {
-              near: { type: 'Point', coordinates: [userLng, userLat] },
-              distanceField: 'distanceMeters',
-              spherical: true,
-              query: {
-                status: VerificationStatus.APPROVED,
-                pageUserId: { $type: 'string' },
-              },
+  private async restaurantsNearest(
+    userLng: number,
+    userLat: number,
+    viewportLocationFilter: ReturnType<WorkspacesService['viewportFilter']>,
+  ): Promise<RestaurantPinListDto> {
+    const aggregated = await this.workspaces
+      .aggregate<Workspace & { distanceMeters: number }>([
+        {
+          $geoNear: {
+            near: { type: 'Point', coordinates: [userLng, userLat] },
+            distanceField: 'distanceMeters',
+            spherical: true,
+            query: {
+              status: VerificationStatus.APPROVED,
+              pageUserId: { $type: 'string' },
             },
           },
-          ...(viewportLocationFilter
-            ? [{ $match: { location: viewportLocationFilter } }]
-            : []),
-          { $limit: MAX_RESTAURANTS_IN_VIEW + 1 },
-        ])
-        .exec();
-      rows = aggregated.map((doc) => ({
+        },
+        ...(viewportLocationFilter
+          ? [{ $match: { location: viewportLocationFilter } }]
+          : []),
+        { $limit: MAX_RESTAURANTS_IN_VIEW + 1 },
+      ])
+      .exec();
+
+    const truncated = aggregated.length > MAX_RESTAURANTS_IN_VIEW;
+    const visible = aggregated.slice(0, MAX_RESTAURANTS_IN_VIEW);
+    const pageUserIds: string[] = [];
+    const rows: PinSource[] = [];
+    for (const doc of visible) {
+      if (typeof doc.pageUserId === 'string') pageUserIds.push(doc.pageUserId);
+      rows.push({
         pageUserId: doc.pageUserId,
         address: doc.address,
         location: doc.location,
         distanceMeters: Math.round(doc.distanceMeters),
-      }));
-    } else {
-      const filter: QueryFilter<Workspace> = {
-        status: VerificationStatus.APPROVED,
-        pageUserId: { $type: 'string' },
-        ...(viewportLocationFilter ? { location: viewportLocationFilter } : {}),
-      };
-      const found = await this.workspaces
-        .find(filter)
-        .sort({ _id: 1 })
-        .limit(MAX_RESTAURANTS_IN_VIEW + 1)
-        .exec();
-      rows = found.map((doc) => ({
-        pageUserId: doc.pageUserId,
-        address: doc.address,
-        location: doc.location,
-        distanceMeters: null,
-      }));
+      });
     }
-
-    const truncated = rows.length > MAX_RESTAURANTS_IN_VIEW;
-    const visible = rows.slice(0, MAX_RESTAURANTS_IN_VIEW);
-    const pageUserIds = visible
-      .map((row) => row.pageUserId)
-      .filter((id): id is string => typeof id === 'string');
 
     const [pageUserRows, ratingStats] = await Promise.all([
       pageUserIds.length > 0
         ? this.users
-            .find({ _id: { $in: pageUserIds } })
+            .find({ _id: { $in: pageUserIds }, status: AccountStatus.ACTIVE })
             .select('username fullName avatarUrl status')
             .exec()
         : Promise.resolve([]),
@@ -573,10 +585,88 @@ export class WorkspacesService {
         ? this.reviews.summariesByPageUserIds(pageUserIds)
         : Promise.resolve(new Map<string, RestaurantRatingStats>()),
     ]);
-    const pages = new Map(pageUserRows.map((user) => [user.id, user]));
+    const pages = new Map<string, PinPageSummary>(
+      pageUserRows.map((user) => [user.id, user]),
+    );
+    return {
+      items: this.buildRestaurantPinItems(rows, pages, ratingStats),
+      truncated,
+    };
+  }
 
+  private async restaurantsAlphabetical(
+    viewportLocationFilter: ReturnType<WorkspacesService['viewportFilter']>,
+  ): Promise<RestaurantPinListDto> {
+    const filter: QueryFilter<Workspace> = {
+      status: VerificationStatus.APPROVED,
+      pageUserId: { $type: 'string' },
+      ...(viewportLocationFilter ? { location: viewportLocationFilter } : {}),
+    };
+    const found = await this.workspaces
+      .find(filter)
+      .select('pageUserId address location')
+      .exec();
+
+    const pageUserIds: string[] = [];
+    for (const row of found) {
+      if (typeof row.pageUserId === 'string') pageUserIds.push(row.pageUserId);
+    }
+    if (pageUserIds.length === 0) return { items: [], truncated: false };
+
+    const pageUserRows = await this.users
+      .find({ _id: { $in: pageUserIds }, status: AccountStatus.ACTIVE })
+      .select('username fullName avatarUrl status')
+      .exec();
+    const pages = new Map<string, PinPageSummary>(
+      pageUserRows.map((user) => [user.id, user]),
+    );
+
+    const active: Array<{ source: PinSource; page: PinPageSummary }> = [];
+    for (const row of found) {
+      if (!row.pageUserId) continue;
+      const page = pages.get(row.pageUserId);
+      if (!page) continue;
+      active.push({
+        source: {
+          pageUserId: row.pageUserId,
+          address: row.address,
+          location: row.location,
+          distanceMeters: null,
+        },
+        page,
+      });
+    }
+
+    active.sort((a, b) => {
+      const byName = VIETNAMESE_COLLATOR.compare(
+        a.page.fullName,
+        b.page.fullName,
+      );
+      if (byName !== 0) return byName;
+      return a.page.id.localeCompare(b.page.id);
+    });
+
+    const truncated = active.length > MAX_RESTAURANTS_IN_VIEW;
+    const visible = active.slice(0, MAX_RESTAURANTS_IN_VIEW);
+    const visibleIds = visible.map((entry) => entry.page.id);
+    const ratingStats = this.reviews
+      ? await this.reviews.summariesByPageUserIds(visibleIds)
+      : new Map<string, RestaurantRatingStats>();
+
+    const rows = visible.map((entry) => entry.source);
+    return {
+      items: this.buildRestaurantPinItems(rows, pages, ratingStats),
+      truncated,
+    };
+  }
+
+  private buildRestaurantPinItems(
+    rows: PinSource[],
+    pages: Map<string, PinPageSummary>,
+    ratingStats: Map<string, RestaurantRatingStats>,
+  ): RestaurantPinListDto['items'] {
     const items: RestaurantPinListDto['items'] = [];
-    for (const workspace of visible) {
+    for (const workspace of rows) {
       if (!workspace.pageUserId) continue;
       const page = pages.get(workspace.pageUserId);
       if (!page || page.status !== AccountStatus.ACTIVE) continue;
@@ -595,7 +685,7 @@ export class WorkspacesService {
         reviewCount: stats?.reviewCount ?? 0,
       });
     }
-    return { items, truncated };
+    return items;
   }
 
   @Cron(runtimeConfig.VERIFICATION_CLEANUP_CRON)

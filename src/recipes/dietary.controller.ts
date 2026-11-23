@@ -11,6 +11,7 @@ import {
 } from '@nestjs/common';
 import {
   ApiBearerAuth,
+  ApiForbiddenResponse,
   ApiOkResponse,
   ApiOperation,
   ApiTags,
@@ -18,6 +19,7 @@ import {
 } from '@nestjs/swagger';
 import type { AuthenticatedRequest } from '../auth-core/auth.types.js';
 import { JwtAuthGuard } from '../auth-core/jwt-auth.guard.js';
+import { PersonalSessionGuard } from '../auth-core/personal-session.guard.js';
 import { DietaryService } from './dietary.service.js';
 import {
   DietaryOptionsDto,
@@ -35,7 +37,11 @@ import { ErrorBodyDto } from '../common/exceptions/error-body.dto.js';
   type: ErrorBodyDto,
   description: 'Authentication required',
 })
-@UseGuards(JwtAuthGuard)
+@ApiForbiddenResponse({
+  type: ErrorBodyDto,
+  description: 'PAGE_SESSION_NOT_ALLOWED',
+})
+@UseGuards(JwtAuthGuard, PersonalSessionGuard)
 @Controller('dietary')
 export class DietaryController {
   constructor(private readonly dietary: DietaryService) {}

@@ -4,8 +4,8 @@ import type { AuthenticatedRequest } from './auth.types.js';
 
 /**
  * For account-level actions a page must not take: paying, deleting or
- * editing the account record, applying for the chef badge, opening pages.
- * Runs after JwtAuthGuard.
+ * editing the account record, managing dietary/BMI profiles, applying for the
+ * chef badge, opening pages. Runs after JwtAuthGuard.
  */
 @Injectable()
 export class PersonalSessionGuard implements CanActivate {

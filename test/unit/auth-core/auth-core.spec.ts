@@ -10,6 +10,7 @@ import { AuthCoreModule } from '../../../src/auth-core/auth-core.module.js';
 import { extractBearerToken } from '../../../src/auth-core/bearer-token.js';
 import { JwtAuthGuard } from '../../../src/auth-core/jwt-auth.guard.js';
 import { OptionalJwtAuthGuard } from '../../../src/auth-core/optional-jwt-auth.guard.js';
+import { PersonalSessionGuard } from '../../../src/auth-core/personal-session.guard.js';
 import { hashPassword } from '../../../src/auth-core/password.js';
 import { Roles, ROLES_KEY } from '../../../src/auth-core/roles.decorator.js';
 import { RolesGuard } from '../../../src/auth-core/roles.guard.js';
@@ -181,6 +182,32 @@ describe('auth-core', () => {
           createHttpContext({ headers: { authorization: '' } }),
         ),
       ).rejects.toBeInstanceOf(UnauthenticatedException);
+    });
+  });
+
+  describe('PersonalSessionGuard', () => {
+    const guard = new PersonalSessionGuard();
+
+    it('allows personal sessions and rejects page sessions', () => {
+      expect(
+        guard.canActivate(
+          createHttpContext({ user: { sub: 'u1', actorId: null } }),
+        ),
+      ).toBe(true);
+
+      let thrown: unknown;
+      try {
+        guard.canActivate(
+          createHttpContext({ user: { sub: 'page-1', actorId: 'u1' } }),
+        );
+      } catch (error) {
+        thrown = error;
+      }
+      expect(thrown).toBeInstanceOf(AccessDeniedException);
+      expect(thrown).toMatchObject({
+        code: 'PAGE_SESSION_NOT_ALLOWED',
+        statusCode: 403,
+      });
     });
   });
 

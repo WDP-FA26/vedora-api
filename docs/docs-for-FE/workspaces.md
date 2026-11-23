@@ -91,8 +91,9 @@ Bảo mật:
 
 Trong phiên page, các thao tác cấp tài khoản trả `403 PAGE_SESSION_NOT_ALLOWED`:
 `PATCH/DELETE /users/:id`, toàn bộ `/billing/*`, `/payments/*`,
-`/payment-intents/*`, gửi yêu cầu huy hiệu đầu bếp, tạo page mới, upload minh
-chứng và gửi lại đơn. Muốn làm những việc này, chuyển về account cá nhân.
+`/payment-intents/*`, `/dietary/*` (hồ sơ ăn uống & BMI), gửi yêu cầu huy hiệu
+đầu bếp, tạo page mới, upload minh chứng và gửi lại đơn. Muốn làm những việc
+này, chuyển về account cá nhân.
 
 ## Endpoint cho thành viên
 
@@ -224,10 +225,14 @@ Account cá nhân có `accountType: "PERSONAL"` và `restaurant: null`.
 ## Bản đồ nhà hàng (public)
 
 ```http
+GET /restaurants?userLng=105.85&userLat=21.03
 GET /restaurants?minLng=105.7&minLat=20.9&maxLng=106&maxLat=21.1&userLng=105.85&userLat=21.03
 ```
 
-Trả về các page đã duyệt nằm trong khung nhìn bản đồ (góc tây nam và đông bắc). Khi gửi đủ `userLng` và `userLat`, API sắp xếp gần người dùng nhất trước và trả thêm `distanceMeters` (mét):
+Trả về các page đã duyệt đang hoạt động.
+
+- `minLng`, `minLat`, `maxLng`, `maxLat` là **tùy chọn** (gửi đủ cả 4 góc tây nam / đông bắc hoặc bỏ qua cả 4 để lấy tất cả nhà hàng trên hệ thống).
+- Khi gửi đủ `userLng` và `userLat`, API sắp xếp gần người dùng nhất trước và trả thêm `distanceMeters` (mét). Khi không gửi tọa độ người dùng, API sắp xếp theo tên nhà hàng từ A → Z (tiếng Việt) và `distanceMeters: null`.
 
 ```json
 {
@@ -249,9 +254,7 @@ Trả về các page đã duyệt nằm trong khung nhìn bản đồ (góc tây
 }
 ```
 
-Tối đa 200 điểm; `truncated: true` nghĩa là còn nữa, cần zoom vào. Khung rộng
-hơn nửa địa cầu (hoặc vắt qua kinh tuyến 180) bỏ qua lọc vị trí và trả danh
-sách giới hạn. `minLat > maxLat` hoặc gửi thiếu một trong hai `userLng`/`userLat` → `400`.
+Tối đa 200 điểm; `truncated: true` nghĩa là số kết quả vượt quá giới hạn 200. Khi có khung nhìn và khung rộng hơn nửa địa cầu (hoặc vắt qua kinh tuyến 180), API bỏ qua lọc khung nhìn. `minLat > maxLat`, gửi thiếu một phần trong 4 góc khung nhìn, hoặc gửi thiếu một trong hai `userLng`/`userLat` → `400`.
 
 ## Thực đơn nhà hàng
 

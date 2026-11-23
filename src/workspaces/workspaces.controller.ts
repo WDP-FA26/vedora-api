@@ -327,7 +327,8 @@ export class RestaurantsController {
 
   @Get()
   @ApiOperation({
-    summary: 'Approved restaurants inside a map viewport (public)',
+    summary:
+      'Approved restaurants, optionally filtered by map viewport; sorted nearest-first when user coords are sent, otherwise A-Z (public)',
   })
   @ApiOkResponse({ type: RestaurantPinListDto })
   inView(

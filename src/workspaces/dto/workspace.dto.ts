@@ -305,42 +305,49 @@ export class ReviewWorkspaceDto {
   note?: string;
 }
 
-/** A map viewport: south-west and north-east corners, plus optional user point for proximity sorting. */
+const hasBounds = (dto: RestaurantsInViewQueryDto): boolean =>
+  dto.minLng !== undefined ||
+  dto.minLat !== undefined ||
+  dto.maxLng !== undefined ||
+  dto.maxLat !== undefined;
+
+const hasUserCoords = (dto: RestaurantsInViewQueryDto): boolean =>
+  dto.userLng !== undefined || dto.userLat !== undefined;
+
+/** Optional map viewport (all 4 corners together) and optional user point for proximity sorting. */
 export class RestaurantsInViewQueryDto {
-  @ApiProperty({ minimum: -180, maximum: 180 })
+  @ApiPropertyOptional({ minimum: -180, maximum: 180 })
+  @ValidateIf(hasBounds)
   @Type(() => Number)
   @IsLongitude()
-  minLng!: number;
+  minLng?: number;
 
-  @ApiProperty({ minimum: -90, maximum: 90 })
+  @ApiPropertyOptional({ minimum: -90, maximum: 90 })
+  @ValidateIf(hasBounds)
   @Type(() => Number)
   @IsLatitude()
-  minLat!: number;
-
-  @ApiProperty({ minimum: -180, maximum: 180 })
-  @Type(() => Number)
-  @IsLongitude()
-  maxLng!: number;
-
-  @ApiProperty({ minimum: -90, maximum: 90 })
-  @Type(() => Number)
-  @IsLatitude()
-  maxLat!: number;
+  minLat?: number;
 
   @ApiPropertyOptional({ minimum: -180, maximum: 180 })
-  @ValidateIf(
-    (dto: RestaurantsInViewQueryDto) =>
-      dto.userLng !== undefined || dto.userLat !== undefined,
-  )
+  @ValidateIf(hasBounds)
+  @Type(() => Number)
+  @IsLongitude()
+  maxLng?: number;
+
+  @ApiPropertyOptional({ minimum: -90, maximum: 90 })
+  @ValidateIf(hasBounds)
+  @Type(() => Number)
+  @IsLatitude()
+  maxLat?: number;
+
+  @ApiPropertyOptional({ minimum: -180, maximum: 180 })
+  @ValidateIf(hasUserCoords)
   @Type(() => Number)
   @IsLongitude()
   userLng?: number;
 
   @ApiPropertyOptional({ minimum: -90, maximum: 90 })
-  @ValidateIf(
-    (dto: RestaurantsInViewQueryDto) =>
-      dto.userLng !== undefined || dto.userLat !== undefined,
-  )
+  @ValidateIf(hasUserCoords)
   @Type(() => Number)
   @IsLatitude()
   userLat?: number;
@@ -370,7 +377,7 @@ export class RestaurantPinDto {
 export class RestaurantPinListDto {
   @ApiProperty({ type: [RestaurantPinDto] }) items!: RestaurantPinDto[];
   @ApiProperty({
-    description: `True when more than ${MAX_RESTAURANTS_IN_VIEW} restaurants are in view; zoom in to see the rest`,
+    description: `True when more than ${MAX_RESTAURANTS_IN_VIEW} restaurants matched; results are capped at ${MAX_RESTAURANTS_IN_VIEW}`,
   })
   truncated!: boolean;
 }

@@ -406,6 +406,23 @@ describe('Restaurant page flows (e2e)', () => {
             .patch(`/api/v1/users/${pageUserId}`)
             .send({ fullName: 'x' }),
         () => request(server()).get('/api/v1/billing/me'),
+        () => request(server()).get('/api/v1/dietary/options'),
+        () => request(server()).get('/api/v1/dietary/me'),
+        () =>
+          request(server()).put('/api/v1/dietary/me').send({
+            groupIds: [],
+            ingredientIds: [],
+            likedIngredientIds: [],
+          }),
+        () => request(server()).get('/api/v1/dietary/nutrition'),
+        () =>
+          request(server())
+            .put('/api/v1/dietary/nutrition')
+            .send({ heightCm: 165, weightKg: 60 }),
+        () =>
+          request(server())
+            .post('/api/v1/dietary/nutrition/check-in')
+            .send({ weightKg: 60 }),
         () => request(server()).post('/api/v1/workspaces').send(APPLICATION),
       ];
       for (const call of calls) {
@@ -533,10 +550,16 @@ describe('Restaurant page flows (e2e)', () => {
   });
 
   describe('restaurant map', () => {
-    it('lists approved restaurants inside the viewport only', async () => {
+    it('lists approved restaurants everywhere or filtered by viewport', async () => {
       const { pageUserId } = await approvedPage();
       await apply(managerToken, manager.id, 201, {
         username: 'pending.page',
+      });
+
+      const all = await request(server()).get('/api/v1/restaurants').expect(200);
+      expect(all.body).toMatchObject({
+        truncated: false,
+        items: [{ pageUserId, username: APPLICATION.username }],
       });
 
       const hanoi = await request(server())
@@ -557,6 +580,12 @@ describe('Restaurant page flows (e2e)', () => {
       await request(server())
         .get('/api/v1/restaurants')
         .query({ minLng: 0, minLat: 50, maxLng: 1, maxLat: 10 })
+        .expect(400);
+
+      // Partial viewport bounds fail validation with 400.
+      await request(server())
+        .get('/api/v1/restaurants')
+        .query({ minLng: 105.7, maxLng: 106 })
         .expect(400);
     });
   });
