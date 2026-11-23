@@ -5,8 +5,7 @@ import { ConfigService } from '@nestjs/config';
 import { JwtModule, JwtService } from '@nestjs/jwt';
 import { Test } from '@nestjs/testing';
 import { Types } from 'mongoose';
-import { experimental_evaluate as evaluate } from 'ai';
-import { evaluationModel } from '../../src/common/decision/decision.js';
+import { decide, evaluationModel } from '../../src/common/decision/decision.js';
 import request from 'supertest';
 import type { App } from 'supertest/types.js';
 import { AdminAiCostsModule } from '../../src/admin-ai-costs/admin-ai-costs.module.js';
@@ -245,18 +244,17 @@ describe('AI cost telemetry and Admin reports with MongoDB', () => {
       modelId: 'typesafe/jev-1.14',
       fetch: (input, init) => transport.observe(input, init, underlying),
     });
-    const result = await evaluate({
+    const result = await decide(
       model,
-      state: 'fixture',
-      questions: {
-        verdict: {
-          type: 'choice',
-          instructions: 'Choose allow',
-          criteria: { allow: 'allow', deny: 'deny' },
-        },
+      'fixture',
+      new AbortController().signal,
+      {
+        type: 'choice',
+        instructions: 'Choose allow',
+        criteria: { allow: 'allow', deny: 'deny' },
       },
-    });
-    expect(result.answers.verdict.choice).toBe('allow');
+    );
+    expect(result.choice).toBe('allow');
     expect(underlying.mock.calls[0][0]).toBe(
       'https://openrouter.ai/api/alpha/decisions',
     );

@@ -5,7 +5,6 @@ import { InjectModel } from '@nestjs/mongoose';
 import type { Model } from 'mongoose';
 import {
   convertToModelMessages,
-  type Experimental_EvaluationModel,
   isStepCount,
   isTextUIPart,
   isToolUIPart,
@@ -23,7 +22,10 @@ import {
   type ModerationTurn,
 } from '../../../ai/guardrails/conversation-state.js';
 import { MODERATION_MODEL } from '../../../ai/guardrails/guardrail.js';
-import { decide } from '../../../common/decision/decision.js';
+import {
+  decide,
+  type DecisionModel,
+} from '../../../common/decision/decision.js';
 import {
   AiUsageService,
   type UsageTicket,
@@ -71,7 +73,7 @@ export class BlogAssistantService {
 
   constructor(
     @Inject(MODERATION_MODEL)
-    private readonly moderator: Experimental_EvaluationModel,
+    private readonly moderator: DecisionModel,
     @InjectAiModel('blog') private readonly model: LanguageModel,
     private readonly knowledge: KnowledgeSearchService,
     private readonly images: BlogImageGeneratorService,

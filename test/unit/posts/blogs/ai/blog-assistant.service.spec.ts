@@ -7,11 +7,7 @@ import { getModelToken } from '@nestjs/mongoose';
 import { Test } from '@nestjs/testing';
 import { AiFeature } from '../../../../../src/mongo/models.js';
 import { simulateReadableStream, type UIMessageChunk } from 'ai';
-import {
-  convertReadableStreamToArray,
-  Experimental_EvaluationMockModelV4,
-  MockLanguageModelV4,
-} from 'ai/test';
+import { convertReadableStreamToArray, MockLanguageModelV4 } from 'ai/test';
 import type { Model } from 'mongoose';
 import { type DeepMockProxy, mockDeep } from 'vitest-mock-extended';
 import { AiUsageService } from '../../../../../src/subscriptions/ai-usage.service.js';
@@ -95,7 +91,9 @@ const model = new MockLanguageModelV4({
     }),
 });
 
-const moderator = new Experimental_EvaluationMockModelV4({
+const moderator = {
+  provider: 'test',
+  modelId: 'jev',
   doEvaluate: vi.fn(() =>
     Promise.resolve({
       answers: {
@@ -104,7 +102,7 @@ const moderator = new Experimental_EvaluationMockModelV4({
       warnings: [],
     }),
   ),
-});
+};
 
 const userMessage = (text: string) => ({
   id: 'm1',

@@ -1,5 +1,5 @@
 import { ConfigService } from '@nestjs/config';
-import { Experimental_EvaluationMockModelV4, MockImageModelV4 } from 'ai/test';
+import { MockImageModelV4 } from 'ai/test';
 import { type DeepMockProxy, mockDeep } from 'vitest-mock-extended';
 import { AiUsageService } from '../../../../../src/subscriptions/ai-usage.service.js';
 import {
@@ -16,7 +16,9 @@ const PNG =
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==';
 
 let verdict = 'allow';
-const moderator = new Experimental_EvaluationMockModelV4({
+const moderator = {
+  provider: 'test',
+  modelId: 'jev',
   doEvaluate: vi.fn(() =>
     Promise.resolve({
       answers: {
@@ -25,7 +27,7 @@ const moderator = new Experimental_EvaluationMockModelV4({
       warnings: [],
     }),
   ),
-});
+};
 
 let failImage = false;
 const imageModel = new MockImageModelV4({

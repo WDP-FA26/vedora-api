@@ -1,5 +1,6 @@
 import type { ModerationSettingsService } from '../../../src/moderation/moderation-settings.service.js';
-import { APICallError, type Experimental_EvaluationModel } from 'ai';
+import { APICallError } from 'ai';
+import type { DecisionModel } from '../../../src/common/decision/decision.js';
 import { vi } from 'vitest';
 import { FeatureUnavailableException } from '../../../src/common/exceptions/feature-unavailable.exception.js';
 import { UnprocessableContentException } from '../../../src/common/exceptions/unprocessable-content.exception.js';
@@ -48,7 +49,7 @@ function modelAnswering(
     modelId: 'jev',
     supportedQuestionTypes: ['choice'],
     doEvaluate,
-  } as unknown as Experimental_EvaluationModel;
+  } as unknown as DecisionModel;
   const service = new ContentModerationService(model, settings);
   return { service, doEvaluate };
 }
@@ -186,7 +187,7 @@ describe('ContentModerationService with an edited policy', () => {
       modelId: 'jev',
       supportedQuestionTypes: ['choice'],
       doEvaluate,
-    } as unknown as Experimental_EvaluationModel;
+    } as unknown as DecisionModel;
     const custom = {
       get: () =>
         Promise.resolve({

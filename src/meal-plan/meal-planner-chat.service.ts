@@ -3,7 +3,6 @@ import { Inject, Injectable, Logger, Optional } from '@nestjs/common';
 import { runtimeConfig } from '../config/runtime-config.js';
 import { InjectModel } from '@nestjs/ai';
 import {
-  type Experimental_EvaluationModel,
   isStepCount,
   type LanguageModel,
   ToolLoopAgent,
@@ -18,7 +17,7 @@ import {
   conversationModerationState,
 } from '../ai/guardrails/conversation-state.js';
 import { MODERATION_MODEL } from '../ai/guardrails/guardrail.js';
-import { decide } from '../common/decision/decision.js';
+import { decide, type DecisionModel } from '../common/decision/decision.js';
 import { NUTRITION_POLICY } from '../ai/guardrails/policies/nutrition.js';
 import { searchKnowledgeTool } from '../knowledge/tools/search-knowledge.tool.js';
 import { KnowledgeSearchService } from '../knowledge/retrieval/knowledge-search.service.js';
@@ -83,7 +82,7 @@ export class MealPlannerChatService {
 
   constructor(
     @Inject(MODERATION_MODEL)
-    private readonly moderator: Experimental_EvaluationModel,
+    private readonly moderator: DecisionModel,
     @InjectModel() private readonly model: LanguageModel,
     private readonly mealPlan: MealPlanService,
     private readonly dietary: DietaryService,

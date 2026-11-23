@@ -1,11 +1,7 @@
 import { runtimeConfig } from '../config/runtime-config.js';
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { InjectModel } from '@nestjs/ai';
-import {
-  type Experimental_EvaluationModel,
-  type LanguageModel,
-  toUIMessageStream,
-} from 'ai';
+import { type LanguageModel, toUIMessageStream } from 'ai';
 import { cannedReply } from '../ai/chat/canned-reply.js';
 import { chatErrorCode, failedStatus } from '../ai/chat/errors.js';
 import { replyFilter } from '../ai/chat/reply-filter.js';
@@ -18,7 +14,7 @@ import {
   MODERATION_MODEL,
   type ModerationVerdict,
 } from '../ai/guardrails/guardrail.js';
-import { decide } from '../common/decision/decision.js';
+import { decide, type DecisionModel } from '../common/decision/decision.js';
 import { NUTRITION_POLICY } from '../ai/guardrails/policies/nutrition.js';
 import { KnowledgeSearchService } from '../knowledge/retrieval/knowledge-search.service.js';
 import type { ChatMessageDto } from './dto/nutrition-chat.dto.js';
@@ -49,7 +45,7 @@ export class NutritionChatService {
 
   constructor(
     @Inject(MODERATION_MODEL)
-    private readonly moderator: Experimental_EvaluationModel,
+    private readonly moderator: DecisionModel,
     @InjectModel() model: LanguageModel,
     knowledge: KnowledgeSearchService,
   ) {

@@ -2,14 +2,13 @@ import { runtimeConfig } from '../../../config/runtime-config.js';
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { AiFeature } from '../../../mongo/models.js';
-import {
-  type Experimental_EvaluationModel,
-  generateImage,
-  type ImageModel,
-} from 'ai';
+import { generateImage, type ImageModel } from 'ai';
 import { randomUUID } from 'node:crypto';
 import { MODERATION_MODEL } from '../../../ai/guardrails/guardrail.js';
-import { decide } from '../../../common/decision/decision.js';
+import {
+  decide,
+  type DecisionModel,
+} from '../../../common/decision/decision.js';
 import { DEFAULT_IMAGE_MODEL, imageModel } from '../../../ai/openrouter.js';
 import { AiUsageService } from '../../../subscriptions/ai-usage.service.js';
 import { AiCostTransportService } from '../../../ai/telemetry/ai-cost-transport.service.js';
@@ -49,7 +48,7 @@ export class BlogImageGeneratorService {
   constructor(
     configService: ConfigService,
     @Inject(MODERATION_MODEL)
-    private readonly moderator: Experimental_EvaluationModel,
+    private readonly moderator: DecisionModel,
     private readonly storage: StorageService,
     private readonly usage: AiUsageService,
     costs: AiCostTransportService,

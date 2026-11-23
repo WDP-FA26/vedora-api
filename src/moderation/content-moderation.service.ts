@@ -1,9 +1,9 @@
 import { runtimeConfig } from '../config/runtime-config.js';
 import { Inject, Injectable, Logger } from '@nestjs/common';
-import { APICallError, type Experimental_EvaluationModel } from 'ai';
+import { APICallError } from 'ai';
 import { FeatureUnavailableException } from '../common/exceptions/feature-unavailable.exception.js';
 import { UnprocessableContentException } from '../common/exceptions/unprocessable-content.exception.js';
-import { decide } from '../common/decision/decision.js';
+import { decide, type DecisionModel } from '../common/decision/decision.js';
 import {
   assessContent,
   type ContentAssessment,
@@ -45,7 +45,7 @@ export class ContentModerationService {
 
   constructor(
     @Inject(CONTENT_MODERATION_MODEL)
-    private readonly model: Experimental_EvaluationModel,
+    private readonly model: DecisionModel,
     private readonly settings: ModerationSettingsService,
   ) {}
 

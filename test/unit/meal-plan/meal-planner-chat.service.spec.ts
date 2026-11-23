@@ -3,11 +3,7 @@ import { FakeEmbeddingModel, providerError } from '@nestjs/ai/testing';
 import { ConfigModule } from '@nestjs/config';
 import { Test } from '@nestjs/testing';
 import { APICallError, simulateReadableStream, type UIMessageChunk } from 'ai';
-import {
-  convertReadableStreamToArray,
-  Experimental_EvaluationMockModelV4,
-  MockLanguageModelV4,
-} from 'ai/test';
+import { convertReadableStreamToArray, MockLanguageModelV4 } from 'ai/test';
 import { type DeepMockProxy, mockDeep } from 'vitest-mock-extended';
 import { AiModule } from '../../../src/ai/ai.module.js';
 import { NUTRITION_POLICY } from '../../../src/ai/guardrails/policies/nutrition.js';
@@ -83,7 +79,9 @@ const model = new MockLanguageModelV4({
     }),
 });
 
-const moderator = new Experimental_EvaluationMockModelV4({
+const moderator = {
+  provider: 'test',
+  modelId: 'jev',
   doEvaluate: vi.fn(() =>
     rateLimitModeration
       ? Promise.reject(providerError(429, { retryAfter: 0 }))
@@ -94,11 +92,11 @@ const moderator = new Experimental_EvaluationMockModelV4({
           warnings: [],
         }),
   ),
-});
+};
 
-const evaluationModel = vi.fn<
-  (modelId: string) => Experimental_EvaluationMockModelV4
->(() => moderator);
+const evaluationModel = vi.fn<(modelId: string) => typeof moderator>(
+  () => moderator,
+);
 const languageModel = Object.assign(
   vi.fn<
     (modelId: string, settings: { reasoning: object }) => MockLanguageModelV4
