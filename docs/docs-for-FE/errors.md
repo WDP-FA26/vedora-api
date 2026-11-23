@@ -95,6 +95,8 @@ Nhắn tin có thêm `MESSAGE_ID_CONFLICT`: `clientMessageId` đã được dùn
 | `MEAL_PLAN_CONFLICT` | Thực đơn bị xung đột khi lưu đồng thời; tải lại và lưu lại | — |
 | `MEAL_DAY_LOCKED` | Thay đổi một ngày trước hôm nay (hoặc cả tuần đã qua) | `weekStart`, `days` (ngày bị khóa), `today` |
 | `MEAL_WEEK_OUT_OF_RANGE` | Tuần xa hơn 4 tuần sau tuần hiện tại | `weekStart`, `maxWeekStart` |
+| `MEAL_LOG_LOCKED` | Ghi/sửa/xoá nhật ký ăn uống của ngày cũ hơn `MEAL_LOG_EDITABLE_DAYS` ngày | `date`, `oldestDate`, `today` |
+| `MEAL_LOG_FULL` | Bữa đã có đủ `MEAL_LOG_MAX_ENTRIES_PER_MEAL` món | `date`, `section`, `max` |
 | `MEAL_WEEK_NOT_EMPTY` | Sao chép vào tuần đã có món mà không đặt `overwrite` | `weekStart` |
 
 ### 413 / 415

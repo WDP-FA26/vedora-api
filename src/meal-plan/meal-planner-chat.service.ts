@@ -24,6 +24,7 @@ import { searchKnowledgeTool } from '../knowledge/tools/search-knowledge.tool.js
 import { KnowledgeSearchService } from '../knowledge/retrieval/knowledge-search.service.js';
 import { DietaryService } from '../recipes/dietary.service.js';
 import type { PlannerMessageDto } from './dto/meal-plan.dto.js';
+import { MealLogService } from './meal-log/meal-log.service.js';
 import { MealPlanService } from './meal-plan.service.js';
 import { MealPlannerChatHistoryService } from './meal-planner-chat-history.service.js';
 import { plannerInstructions } from './meal-planner.prompt.js';
@@ -37,6 +38,7 @@ import {
 } from './tools/dietary-notes.tool.js';
 import { autoBalancePlanTool } from './tools/auto-balance-plan.tool.js';
 import { fillSlotsTool } from './tools/fill-slots.tool.js';
+import { getEatingLogTool } from './tools/get-eating-log.tool.js';
 import { getPlanTool } from './tools/get-plan.tool.js';
 import { getRecipeTool } from './tools/get-recipe.tool.js';
 import { consultNutritionSubagentTool } from './tools/nutrition-subagent.tool.js';
@@ -89,6 +91,7 @@ export class MealPlannerChatService {
     private readonly usage: AiUsageService,
     @Optional() private readonly history?: MealPlannerChatHistoryService,
     @Optional() private readonly restaurantMenu?: RestaurantMenuService,
+    @Optional() private readonly mealLog?: MealLogService,
   ) {}
 
   async stream(
@@ -225,6 +228,11 @@ export class MealPlannerChatService {
                   this.restaurantMenu,
                   avoidedTerms,
                 ),
+              }
+            : {}),
+          ...(this.mealLog
+            ? {
+                getEatingLog: getEatingLogTool(this.mealLog, userId, toolWeek),
               }
             : {}),
           ...webTools(allowWebSearch),

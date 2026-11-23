@@ -45,6 +45,7 @@ export const MODEL_NAMES = [
   'RecipeFavorite',
   'RecipeRating',
   'MealPlanEntry',
+  'MealLogEntry',
   'MealPlanChatThread',
   'MealPlanChatMessage',
   'PaymentIntent',

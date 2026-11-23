@@ -41,6 +41,20 @@ export function mondayOf(date: string): string {
   return addDays(date, -sinceMonday);
 }
 
+/** True for a real calendar date written `YYYY-MM-DD`. */
+export function isCalendarDate(value: string): boolean {
+  if (!DATE_PATTERN.test(value)) return false;
+  const epoch = parseDate(value);
+  if (Number.isNaN(epoch)) return false;
+  return formatDate(epoch) === value;
+}
+
+/** The weekday of a `YYYY-MM-DD` date. */
+export function weekdayOf(date: string): Weekday {
+  const sundayFirst = new Date(parseDate(date)).getUTCDay();
+  return WEEKDAY_ORDER[(sundayFirst + 6) % 7];
+}
+
 /** True for a real calendar date written `YYYY-MM-DD` that is a Monday. */
 export function isWeekStart(value: string): boolean {
   if (!DATE_PATTERN.test(value)) return false;

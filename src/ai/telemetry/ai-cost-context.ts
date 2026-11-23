@@ -24,6 +24,7 @@ export const AI_COST_FEATURES = [
   'KNOWLEDGE',
   'POSTS',
   'RECIPE_DRAFT',
+  'MEAL_LOG',
   'TRANSCRIPTION',
   'SYSTEM',
 ] as const;

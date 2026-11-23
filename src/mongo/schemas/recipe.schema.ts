@@ -191,6 +191,8 @@ cascadeOnDelete(RecipeSchema, [
   { model: 'RecipeFavorite', field: 'recipeId', action: 'delete' },
   { model: 'RecipeRating', field: 'recipeId', action: 'delete' },
   { model: 'MealPlanEntry', field: 'recipeId', action: 'delete' },
+  // The log keeps its copied name and calories; only the link goes.
+  { model: 'MealLogEntry', field: 'recipeId', action: 'unset' },
 ]);
 
 @Schema(collectionSchema('recipe_favorites', 'created'))

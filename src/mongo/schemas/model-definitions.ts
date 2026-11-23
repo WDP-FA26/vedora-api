@@ -49,6 +49,7 @@ import {
   RecipeRatingSchema,
   RecipeSchema,
 } from './recipe.schema.js';
+import { MealLogEntrySchema } from './meal-log.schema.js';
 import {
   KnowledgeDocumentSchema,
   KnowledgePageSchema,
@@ -122,6 +123,7 @@ export const MODEL_DEFINITIONS = [
   { name: 'RecipeFavorite', schema: RecipeFavoriteSchema },
   { name: 'RecipeRating', schema: RecipeRatingSchema },
   { name: 'MealPlanEntry', schema: MealPlanEntrySchema },
+  { name: 'MealLogEntry', schema: MealLogEntrySchema },
   { name: 'MealPlanChatThread', schema: MealPlanChatThreadSchema },
   { name: 'MealPlanChatMessage', schema: MealPlanChatMessageSchema },
   { name: 'PaymentIntent', schema: PaymentIntentSchema },

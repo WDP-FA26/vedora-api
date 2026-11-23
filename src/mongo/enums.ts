@@ -262,6 +262,26 @@ export enum RecipeTag {
   SNACK = 'SNACK',
 }
 
+/** Where a meal-log entry came from. */
+export enum MealLogSource {
+  /** Ticked off a dish of the saved plan. */
+  PLAN = 'PLAN',
+  /** A catalog recipe that was not in the plan. */
+  RECIPE = 'RECIPE',
+  /** Free text: a dish outside the catalog. */
+  CUSTOM = 'CUSTOM',
+}
+
+/** Where a meal-log entry's calories came from. */
+export enum CalorieSource {
+  /** The recipe's calories per serving when logged. */
+  RECIPE = 'RECIPE',
+  /** Typed by the user. */
+  USER = 'USER',
+  /** Estimated by AI from a web search; an estimate, not a measurement. */
+  WEB_ESTIMATE = 'WEB_ESTIMATE',
+}
+
 export enum AiFeature {
   MEAL_PLAN_CHAT = 'MEAL_PLAN_CHAT',
   BLOG_CHAT = 'BLOG_CHAT',

@@ -339,6 +339,8 @@ không theo prompt:
 
 `GET /meal-plan/shopping-list?weekStart=` tính trên một tuần; xem [meal-plan-shopping-list.md](meal-plan-shopping-list.md).
 
+Món đã thực sự ăn (kể cả món ngoài thực đơn) và thống kê kcal theo tuần: xem [meal-log.md](meal-log.md).
+
 ## Chọn món, xem trước và lưu
 
 1. Đọc `/meal-plan?weekStart=` để lấy toàn bộ nội dung đang lưu của tuần đang xem.

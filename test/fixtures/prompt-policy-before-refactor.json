@@ -8,7 +8,7 @@
     "file": "config/prompts/meal-planner.md",
     "source": "meal-plan/meal-planner.prompt.ts",
     "sha256": "0fde39af970877b1115317ef8d7e6ad2dcb09637de5bf752b17a09a14d5d9309",
-    "upstreamSha256": "f93a73fdfddeeb304592356a589531993d535b77b4d8c7e0b8b6c5752a5507a0",
+    "upstreamSha256": "82a65cfb1b6fe5aff3a63d282a04ebbfb59f79397d602f5da7c5b886a05ad0a5",
     "upstreamCommit": "e94efb56885155b31f62d099b3e293c38703f10f"
   },
   {

@@ -6,6 +6,7 @@ import { generateText, type LanguageModel } from 'ai';
 import { z } from 'zod';
 import { loadTextConfig } from '../../config/config-files.js';
 import { DEFAULT_CHAT_MODEL } from '../../ai/openrouter.js';
+import { extractJsonObject } from '../../ai/json-text.js';
 import { webSearchTool } from '../../ai/tools/web-search.tool.js';
 import type { PostSourcePart } from '../../posts/summaries/post-source.js';
 import {
@@ -34,20 +35,6 @@ const calorieResearchSchema = z.object({
     )
     .optional(),
 });
-
-function extractJsonObject(text: string): unknown {
-  const cleaned = text.trim();
-  const fenced = cleaned.match(/```(?:json)?\s*([\s\S]*?)```/i);
-  const candidate = fenced ? fenced[1].trim() : cleaned;
-  const start = candidate.indexOf('{');
-  const end = candidate.lastIndexOf('}');
-  if (start < 0 || end <= start) return null;
-  try {
-    return JSON.parse(candidate.slice(start, end + 1));
-  } catch {
-    return null;
-  }
-}
 
 /** Asks the chat model for a recipe draft of a source, matched to the catalog, then verifies calories on the web. */
 @Injectable()
