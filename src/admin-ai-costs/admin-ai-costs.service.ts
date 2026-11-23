@@ -378,6 +378,11 @@ export class AdminAiCostsService {
     if (!row)
       throw new ResourceNotFoundException('NOT_FOUND', 'AI call not found');
     if (row.costUsd !== null || row.duplicateCharge) return this.row(row);
+    if (row.gateway === 'openai')
+      throw new StateConflictException(
+        'CONFLICT',
+        'Direct OpenAI calls do not expose an OpenRouter generation charge; consult OpenAI usage and billing',
+      );
     if (!row.generationId)
       throw new StateConflictException(
         'CONFLICT',

@@ -53,6 +53,51 @@ describe('AiCostTransportService', () => {
     }
   });
 
+  it('records native OpenAI usage without inventing a dollar charge or an OpenRouter generation', async () => {
+    const underlying = vi.fn<typeof fetch>().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          id: 'resp_fixture',
+          model: 'gpt-6-luna',
+          usage: { input_tokens: 12, output_tokens: 8 },
+        }),
+        { headers: { 'content-type': 'application/json' } },
+      ),
+    );
+    const response = await transport.observe(
+      'https://api.openai.com/v1/responses',
+      {
+        method: 'POST',
+        headers: { Authorization: 'Bearer fixture-openai-secret' },
+        body: JSON.stringify({
+          model: 'gpt-6-luna',
+          input: 'fixture-private-prompt',
+        }),
+      },
+      underlying,
+      'gpt-6-luna',
+      'SYSTEM',
+      'openai',
+    );
+    await response.text();
+    const row = await onlyRow();
+    expect(row).toMatchObject({
+      gateway: 'openai',
+      provider: 'openai',
+      generationId: 'resp_fixture',
+      requestedModel: 'gpt-6-luna',
+      inputTokens: 12,
+      outputTokens: 8,
+      costUsd: null,
+      costSource: null,
+      status: 'SUCCEEDED',
+    });
+    expect(row.chargeKey).toBeUndefined();
+    const stored = JSON.stringify(row);
+    expect(stored).not.toContain('fixture-private-prompt');
+    expect(stored).not.toContain('fixture-openai-secret');
+  });
+
   it('passes through non-OpenRouter URLs and non-API paths without recording', async () => {
     const underlying = vi
       .fn<typeof fetch>()

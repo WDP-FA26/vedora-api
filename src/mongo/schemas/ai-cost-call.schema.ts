@@ -15,6 +15,8 @@ export class AiCostCall extends Identified {
   @Prop({ type: String, default: 'unknown' }) requestedModel!: string;
   @Prop({ type: String, default: null }) resolvedModel!: string | null;
   @Prop({ type: String, default: null }) provider!: string | null;
+  @Prop({ type: String, enum: ['openrouter', 'openai'], default: 'openrouter' })
+  gateway!: 'openrouter' | 'openai';
   @Prop({ type: String, default: null }) generationId!: string | null;
   @Prop({ type: String }) chargeKey?: string;
   @Prop({ type: Boolean, default: false }) duplicateCharge!: boolean;

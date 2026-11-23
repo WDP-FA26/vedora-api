@@ -31,6 +31,15 @@ export class AiCostTransportService {
   forModel(model: string, feature = 'SYSTEM'): typeof fetch {
     return (input, init) => this.observe(input, init, fetch, model, feature);
   }
+
+  forProvider(
+    gateway: 'openrouter' | 'openai',
+    model: string,
+    feature = 'SYSTEM',
+  ): typeof fetch {
+    return (input, init) =>
+      this.observe(input, init, fetch, model, feature, gateway);
+  }
   readonly fetch: typeof fetch = (input, init) =>
     this.observe(input, init, fetch);
 
@@ -41,11 +50,16 @@ export class AiCostTransportService {
     underlying: typeof fetch,
     model = 'unknown',
     feature = 'SYSTEM',
+    gateway: 'openrouter' | 'openai' = 'openrouter',
   ): Promise<Response> {
     const url = new URL(
       typeof input === 'string' || input instanceof URL ? input : input.url,
     );
-    const provider = new URL(runtimeConfig.OPENROUTER_API_BASE_URL);
+    const provider = new URL(
+      gateway === 'openai'
+        ? runtimeConfig.OPENAI_API_BASE_URL
+        : runtimeConfig.OPENROUTER_API_BASE_URL,
+    );
     const apiPath = provider.pathname.replace(/\/$/, '');
     const alphaPath = apiPath.replace(/\/v1$/, '');
     // A provider's fetch hook can serve other hosts; never record credentials or arbitrary URLs.
@@ -86,6 +100,7 @@ export class AiCostTransportService {
       userId: scope?.userId ?? null,
       feature: scope?.feature ?? feature,
       operation,
+      gateway,
       requestedModel:
         metadataText(bodyModel) ?? metadataText(model) ?? 'unknown',
     };
@@ -108,6 +123,7 @@ export class AiCostTransportService {
         new CostObservation(),
         signal?.aborted ? 'ABORTED' : 'FAILED',
         null,
+        gateway,
       );
       throw error;
     }
@@ -115,6 +131,7 @@ export class AiCostTransportService {
       response.headers.get('content-type')?.includes('text/event-stream') ??
         false,
     );
+    if (gateway === 'openai') parser.observation.provider = 'openai';
     let settled = false;
     const settle = async (status: AiCostCall['status']) => {
       if (settled) return;
@@ -126,6 +143,7 @@ export class AiCostTransportService {
         parser.observation,
         parser.observation.failed || !response.ok ? 'FAILED' : status,
         response.status,
+        gateway,
       );
     };
     if (!response.body) {
@@ -166,6 +184,7 @@ export class AiCostTransportService {
     observation: CostObservation,
     source: 'RESPONSE' | 'GENERATION',
     extra: Record<string, unknown> = {},
+    gateway: 'openrouter' | 'openai' = 'openrouter',
   ): Promise<void> {
     const {
       generationId,
@@ -179,7 +198,7 @@ export class AiCostTransportService {
     // chargeKey is assigned only with a reported cost; a later attempt can supply missing cost.
     const chargeKey =
       observation.costUsd !== null && generationId
-        ? `openrouter:${generationId}`
+        ? `${gateway}:${generationId}`
         : undefined;
     const values = {
       generationId,
@@ -225,14 +244,21 @@ export class AiCostTransportService {
     observation: CostObservation,
     status: AiCostCall['status'],
     httpStatus: number | null,
+    gateway: 'openrouter' | 'openai' = 'openrouter',
   ) {
     if (!recorded) return;
     try {
-      await this.settleCharge(id, observation, 'RESPONSE', {
-        status,
-        httpStatus,
-        finishedAt: new Date(),
-      });
+      await this.settleCharge(
+        id,
+        observation,
+        'RESPONSE',
+        {
+          status,
+          httpStatus,
+          finishedAt: new Date(),
+        },
+        gateway,
+      );
     } catch {
       this.logger.error(
         'AI_COST_WRITE_FAILED: attempt remains pending; reconcile with provider activity',
