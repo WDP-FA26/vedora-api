@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { CalorieSource } from '../../mongo/models.js';
 import type { MealLogService } from '../meal-log/meal-log.service.js';
 import { DAY_NAMES, SECTION_NAMES } from '../meal-planner.prompt.js';
+import { eatingLogOutput } from './output-schemas.js';
 import { plannableWeekStarts, weekStartInput } from './planner-weeks.js';
 
 /**
@@ -20,6 +21,7 @@ export function getEatingLogTool(
     inputSchema: z.object({
       weekStart: weekStartInput(plannableWeekStarts()),
     }),
+    outputSchema: eatingLogOutput,
     execute: async (input) => {
       const weekStart = input.weekStart ?? openWeekStart;
       return { log: await mealLog.week(userId, weekStart) };

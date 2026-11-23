@@ -5,6 +5,7 @@ import type {
   MealPlanService,
   RecipeInstructions,
 } from '../meal-plan.service.js';
+import { recipeInstructionsOutput } from './output-schemas.js';
 
 const PILLAR_LABELS: Record<NutritionPillar, string> = {
   [NutritionPillar.PLANT_PROTEIN]: 'Đạm thực vật',
@@ -21,6 +22,7 @@ export function getRecipeTool(mealPlan: MealPlanService, userId: string) {
     inputSchema: z.object({
       recipeId: z.string().min(1).describe('A recipe id from searchRecipes'),
     }),
+    outputSchema: recipeInstructionsOutput,
     execute: ({ recipeId }) => mealPlan.recipeInstructions(userId, recipeId),
     toModelOutput: ({ output }) => ({ type: 'text', value: format(output) }),
   });

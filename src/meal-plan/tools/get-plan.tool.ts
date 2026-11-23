@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { MEAL_SECTIONS } from '../dto/meal-plan.dto.js';
 import type { MealPlanService } from '../meal-plan.service.js';
 import { DAY_NAMES, SECTION_NAMES } from '../meal-planner.prompt.js';
+import { planOutput } from './output-schemas.js';
 import { plannableWeekStarts, weekStartInput } from './planner-weeks.js';
 
 export function getPlanTool(
@@ -16,6 +17,7 @@ export function getPlanTool(
     inputSchema: z.object({
       weekStart: weekStartInput(plannableWeekStarts()),
     }),
+    outputSchema: planOutput,
     execute: async (input) => {
       const weekStart = input.weekStart ?? openWeekStart;
       const plan = await mealPlan.find(userId, weekStart);

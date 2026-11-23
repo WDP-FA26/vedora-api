@@ -10,6 +10,7 @@ import type {
   MealPlanService,
   RecipeSuggestion,
 } from '../meal-plan.service.js';
+import { recipeSuggestionsOutput } from './output-schemas.js';
 
 const PILLAR_LABELS: Record<NutritionPillar, string> = {
   [NutritionPillar.PLANT_PROTEIN]: 'Đạm TV',
@@ -68,6 +69,7 @@ export function searchRecipesTool(mealPlan: MealPlanService, userId: string) {
           'Only dishes providing this plant-based nutrition pillar (PLANT_PROTEIN, FIBER_VEG, HEALTHY_FAT, IRON_RICH, CALCIUM_RICH)',
         ),
     }),
+    outputSchema: recipeSuggestionsOutput,
     execute: ({ query, tag, tags, exclude, maxMinutes, maxCalories, pillar }) =>
       mealPlan.suggestions(userId, query, {
         tag,

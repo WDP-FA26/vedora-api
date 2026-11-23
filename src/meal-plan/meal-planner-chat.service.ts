@@ -7,8 +7,8 @@ import {
   isStepCount,
   type LanguageModel,
   ToolLoopAgent,
-  type ToolSet,
   toUIMessageStream,
+  type UIMessage,
 } from 'ai';
 import { cannedReply } from '../ai/chat/canned-reply.js';
 import { chatErrorCode } from '../ai/chat/errors.js';
@@ -38,6 +38,12 @@ import {
 } from './tools/dietary-notes.tool.js';
 import { autoBalancePlanTool } from './tools/auto-balance-plan.tool.js';
 import { fillSlotsTool } from './tools/fill-slots.tool.js';
+import {
+  isPlannerCodeModeEnabled,
+  PLANNER_CODE_MODE_CALLERS,
+  PLANNER_CODE_MODE_NOTE,
+  plannerCodeModeTool,
+} from './tools/code-mode.js';
 import { getEatingLogTool } from './tools/get-eating-log.tool.js';
 import { getPlanTool } from './tools/get-plan.tool.js';
 import { getRecipeTool } from './tools/get-recipe.tool.js';
@@ -57,6 +63,10 @@ import { RestaurantMenuService } from '../workspaces/restaurant-menu.service.js'
 
 const MAX_STEPS = runtimeConfig.PLANNER_CHAT_MAX_STEPS;
 const SEARCH_TIMEOUT_MS = runtimeConfig.AI_KNOWLEDGE_TOOL_TIMEOUT_MS;
+const TOOL_TIMEOUTS = {
+  searchKnowledgeMs: SEARCH_TIMEOUT_MS,
+  searchRestaurantDishesMs: SEARCH_TIMEOUT_MS,
+};
 
 /** Added on the last step, when tools are off, so the turn ends with a handover instead of a cut. */
 const LAST_STEP_NOTE = `
@@ -72,7 +82,11 @@ export interface PlannerChatOptions {
  * Web search is the user's choice: without consent the planner only gets the
  * tool that asks for it, so the prompt alone never decides whether it searches.
  */
-function webTools(allowWebSearch: boolean): ToolSet {
+function webTools(
+  allowWebSearch: boolean,
+):
+  | { webSearch: ReturnType<typeof webSearchTool> }
+  | { requestWebSearch: ReturnType<typeof requestWebSearchTool> } {
   if (allowWebSearch) return { webSearch: webSearchTool() };
   return { requestWebSearch: requestWebSearchTool() };
 }
@@ -182,113 +196,106 @@ export class MealPlannerChatService {
         if (index >= 0) avoidedTerms.splice(index, 1);
         if (note) avoidedTerms.push(note);
       };
-      const instructions = plannerInstructions(
+      const baseInstructions = plannerInstructions(
         restrictions,
         plan,
         allowWebSearch,
         nutrition,
       );
-      const agent = new ToolLoopAgent({
+      const instructions = isPlannerCodeModeEnabled
+        ? `${baseInstructions}${PLANNER_CODE_MODE_NOTE}`
+        : baseInstructions;
+      const tools = {
+        searchKnowledge: searchKnowledgeTool(this.knowledge),
+        searchRecipes: searchRecipesTool(this.mealPlan, userId),
+        getRecipe: getRecipeTool(this.mealPlan, userId),
+        getPlan: getPlanTool(this.mealPlan, userId, toolWeek),
+        fillSlots: fillSlotsTool(this.mealPlan, userId, toolWeek),
+        autoBalancePlan: autoBalancePlanTool(this.mealPlan, userId, toolWeek),
+        editPlan: editPlanTool(this.mealPlan, userId, toolWeek),
+        askUser: askUserTool(),
+        updatePreferences: updatePreferencesTool(this.dietary, userId),
+        updateAllergyNote: updateAllergyNoteTool(
+          this.dietary,
+          userId,
+          onAllergyNoteSaved,
+        ),
+        consultNutritionSubagent: consultNutritionSubagentTool(
+          this.model,
+          this.mealPlan,
+          this.knowledge,
+          userId,
+          nutrition,
+          avoidedTerms,
+        ),
+        verifyMealPlanAllergies: verifyMealPlanAllergiesTool(
+          this.model,
+          this.mealPlan,
+          userId,
+          toolWeek,
+          restrictions,
+        ),
+        ...(this.restaurantMenu
+          ? {
+              searchRestaurantDishes: searchRestaurantDishesTool(
+                this.restaurantMenu,
+                avoidedTerms,
+              ),
+            }
+          : {}),
+        ...(this.mealLog
+          ? {
+              getEatingLog: getEatingLogTool(this.mealLog, userId, toolWeek),
+            }
+          : {}),
+        ...webTools(allowWebSearch),
+      };
+      const settings = {
         model: this.model,
         instructions,
         maxOutputTokens: runtimeConfig.PLANNER_CHAT_MAX_OUTPUT_TOKENS,
-        tools: {
-          searchKnowledge: searchKnowledgeTool(this.knowledge),
-          searchRecipes: searchRecipesTool(this.mealPlan, userId),
-          getRecipe: getRecipeTool(this.mealPlan, userId),
-          getPlan: getPlanTool(this.mealPlan, userId, toolWeek),
-          fillSlots: fillSlotsTool(this.mealPlan, userId, toolWeek),
-          autoBalancePlan: autoBalancePlanTool(this.mealPlan, userId, toolWeek),
-          editPlan: editPlanTool(this.mealPlan, userId, toolWeek),
-          askUser: askUserTool(),
-          updatePreferences: updatePreferencesTool(this.dietary, userId),
-          updateAllergyNote: updateAllergyNoteTool(
-            this.dietary,
-            userId,
-            onAllergyNoteSaved,
-          ),
-          consultNutritionSubagent: consultNutritionSubagentTool(
-            this.model,
-            this.mealPlan,
-            this.knowledge,
-            userId,
-            nutrition,
-            avoidedTerms,
-          ),
-          verifyMealPlanAllergies: verifyMealPlanAllergiesTool(
-            this.model,
-            this.mealPlan,
-            userId,
-            toolWeek,
-            restrictions,
-          ),
-          ...(this.restaurantMenu
-            ? {
-                searchRestaurantDishes: searchRestaurantDishesTool(
-                  this.restaurantMenu,
-                  avoidedTerms,
-                ),
-              }
-            : {}),
-          ...(this.mealLog
-            ? {
-                getEatingLog: getEatingLogTool(this.mealLog, userId, toolWeek),
-              }
-            : {}),
-          ...webTools(allowWebSearch),
-        },
         stopWhen: isStepCount(MAX_STEPS),
-        prepareStep: ({ stepNumber }) => {
+        prepareStep: ({ stepNumber }: { stepNumber: number }) => {
           if (stepNumber < MAX_STEPS - 1) return {};
           return {
-            toolChoice: 'none',
+            toolChoice: 'none' as const,
             instructions: `${instructions}${LAST_STEP_NOTE}`,
           };
         },
-      });
-
-      const result = await agent.stream({
+      };
+      const streamArgs = {
         messages: messages.map(({ role, text }) => ({ role, content: text })),
         abortSignal,
-        timeout: {
-          tools: {
-            searchKnowledgeMs: SEARCH_TIMEOUT_MS,
-            searchRestaurantDishesMs: SEARCH_TIMEOUT_MS,
-          },
-        },
+        timeout: { tools: TOOL_TIMEOUTS },
+      };
+      const ui = this.uiStreamOptions(userId, activeThreadId);
+      if (isPlannerCodeModeEnabled) {
+        const agent = new ToolLoopAgent({
+          ...settings,
+          tools: { ...tools, code_mode: plannerCodeModeTool() },
+          experimental_toolCallers: PLANNER_CODE_MODE_CALLERS,
+        });
+        const result = await agent.stream({
+          ...streamArgs,
+          experimental_transform: replyFilter(),
+        });
+        return quotaStream(
+          toUIMessageStream({
+            stream: result.stream,
+            tools: agent.tools,
+            ...ui,
+          }),
+          this.usage,
+          ticket,
+        );
+      }
+      const agent = new ToolLoopAgent({ ...settings, tools });
+      const result = await agent.stream({
+        ...streamArgs,
         experimental_transform: replyFilter(),
       });
-      const assistantMessageId = randomUUID();
       return quotaStream(
-        toUIMessageStream({
-          stream: result.stream,
-          tools: agent.tools,
-          sendSources: true,
-          // Reasoning is excluded from the model, but some routes (web search) still stream it.
-          sendReasoning: false,
-          generateMessageId: () => assistantMessageId,
-          onEnd: async ({ responseMessage }) => {
-            try {
-              await this.history?.recordAssistantMessage(
-                userId,
-                activeThreadId,
-                responseMessage,
-              );
-            } catch (error) {
-              this.logger.warn(
-                `Failed to save assistant chat message: ${String(error)}`,
-              );
-            }
-          },
-          onError: (error) => {
-            this.logger.error(
-              `Meal planner stream failed: ${
-                error instanceof Error ? error.message : String(error)
-              }`,
-            );
-            return chatErrorCode(error);
-          },
-        }),
+        toUIMessageStream({ stream: result.stream, tools: agent.tools, ...ui }),
         this.usage,
         ticket,
       );
@@ -296,5 +303,37 @@ export class MealPlannerChatService {
       await this.usage.refund(ticket);
       throw error;
     }
+  }
+
+  /** Options shared by every planner reply stream: ids, saving and errors. */
+  private uiStreamOptions(userId: string, threadId: string) {
+    const assistantMessageId = randomUUID();
+    return {
+      sendSources: true,
+      // Reasoning is excluded from the model, but some routes (web search) still stream it.
+      sendReasoning: false,
+      generateMessageId: () => assistantMessageId,
+      onEnd: async ({ responseMessage }: { responseMessage: UIMessage }) => {
+        try {
+          await this.history?.recordAssistantMessage(
+            userId,
+            threadId,
+            responseMessage,
+          );
+        } catch (error) {
+          this.logger.warn(
+            `Failed to save assistant chat message: ${String(error)}`,
+          );
+        }
+      },
+      onError: (error: unknown) => {
+        this.logger.error(
+          `Meal planner stream failed: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+        );
+        return chatErrorCode(error);
+      },
+    };
   }
 }

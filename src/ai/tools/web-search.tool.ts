@@ -11,7 +11,7 @@ import { runtimeConfig } from '../../config/runtime-config.js';
  * flattens its options to the top level of the tool, where OpenRouter ignores
  * them; the server tool reads them from `parameters`.
  */
-export function webSearchTool(): Tool {
+export function webSearchTool(): Tool<Record<string, never>, unknown> {
   return {
     type: 'provider',
     id: 'openrouter.web_search',
@@ -27,5 +27,7 @@ export function webSearchTool(): Tool {
       },
     },
     inputSchema: z.object({}),
+    // Results arrive as url sources; this only gives the tool a concrete type.
+    outputSchema: z.unknown(),
   };
 }
