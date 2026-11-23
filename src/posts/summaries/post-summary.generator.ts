@@ -4,7 +4,7 @@ import { ConfigService } from '@nestjs/config';
 import { AiService } from '@nestjs/ai';
 import { z } from 'zod';
 import { loadTextConfig } from '../../config/config-files.js';
-import { DEFAULT_CHAT_MODEL } from '../../ai/openrouter.js';
+import { activeChatModelId } from '../../ai/provider.js';
 import { RecipeTag } from '../../mongo/models.js';
 import type { PostSourcePart } from './post-source.js';
 
@@ -50,7 +50,7 @@ export class PostSummaryGenerator {
     private readonly ai: AiService,
     config: ConfigService,
   ) {
-    this.modelId = config.get<string>('OPENROUTER_MODEL', DEFAULT_CHAT_MODEL);
+    this.modelId = activeChatModelId(config);
   }
 
   async generate(parts: SummarySourcePart[]): Promise<SummaryOutput> {

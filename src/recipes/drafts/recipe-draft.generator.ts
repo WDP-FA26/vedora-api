@@ -5,7 +5,7 @@ import { AiService, InjectModel } from '@nestjs/ai';
 import { generateText, type LanguageModel } from 'ai';
 import { z } from 'zod';
 import { loadTextConfig } from '../../config/config-files.js';
-import { DEFAULT_CHAT_MODEL } from '../../ai/openrouter.js';
+import { activeChatModelId } from '../../ai/provider.js';
 import { webSearchTool } from '../../ai/tools/web-search.tool.js';
 import type { PostSourcePart } from '../../posts/summaries/post-source.js';
 import {
@@ -60,7 +60,7 @@ export class RecipeDraftGenerator {
     config: ConfigService,
     @Optional() @InjectModel() private readonly model?: LanguageModel,
   ) {
-    this.modelId = config.get<string>('OPENROUTER_MODEL', DEFAULT_CHAT_MODEL);
+    this.modelId = activeChatModelId(config);
   }
 
   async generate(

@@ -1,11 +1,10 @@
 import { Global, Module } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import {
-  chatModel,
-  DEFAULT_CONTENT_MODERATION_MODEL,
-  DEFAULT_MODERATION_EVIDENCE_MODEL,
-} from '../ai/openrouter.js';
-import { evaluationModel } from '../common/decision/decision.js';
+  activeChatModel,
+  activeChatModelId,
+  activeEvaluationModel,
+} from '../ai/provider.js';
 import { AdminModerationController } from './admin-moderation.controller.js';
 import {
   CONTENT_MODERATION_MODEL,
@@ -29,17 +28,7 @@ import { AiCostTransportService } from '../ai/telemetry/ai-cost-transport.servic
       provide: CONTENT_MODERATION_MODEL,
       inject: [ConfigService, AiCostTransportService],
       useFactory: (config: ConfigService, costs: AiCostTransportService) =>
-        evaluationModel({
-          apiKey: config.getOrThrow<string>('OPENROUTER_API_KEY'),
-          modelId: config.get<string>(
-            'OPENROUTER_CONTENT_MODERATION_MODEL',
-            DEFAULT_CONTENT_MODERATION_MODEL,
-          ),
-          fetch: costs.forModel(
-            DEFAULT_CONTENT_MODERATION_MODEL,
-            'CONTENT_MODERATION',
-          ),
-        }),
+        activeEvaluationModel(config, costs, true),
     },
     {
       provide: MODERATION_EVIDENCE_MODEL,
@@ -48,15 +37,8 @@ import { AiCostTransportService } from '../ai/telemetry/ai-cost-transport.servic
         config: ConfigService,
         costs: AiCostTransportService,
       ): EvidenceModel => {
-        const id = config.get<string>(
-          'OPENROUTER_MODERATION_EVIDENCE_MODEL',
-          DEFAULT_MODERATION_EVIDENCE_MODEL,
-        );
-        const model = chatModel({
-          apiKey: config.getOrThrow<string>('OPENROUTER_API_KEY'),
-          modelId: id,
-          fetch: costs.forModel(id, 'CONTENT_MODERATION'),
-        });
+        const id = activeChatModelId(config, 'evidence');
+        const model = activeChatModel(config, costs, 'evidence');
         return { id, model };
       },
     },
