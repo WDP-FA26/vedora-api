@@ -67,7 +67,10 @@ export function parseRuntimeSettings(
     }
     const value = raw.trim();
     try {
-      if (key.endsWith('_CRON')) {
+      if (key === 'AI_PROVIDER') {
+        if (!['openrouter', 'openai'].includes(value))
+          throw new Error('unsupported AI provider');
+      } else if (key.endsWith('_CRON')) {
         if (value.split(/\s+/).length !== 6)
           throw new Error('expected six fields');
         new CronTime(value);

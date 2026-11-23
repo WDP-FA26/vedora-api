@@ -135,9 +135,44 @@ export class EnvironmentVariables {
   @IsString()
   TRANSCRIPTION_MODEL = 'elevenlabs/scribe-v2';
 
+  @IsIn(['openrouter', 'openai'])
+  AI_PROVIDER = 'openrouter';
+
+  @ValidateIf((env: EnvironmentVariables) => env.AI_PROVIDER === 'openrouter')
   @IsString()
   @IsNotEmpty()
-  OPENROUTER_API_KEY!: string;
+  OPENROUTER_API_KEY = '';
+
+  @ValidateIf((env: EnvironmentVariables) => env.AI_PROVIDER === 'openai')
+  @IsString()
+  @IsNotEmpty()
+  OPENAI_API_KEY = '';
+
+  @IsString()
+  @IsNotEmpty()
+  OPENAI_MODEL = 'gpt-6-luna';
+
+  @IsString()
+  OPENAI_BLOG_MODEL = '';
+
+  @IsString()
+  @IsNotEmpty()
+  OPENAI_DECISION_MODEL = 'gpt-6-luna';
+
+  @IsString()
+  OPENAI_EVIDENCE_MODEL = '';
+
+  @IsString()
+  @IsNotEmpty()
+  OPENAI_EMBEDDING_MODEL = 'text-embedding-3-small';
+
+  @IsString()
+  @IsNotEmpty()
+  OPENAI_IMAGE_MODEL = 'gpt-image-1';
+
+  @IsString()
+  @IsNotEmpty()
+  OPENAI_TRANSCRIPTION_MODEL = 'whisper-1';
 
   @IsString()
   OPENROUTER_MODEL = 'openrouter/auto';

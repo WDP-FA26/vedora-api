@@ -276,6 +276,8 @@ export const numericDefaults = {
 } as const;
 
 export const stringDefaults = {
+  AI_PROVIDER: 'openrouter',
+  OPENAI_API_BASE_URL: 'https://api.openai.com/v1',
   FOLLOW_SUGGESTION_REBUILD_CRON: '0 0 * * * *',
   POST_SEARCH_INDEX_CRON: '0 * * * * *',
   POST_SUMMARY_CRON: '*/10 * * * * *',
