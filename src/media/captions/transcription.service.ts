@@ -4,6 +4,7 @@ import { ConfigService } from '@nestjs/config';
 import { AiService } from '@nestjs/ai';
 import { AiCostTransportService } from '../../ai/telemetry/ai-cost-transport.service.js';
 import { z } from 'zod';
+import { isOpenAI } from '../../ai/provider.js';
 import { parsePayload, validatePayload } from '../../common/validation.js';
 import { ExternalServiceException } from '../../common/exceptions/external-service.exception.js';
 import { type SpeechAudio, toOriginalTime } from './speech-audio.js';
@@ -73,36 +74,58 @@ export interface Transcript {
 export class TranscriptionService {
   private readonly apiKey: string;
   private readonly transcriptionModel: string;
+  private readonly directOpenAI: boolean;
 
   constructor(
     configService: ConfigService,
     private readonly ai: AiService,
     private readonly costs: AiCostTransportService,
   ) {
-    this.apiKey = configService.getOrThrow<string>('OPENROUTER_API_KEY');
+    this.directOpenAI = isOpenAI(configService);
+    this.apiKey = configService.getOrThrow<string>(
+      this.directOpenAI ? 'OPENAI_API_KEY' : 'OPENROUTER_API_KEY',
+    );
     this.transcriptionModel = configService.get<string>(
-      'TRANSCRIPTION_MODEL',
-      'elevenlabs/scribe-v2',
+      this.directOpenAI ? 'OPENAI_TRANSCRIPTION_MODEL' : 'TRANSCRIPTION_MODEL',
+      this.directOpenAI ? 'whisper-1' : 'elevenlabs/scribe-v2',
     );
   }
 
   async transcribe({ audio, speech }: SpeechAudio): Promise<Transcript> {
-    const response = await this.costs.fetch(
-      `${OPENROUTER_API}/audio/transcriptions`,
+    const form = new FormData();
+    if (this.directOpenAI) {
+      form.set(
+        'file',
+        new Blob([Uint8Array.from(audio)], { type: 'audio/mpeg' }),
+        'speech.mp3',
+      );
+      form.set('model', this.transcriptionModel);
+      form.set('response_format', 'verbose_json');
+      form.set('timestamp_granularities[]', 'word');
+      form.set('prompt', CAPTION_PROMPT);
+      form.set('temperature', '0');
+    }
+    const send = this.directOpenAI
+      ? this.costs.forProvider('openai', this.transcriptionModel, 'CAPTIONS')
+      : this.costs.fetch;
+    const response = await send(
+      `${this.directOpenAI ? runtimeConfig.OPENAI_API_BASE_URL : OPENROUTER_API}/audio/transcriptions`,
       {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${this.apiKey}`,
-          'Content-Type': 'application/json',
+          ...(!this.directOpenAI ? { 'Content-Type': 'application/json' } : {}),
         },
-        body: JSON.stringify({
-          model: this.transcriptionModel,
-          input_audio: { data: audio.toString('base64'), format: 'mp3' },
-          response_format: 'verbose_json',
-          timestamp_granularities: ['word'],
-          prompt: CAPTION_PROMPT,
-          temperature: 0,
-        }),
+        body: this.directOpenAI
+          ? form
+          : JSON.stringify({
+              model: this.transcriptionModel,
+              input_audio: { data: audio.toString('base64'), format: 'mp3' },
+              response_format: 'verbose_json',
+              timestamp_granularities: ['word'],
+              prompt: CAPTION_PROMPT,
+              temperature: 0,
+            }),
         signal: AbortSignal.timeout(TRANSCRIBE_TIMEOUT_MS),
       },
     );

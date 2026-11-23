@@ -11,7 +11,19 @@ import { runtimeConfig } from '../../config/runtime-config.js';
  * flattens its options to the top level of the tool, where OpenRouter ignores
  * them; the server tool reads them from `parameters`.
  */
-export function webSearchTool(): Tool {
+export function webSearchTool(
+  provider: string = runtimeConfig.AI_PROVIDER,
+): Tool {
+  if (provider === 'openai')
+    return {
+      type: 'provider',
+      id: 'openai.web_search',
+      isProviderExecuted: true,
+      inputSchema: z.object({}),
+      args: {
+        searchContextSize: runtimeConfig.PLANNER_WEB_SEARCH_CONTEXT_SIZE,
+      },
+    };
   return {
     type: 'provider',
     id: 'openrouter.web_search',

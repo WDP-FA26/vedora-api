@@ -10,7 +10,7 @@ import {
 import { randomUUID } from 'node:crypto';
 import { MODERATION_MODEL } from '../../../ai/guardrails/guardrail.js';
 import { decide } from '../../../common/decision/decision.js';
-import { DEFAULT_IMAGE_MODEL, imageModel } from '../../../ai/openrouter.js';
+import { activeImageModel, isOpenAI } from '../../../ai/provider.js';
 import { AiUsageService } from '../../../subscriptions/ai-usage.service.js';
 import { AiCostTransportService } from '../../../ai/telemetry/ai-cost-transport.service.js';
 import {
@@ -45,6 +45,7 @@ const EXTENSIONS: Record<string, string> = {
 export class BlogImageGeneratorService {
   private readonly logger = new Logger(BlogImageGeneratorService.name);
   private readonly imageModel: ImageModel;
+  private readonly directOpenAI: boolean;
 
   constructor(
     configService: ConfigService,
@@ -54,15 +55,8 @@ export class BlogImageGeneratorService {
     private readonly usage: AiUsageService,
     costs: AiCostTransportService,
   ) {
-    const apiKey = configService.getOrThrow<string>('OPENROUTER_API_KEY');
-    this.imageModel = imageModel({
-      apiKey,
-      modelId: configService.get<string>(
-        'OPENROUTER_IMAGE_MODEL',
-        DEFAULT_IMAGE_MODEL,
-      ),
-      fetch: costs.forModel(DEFAULT_IMAGE_MODEL),
-    });
+    this.directOpenAI = isOpenAI(configService);
+    this.imageModel = activeImageModel(configService, costs);
   }
 
   generate(
@@ -75,7 +69,16 @@ export class BlogImageGeneratorService {
       generateImage({
         model: this.imageModel,
         prompt,
-        aspectRatio,
+        ...(this.directOpenAI
+          ? {
+              size:
+                aspectRatio === '1:1'
+                  ? ('1024x1024' as const)
+                  : aspectRatio === '3:4'
+                    ? ('1024x1536' as const)
+                    : ('1536x1024' as const),
+            }
+          : { aspectRatio }),
         maxRetries: runtimeConfig.AI_IMAGE_MAX_RETRIES,
         abortSignal,
       }),
