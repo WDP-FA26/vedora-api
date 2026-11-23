@@ -19,7 +19,8 @@ import {
 
 const INSTRUCTIONS = loadTextConfig(runtimeConfig.RECIPE_DRAFT_PROMPT_FILE);
 const TIMEOUT_MS = runtimeConfig.RECIPE_DRAFT_TIMEOUT_MS;
-const WEB_RESEARCH_TIMEOUT_MS = 25_000;
+const WEB_RESEARCH_TIMEOUT_MS =
+  runtimeConfig.RECIPE_DRAFT_WEB_RESEARCH_TIMEOUT_MS;
 
 const calorieResearchSchema = z.object({
   caloriesPerServing: z.number().min(10).max(3000).nullable().optional(),
@@ -148,7 +149,9 @@ Sau khi tra web, chỉ trả về DUY NHẤT một khối JSON theo mẫu (khôn
           `Số khẩu phần: ${servings}`,
           `Nguyên liệu: ${ingredientLines || 'không rõ định lượng'}`,
           `Ước tính sơ bộ hiện có: ${recipe.caloriesPerServing ?? 'chưa có'} kcal/suất`,
-          sourceContext ? `Ngữ cảnh từ Admin / bài viết:\n${sourceContext}` : '',
+          sourceContext
+            ? `Ngữ cảnh từ Admin / bài viết:\n${sourceContext}`
+            : '',
         ]
           .filter(Boolean)
           .join('\n'),

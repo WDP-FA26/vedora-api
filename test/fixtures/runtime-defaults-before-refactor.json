@@ -85,7 +85,8 @@
     "env": "TURNSTILE_VERIFY_TIMEOUT_MS",
     "original": 5000,
     "default": 5000,
-    "multiplier": 1
+    "multiplier": 1,
+    "upstreamOriginal": 10000
   },
   {
     "file": "storage/storage.service.ts",
@@ -405,7 +406,8 @@
     "env": "AI_KNOWLEDGE_TOOL_TIMEOUT_MS",
     "original": 5000,
     "default": 5000,
-    "multiplier": 1
+    "multiplier": 1,
+    "upstreamOriginal": 10000
   },
   {
     "file": "posts/search/post-search.service.ts",
@@ -675,7 +677,8 @@
     "env": "AI_KNOWLEDGE_TOOL_TIMEOUT_MS",
     "original": 5000,
     "default": 5000,
-    "multiplier": 1
+    "multiplier": 1,
+    "upstreamOriginal": 10000
   },
   {
     "file": "nutrition-chat/dto/nutrition-chat.dto.ts",
@@ -715,7 +718,8 @@
     "env": "AI_KNOWLEDGE_TOOL_TIMEOUT_MS",
     "original": 5000,
     "default": 5000,
-    "multiplier": 1
+    "multiplier": 1,
+    "upstreamOriginal": 10000
   },
   {
     "file": "nutrition-chat/guest/guest-session.service.ts",
@@ -748,7 +752,7 @@
     "original": 4000,
     "default": 4000,
     "multiplier": 1,
-    "upstreamOriginal": 10000,
+    "upstreamOriginal": 20000,
     "upstreamCommit": "b6d221715fc61166f82e16b88d5add0b87047319"
   },
   {
@@ -773,7 +777,8 @@
     "env": "PUBLIC_IMAGE_FETCH_TIMEOUT_MS",
     "original": 10000,
     "default": 10000,
-    "multiplier": 1
+    "multiplier": 1,
+    "upstreamOriginal": 20000
   },
   {
     "file": "common/http/fetch-public-image.ts",
@@ -837,7 +842,8 @@
     "env": "MODERATION_CONTENT_TIMEOUT_MS",
     "original": 20000,
     "default": 20000,
-    "multiplier": 1
+    "multiplier": 1,
+    "upstreamOriginal": 40000
   },
   {
     "file": "moderation/content-moderation.service.ts",
@@ -981,7 +987,8 @@
     "env": "CAPTION_TRACK_TIMEOUT_MS",
     "original": 15000,
     "default": 15000,
-    "multiplier": 1
+    "multiplier": 1,
+    "upstreamOriginal": 30000
   },
   {
     "file": "media/captions/transcription.service.ts",
@@ -997,7 +1004,8 @@
     "env": "TRANSCRIPTION_TIMEOUT_MS",
     "original": 180000,
     "default": 180000,
-    "multiplier": 1
+    "multiplier": 1,
+    "upstreamOriginal": 360000
   },
   {
     "file": "media/captions/transcription.service.ts",
@@ -1069,7 +1077,8 @@
     "env": "AUDIO_DOWNLOAD_TIMEOUT_MS",
     "original": 300000,
     "default": 300000,
-    "multiplier": 1
+    "multiplier": 1,
+    "upstreamOriginal": 600000
   },
   {
     "file": "knowledge/knowledge.service.ts",
@@ -1197,7 +1206,8 @@
     "env": "KNOWLEDGE_RERANK_TIMEOUT_MS",
     "original": 800,
     "default": 800,
-    "multiplier": 1
+    "multiplier": 1,
+    "upstreamOriginal": 1600
   },
   {
     "file": "knowledge/retrieval/knowledge-models.service.ts",
@@ -1221,7 +1231,8 @@
     "env": "KNOWLEDGE_EMBED_TIMEOUT_MS",
     "original": 60000,
     "default": 60000,
-    "multiplier": 1
+    "multiplier": 1,
+    "upstreamOriginal": 120000
   },
   {
     "file": "knowledge/retrieval/knowledge-models.service.ts",
@@ -1229,7 +1240,8 @@
     "env": "KNOWLEDGE_OCR_TIMEOUT_MS",
     "original": 300000,
     "default": 300000,
-    "multiplier": 1
+    "multiplier": 1,
+    "upstreamOriginal": 600000
   },
   {
     "file": "knowledge/retrieval/knowledge-models.service.ts",

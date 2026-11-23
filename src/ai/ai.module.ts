@@ -13,6 +13,7 @@ import {
 import type { ReasoningEffort } from './reasoning.js';
 import { AiTelemetryModule } from './telemetry/ai-telemetry.module.js';
 import { AiCostTransportService } from './telemetry/ai-cost-transport.service.js';
+import { runtimeConfig } from '../config/runtime-config.js';
 
 @Global()
 @Module({
@@ -77,7 +78,7 @@ import { AiCostTransportService } from './telemetry/ai-cost-transport.service.js
                 ),
                 fetch: costs.forModel(DEFAULT_EMBEDDING_MODEL, 'POSTS'),
               }),
-              timeout: '30s',
+              timeout: runtimeConfig.POST_SEARCH_EMBED_TIMEOUT_MS,
             },
           },
         };
