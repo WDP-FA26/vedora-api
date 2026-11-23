@@ -1,12 +1,18 @@
 import { MockLanguageModelV4 } from 'ai/test';
 import { type DeepMockProxy, mockDeep } from 'vitest-mock-extended';
+import type { MealPlanDto } from '../../../src/meal-plan/dto/meal-plan.dto.js';
 import type { MealPlanService } from '../../../src/meal-plan/meal-plan.service.js';
 import { verifyMealPlanAllergiesTool } from '../../../src/meal-plan/tools/allergy-verifier-subagent.tool.js';
-import { autoBalanceDraftTool } from '../../../src/meal-plan/tools/auto-balance-draft.tool.js';
-import { editDraftTool } from '../../../src/meal-plan/tools/edit-draft.tool.js';
+import { askUserTool } from '../../../src/meal-plan/tools/ask-user.tool.js';
+import { autoBalancePlanTool } from '../../../src/meal-plan/tools/auto-balance-plan.tool.js';
+import { editPlanTool } from '../../../src/meal-plan/tools/edit-plan.tool.js';
 import { fillSlotsTool } from '../../../src/meal-plan/tools/fill-slots.tool.js';
 import { getPlanTool } from '../../../src/meal-plan/tools/get-plan.tool.js';
 import { getRecipeTool } from '../../../src/meal-plan/tools/get-recipe.tool.js';
+import {
+  changeFeedback,
+  mergeChanges,
+} from '../../../src/meal-plan/tools/proposal-text.js';
 import { searchRecipesTool } from '../../../src/meal-plan/tools/search-recipes.tool.js';
 import { MealSection, RecipeTag, Weekday } from '../../../src/mongo/models.js';
 
@@ -184,7 +190,7 @@ describe('Meal planner AI tools', () => {
   });
 
   describe('getPlanTool', () => {
-    it('formats the saved weekly plan and unsaved draft changes', async () => {
+    it('formats the saved weekly plan', async () => {
       const toolDef = getPlanTool(mealPlan, userId, WEEK);
       const savedPlan = {
         weekStart: WEEK,
@@ -219,32 +225,11 @@ describe('Meal planner AI tools', () => {
         })),
         problems: [],
       };
-      const draft = {
-        weekStart: WEEK,
-        days: [
-          {
-            day: Weekday.WED,
-            sections: [
-              {
-                section: MealSection.LUNCH,
-                recipes: [
-                  { id: 'rec-pho', title: 'Phở chay', tag: RecipeTag.NOODLES },
-                ],
-                previous: [],
-              },
-            ],
-          },
-        ],
-        problems: [],
-        ok: true,
-      };
       mealPlan.find.mockResolvedValue(savedPlan);
-      mealPlan.getDraft.mockResolvedValue(draft);
 
       const output = await toolDef.execute?.({}, execOptions);
       expect(mealPlan.find).toHaveBeenCalledWith(userId, WEEK);
-      expect(mealPlan.getDraft).toHaveBeenCalledWith(userId, WEEK);
-      expect(output).toEqual({ plan: savedPlan, draft });
+      expect(output).toEqual({ plan: savedPlan });
 
       if (!output || Symbol.asyncIterator in output) {
         throw new Error('expected plan output');
@@ -262,9 +247,7 @@ describe('Meal planner AI tools', () => {
       });
       expect(modelOut).toEqual({
         type: 'text',
-        value: expect.stringContaining(
-          '- Thứ Tư: trưa: Phở chay (id rec-pho)',
-        ) as unknown,
+        value: expect.stringContaining('- Thứ Tư: (empty)') as unknown,
       });
     });
   });
@@ -297,17 +280,17 @@ describe('Meal planner AI tools', () => {
         weekStart: WEEK,
         days: [],
         problems: [],
-        ok: false,
+        applied: false,
         filled: 0,
         allSlotsAlreadyFilled: false,
       };
-      mealPlan.fillDraft.mockResolvedValue(result);
+      mealPlan.fillPlan.mockResolvedValue(result);
 
       await toolDef.execute?.(
         { ...request, days: [Weekday.FRI], weekStart: '2026-11-23' },
         execOptions,
       );
-      expect(mealPlan.fillDraft).toHaveBeenLastCalledWith(userId, {
+      expect(mealPlan.fillPlan).toHaveBeenLastCalledWith(userId, {
         ...request,
         days: [Weekday.FRI],
         weekStart: '2026-11-23',
@@ -350,7 +333,7 @@ describe('Meal planner AI tools', () => {
       ).toBe(false);
     });
 
-    it('passes the request to fillDraft and summarizes the draft', async () => {
+    it('passes the request to fillPlan and summarizes the saved change', async () => {
       const toolDef = fillSlotsTool(mealPlan, userId, WEEK);
       const result = {
         weekStart: WEEK,
@@ -363,14 +346,14 @@ describe('Meal planner AI tools', () => {
           },
         ],
         problems: [],
-        ok: true,
+        applied: true,
         filled: 1,
         allSlotsAlreadyFilled: false,
       };
-      mealPlan.fillDraft.mockResolvedValue(result);
+      mealPlan.fillPlan.mockResolvedValue(result);
 
       const output = await toolDef.execute?.(request, execOptions);
-      expect(mealPlan.fillDraft).toHaveBeenCalledWith(userId, {
+      expect(mealPlan.fillPlan).toHaveBeenCalledWith(userId, {
         ...request,
         weekStart: WEEK,
       });
@@ -383,7 +366,10 @@ describe('Meal planner AI tools', () => {
       });
       expect(modelOut).toEqual({
         type: 'text',
-        value: expect.stringContaining('Cơm gạo lứt (id rec-1)') as unknown,
+        value: [
+          "Saved to the user's plan for the week of 2026-11-16; the app shows the change in the chat and the user can rewind it. Changes:",
+          '- Thứ Hai: trưa: Cơm gạo lứt (id rec-1)',
+        ].join('\n'),
       });
     });
 
@@ -394,7 +380,7 @@ describe('Meal planner AI tools', () => {
         weekStart: WEEK,
         days: [],
         problems: [],
-        ok: false,
+        applied: false,
         filled: 0,
         allSlotsAlreadyFilled: true,
       };
@@ -414,7 +400,7 @@ describe('Meal planner AI tools', () => {
         weekStart: WEEK,
         days: [],
         problems: [],
-        ok: false,
+        applied: false,
         filled: 0,
         allSlotsAlreadyFilled: false,
       };
@@ -432,7 +418,7 @@ describe('Meal planner AI tools', () => {
     });
   });
 
-  describe('editDraftTool', () => {
+  describe('editPlanTool', () => {
     const operations = [
       {
         op: 'set' as const,
@@ -442,8 +428,8 @@ describe('Meal planner AI tools', () => {
       },
     ];
 
-    it('applies operations and shows unsaved draft feedback when valid', async () => {
-      const toolDef = editDraftTool(mealPlan, userId, WEEK);
+    it('saves operations and tells the model what changed', async () => {
+      const toolDef = editPlanTool(mealPlan, userId, WEEK);
       const result = {
         weekStart: WEEK,
         days: [
@@ -459,17 +445,17 @@ describe('Meal planner AI tools', () => {
           },
         ],
         problems: [],
-        ok: true,
+        applied: true,
         errors: [],
       };
-      mealPlan.editDraft.mockResolvedValue(result);
+      mealPlan.editPlan.mockResolvedValue(result);
 
       const output = await toolDef.execute?.({ operations }, execOptions);
-      expect(mealPlan.editDraft).toHaveBeenCalledWith(userId, WEEK, operations);
+      expect(mealPlan.editPlan).toHaveBeenCalledWith(userId, WEEK, operations);
       expect(output).toEqual(result);
 
       if (!output || Symbol.asyncIterator in output) {
-        throw new Error('expected draft output');
+        throw new Error('expected plan change output');
       }
       const modelOut = await toolDef.toModelOutput?.({
         input: { operations },
@@ -478,12 +464,108 @@ describe('Meal planner AI tools', () => {
       });
       expect(modelOut).toEqual({
         type: 'text',
-        value: expect.stringContaining('Phở chay (id ') as unknown,
+        value: expect.stringContaining(
+          `Saved to the user's plan for the week of ${WEEK}`,
+        ) as unknown,
+      });
+      expect(modelOut).toEqual({
+        type: 'text',
+        value: expect.stringContaining(
+          `- Thứ Hai: trưa: Phở chay (id ${recipe1})`,
+        ) as unknown,
       });
     });
 
-    it('formats all problem types and unapplied operation errors when invalid', async () => {
-      const toolDef = editDraftTool(mealPlan, userId, WEEK);
+    it('passes the week the model names', async () => {
+      const toolDef = editPlanTool(mealPlan, userId, WEEK);
+      mealPlan.editPlan.mockResolvedValue({
+        weekStart: '2026-11-23',
+        days: [],
+        problems: [],
+        applied: false,
+        errors: [],
+      });
+
+      await toolDef.execute?.(
+        { weekStart: '2026-11-23', operations },
+        execOptions,
+      );
+      expect(mealPlan.editPlan).toHaveBeenCalledWith(
+        userId,
+        '2026-11-23',
+        operations,
+      );
+    });
+
+    it('says a same-day clash was saved with a warning', async () => {
+      const toolDef = editPlanTool(mealPlan, userId, WEEK);
+      const modelOut = await toolDef.toModelOutput?.({
+        input: { operations },
+        toolCallId: 'call-1',
+        output: {
+          weekStart: WEEK,
+          days: [
+            {
+              day: Weekday.WED,
+              sections: [
+                {
+                  section: MealSection.DINNER,
+                  recipes: [
+                    { id: 'rec-1', title: 'Đậu hũ', tag: null },
+                    { id: 'rec-3', title: 'Rau bina', tag: null },
+                  ],
+                  previous: [{ id: 'rec-1', title: 'Đậu hũ', tag: null }],
+                },
+              ],
+            },
+          ],
+          problems: [
+            {
+              code: 'DAY_CONFLICT',
+              day: Weekday.WED,
+              recipes: ['Đậu hũ', 'Rau bina'],
+              recipeIds: ['rec-1', 'rec-3'],
+              ingredients: ['Đậu hũ', 'Rau bina'],
+              reason: 'Oxalat cản canxi',
+            },
+          ],
+          applied: true,
+          errors: [],
+        },
+      });
+      expect(modelOut).toEqual({
+        type: 'text',
+        value: [
+          `Saved to the user's plan for the week of ${WEEK}; the app shows the change in the chat and the user can rewind it. Changes:`,
+          '- Thứ Tư: tối: Đậu hũ (id rec-1), Rau bina (id rec-3)',
+          'Saved with same-day clash warnings (fix them unless the user wants them):',
+          '- Thứ Tư: Đậu hũ and Rau bina must not be eaten in the same meal (Oxalat cản canxi); they come from: Đậu hũ, Rau bina.',
+        ].join('\n'),
+      });
+    });
+
+    it('says when no slot changed', async () => {
+      const toolDef = editPlanTool(mealPlan, userId, WEEK);
+      const modelOut = await toolDef.toModelOutput?.({
+        input: { operations },
+        toolCallId: 'call-1',
+        output: {
+          weekStart: WEEK,
+          days: [],
+          problems: [],
+          applied: false,
+          errors: ['remove: MON LUNCH does not have that dish'],
+        },
+      });
+      expect(modelOut).toEqual({
+        type: 'text',
+        value:
+          'No slot changed.\nNot applied:\n- remove: MON LUNCH does not have that dish',
+      });
+    });
+
+    it('formats all problem types and unapplied operation errors when nothing was saved', async () => {
+      const toolDef = editPlanTool(mealPlan, userId, WEEK);
       const result = {
         weekStart: WEEK,
         days: [],
@@ -521,14 +603,14 @@ describe('Meal planner AI tools', () => {
             reason: null,
           },
         ],
-        ok: false,
+        applied: false,
         errors: ['move: MON LUNCH is full'],
       };
-      mealPlan.editDraft.mockResolvedValue(result);
+      mealPlan.editPlan.mockResolvedValue(result);
 
       const output = await toolDef.execute?.({ operations }, execOptions);
       if (!output || Symbol.asyncIterator in output) {
-        throw new Error('expected draft output');
+        throw new Error('expected plan change output');
       }
       const modelOut = await toolDef.toModelOutput?.({
         input: { operations },
@@ -538,7 +620,7 @@ describe('Meal planner AI tools', () => {
       expect(modelOut).toEqual({
         type: 'text',
         value: [
-          'Nothing was kept. Fix these and call again:',
+          'Nothing was saved. Fix these and call again:',
           '- Thứ Hai: a recipe id does not exist; use ids from searchRecipes.',
           '- Thứ Ba: "Canh hành" has Hành, which the user does not eat.',
           '- Thứ Tư: Đậu hũ and Rau bina must not be eaten in the same meal (Oxalat cản canxi); they come from: Đậu hũ, Rau bina.',
@@ -550,9 +632,9 @@ describe('Meal planner AI tools', () => {
     });
   });
 
-  describe('autoBalanceDraftTool & verifyMealPlanAllergiesTool', () => {
-    it('delegates autoBalanceDraft and summarizes target calories', async () => {
-      const toolDef = autoBalanceDraftTool(mealPlan, userId, WEEK);
+  describe('autoBalancePlanTool & verifyMealPlanAllergiesTool', () => {
+    it('delegates autoBalancePlan and summarizes target calories', async () => {
+      const toolDef = autoBalancePlanTool(mealPlan, userId, WEEK);
       const balanced = {
         weekStart: WEEK,
         days: [
@@ -575,17 +657,17 @@ describe('Meal planner AI tools', () => {
           },
         ],
         problems: [],
-        ok: true,
+        applied: true,
         filled: 1,
         targetCalories: 2000,
       };
-      mealPlan.autoBalanceDraft.mockResolvedValue(balanced);
+      mealPlan.autoBalancePlan.mockResolvedValue(balanced);
 
       const output = await toolDef.execute?.(
         { days: [Weekday.MON], targetCalories: 2000 },
         execOptions,
       );
-      expect(mealPlan.autoBalanceDraft).toHaveBeenCalledWith(userId, {
+      expect(mealPlan.autoBalancePlan).toHaveBeenCalledWith(userId, {
         weekStart: WEEK,
         days: [Weekday.MON],
         targetCalories: 2000,
@@ -601,7 +683,20 @@ describe('Meal planner AI tools', () => {
       });
       expect(modelOut).toEqual({
         type: 'text',
-        value: expect.stringContaining('~2000 kcal/day') as unknown,
+        value: expect.stringContaining(
+          "Auto-balanced against ~2000 kcal/day.\nSaved to the user's plan",
+        ) as unknown,
+      });
+
+      const unchanged = await toolDef.toModelOutput?.({
+        input: {},
+        toolCallId: 'call-balance',
+        output: { ...balanced, days: [], applied: false, filled: 0 },
+      });
+      expect(unchanged).toEqual({
+        type: 'text',
+        value:
+          'The schedule already sits comfortably around ~2000 kcal/day, so no slot changed.',
       });
     });
 
@@ -620,7 +715,8 @@ describe('Meal planner AI tools', () => {
                       reason: 'Món gỏi có đậu phộng rang gây dị ứng',
                     },
                   ],
-                  summary: 'Phát hiện 1 món có đậu phộng và đã đổi sang món an toàn.',
+                  summary:
+                    'Phát hiện 1 món có đậu phộng và đã đổi sang món an toàn.',
                 }),
               },
             ],
@@ -642,7 +738,7 @@ describe('Meal planner AI tools', () => {
           }),
       });
 
-      const savedPlan = {
+      const savedPlan: MealPlanDto = {
         weekStart: WEEK,
         currentWeekStart: WEEK,
         today: WEEK,
@@ -660,7 +756,26 @@ describe('Meal planner AI tools', () => {
         })),
         problems: [],
       };
-      const draft = {
+      const lunch = savedPlan.days[0].sections.find(
+        ({ section }) => section === MealSection.LUNCH,
+      );
+      lunch?.recipes.push({
+        id: recipe1,
+        title: 'Gỏi ngó sen',
+        imageUrl: null,
+        tag: RecipeTag.SALAD,
+        servings: 2,
+        prepMinutes: 10,
+        cookMinutes: 10,
+        ingredients: [],
+        steps: ['Trộn gỏi'],
+      });
+      const flaggedRef = {
+        id: recipe1,
+        title: 'Gỏi ngó sen',
+        tag: RecipeTag.SALAD,
+      };
+      const removed = {
         weekStart: WEEK,
         days: [
           {
@@ -668,20 +783,15 @@ describe('Meal planner AI tools', () => {
             sections: [
               {
                 section: MealSection.LUNCH,
-                recipes: [
-                  {
-                    id: recipe1,
-                    title: 'Gỏi ngó sen',
-                    tag: RecipeTag.SALAD,
-                  },
-                ],
-                previous: [],
+                recipes: [],
+                previous: [flaggedRef],
               },
             ],
           },
         ],
         problems: [],
-        ok: true,
+        applied: true,
+        errors: [],
       };
       const replaced = {
         weekStart: WEEK,
@@ -704,30 +814,25 @@ describe('Meal planner AI tools', () => {
           },
         ],
         problems: [],
-        ok: true,
+        applied: true,
         filled: 1,
         allSlotsAlreadyFilled: false,
       };
       mealPlan.find.mockResolvedValue(savedPlan);
-      mealPlan.getDraft.mockResolvedValue(draft);
       mealPlan.recipeInstructions.mockResolvedValue({
         id: recipe1,
         title: 'Gỏi ngó sen',
         description: null,
         servings: 2,
         minutes: 20,
-        ingredients: [{ name: 'Đậu phộng', quantity: 25, unit: 'g', note: null }],
+        ingredients: [
+          { name: 'Đậu phộng', quantity: 25, unit: 'g', note: null },
+        ],
         steps: ['Trộn gỏi và rắc đậu phộng'],
         avoidedIngredients: [],
       });
-      mealPlan.editDraft.mockResolvedValue({
-        weekStart: WEEK,
-        days: [],
-        problems: [],
-        ok: true,
-        errors: [],
-      });
-      mealPlan.fillDraft.mockResolvedValue(replaced);
+      mealPlan.editPlan.mockResolvedValue(removed);
+      mealPlan.fillPlan.mockResolvedValue(replaced);
 
       const toolDef = verifyMealPlanAllergiesTool(
         mockModel,
@@ -748,7 +853,7 @@ describe('Meal planner AI tools', () => {
       expect(output.verified).toBe(true);
       expect(output.flaggedDishes).toHaveLength(1);
       expect(output.flaggedDishes[0].recipeId).toBe(recipe1);
-      expect(mealPlan.editDraft).toHaveBeenCalledWith(userId, WEEK, [
+      expect(mealPlan.editPlan).toHaveBeenCalledWith(userId, WEEK, [
         {
           op: 'remove',
           day: Weekday.MON,
@@ -756,7 +861,7 @@ describe('Meal planner AI tools', () => {
           recipeId: recipe1,
         },
       ]);
-      expect(mealPlan.fillDraft).toHaveBeenCalledWith(
+      expect(mealPlan.fillPlan).toHaveBeenCalledWith(
         userId,
         expect.objectContaining({
           weekStart: WEEK,
@@ -766,8 +871,167 @@ describe('Meal planner AI tools', () => {
           avoidIds: [recipe1],
         }),
       );
-      expect(output.ok).toBe(true);
-      expect(output.days?.[0].sections[0].recipes[0].id).toBe(safeId);
+      expect(output.applied).toBe(true);
+      expect(output.safe).toBe(true);
+      // The removal and the refill are one change: a rewind puts back the
+      // flagged dish, the state before the tool ran.
+      const mondayLunch = output.days?.[0].sections[0];
+      expect(mondayLunch?.recipes.map(({ id }) => id)).toEqual([safeId]);
+      expect(mondayLunch?.previous.map(({ id }) => id)).toEqual([recipe1]);
+    });
+
+    it('only reports flagged dishes when asked not to replace them', async () => {
+      const savedPlan = {
+        weekStart: WEEK,
+        currentWeekStart: WEEK,
+        today: WEEK,
+        maxWeekStart: '2026-12-14',
+        minWeekStart: WEEK,
+        editable: true,
+        days: Object.values(Weekday).map((day) => ({
+          day,
+          date: WEEK,
+          editable: true,
+          sections: Object.values(MealSection).map((section) => ({
+            section,
+            recipes:
+              day === Weekday.MON && section === MealSection.DINNER
+                ? [
+                    {
+                      id: recipe1,
+                      title: 'Canh hành',
+                      imageUrl: null,
+                      tag: RecipeTag.SOUP,
+                      servings: 2,
+                      prepMinutes: 10,
+                      cookMinutes: 10,
+                      ingredients: [],
+                      steps: ['Nấu'],
+                    },
+                  ]
+                : [],
+          })),
+        })),
+        problems: [],
+      };
+      mealPlan.find.mockResolvedValue(savedPlan);
+      mealPlan.recipeInstructions.mockResolvedValue({
+        id: recipe1,
+        title: 'Canh hành',
+        description: null,
+        servings: 2,
+        minutes: 20,
+        ingredients: [{ name: 'Hành', quantity: 1, unit: 'củ', note: null }],
+        steps: ['Nấu canh'],
+        avoidedIngredients: ['Hành'],
+      });
+
+      const toolDef = verifyMealPlanAllergiesTool(
+        new MockLanguageModelV4(),
+        mealPlan,
+        userId,
+        WEEK,
+        { ingredients: [{ id: 'ing-1', name: 'Hành' }], groups: [] },
+      );
+      const output = await toolDef.execute?.(
+        { replaceFlagged: false },
+        execOptions,
+      );
+      if (!output || Symbol.asyncIterator in output) {
+        throw new Error('expected allergy verification output');
+      }
+
+      expect(output.safe).toBe(false);
+      expect(output.flaggedDishes).toEqual([
+        {
+          day: Weekday.MON,
+          section: MealSection.DINNER,
+          recipeId: recipe1,
+          title: 'Canh hành',
+          reason: 'Chứa thành phần tránh: Hành',
+        },
+      ]);
+      expect(output.applied).toBeUndefined();
+      expect(mealPlan.editPlan).not.toHaveBeenCalled();
+      expect(mealPlan.fillPlan).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('askUserTool', () => {
+    it('has no execute, so the turn ends on the question', () => {
+      const toolDef = askUserTool();
+      expect(toolDef.execute).toBeUndefined();
+      const schema = toolDef.inputSchema;
+      if (!('safeParse' in schema)) throw new Error('expected a zod schema');
+      expect(
+        schema.safeParse({
+          question: 'Bạn muốn đổi món nào?',
+          options: ['Đậu hũ sốt cà', 'Canh nấm'],
+        }).success,
+      ).toBe(true);
+      expect(
+        schema.safeParse({ question: 'Đổi món?', options: ['Chỉ một'] })
+          .success,
+      ).toBe(false);
+    });
+  });
+
+  describe('mergeChanges', () => {
+    const ref = (id: string) => ({ id, title: id, tag: null });
+    const change = (
+      day: Weekday,
+      previous: string[],
+      recipes: string[],
+      applied = true,
+    ) => ({
+      weekStart: WEEK,
+      days: [
+        {
+          day,
+          sections: [
+            {
+              section: MealSection.LUNCH,
+              previous: previous.map(ref),
+              recipes: recipes.map(ref),
+            },
+          ],
+        },
+      ],
+      problems: [],
+      applied,
+    });
+
+    it('keeps the dishes from before the first change and after the second', () => {
+      const merged = mergeChanges(
+        change(Weekday.MON, ['a'], []),
+        change(Weekday.MON, [], ['b']),
+      );
+      const lunch = merged.days[0].sections[0];
+      expect(merged.applied).toBe(true);
+      expect(lunch.previous.map(({ id }) => id)).toEqual(['a']);
+      expect(lunch.recipes.map(({ id }) => id)).toEqual(['b']);
+    });
+
+    it('adds the days only the second change touched and ignores one not saved', () => {
+      const merged = mergeChanges(
+        change(Weekday.MON, ['a'], []),
+        change(Weekday.TUE, [], ['b']),
+      );
+      expect(merged.days.map(({ day }) => day)).toEqual([
+        Weekday.MON,
+        Weekday.TUE,
+      ]);
+
+      const first = change(Weekday.MON, ['a'], []);
+      expect(mergeChanges(first, change(Weekday.TUE, [], ['b'], false))).toBe(
+        first,
+      );
+    });
+
+    it('says nothing was saved for a change that was not applied', () => {
+      expect(changeFeedback(change(Weekday.MON, [], [], false))).toBe(
+        'No slot changed.',
+      );
     });
   });
 });

@@ -12,7 +12,7 @@ export function searchRestaurantDishesTool(
 ) {
   return tool({
     description:
-      'Search vegetarian dishes served by approved restaurants on Vedora. Use when the user asks to eat out, asks for restaurant recommendations, or wants restaurant dishes alongside their plan. Returns dish details, price in VND, restaurant name, address, star rating, and any AVOIDED ingredient warning.',
+      'Search vegetarian dishes served by approved restaurants on Vedora. Use it only when the user says they want to eat out, asks about restaurants or ready-made food, or asks for restaurant dishes. Do not use it to find a replacement when the user changes a dish on their plan: restaurant dishes cannot be placed on the plan (use searchRecipes for that). Every dish returned is shown to the user as a card in the chat, so only search for what you will recommend. Returns dish details, price in VND, restaurant name, address, star rating, and any AVOIDED ingredient warning.',
     inputSchema: z.object({
       query: z
         .string()
@@ -31,7 +31,10 @@ export function searchRestaurantDishesTool(
     }),
     execute: ({ query, limit }) =>
       restaurantMenu.suggestForPlanner(query, limit ?? 8, avoidedTerms),
-    toModelOutput: ({ output }) => ({ type: 'text', value: formatLines(output) }),
+    toModelOutput: ({ output }) => ({
+      type: 'text',
+      value: formatLines(output),
+    }),
   });
 }
 
@@ -59,7 +62,10 @@ function formatLines(dishes: PlannerRestaurantDishSuggestion[]): string {
         formatPrice(dish.priceVnd),
         `nhà hàng: ${dish.restaurant.name} (@${dish.restaurant.username})`,
         `địa chỉ: ${dish.restaurant.address}`,
-        formatRating(dish.restaurant.averageRating, dish.restaurant.reviewCount),
+        formatRating(
+          dish.restaurant.averageRating,
+          dish.restaurant.reviewCount,
+        ),
       ];
       if (dish.description?.trim()) parts.push(dish.description.trim());
       if (dish.avoidedMatches.length > 0) {

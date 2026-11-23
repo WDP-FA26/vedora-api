@@ -10,9 +10,9 @@ import type { MealPlanService } from '../meal-plan.service.js';
 import { DAY_NAMES, SECTION_NAMES } from '../meal-planner.prompt.js';
 import { plannableWeekStarts, weekStartInput } from './planner-weeks.js';
 import {
-  describeDraft,
-  proposalFeedback,
-  type DraftProposal,
+  changeFeedback,
+  mergeChanges,
+  type PlanChange,
 } from './proposal-text.js';
 
 const logger = new Logger('AllergyVerifierSubagentTool');
@@ -24,10 +24,14 @@ const allergyAuditSchema = z.object({
         recipeId: z.string(),
         reason: z
           .string()
-          .describe('Lý do ngắn gọn bằng tiếng Việt món này vi phạm dị ứng/lưu ý'),
+          .describe(
+            'Lý do ngắn gọn bằng tiếng Việt món này vi phạm dị ứng/lưu ý',
+          ),
       }),
     )
-    .describe('Only recipes that genuinely contain or risk triggering an allergen or restriction'),
+    .describe(
+      'Only recipes that genuinely contain or risk triggering an allergen or restriction',
+    ),
   summary: z
     .string()
     .describe('Tóm tắt kết quả kiểm định ngắn gọn bằng tiếng Việt'),
@@ -47,25 +51,23 @@ export interface AllergyVerificationResult {
   checkedDishesCount: number;
   flaggedDishes: FlaggedDishReport[];
   summary: string;
+  /** Set when flagged dishes were replaced: what changed in the saved plan. */
   weekStart?: string;
-  days?: DraftProposal['days'];
-  problems?: DraftProposal['problems'];
-  ok?: boolean;
+  days?: PlanChange['days'];
+  problems?: PlanChange['problems'];
+  applied?: boolean;
 }
 
-function buildEffectiveSlots(
+function editableSlots(
   plan: Awaited<ReturnType<MealPlanService['find']>>,
-  draft: DraftProposal,
 ): { day: Weekday; section: MealSection; recipeIds: string[] }[] {
   const result: { day: Weekday; section: MealSection; recipeIds: string[] }[] =
     [];
   for (const dayObj of plan.days) {
     if (!dayObj.editable) continue;
-    const draftDay = draft.days.find((item) => item.day === dayObj.day);
     for (const section of MEAL_SECTIONS) {
       const recipes =
-        (draftDay ?? dayObj).sections.find((s) => s.section === section)
-          ?.recipes ?? [];
+        dayObj.sections.find((s) => s.section === section)?.recipes ?? [];
       result.push({
         day: dayObj.day,
         section,
@@ -77,7 +79,9 @@ function buildEffectiveSlots(
 }
 
 function recipeHaystack(
-  recipe: NonNullable<Awaited<ReturnType<MealPlanService['recipeInstructions']>>>,
+  recipe: NonNullable<
+    Awaited<ReturnType<MealPlanService['recipeInstructions']>>
+  >,
 ): string {
   const ingredientText = recipe.ingredients
     .map((item) => `${item.name} ${item.note ?? ''}`)
@@ -101,7 +105,10 @@ async function runSemanticAllergyAudit(
     Awaited<ReturnType<MealPlanService['recipeInstructions']>>
   >[],
   abortSignal?: AbortSignal,
-): Promise<{ flagged: { recipeId: string; reason: string }[]; summary?: string }> {
+): Promise<{
+  flagged: { recipeId: string; reason: string }[];
+  summary?: string;
+}> {
   const recipeLines = recipes.map((recipe) => {
     const ingredients = recipe.ingredients
       .map((item) => (item.note ? `${item.name} (${item.note})` : item.name))
@@ -133,7 +140,7 @@ Lưu ý hiểu đúng ngữ cảnh ẩm thực Việt Nam:
 
 /**
  * Dedicated Allergy Verification Subagent tool: audits every dish in the active
- * week's draft + saved plan against natural-language allergy notes and
+ * week's saved plan against natural-language allergy notes and
  * automatically swaps out unsafe dishes while keeping safe selections intact.
  */
 export function verifyMealPlanAllergiesTool(
@@ -145,7 +152,7 @@ export function verifyMealPlanAllergiesTool(
 ) {
   return tool({
     description:
-      'Run the Allergy Verification Subagent on the week’s draft and saved menu to inspect every dish’s full ingredient list and cooking steps against the user’s natural-language dietary/allergy profile. Automatically replaces any flagged allergen dish with a safe alternative.',
+      'Run the Allergy Verification Subagent on the week’s plan to inspect every dish’s full ingredient list and cooking steps against the user’s natural-language dietary/allergy profile. Use it after you build or change a plan when the user has an allergy note or mentioned an allergy. Replaces any flagged allergen dish with a safe alternative in the saved plan (the user can rewind it from the chat); set replaceFlagged: false to only report when the user asked for a check, not a change.',
     inputSchema: z.object({
       weekStart: weekStartInput(plannableWeekStarts()),
       allergyDescription: z
@@ -158,22 +165,18 @@ export function verifyMealPlanAllergiesTool(
       replaceFlagged: z
         .boolean()
         .optional()
-        .describe('Automatically replace any flagged dish with a safe alternative (default true)'),
+        .describe(
+          'Automatically replace any flagged dish with a safe alternative (default true)',
+        ),
     }),
     execute: async (
       { weekStart, allergyDescription, replaceFlagged },
       { abortSignal },
     ): Promise<AllergyVerificationResult> => {
       const week = weekStart ?? openWeekStart;
-      const [plan, draft] = await Promise.all([
-        mealPlan.find(userId, week),
-        mealPlan.getDraft(userId, week),
-      ]);
-
-      const slots = buildEffectiveSlots(plan, draft);
-      const uniqueIds = [
-        ...new Set(slots.flatMap((slot) => slot.recipeIds)),
-      ];
+      const plan = await mealPlan.find(userId, week);
+      const slots = editableSlots(plan);
+      const uniqueIds = [...new Set(slots.flatMap((slot) => slot.recipeIds))];
       if (uniqueIds.length === 0) {
         return {
           verified: true,
@@ -274,7 +277,7 @@ export function verifyMealPlanAllergiesTool(
         };
       }
 
-      let updatedDraft: DraftProposal | undefined;
+      let change: PlanChange | undefined;
       if (replaceFlagged !== false) {
         const removeOps: DraftOp[] = flaggedDishes.map((item) => ({
           op: 'remove',
@@ -282,8 +285,7 @@ export function verifyMealPlanAllergiesTool(
           section: item.section,
           recipeId: item.recipeId,
         }));
-        const afterRemove = await mealPlan.editDraft(userId, week, removeOps);
-        updatedDraft = afterRemove;
+        change = await mealPlan.editPlan(userId, week, removeOps);
 
         const vacatedKeys = new Set<string>();
         const affectedDays = new Set<Weekday>();
@@ -307,7 +309,7 @@ export function verifyMealPlanAllergiesTool(
               .filter((section) => !vacatedKeys.has(`${day}:${section}`))
               .map((section) => ({ day, section })),
           );
-          updatedDraft = await mealPlan.fillDraft(userId, {
+          const refill = await mealPlan.fillPlan(userId, {
             weekStart: week,
             days: [...affectedDays],
             sections: [...affectedSections],
@@ -315,23 +317,24 @@ export function verifyMealPlanAllergiesTool(
             avoidIds: [...flaggedReasons.keys()],
             pinned,
           });
+          change = mergeChanges(change, refill);
         }
       }
 
       return {
         verified: true,
-        safe: updatedDraft !== undefined && updatedDraft.ok,
+        safe: change !== undefined && change.applied,
         checkedDishesCount: uniqueIds.length,
         flaggedDishes,
         summary:
           subagentSummary ||
-          `Phát hiện ${flaggedDishes.length} lượt món có nguy cơ dị ứng (${flaggedDishes.map((d) => `${d.title} - ${DAY_NAMES[d.day]} ${SECTION_NAMES[d.section]}`).join('; ')})${updatedDraft ? ' và đã tự động đổi sang món an toàn.' : '.'}`,
-        ...(updatedDraft
+          `Phát hiện ${flaggedDishes.length} lượt món có nguy cơ dị ứng (${flaggedDishes.map((d) => `${d.title} - ${DAY_NAMES[d.day]} ${SECTION_NAMES[d.section]}`).join('; ')})${change?.applied ? ' và đã tự động đổi sang món an toàn.' : '.'}`,
+        ...(change
           ? {
-              weekStart: updatedDraft.weekStart,
-              days: updatedDraft.days,
-              problems: updatedDraft.problems,
-              ok: updatedDraft.ok,
+              weekStart: change.weekStart,
+              days: change.days,
+              problems: change.problems,
+              applied: change.applied,
             }
           : {}),
       };
@@ -341,32 +344,21 @@ export function verifyMealPlanAllergiesTool(
         output.flaggedDishes.length > 0
           ? `\nFlagged:\n${output.flaggedDishes.map((item) => `- ${DAY_NAMES[item.day]} ${SECTION_NAMES[item.section]}: ${item.title} — ${item.reason}`).join('\n')}`
           : '';
-      const draftNote = formatDraftAuditNote(output);
+      const changeNote = formatChangeNote(output);
       return {
         type: 'text',
-        value: `${output.summary}${flaggedLines}${draftNote}`,
+        value: `${output.summary}${flaggedLines}${changeNote}`,
       };
     },
   });
 }
 
-function formatDraftAuditNote(output: AllergyVerificationResult): string {
-  if (!output.days) return '';
-  if (output.weekStart) {
-    return `\n${proposalFeedback({
-      weekStart: output.weekStart,
-      days: output.days,
-      problems: output.problems ?? [],
-      ok: output.ok ?? false,
-    })}`;
-  }
-  if (output.days.length > 0) {
-    return `\n${describeDraft({
-      weekStart: '',
-      days: output.days,
-      problems: output.problems ?? [],
-      ok: output.ok ?? false,
-    })}`;
-  }
-  return '';
+function formatChangeNote(output: AllergyVerificationResult): string {
+  if (!output.days || !output.weekStart) return '';
+  return `\n${changeFeedback({
+    weekStart: output.weekStart,
+    days: output.days,
+    problems: output.problems ?? [],
+    applied: output.applied ?? false,
+  })}`;
 }

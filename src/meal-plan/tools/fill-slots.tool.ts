@@ -15,7 +15,7 @@ import {
   plannableWeekStarts,
   weekStartInput,
 } from './planner-weeks.js';
-import { proposalFeedback, type DraftProposal } from './proposal-text.js';
+import { changeFeedback, type PlanChange } from './proposal-text.js';
 
 const slotKey = z.object({
   day: z.enum(Weekday),
@@ -45,7 +45,7 @@ const fields = {
   onlyEmpty: z
     .boolean()
     .describe(
-      'true keeps every slot that already has a dish (saved or in the draft); false replaces the chosen slots',
+      'true keeps every slot that already has a dish; false replaces the chosen slots',
     ),
   candidateIds: z
     .array(z.uuid())
@@ -112,7 +112,7 @@ const fields = {
     ),
 };
 
-export type FillSlotsOutput = DraftProposal & {
+export type FillSlotsOutput = PlanChange & {
   filled: number;
   allSlotsAlreadyFilled: boolean;
   /** Requested days that came before today, which were left alone. */
@@ -139,11 +139,11 @@ export function fillSlotsTool(
   });
   return tool({
     description:
-      'Optional helper to fill many slots at once with an algorithm that respects avoided ingredients, cooking time, same-day clashes and meal variety (a dish never repeats within one meal across the week; days before today are skipped and reported as DAY_PASSED). Pass weekStart to work on a week other than the one the user has open. Combine freely with editDraft in any order: pass onlyEmpty: true to fill empty slots around dishes you placed, or onlyEmpty: false (with optional pinned slots/recipeIds) to build or refresh a range.',
+      "Fill many slots of the user's plan at once with an algorithm that respects avoided ingredients, cooking time, same-day clashes and meal variety (a dish never repeats within one meal across the week; days before today are skipped and reported as DAY_PASSED). The result is saved at once and shown in the chat, where the user can rewind it. Pass weekStart to work on a week other than the one the user has open. Combine freely with editPlan: pass onlyEmpty: true to fill empty slots around dishes the user has, or onlyEmpty: false (with optional pinned slots/recipeIds) to rebuild a range.",
     inputSchema: input,
     execute: async ({ weekStart, ...request }): Promise<FillSlotsOutput> => {
       const week = weekStart ?? openWeekStart;
-      const result = await mealPlan.fillDraft(userId, {
+      const result = await mealPlan.fillPlan(userId, {
         ...request,
         weekStart: week,
       });
@@ -153,7 +153,7 @@ export function fillSlotsTool(
     },
     toModelOutput: ({ output }) => {
       const note = passedNote(output);
-      if (output.filled === 0 && output.problems.length === 0) {
+      if (!output.applied && output.problems.length === 0) {
         return {
           type: 'text',
           value: output.allSlotsAlreadyFilled
@@ -161,7 +161,7 @@ export function fillSlotsTool(
             : `No dish fits these requests, so nothing changed. Relax the filters or omit candidateIds.${note}`,
         };
       }
-      return { type: 'text', value: `${proposalFeedback(output)}${note}` };
+      return { type: 'text', value: `${changeFeedback(output)}${note}` };
     },
   });
 }

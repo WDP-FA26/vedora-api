@@ -1,6 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import request from 'supertest';
 import type {
+  MealPlanChatRewindDto,
+  MealPlanChatThreadDetailDto,
   MealPlanDto,
   MealPlanPreviewDto,
   MealPlanProblemDto,
@@ -581,7 +583,7 @@ describe('Meal plan and shopping list flows (e2e)', () => {
       await putWeek(token, weekStart, [dayBody('MON')]).expect(400);
     });
 
-    it('requires weekStart to save, preview, generate and discard a draft', async () => {
+    it('requires weekStart to save, preview and generate', async () => {
       const { token } = await signedUser();
       const auth = (test: request.Test) =>
         test.set('Authorization', `Bearer ${token}`);
@@ -595,12 +597,6 @@ describe('Meal plan and shopping list flows (e2e)', () => {
       await auth(request(server()).post('/api/v1/meal-plan/generate'))
         .send({ days: ['MON'], sections: ['LUNCH'], onlyEmpty: true })
         .expect(400);
-      await auth(request(server()).delete('/api/v1/meal-plan/draft')).expect(
-        400,
-      );
-      await auth(
-        request(server()).delete(`/api/v1/meal-plan/draft?weekStart=${WEEK}`),
-      ).expect(204);
     });
 
     it('refuses a week further ahead than four weeks, for reading and saving', async () => {
@@ -959,6 +955,145 @@ describe('Meal plan and shopping list flows (e2e)', () => {
           onlyEmpty: true,
         })
         .expect(401);
+    });
+  });
+
+  describe('rewinding the assistant chat', () => {
+    const SECTIONS = ['BREAKFAST', 'LUNCH', 'DINNER', 'OTHER'] as const;
+
+    /** A saved editPlan output that changed lunch of one day. */
+    const lunchChange = (
+      day: `${Weekday}`,
+      previous: Recipe[],
+      recipes: Recipe[],
+    ) => ({
+      type: 'tool-editPlan',
+      toolCallId: randomUUID(),
+      state: 'output-available',
+      input: {},
+      output: {
+        weekStart: WEEK,
+        applied: true,
+        problems: [],
+        days: [
+          {
+            day,
+            sections: SECTIONS.map((section) => {
+              const pick = (dishes: Recipe[]) =>
+                section === 'LUNCH'
+                  ? dishes.map(({ id, title }) => ({ id, title, tag: null }))
+                  : [];
+              return {
+                section,
+                previous: pick(previous),
+                recipes: pick(recipes),
+              };
+            }),
+          },
+        ],
+      },
+    });
+
+    const chatThread = (threadId: string) =>
+      `/api/v1/meal-plan/chat/threads/${threadId}`;
+
+    async function seedThread(token: string) {
+      const threadId = randomUUID();
+      await request(server())
+        .patch(chatThread(threadId))
+        .set('Authorization', `Bearer ${token}`)
+        .send({
+          messages: [
+            { id: 'u1', role: 'user', text: 'Lên thực đơn thứ Hai' },
+            {
+              id: 'a1',
+              role: 'assistant',
+              parts: [lunchChange('MON', [], [tofuDish])],
+            },
+            { id: 'u2', role: 'user', text: 'Đổi sang trà mật ong' },
+            {
+              id: 'a2',
+              role: 'assistant',
+              parts: [
+                lunchChange('MON', [tofuDish], [honeyDish]),
+                { type: 'text', text: 'Đã đổi món.' },
+              ],
+            },
+          ],
+        })
+        .expect(200);
+      return threadId;
+    }
+
+    const rewind = (token: string, threadId: string, messageId: unknown) =>
+      request(server())
+        .post(`${chatThread(threadId)}/rewind`)
+        .set('Authorization', `Bearer ${token}`)
+        .send({ messageId });
+
+    it('puts the dishes back and removes the message and the replies after it', async () => {
+      const { token } = await signedUser();
+      const threadId = await seedThread(token);
+      await putDays(token, [dayBody('MON', { lunch: [honeyDish.id] })]).expect(
+        200,
+      );
+
+      const response = await rewind(token, threadId, 'u2').expect(200);
+
+      expect(response.body as MealPlanChatRewindDto).toEqual({
+        text: 'Đổi sang trà mật ong',
+        weeks: [
+          { weekStart: WEEK, restored: ['MON'], skipped: [], droppedDishes: 0 },
+        ],
+      });
+      expect(sectionIds(await getPlan(token), 'MON', 'LUNCH')).toEqual([
+        tofuDish.id,
+      ]);
+      const detail = (
+        await request(server())
+          .get(chatThread(threadId))
+          .set('Authorization', `Bearer ${token}`)
+          .expect(200)
+      ).body as MealPlanChatThreadDetailDto;
+      expect(detail.messages.map(({ id }) => id)).toEqual(['u1', 'a1']);
+      expect(detail.messageCount).toBe(2);
+      expect(detail.lastMessagePreview).toBe('Đã cập nhật thực đơn');
+    });
+
+    it('goes back to an empty day when rewinding the first message', async () => {
+      const { token } = await signedUser();
+      const threadId = await seedThread(token);
+      await putDays(token, [dayBody('MON', { lunch: [honeyDish.id] })]).expect(
+        200,
+      );
+
+      await rewind(token, threadId, 'u1').expect(200);
+
+      expect(sectionIds(await getPlan(token), 'MON', 'LUNCH')).toEqual([]);
+    });
+
+    it('answers 404 for an assistant message, an unknown message or another user, and 400 without messageId', async () => {
+      const { token } = await signedUser();
+      const other = await signedUser();
+      const threadId = await seedThread(token);
+
+      await rewind(token, threadId, 'a1').expect(404);
+      await rewind(token, threadId, 'nope').expect(404);
+      await rewind(other.token, threadId, 'u1').expect(404);
+      await rewind(token, threadId, undefined).expect(400);
+      await rewind(token, 'not-a-uuid', 'u1').expect(400);
+      await request(server())
+        .post(`${chatThread(threadId)}/rewind`)
+        .send({ messageId: 'u1' })
+        .expect(401);
+
+      const detail = (
+        await request(server())
+          .get(chatThread(threadId))
+          .set('Authorization', `Bearer ${token}`)
+          .expect(200)
+      ).body as MealPlanChatThreadDetailDto;
+      expect(detail.messages).toHaveLength(4);
     });
   });
 });

@@ -4,7 +4,7 @@ import { MealSection, Weekday } from '../../mongo/models.js';
 import { MAX_DISHES_PER_SECTION } from '../dto/meal-plan.dto.js';
 import type { MealPlanService } from '../meal-plan.service.js';
 import { plannableWeekStarts, weekStartInput } from './planner-weeks.js';
-import { proposalFeedback, type DraftProposal } from './proposal-text.js';
+import { changeFeedback, type PlanChange } from './proposal-text.js';
 
 const slot = {
   day: z.enum(Weekday),
@@ -41,29 +41,29 @@ const operation = z.discriminatedUnion('op', [
     .describe('Move one dish from a slot to another'),
 ]);
 
-export type EditDraftOutput = DraftProposal & { errors: string[] };
+export type EditPlanOutput = PlanChange & { errors: string[] };
 
-export function editDraftTool(
+export function editPlanTool(
   mealPlan: MealPlanService,
   userId: string,
   openWeekStart: string,
 ) {
   return tool({
     description:
-      'Directly edit individual slots of the unsaved draft: set, add, remove, clear or move dishes (up to 60 operations in one call). If a change uses an unknown or avoided recipe, nothing is kept. If it causes a same-day ingredient clash, the draft stays saved so you can see the full day and fix whichever dish you choose. A slot on a day before today is refused with DAY_PASSED. Pass weekStart to edit a week other than the one the user has open. Nothing is saved to the permanent timetable until the user presses "Áp dụng".',
+      "Edit individual slots of the user's saved plan right away: set, add, remove, clear or move dishes (up to 60 operations in one call). The change is saved at once and shown in the chat, where the user can rewind it. If a change uses an unknown or avoided recipe, nothing is saved. A same-day ingredient clash is saved with a warning so you can fix whichever dish you choose. A slot on a day before today is refused with DAY_PASSED. Pass weekStart to edit a week other than the one the user has open.",
     inputSchema: z.object({
       weekStart: weekStartInput(plannableWeekStarts()),
       operations: z.array(operation).min(1).max(60),
     }),
-    execute: (input): Promise<EditDraftOutput> =>
-      mealPlan.editDraft(
+    execute: (input): Promise<EditPlanOutput> =>
+      mealPlan.editPlan(
         userId,
         input.weekStart ?? openWeekStart,
         input.operations,
       ),
     toModelOutput: ({ output }) => ({
       type: 'text',
-      value: proposalFeedback(output, output.errors),
+      value: changeFeedback(output, output.errors),
     }),
   });
 }

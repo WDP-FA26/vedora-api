@@ -18,14 +18,13 @@ Swagger mô tả đầy đủ request/response tại `/docs`. Thực đơn lưu 
 | POST   | `/meal-plan/copy`    | Có                                       | Sao chép món của một tuần sang tuần khác (không ghi đè nếu không có `overwrite`) |
 | POST   | `/meal-plan/preview` | Có                                       | Đề xuất, nội dung cũ và các vấn đề; không lưu |
 | POST   | `/meal-plan/generate` | Có                                      | Thuật toán (không AI) chọn món cho các ô được chọn; trả preview, không lưu |
-| GET    | `/meal-plan/draft?weekStart=` | Có                              | Bản nháp chưa lưu của một tuần do trợ lý tạo, cùng dạng preview kèm `ok` (hết hạn sau 6 giờ) |
-| DELETE | `/meal-plan/draft?weekStart=` | Có (`weekStart` bắt buộc)       | Xóa bản nháp chưa lưu của tuần đó (204)       |
 | PUT    | `/meal-plan/days`    | Có                                       | Lưu các ngày được gửi và trả thực đơn mới     |
 | POST   | `/meal-plan/chat`    | Có                                       | Chat với trợ lý (SSE); truyền thêm `threadId` để tự lưu tin nhắn |
 | GET    | `/meal-plan/chat/threads` | Có                                  | Danh sách đoạn chat đã lưu (`{ items, meta }`, mới nhất trước) |
 | POST   | `/meal-plan/chat/threads` | Có                                  | Tạo hoặc đảm bảo tồn tại đoạn chat (`id?`, `title?`) |
 | GET    | `/meal-plan/chat/threads/:threadId` | Có                        | Chi tiết đoạn chat kèm toàn bộ `messages` và `proposalStatuses` |
 | PATCH  | `/meal-plan/chat/threads/:threadId` | Có                        | Cập nhật `title`, `proposalStatuses` hoặc đồng bộ `messages` |
+| POST   | `/meal-plan/chat/threads/:threadId/rewind` | Có                 | Quay lại trước một tin nhắn của người dùng: khôi phục các món trợ lý đã đổi từ tin đó trở đi và xóa tin đó cùng mọi tin sau |
 | DELETE | `/meal-plan/chat/threads/:threadId` | Có                        | Xóa đoạn chat và toàn bộ tin nhắn thuộc đoạn chat (204) |
 
 Gửi `Authorization: Bearer <accessToken>` khi cần đăng nhập. Trên API đọc công
@@ -130,21 +129,22 @@ Response giống `POST /meal-plan/preview`: chỉ gồm các ngày có thay đ�
 bốn phần kèm `previous`. `days` rỗng khi không có món nào phù hợp. Kết quả dùng
 `PUT /meal-plan/days` để lưu. Mỗi lần gọi có thể ra kết quả khác nhau.
 
-Trợ lý chat dùng cùng thuật toán qua công cụ `fillSlots` (ghi vào bản nháp chưa lưu),
-đọc thực đơn và bản nháp hiện tại bằng `getPlan`, và chỉnh từng ô bằng `editDraft`
-(`set`, `add`, `remove`, `clear`, `move`). Output của `fillSlots` và `editDraft`
-có cùng dạng đề xuất (`part.type` là `tool-fillSlots` hoặc `tool-editDraft`,
-gồm `output.ok`, `output.days`, `output.problems`), nên FE hiển thị chúng như nhau.
+Trợ lý chat dùng cùng thuật toán qua công cụ `fillSlots`, đọc thực đơn bằng `getPlan`,
+chỉnh từng ô bằng `editPlan` (`set`, `add`, `remove`, `clear`, `move`) và cân đối Kcal bằng
+`autoBalancePlan`. Các công cụ này **lưu thẳng vào thực đơn** (không còn bản nháp hay nút "Áp dụng").
+Output của `fillSlots`, `editPlan`, `autoBalancePlan` và `verifyMealPlanAllergies` (khi nó đổi món) có cùng
+dạng thay đổi: `output.weekStart`, `output.days` (chỉ ngày đổi, đủ bốn phần, `previous` là món trước lần gọi,
+`recipes` là món sau), `output.problems` và `output.applied` (`false` khi không lưu gì: không có thay đổi, hoặc
+có món không tồn tại / người dùng tránh). FE hiển thị thẻ "Đã cập nhật thực đơn" và tải lại `GET /meal-plan`.
 
 Khi gửi `threadId` (UUID v4) lên `POST /meal-plan/chat`, backend tự động lưu tin
 nhắn người dùng, các lượt bị từ chối bởi moderation (`metadata: { refused: true }`)
 và câu trả lời stream xong của trợ lý (đầy đủ `parts`, gồm text, tool trace,
-knowledge sources và proposal) vào đoạn chat đó. FE chỉ gửi tối đa 10 tin nhắn gần
+knowledge sources và các thay đổi thực đơn) vào đoạn chat đó. FE chỉ gửi tối đa 10 tin nhắn gần
 nhất trong `messages` để làm ngữ cảnh cho LLM; toàn bộ tin nhắn trước đó vẫn được
 giữ đầy đủ trong MongoDB và trả về qua `GET /meal-plan/chat/threads/:threadId`.
-`PATCH /meal-plan/chat/threads/:threadId` dùng để cập nhật `title`, `proposalStatuses`
-(`staged | saved | dismissed`; FE mới chỉ ghi `saved | dismissed`) hoặc đồng bộ thêm tin nhắn theo `id`
-(idempotent).
+`PATCH /meal-plan/chat/threads/:threadId` dùng để cập nhật `title` hoặc đồng bộ thêm tin nhắn theo `id`
+(idempotent). `proposalStatuses` chỉ còn cho đoạn chat cũ từ thời có thẻ đề xuất; FE mới không ghi nữa.
  `imageUrl` là link HTTPS có
 thể bằng `null`. `post` chỉ có `{ id, author: { username, fullName } }` khi bài
 nguồn đã `PUBLISHED`; nếu bài đang xử lý, thất bại hoặc đã bị xóa thì `post=null`.
@@ -170,8 +170,8 @@ suất cả nồi dùng cho danh sách đi chợ) và `nutritionPillars` (`PLANT
 - `POST /dietary/nutrition/check-in`: ghi nhận `{ weightKg, heightCm?, date?, feeling?, note? }` cho một ngày
   (`<= today`). Ghi đè nếu cùng ngày đã có bản ghi, và đồng bộ `weightKg` mới nhất lên hồ sơ người dùng.
 
-Thuật toán `generate`/`fillSlots`/`autoBalanceDraft` tự động cộng điểm cho món hợp mục tiêu BMI (tối thanh nhẹ khi `LOSE_WEIGHT`, ghép nhiều món bổ trợ cho mâm cơm cân bằng hoặc khi hụt Kcal để tiệm cận mục tiêu `~88%–115%` Kcal/ngày, nhưng bỏ qua các ngày ăn thiếu bữa chính do ăn ngoài) và cân bằng 5 nhóm dưỡng chất chay theo từng ngày. Trợ lý chat (`POST /meal-plan/chat`) nhận ngữ cảnh BMI, `allergyNote`, calo ước tính và xu hướng cân nặng, được trang bị:
-- `autoBalanceDraft`: tự động cân đối & bổ sung món kết hợp (kể cả phần `OTHER`) khi thực đơn đang hụt/dư Kcal.
+Thuật toán `generate`/`fillSlots`/`autoBalancePlan` tự động cộng điểm cho món hợp mục tiêu BMI (tối thanh nhẹ khi `LOSE_WEIGHT`, ghép nhiều món bổ trợ cho mâm cơm cân bằng hoặc khi hụt Kcal để tiệm cận mục tiêu `~88%–115%` Kcal/ngày, nhưng bỏ qua các ngày ăn thiếu bữa chính do ăn ngoài) và cân bằng 5 nhóm dưỡng chất chay theo từng ngày. Trợ lý chat (`POST /meal-plan/chat`) nhận ngữ cảnh BMI, `allergyNote`, calo ước tính và xu hướng cân nặng, được trang bị:
+- `autoBalancePlan`: tự động cân đối & bổ sung món kết hợp (kể cả phần `OTHER`) khi thực đơn đang hụt/dư Kcal.
 - `consultNutritionSubagent`: subagent nghiên cứu dinh dưỡng có sẵn `webSearch` + `searchRecipes` để tra món ăn ngoài hệ thống, tính Kcal còn lại và gợi ý món Vedora tương ứng.
 - `verifyMealPlanAllergies`: subagent kiểm định dị ứng đọc toàn bộ nguyên liệu + bước nấu của các món trên lịch đối chiếu với `allergyNote` ngôn ngữ tự nhiên và tự động đổi sang món an toàn nếu phát hiện rủi ro.
 
@@ -207,8 +207,6 @@ quyết định tuần nào hợp lệ; FE không tự tính ngày hay đoán tu
   một ngày trước khi ngày đó qua vẫn hiển thị để xem lại.
 - Tạo bằng thuật toán (`generate`) bỏ qua ngày bị khóa thay vì báo lỗi; trợ lý chat cũng bỏ qua nhưng báo
   `DAY_PASSED` để nói lại với người dùng.
-- Bản nháp cũng theo tuần: mỗi tuần một bản nháp riêng, hết hạn sau 6 giờ. Lưu một tuần chỉ xóa nháp
-  của tuần đó.
 
 ### Response `GET /meal-plan`
 
@@ -233,7 +231,6 @@ type MealPlan = {
 Dùng `editable` để khóa kéo-thả và nút lưu; không tự so ngày ở phía FE. `weekStart` là
 tham số query tùy chọn (mặc định tuần hiện tại); `PUT /meal-plan/days`, `POST /meal-plan/preview`,
 `POST /meal-plan/generate` và `POST /meal-plan/chat` **bắt buộc** `weekStart` trong body.
-`DELETE /meal-plan/draft` bắt buộc `?weekStart=`.
 
 ### Sao chép tuần: `POST /meal-plan/copy`
 
@@ -250,20 +247,50 @@ tránh thì `409 MEAL_PLAN_INVALID`; người dùng sửa món đó rồi sao ch
 ### Trợ lý chat
 
 Request mang `weekStart` của tuần đang xem; đó chỉ là tuần **mặc định**. Prompt có bảng lịch của tuần này
-và 4 tuần tới kèm ngày tháng, nên trợ lý tự hiểu "tuần sau", "25/11" hay "T4" và đề xuất cho bất kỳ tuần nào
+và 4 tuần tới kèm ngày tháng, nên trợ lý tự hiểu "tuần sau", "25/11" hay "T4" và sửa bất kỳ tuần nào
 trong khoảng đó mà người dùng không cần chuyển trang. Khi tuần đang xem đã qua hết, mặc định là tuần hiện tại.
 
-- `getPlan`, `fillSlots`, `editDraft` nhận `weekStart` tùy chọn (chỉ các tuần lập được). Mỗi output đề xuất có
-  `weekStart` của nó; một tin nhắn có thể chứa đề xuất cho nhiều tuần. Mỗi output là **toàn bộ** bản nháp của
-  tuần đó so với thực đơn đã lưu, nên chỉ đề xuất mới nhất của mỗi tuần còn áp dụng được.
-- Người dùng nhắc ngày đã qua: công cụ báo `DAY_PASSED`, trợ lý nói rõ ngày đó không sửa được và làm nháp cho
-  đúng thứ đó của tuần sau.
-- **Áp dụng** nằm trên thẻ đề xuất trong khung chat: FE đọc lại `GET /meal-plan?weekStart=` của tuần đề xuất,
-  gửi các ngày đổi (bỏ ngày đã qua) tới `PUT /meal-plan/days` với `weekStart` của đề xuất, rồi đặt
-  `proposalStatuses[id] = 'saved'`. Lưu xóa nháp của các ngày đã lưu.
-- **Bỏ đề xuất**: đặt `'dismissed'` và gọi `DELETE /meal-plan/draft?weekStart=` của tuần đó.
-- Tin nhắn đầu của một đoạn chat mới xóa nháp của mọi tuần. `'staged'` chỉ còn trong đoạn chat cũ;
-  FE coi như chưa quyết định.
+- `getPlan`, `fillSlots`, `editPlan`, `autoBalancePlan` nhận `weekStart` tùy chọn (chỉ các tuần lập được). Mỗi
+  output thay đổi có `weekStart` của nó; một tin nhắn có thể đổi nhiều tuần, và nhiều output của cùng một tuần
+  (ví dụ `fillSlots` rồi `verifyMealPlanAllergies`) nối tiếp nhau: `previous` của output đầu là trạng thái trước tin nhắn.
+- Người dùng nhắc ngày đã qua: công cụ báo `DAY_PASSED`, trợ lý nói rõ ngày đó không sửa được và hỏi có muốn lên
+  cho đúng thứ đó của tuần sau không.
+- Trùng món kỵ nhau trong ngày (`DAY_CONFLICT`) vẫn được lưu và nằm trong `output.problems` như cảnh báo.
+
+#### Hỏi người dùng: `askUser`
+
+Khi yêu cầu còn mở (đổi món nhưng chưa nói đổi sang gì, chưa rõ ngày/bữa), thay đổi sẽ ghi đè nhiều món người dùng
+đã có, hoặc có điểm cần lưu ý (dị ứng, ngày đã qua, Kcal lệch xa), trợ lý gọi `askUser` với input
+`{ question: string; options: string[] (2–6, mỗi cái ≤ 80 ký tự); multiple?: boolean }`. Công cụ **không có output**
+trên server: luồng dừng ở part `tool-askUser` với `state: 'input-available'`. FE hiện `options` thành nút; khi người
+dùng chọn, FE `addToolOutput({ tool: 'askUser', toolCallId, output: { answer } })` rồi gửi `answer` như tin nhắn
+người dùng tiếp theo. Người dùng cũng có thể gõ câu trả lời khác.
+
+#### Quay lại: `POST /meal-plan/chat/threads/:threadId/rewind`
+
+```json
+{ "messageId": "<id của tin nhắn người dùng>" }
+```
+
+Giống "rewind" của Claude Code: backend đọc các output thay đổi (`applied: true`) từ tin nhắn đó trở đi, đưa mỗi
+ngày bị đổi về `previous` của lần đổi **đầu tiên** (qua `PUT /meal-plan/days` nội bộ), rồi xóa tin nhắn đó cùng mọi tin
+sau khỏi đoạn chat. Response:
+
+```ts
+type ChatRewind = {
+  text: string; // nội dung tin nhắn bị xóa, để đưa lại vào ô nhập
+  weeks: {
+    weekStart: string;
+    restored: Weekday[];
+    skipped: Weekday[];     // ngày đã qua nên giữ nguyên
+    droppedDishes: number;  // món cũ đã bị xóa hoặc nay bị tránh nên không thêm lại
+  }[];
+};
+```
+
+- `404` khi đoạn chat hoặc tin nhắn người dùng không có (ví dụ lượt bị lỗi trước khi được lưu): FE chỉ cần cắt
+  hội thoại ở phía client, thực đơn không có gì để khôi phục.
+- Khôi phục ghi đè cả những sửa tay của người dùng trên cùng ngày sau tin nhắn đó.
 
 #### Tìm trên web (cần người dùng cho phép)
 

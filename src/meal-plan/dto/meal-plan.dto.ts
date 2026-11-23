@@ -554,6 +554,47 @@ export class MealPlanChatThreadDetailDto extends MealPlanChatThreadSummaryDto {
   messages!: MealPlanChatMessageDto[];
 }
 
+export class RewindMealPlanChatDto {
+  @ApiProperty({
+    description:
+      'The user message to go back before: it and every later message are removed',
+  })
+  @IsString()
+  @MinLength(1)
+  @MaxLength(200)
+  messageId!: string;
+}
+
+export class MealPlanChatRewindWeekDto {
+  @ApiProperty({ example: '2026-11-16' }) weekStart!: string;
+  @ApiProperty({
+    enum: Weekday,
+    isArray: true,
+    description: 'Days put back as they were',
+  })
+  restored!: Weekday[];
+  @ApiProperty({
+    enum: Weekday,
+    isArray: true,
+    description:
+      'Days the assistant changed that have passed since, so they stay as they are',
+  })
+  skipped!: Weekday[];
+  @ApiProperty({
+    description: 'Dishes left out because they were deleted or are now avoided',
+  })
+  droppedDishes!: number;
+}
+
+export class MealPlanChatRewindDto {
+  @ApiProperty({
+    description: 'The text of the removed user message, to edit and send again',
+  })
+  text!: string;
+  @ApiProperty({ type: [MealPlanChatRewindWeekDto] })
+  weeks!: MealPlanChatRewindWeekDto[];
+}
+
 export class CreateMealPlanChatThreadDto {
   @ApiPropertyOptional({ format: 'uuid' })
   @IsOptional()

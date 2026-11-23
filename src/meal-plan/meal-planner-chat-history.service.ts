@@ -3,6 +3,7 @@ import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import type { UIMessage } from 'ai';
 import type { Model } from 'mongoose';
+import { z } from 'zod';
 import { InvalidInputException } from '../common/exceptions/invalid-input.exception.js';
 import { ResourceNotFoundException } from '../common/exceptions/resource-not-found.exception.js';
 import {
@@ -16,15 +17,21 @@ import {
   MealPlanChatMessage,
   type MealPlanChatProposalStatus,
   MealPlanChatThread,
+  MealSection,
+  Weekday,
 } from '../mongo/models.js';
 import type {
   CreateMealPlanChatThreadDto,
   MealPlanChatMessageDto,
+  MealPlanChatRewindDto,
+  MealPlanChatRewindWeekDto,
   MealPlanChatThreadDetailDto,
   MealPlanChatThreadSummaryDto,
   PlannerMessageDto,
+  SaveMealDayDto,
   UpdateMealPlanChatThreadDto,
 } from './dto/meal-plan.dto.js';
+import { MealPlanService } from './meal-plan.service.js';
 
 export const DEFAULT_CHAT_THREAD_TITLE = 'Cuộc trò chuyện mới';
 const MAX_AUTO_TITLE_LENGTH = 80;
@@ -34,14 +41,71 @@ function isProposalStatus(value: unknown): value is MealPlanChatProposalStatus {
   return value === 'staged' || value === 'saved' || value === 'dismissed';
 }
 
-const PROPOSAL_TOOL_TYPES: ReadonlySet<string> = new Set([
-  'tool-proposeMealPlan',
-  'tool-generateMealPlan',
+/** The planner's tools that write the saved plan; each output is a `PlanChange`. */
+const PLAN_CHANGE_TOOL_TYPES: ReadonlySet<string> = new Set([
   'tool-fillSlots',
-  'tool-autoBalanceDraft',
+  'tool-autoBalancePlan',
+  'tool-editPlan',
   'tool-verifyMealPlanAllergies',
-  'tool-editDraft',
 ]);
+
+const recipeRefSchema = z.object({ id: z.string() });
+/**
+ * The part of a saved `PlanChange` a rewind needs. Outputs of the draft era
+ * have no `applied` and were never saved, so they do not parse.
+ */
+const savedChangeSchema = z.object({
+  applied: z.literal(true),
+  weekStart: z.string(),
+  days: z.array(
+    z.object({
+      day: z.enum(Weekday),
+      sections: z.array(
+        z.object({
+          section: z.enum(MealSection),
+          previous: z.array(recipeRefSchema),
+        }),
+      ),
+    }),
+  ),
+});
+
+/**
+ * The days the assistant changed in `parts`, as they were before its first
+ * change, by week. A later change to the same day is ignored: the first
+ * change's `previous` already holds the day before the turn.
+ */
+function daysBeforeChanges(
+  messages: readonly MealPlanChatMessage[],
+): Map<string, SaveMealDayDto[]> {
+  const byWeek = new Map<string, SaveMealDayDto[]>();
+  for (const message of messages) {
+    for (const part of message.parts) {
+      if (typeof part.type !== 'string') continue;
+      if (!PLAN_CHANGE_TOOL_TYPES.has(part.type)) continue;
+      if (part.state !== 'output-available') continue;
+      const change = savedChangeSchema.safeParse(part.output);
+      if (!change.success) continue;
+      const days = byWeek.get(change.data.weekStart) ?? [];
+      for (const { day, sections } of change.data.days) {
+        if (days.some((item) => item.day === day)) continue;
+        const ids = (section: MealSection): string[] => {
+          const found = sections.find((item) => item.section === section);
+          return found ? found.previous.map(({ id }) => id) : [];
+        };
+        days.push({
+          day,
+          breakfast: ids(MealSection.BREAKFAST),
+          lunch: ids(MealSection.LUNCH),
+          dinner: ids(MealSection.DINNER),
+          others: ids(MealSection.OTHER),
+        });
+      }
+      byWeek.set(change.data.weekStart, days);
+    }
+  }
+  return byWeek;
+}
 
 export interface UpsertMealPlanChatMessageInput {
   id: string;
@@ -125,11 +189,11 @@ function derivePreview(
     if (normalized.length <= MAX_PREVIEW_LENGTH) return normalized;
     return `${normalized.slice(0, MAX_PREVIEW_LENGTH - 1)}…`;
   }
-  const hasProposal = parts.some(
+  const changedPlan = parts.some(
     (part) =>
-      typeof part.type === 'string' && PROPOSAL_TOOL_TYPES.has(part.type),
+      typeof part.type === 'string' && PLAN_CHANGE_TOOL_TYPES.has(part.type),
   );
-  if (hasProposal) return 'Đã tạo đề xuất thực đơn';
+  if (changedPlan) return 'Đã cập nhật thực đơn';
   const hasTool = parts.some(
     (part) =>
       typeof part.type === 'string' &&
@@ -184,6 +248,7 @@ export class MealPlannerChatHistoryService {
     private readonly threads: Model<MealPlanChatThread>,
     @InjectModel(MealPlanChatMessage.name)
     private readonly messages: Model<MealPlanChatMessage>,
+    private readonly mealPlan: MealPlanService,
   ) {}
 
   async assertThreadAccess(userId: string, threadId: string): Promise<void> {
@@ -494,6 +559,63 @@ export class MealPlannerChatHistoryService {
     }
 
     return this.getThread(userId, threadId);
+  }
+
+  /**
+   * Goes back to just before the user's message `messageId`, like a rewind:
+   * the days the assistant changed from that turn on get their dishes back,
+   * and that message and everything after it leave the thread. Days that have
+   * passed since cannot change and are reported in `skipped`.
+   */
+  async rewind(
+    userId: string,
+    threadId: string,
+    messageId: string,
+  ): Promise<MealPlanChatRewindDto> {
+    const target = await this.messages
+      .findOne({ threadId, userId, messageId })
+      .exec();
+    if (!target || target.role !== 'user') {
+      throw new ResourceNotFoundException(
+        'NOT_FOUND',
+        'Chat message not found',
+      );
+    }
+    const later = await this.messages
+      .find({ threadId, userId, sequence: { $gte: target.sequence } })
+      .sort({ sequence: 1, _id: 1 })
+      .exec();
+
+    const restored: MealPlanChatRewindWeekDto[] = [];
+    for (const [weekStart, days] of daysBeforeChanges(later)) {
+      const result = await this.mealPlan.restoreDays(userId, weekStart, days);
+      restored.push({ weekStart, ...result });
+    }
+
+    await this.messages
+      .deleteMany({ threadId, userId, sequence: { $gte: target.sequence } })
+      .exec();
+    const last = await this.messages
+      .findOne({ threadId, userId })
+      .sort({ sequence: -1, _id: -1 })
+      .exec();
+    const remaining = await this.messages
+      .countDocuments({ threadId, userId })
+      .exec();
+    await this.threads
+      .updateOne(
+        { _id: threadId, userId },
+        {
+          $set: {
+            messageCount: remaining,
+            lastMessagePreview: last
+              ? derivePreview(last.text, last.parts)
+              : null,
+          },
+        },
+      )
+      .exec();
+    return { text: target.text, weeks: restored };
   }
 
   async deleteThread(userId: string, threadId: string): Promise<void> {

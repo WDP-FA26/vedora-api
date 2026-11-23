@@ -4,14 +4,24 @@ import type { UIMessage } from 'ai';
 import { randomUUID } from 'node:crypto';
 import { InvalidInputException } from '../../../src/common/exceptions/invalid-input.exception.js';
 import { ResourceNotFoundException } from '../../../src/common/exceptions/resource-not-found.exception.js';
+import { MEAL_SECTIONS } from '../../../src/meal-plan/dto/meal-plan.dto.js';
+import { MealPlanService } from '../../../src/meal-plan/meal-plan.service.js';
 import { MealPlannerChatHistoryService } from '../../../src/meal-plan/meal-planner-chat-history.service.js';
 import {
   MealPlanChatMessage,
   MealPlanChatThread,
+  MealSection,
+  Weekday,
 } from '../../../src/mongo/models.js';
 import { MongoModule } from '../../../src/mongo/mongo.module.js';
 import { MongoService } from '../../../src/mongo/mongo.service.js';
-import { createUser } from '../../support/fixtures.js';
+import { DietaryService } from '../../../src/recipes/dietary.service.js';
+import { IncompatibilityRulesService } from '../../../src/recipes/incompatibility-rules.service.js';
+import {
+  createIngredient,
+  createRecipe,
+  createUser,
+} from '../../support/fixtures.js';
 import {
   createTestMongoUrl,
   dropTestDatabase,
@@ -20,11 +30,70 @@ import {
 
 const USER_A = '4a1e32e4-e18e-4dd7-8b4a-246ef2113ff2';
 const USER_B = '5b2f43f5-f29f-4ee8-9c5b-357fe3224aa3';
+const RICE_ID = 'a1a2d3e4-0000-4000-8000-000000000003';
+const TOFU_RECIPE = 'd1a2d3e4-0000-4000-8000-000000000001';
+const SPINACH_RECIPE = 'd1a2d3e4-0000-4000-8000-000000000002';
+const RICE_RECIPE = 'd1a2d3e4-0000-4000-8000-000000000003';
+const WEEK = '2026-11-16';
+const NEXT_WEEK = '2026-11-23';
+// 00:30 on Monday 2026-11-16 in the app time zone, so every day is still editable.
+const MONDAY_MORNING = new Date('2026-11-15T17:30:00Z');
+// 12:00 on Wednesday 2026-11-18 in the app time zone.
+const WEDNESDAY = new Date('2026-11-18T05:00:00Z');
+
+const TITLES: Record<string, string> = {
+  [TOFU_RECIPE]: 'Đậu hũ sốt cà',
+  [SPINACH_RECIPE]: 'Canh rau bina',
+  [RICE_RECIPE]: 'Cơm gạo lứt',
+};
+
+const recipeRef = (id: string) => ({ id, title: TITLES[id] ?? id, tag: null });
+
+/**
+ * A tool output as the planner saves it: one changed day with all four
+ * sections, where only lunch differs.
+ */
+function lunchChange(
+  weekStart: string,
+  day: Weekday,
+  previous: string[],
+  recipes: string[],
+  applied = true,
+) {
+  const sections = MEAL_SECTIONS.map((section) => {
+    if (section !== MealSection.LUNCH) {
+      return { section, previous: [], recipes: [] };
+    }
+    return {
+      section,
+      previous: previous.map(recipeRef),
+      recipes: recipes.map(recipeRef),
+    };
+  });
+  return { weekStart, days: [{ day, sections }], problems: [], applied };
+}
+
+function toolPart(
+  type: string,
+  output: unknown,
+  state = 'output-available',
+): Record<string, unknown> {
+  return { type, toolCallId: randomUUID(), state, input: {}, output };
+}
+
+const lunchOnly = (day: Weekday, lunch: string[] = []) => ({
+  day,
+  breakfast: [],
+  lunch,
+  dinner: [],
+  others: [],
+});
 
 describe('MealPlannerChatHistoryService', () => {
   let app: INestApplication;
   let mongo: MongoService;
   let service: MealPlannerChatHistoryService;
+  let mealPlan: MealPlanService;
 
   const threads = () =>
     mongo.connection.model<MealPlanChatThread>('MealPlanChatThread');
@@ -36,19 +105,28 @@ describe('MealPlannerChatHistoryService', () => {
       imports: [
         MongoModule.forTest(createTestMongoUrl('meal_plan_chat_history')),
       ],
-      providers: [MealPlannerChatHistoryService],
+      providers: [
+        MealPlannerChatHistoryService,
+        MealPlanService,
+        DietaryService,
+        IncompatibilityRulesService,
+      ],
     }).compile();
     app = moduleRef.createNestApplication();
     await app.init();
     await prepareTestDatabase(app);
     mongo = app.get(MongoService);
     service = app.get(MealPlannerChatHistoryService);
+    mealPlan = app.get(MealPlanService);
   });
 
   beforeEach(async () => {
     for (const collection of [
       'meal_plan_chat_messages',
       'meal_plan_chat_threads',
+      'meal_plan_week_entries',
+      'recipes',
+      'ingredients',
       'users',
     ]) {
       await mongo.connection.collections[collection].deleteMany({});
@@ -292,5 +370,190 @@ describe('MealPlannerChatHistoryService', () => {
     expect(await messages().countDocuments({ userId: USER_A })).toBe(0);
     expect(await threads().countDocuments({ userId: USER_B })).toBe(1);
     expect(await messages().countDocuments({ userId: USER_B })).toBe(1);
+  });
+
+  describe('rewind', () => {
+    const threadId = randomUUID();
+
+    const lunchOf = async (weekStart: string, day: Weekday) => {
+      const plan = await mealPlan.find(USER_A, weekStart);
+      const found = plan.days.find((item) => item.day === day);
+      const lunch = found?.sections.find(
+        ({ section }) => section === MealSection.LUNCH,
+      );
+      return (lunch?.recipes ?? []).map(({ id }) => id);
+    };
+
+    const say = (
+      id: string,
+      role: 'user' | 'assistant',
+      parts: Record<string, unknown>[],
+    ) => service.upsertMessage(USER_A, threadId, { id, role, parts });
+
+    const text = (value: string) => ({ type: 'text', text: value });
+
+    beforeEach(async () => {
+      vi.useFakeTimers({ toFake: ['Date'], now: MONDAY_MORNING });
+      await createIngredient(mongo, { id: RICE_ID, name: 'Gạo lứt' });
+      for (const id of [TOFU_RECIPE, SPINACH_RECIPE, RICE_RECIPE]) {
+        await createRecipe(mongo, { id, title: TITLES[id] }, [RICE_ID]);
+      }
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it('restores the earliest previous of each day, from the target message on, and drops those messages', async () => {
+      // The plan as the assistant left it after the turns below.
+      await mealPlan.apply(USER_A, WEEK, [
+        lunchOnly(Weekday.WED, [SPINACH_RECIPE]),
+        lunchOnly(Weekday.THU, [RICE_RECIPE]),
+        lunchOnly(Weekday.FRI, [RICE_RECIPE]),
+      ]);
+      await say('u1', 'user', [text('Xin chào')]);
+      await say('a1', 'assistant', [text('Chào bạn!')]);
+      await say('u2', 'user', [text('Đổi món trưa thứ Tư')]);
+      await say('a2', 'assistant', [
+        toolPart('tool-searchRecipes', [{ id: RICE_RECIPE }]),
+        toolPart(
+          'tool-editPlan',
+          lunchChange(WEEK, Weekday.WED, [TOFU_RECIPE], [RICE_RECIPE]),
+        ),
+        toolPart(
+          'tool-fillSlots',
+          lunchChange(WEEK, Weekday.WED, [RICE_RECIPE], [SPINACH_RECIPE]),
+        ),
+        toolPart(
+          'tool-fillSlots',
+          lunchChange(WEEK, Weekday.THU, [], [RICE_RECIPE]),
+        ),
+        // Not saved: must not be put back.
+        toolPart(
+          'tool-autoBalancePlan',
+          lunchChange(WEEK, Weekday.FRI, [TOFU_RECIPE], [], false),
+        ),
+        // Still running: must not be put back.
+        toolPart(
+          'tool-editPlan',
+          lunchChange(WEEK, Weekday.FRI, [SPINACH_RECIPE], [RICE_RECIPE]),
+          'input-available',
+        ),
+        // A draft-era output without `applied`.
+        toolPart('tool-editPlan', {
+          ...lunchChange(WEEK, Weekday.SAT, [TOFU_RECIPE], []),
+          applied: undefined,
+        }),
+        text('Mình đã đổi món.'),
+      ]);
+      await say('u3', 'user', [text('Kiểm tra dị ứng tuần sau')]);
+      await say('a3', 'assistant', [
+        toolPart(
+          'tool-verifyMealPlanAllergies',
+          lunchChange(NEXT_WEEK, Weekday.MON, [TOFU_RECIPE], []),
+        ),
+      ]);
+
+      const result = await service.rewind(USER_A, threadId, 'u2');
+
+      expect(result).toEqual({
+        text: 'Đổi món trưa thứ Tư',
+        weeks: [
+          {
+            weekStart: WEEK,
+            restored: [Weekday.WED, Weekday.THU],
+            skipped: [],
+            droppedDishes: 0,
+          },
+          {
+            weekStart: NEXT_WEEK,
+            restored: [Weekday.MON],
+            skipped: [],
+            droppedDishes: 0,
+          },
+        ],
+      });
+      expect(await lunchOf(WEEK, Weekday.WED)).toEqual([TOFU_RECIPE]);
+      expect(await lunchOf(WEEK, Weekday.THU)).toEqual([]);
+      expect(await lunchOf(WEEK, Weekday.FRI)).toEqual([RICE_RECIPE]);
+      expect(await lunchOf(WEEK, Weekday.SAT)).toEqual([]);
+      expect(await lunchOf(NEXT_WEEK, Weekday.MON)).toEqual([TOFU_RECIPE]);
+
+      const detail = await service.getThread(USER_A, threadId);
+      expect(detail.messages.map(({ id }) => id)).toEqual(['u1', 'a1']);
+      expect(detail.messageCount).toBe(2);
+      expect(detail.lastMessagePreview).toBe('Chào bạn!');
+    });
+
+    it('skips days that have passed, and empties the thread when rewinding its first message', async () => {
+      await say('u1', 'user', [text('Lên thực đơn')]);
+      await say('a1', 'assistant', [
+        toolPart(
+          'tool-fillSlots',
+          lunchChange(WEEK, Weekday.MON, [], [TOFU_RECIPE]),
+        ),
+        toolPart(
+          'tool-fillSlots',
+          lunchChange(WEEK, Weekday.THU, [], [RICE_RECIPE]),
+        ),
+      ]);
+      await mealPlan.apply(USER_A, WEEK, [
+        lunchOnly(Weekday.MON, [TOFU_RECIPE]),
+        lunchOnly(Weekday.THU, [RICE_RECIPE]),
+      ]);
+      expect(
+        (await service.getThread(USER_A, threadId)).lastMessagePreview,
+      ).toBe('Đã cập nhật thực đơn');
+      vi.setSystemTime(WEDNESDAY);
+
+      const result = await service.rewind(USER_A, threadId, 'u1');
+
+      expect(result).toEqual({
+        text: 'Lên thực đơn',
+        weeks: [
+          {
+            weekStart: WEEK,
+            restored: [Weekday.THU],
+            skipped: [Weekday.MON],
+            droppedDishes: 0,
+          },
+        ],
+      });
+      expect(await lunchOf(WEEK, Weekday.MON)).toEqual([TOFU_RECIPE]);
+      expect(await lunchOf(WEEK, Weekday.THU)).toEqual([]);
+      const detail = await service.getThread(USER_A, threadId);
+      expect(detail.messages).toEqual([]);
+      expect(detail.messageCount).toBe(0);
+      expect(detail.lastMessagePreview).toBeNull();
+    });
+
+    it('lets the conversation go on after a rewind', async () => {
+      await say('u1', 'user', [text('Câu 1')]);
+      await say('a1', 'assistant', [text('Đáp 1')]);
+      await service.rewind(USER_A, threadId, 'u1');
+
+      await say('u2', 'user', [text('Câu 1 sửa lại')]);
+
+      const detail = await service.getThread(USER_A, threadId);
+      expect(detail.messages.map(({ id }) => id)).toEqual(['u2']);
+      expect(detail.messageCount).toBe(1);
+    });
+
+    it('returns 404 for an unknown message, an assistant message, or another user', async () => {
+      await say('u1', 'user', [text('Lên thực đơn')]);
+      await say('a1', 'assistant', [text('Đây là thực đơn')]);
+
+      await expect(
+        service.rewind(USER_A, threadId, 'missing'),
+      ).rejects.toBeInstanceOf(ResourceNotFoundException);
+      await expect(
+        service.rewind(USER_A, threadId, 'a1'),
+      ).rejects.toBeInstanceOf(ResourceNotFoundException);
+      await expect(
+        service.rewind(USER_B, threadId, 'u1'),
+      ).rejects.toBeInstanceOf(ResourceNotFoundException);
+
+      expect(await messages().countDocuments({ threadId })).toBe(2);
+    });
   });
 });

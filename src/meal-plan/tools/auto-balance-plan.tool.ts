@@ -8,9 +8,9 @@ import {
   plannableWeekStarts,
   weekStartInput,
 } from './planner-weeks.js';
-import { proposalFeedback, type DraftProposal } from './proposal-text.js';
+import { changeFeedback, type PlanChange } from './proposal-text.js';
 
-export type AutoBalanceOutput = DraftProposal & {
+export type AutoBalanceOutput = PlanChange & {
   filled: number;
   targetCalories: number;
   passedDays?: { day: Weekday; date: string }[];
@@ -25,17 +25,17 @@ function passedNote(output: AutoBalanceOutput): string {
 }
 
 /**
- * Autonomously balances the draft week toward the daily kcal target by filling
- * missing slots and stacking complementary 2nd/3rd dishes + snacks where needed.
+ * Balances the saved week toward the daily kcal target by filling missing
+ * slots and stacking complementary 2nd/3rd dishes + snacks where needed.
  */
-export function autoBalanceDraftTool(
+export function autoBalancePlanTool(
   mealPlan: MealPlanService,
   userId: string,
   openWeekStart: string,
 ) {
   return tool({
     description:
-      'Automatically rebalance editable days of a week toward the calorie target while keeping existing main dishes: tops up under-calorie days with complementary 2nd/3rd dishes (e.g. main + stir-fry/soup + snack in OTHER) and trims excess secondary dishes on over-budget days. Returns a ready-to-apply Proposal Card in one step.',
+      "Automatically rebalance editable days of a week toward the calorie target while keeping existing main dishes: tops up under-calorie days with complementary 2nd/3rd dishes (e.g. main + stir-fry/soup + snack in OTHER) and trims excess secondary dishes on over-budget days. Saves the result to the user's plan at once (the user can rewind it from the chat).",
     inputSchema: z.object({
       weekStart: weekStartInput(plannableWeekStarts()),
       days: z
@@ -43,14 +43,18 @@ export function autoBalanceDraftTool(
         .min(1)
         .max(7)
         .optional()
-        .describe('Optional subset of days to balance; defaults to all editable days'),
+        .describe(
+          'Optional subset of days to balance; defaults to all editable days',
+        ),
       targetCalories: z
         .number()
         .int()
         .min(800)
         .max(4500)
         .optional()
-        .describe('Optional daily kcal budget override (e.g. after accounting for eating out)'),
+        .describe(
+          'Optional daily kcal budget override (e.g. after accounting for eating out)',
+        ),
     }),
     execute: async ({
       weekStart,
@@ -58,19 +62,18 @@ export function autoBalanceDraftTool(
       targetCalories,
     }): Promise<AutoBalanceOutput> => {
       const week = weekStart ?? openWeekStart;
-      const result = await mealPlan.autoBalanceDraft(userId, {
+      const result = await mealPlan.autoBalancePlan(userId, {
         weekStart: week,
         days,
         targetCalories,
       });
-      const passed =
-        days && days.length > 0 ? passedDays(week, days) : [];
+      const passed = days && days.length > 0 ? passedDays(week, days) : [];
       if (passed.length === 0) return result;
       return { ...result, passedDays: passed };
     },
     toModelOutput: ({ output }) => {
       const note = passedNote(output);
-      if (output.filled === 0 && output.days.length === 0) {
+      if (!output.applied && output.problems.length === 0) {
         return {
           type: 'text',
           value: `The schedule already sits comfortably around ~${output.targetCalories} kcal/day, so no slot changed.${note}`,
@@ -78,7 +81,7 @@ export function autoBalanceDraftTool(
       }
       return {
         type: 'text',
-        value: `Auto-balanced against ~${output.targetCalories} kcal/day.\n${proposalFeedback(output)}${note}`,
+        value: `Auto-balanced against ~${output.targetCalories} kcal/day.\n${changeFeedback(output)}${note}`,
       };
     },
   });

@@ -20,7 +20,10 @@ import { MealPlannerChatService } from '../../../src/meal-plan/meal-planner-chat
 import { ModerationSettingsService } from '../../../src/moderation/moderation-settings.service.js';
 import { AiFeature, MealSection, Weekday } from '../../../src/mongo/models.js';
 import { DietaryService } from '../../../src/recipes/dietary.service.js';
-import { AiUsageService, type UsageTicket } from '../../../src/subscriptions/ai-usage.service.js';
+import {
+  AiUsageService,
+  type UsageTicket,
+} from '../../../src/subscriptions/ai-usage.service.js';
 import { RestaurantMenuService } from '../../../src/workspaces/restaurant-menu.service.js';
 
 type StreamPart =
@@ -149,7 +152,6 @@ describe('MealPlannerChatService', () => {
     dietary.find.mockResolvedValue({
       ingredients: [],
       groups: [],
-      terms: [],
     });
     mealPlan.find.mockResolvedValue({
       weekStart: WEEK,
@@ -169,13 +171,6 @@ describe('MealPlannerChatService', () => {
       })),
       problems: [],
     });
-    mealPlan.getDraft.mockResolvedValue({
-      weekStart: WEEK,
-      days: [],
-      problems: [],
-      ok: false,
-    });
-    mealPlan.discardAllDrafts.mockResolvedValue(undefined);
 
     createOpenRouter.mockClear();
     languageModel.mockClear();
@@ -319,10 +314,8 @@ describe('MealPlannerChatService', () => {
         questions: { verdict: NUTRITION_POLICY },
       }),
     );
-    expect(mealPlan.discardAllDrafts).toHaveBeenCalledWith(USER_ID);
     expect(dietary.find).toHaveBeenCalledWith(USER_ID);
     expect(mealPlan.find).toHaveBeenCalledWith(USER_ID, WEEK);
-    expect(mealPlan.getDraft).toHaveBeenCalledWith(USER_ID, WEEK);
     expect(replyText(chunks)).toBe('Mình đã gợi ý thực đơn.');
     expect(model.doStreamCalls[0].tools?.map((t) => t.name)).toEqual([
       'searchKnowledge',
@@ -330,8 +323,9 @@ describe('MealPlannerChatService', () => {
       'getRecipe',
       'getPlan',
       'fillSlots',
-      'autoBalanceDraft',
-      'editDraft',
+      'autoBalancePlan',
+      'editPlan',
+      'askUser',
       'consultNutritionSubagent',
       'verifyMealPlanAllergies',
       'searchRestaurantDishes',
@@ -356,7 +350,7 @@ describe('MealPlannerChatService', () => {
     expect(tools.some((t) => t.type === 'provider')).toBe(false);
     const [system] = model.doStreamCalls[0].prompt;
     expect(system.role === 'system' && system.content).toContain(
-      'CHƯA cho phép',
+      'người dùng chưa cho phép bạn tự tìm trên web',
     );
   });
 
@@ -393,7 +387,9 @@ describe('MealPlannerChatService', () => {
       }),
     );
     const [system] = model.doStreamCalls[0].prompt;
-    expect(system.role === 'system' && system.content).toContain('ĐÃ cho phép');
+    expect(system.role === 'system' && system.content).toContain(
+      'người dùng đã cho phép bạn tìm trên web',
+    );
   });
 
   it('forwards web citations to the client as source parts', async () => {
@@ -429,28 +425,6 @@ describe('MealPlannerChatService', () => {
         title: 'Tempeh',
       }),
     );
-  });
-
-  it('keeps the drafts while a conversation goes on', async () => {
-    const service = await createService();
-
-    await convertReadableStreamToArray(
-      await service.stream(
-        USER_ID,
-        [
-          { role: 'user', text: 'Lên thực đơn' },
-          {
-            role: 'assistant',
-            text: 'Đã tạo.\n[Đề xuất (người dùng đã bỏ qua): Thứ Hai (sáng: Phở chay (id 1))]',
-          },
-          { role: 'user', text: 'Đổi món tối T4' },
-        ],
-        new AbortController().signal,
-        WEEK,
-      ),
-    );
-    expect(mealPlan.discardAllDrafts).not.toHaveBeenCalled();
-    expect(mealPlan.discardDraft).not.toHaveBeenCalled();
   });
 
   it('refunds the ticket when downstream setup throws after moderation', async () => {
@@ -632,7 +606,6 @@ describe('MealPlannerChatService', () => {
     dietary.find.mockResolvedValue({
       ingredients: [{ id: 'ing-1', name: 'Đậu phộng' }],
       groups: [],
-      terms: ['Đậu phộng'],
     });
     restaurantMenu.suggestForPlanner.mockResolvedValue([
       {

@@ -54,6 +54,34 @@ describe('MealPlanService', () => {
   const rules = () =>
     mongo.connection.model<IncompatibilityRule>('IncompatibilityRule');
 
+  type ChangedDays = Awaited<ReturnType<MealPlanService['editPlan']>>['days'];
+
+  /** The dishes of one slot in a change: after (`recipes`) or before (`previous`). */
+  const changedIds = (
+    days: ChangedDays,
+    day: Weekday,
+    section: MealSection,
+    side: 'recipes' | 'previous' = 'recipes',
+  ): string[] => {
+    const found = days.find((item) => item.day === day);
+    const slot = found?.sections.find((item) => item.section === section);
+    if (!slot) return [];
+    return slot[side].map(({ id }) => id);
+  };
+
+  /** The saved dishes of one slot. */
+  const savedIds = async (
+    weekStart: string,
+    day: Weekday,
+    section: MealSection,
+  ): Promise<string[]> => {
+    const rows = await entries()
+      .find({ userId: USER_ID, weekStart, day, section })
+      .sort({ position: 1 })
+      .exec();
+    return rows.map(({ recipeId }) => recipeId);
+  };
+
   const saved = (
     day: Weekday,
     section: MealSection,
@@ -84,7 +112,6 @@ describe('MealPlanService', () => {
   beforeEach(async () => {
     vi.setSystemTime(MONDAY_MORNING);
     for (const collection of [
-      'meal_plan_week_draft_slots',
       'meal_plan_week_entries',
       'recipes',
       'ingredients',
@@ -230,7 +257,7 @@ describe('MealPlanService', () => {
     ]);
   });
 
-  it('shows an avoided recipe to the assistant but keeps it out of the draft', async () => {
+  it('shows an avoided recipe to the assistant but keeps it out of the plan', async () => {
     await users().updateOne(
       { _id: USER_ID },
       { $set: { avoidedIngredientIds: [TOFU_ID] } },
@@ -242,7 +269,7 @@ describe('MealPlanService', () => {
       avoidedIngredients: ['Đậu hũ'],
     });
 
-    const attempt = await service.editDraft(USER_ID, WEEK, [
+    const attempt = await service.editPlan(USER_ID, WEEK, [
       {
         op: 'set',
         day: Weekday.WED,
@@ -250,21 +277,23 @@ describe('MealPlanService', () => {
         recipeIds: [TOFU_RECIPE],
       },
     ]);
-    expect(attempt.ok).toBe(false);
+    expect(attempt.applied).toBe(false);
     expect(attempt.problems[0]?.code).toBe('AVOIDED_INGREDIENT');
-    expect((await service.getDraft(USER_ID, WEEK)).days).toEqual([]);
+    expect(await entries().countDocuments({ userId: USER_ID })).toBe(0);
 
-    const filled = await service.fillDraft(USER_ID, {
+    const filled = await service.fillPlan(USER_ID, {
       weekStart: WEEK,
       days: [Weekday.WED],
       sections: [MealSection.DINNER],
       onlyEmpty: false,
       candidateIds: [TOFU_RECIPE],
     });
-    const planned = filled.days.flatMap(({ sections }) =>
-      sections.flatMap(({ recipes }) => recipes.map(({ id }) => id)),
+    expect(
+      changedIds(filled.days, Weekday.WED, MealSection.DINNER),
+    ).not.toContain(TOFU_RECIPE);
+    expect(await savedIds(WEEK, Weekday.WED, MealSection.DINNER)).not.toContain(
+      TOFU_RECIPE,
     );
-    expect(planned).not.toContain(TOFU_RECIPE);
   });
 
   it('lets a dish be removed from a day that already clashes', async () => {
@@ -514,8 +543,8 @@ describe('MealPlanService', () => {
     expect(byIngredient).toHaveLength(2);
   });
 
-  describe('draft operations (fillDraft, editDraft, getDraft, discardDraft)', () => {
-    it('fillDraft pins specific recipeIds in a slot and fills the remaining slots', async () => {
+  describe('assistant changes (fillPlan, editPlan)', () => {
+    it('fillPlan pins specific recipeIds in a slot, fills the rest and saves', async () => {
       const phoId = 'd1a2d3e4-0000-4000-8000-000000000010';
       await createRecipe(
         mongo,
@@ -528,7 +557,7 @@ describe('MealPlanService', () => {
         [TOFU_ID],
       );
 
-      const result = await service.fillDraft(USER_ID, {
+      const result = await service.fillPlan(USER_ID, {
         weekStart: WEEK,
         days: [Weekday.WED],
         sections: [
@@ -546,37 +575,64 @@ describe('MealPlanService', () => {
         ],
       });
 
-      expect(result.ok).toBe(true);
+      expect(result.applied).toBe(true);
       expect(result.problems).toEqual([]);
-      const wed = result.days.find((d) => d.day === Weekday.WED);
-      const sectionIds = (section: MealSection) =>
-        wed?.sections
-          .find((s) => s.section === section)
-          ?.recipes.map((r) => r.id);
-      expect(sectionIds(MealSection.LUNCH)).toEqual([phoId]);
-
-      const draft = await service.getDraft(USER_ID, WEEK);
-      expect(draft.days).toHaveLength(1);
-      await service.discardDraft(USER_ID, WEEK);
-      expect(await service.getDraft(USER_ID, WEEK)).toEqual({
-        weekStart: WEEK,
-        days: [],
-        problems: [],
-        ok: false,
-      });
+      expect(result.days.map(({ day }) => day)).toEqual([Weekday.WED]);
+      expect(changedIds(result.days, Weekday.WED, MealSection.LUNCH)).toEqual([
+        phoId,
+      ]);
+      expect(
+        changedIds(result.days, Weekday.WED, MealSection.LUNCH, 'previous'),
+      ).toEqual([]);
+      expect(await savedIds(WEEK, Weekday.WED, MealSection.LUNCH)).toEqual([
+        phoId,
+      ]);
     });
 
-    it('editDraft keeps DAY_CONFLICT in draft for the agent to resolve without mutating other slots', async () => {
-      await service.editDraft(USER_ID, WEEK, [
+    it('editPlan returns each changed day with all four sections, before and after', async () => {
+      await saved(Weekday.MON, MealSection.LUNCH, TOFU_RECIPE);
+
+      const result = await service.editPlan(USER_ID, WEEK, [
         {
           op: 'set',
-          day: Weekday.WED,
+          day: Weekday.MON,
           section: MealSection.DINNER,
-          recipeIds: [SPINACH_RECIPE],
+          recipeIds: [RICE_RECIPE],
         },
       ]);
 
-      const clash = await service.editDraft(USER_ID, WEEK, [
+      expect(result.applied).toBe(true);
+      expect(result.errors).toEqual([]);
+      expect(result.days).toHaveLength(1);
+      expect(result.days[0].sections.map(({ section }) => section)).toEqual([
+        MealSection.BREAKFAST,
+        MealSection.LUNCH,
+        MealSection.DINNER,
+        MealSection.OTHER,
+      ]);
+      const { days } = result;
+      expect(changedIds(days, Weekday.MON, MealSection.LUNCH)).toEqual([
+        TOFU_RECIPE,
+      ]);
+      expect(
+        changedIds(days, Weekday.MON, MealSection.LUNCH, 'previous'),
+      ).toEqual([TOFU_RECIPE]);
+      expect(changedIds(days, Weekday.MON, MealSection.DINNER)).toEqual([
+        RICE_RECIPE,
+      ]);
+      expect(
+        changedIds(days, Weekday.MON, MealSection.DINNER, 'previous'),
+      ).toEqual([]);
+      expect(await savedIds(WEEK, Weekday.MON, MealSection.DINNER)).toEqual([
+        RICE_RECIPE,
+      ]);
+      expect(await savedIds(WEEK, Weekday.MON, MealSection.LUNCH)).toEqual([
+        TOFU_RECIPE,
+      ]);
+    });
+
+    it('editPlan saves a DAY_CONFLICT and lists it, so a later edit can fix it', async () => {
+      const clash = await service.editPlan(USER_ID, WEEK, [
         {
           op: 'set',
           day: Weekday.WED,
@@ -585,12 +641,14 @@ describe('MealPlanService', () => {
         },
       ]);
 
-      expect(clash.ok).toBe(false);
-      expect(clash.problems[0]?.code).toBe('DAY_CONFLICT');
-      const draft = await service.getDraft(USER_ID, WEEK);
-      expect(draft.days).toHaveLength(1);
+      expect(clash.applied).toBe(true);
+      expect(clash.problems.map(({ code }) => code)).toEqual(['DAY_CONFLICT']);
+      expect(await savedIds(WEEK, Weekday.WED, MealSection.DINNER)).toEqual([
+        SPINACH_RECIPE,
+        TOFU_RECIPE,
+      ]);
 
-      const resolved = await service.editDraft(USER_ID, WEEK, [
+      const resolved = await service.editPlan(USER_ID, WEEK, [
         {
           op: 'set',
           day: Weekday.WED,
@@ -598,50 +656,27 @@ describe('MealPlanService', () => {
           recipeIds: [SPINACH_RECIPE, RICE_RECIPE],
         },
       ]);
-      expect(resolved.ok).toBe(true);
+      expect(resolved.applied).toBe(true);
       expect(resolved.problems).toEqual([]);
-      const wed = resolved.days.find((d) => d.day === Weekday.WED);
-      const dinner = wed?.sections.find(
-        (s) => s.section === MealSection.DINNER,
-      );
-      expect(dinner?.recipes.map((r) => r.id)).toEqual([
+      expect(
+        changedIds(resolved.days, Weekday.WED, MealSection.DINNER, 'previous'),
+      ).toEqual([SPINACH_RECIPE, TOFU_RECIPE]);
+      expect(await savedIds(WEEK, Weekday.WED, MealSection.DINNER)).toEqual([
         SPINACH_RECIPE,
         RICE_RECIPE,
       ]);
     });
 
-    it('persists draft on a DAY_CONFLICT inside one meal, but keeps nothing on fatal problems', async () => {
-      const clash = await service.editDraft(USER_ID, WEEK, [
+    it('editPlan with an unknown recipe saves nothing, not even its valid operations', async () => {
+      await saved(Weekday.MON, MealSection.LUNCH, TOFU_RECIPE);
+
+      const result = await service.editPlan(USER_ID, WEEK, [
         {
           op: 'set',
           day: Weekday.MON,
           section: MealSection.LUNCH,
-          recipeIds: [TOFU_RECIPE, SPINACH_RECIPE],
-        },
-        {
-          op: 'set',
-          day: Weekday.MON,
-          section: MealSection.DINNER,
           recipeIds: [RICE_RECIPE],
         },
-      ]);
-
-      expect(clash.ok).toBe(false);
-      expect(clash.problems[0]?.code).toBe('DAY_CONFLICT');
-      // Still persisted so fixing one slot keeps the other
-      const fixed = await service.editDraft(USER_ID, WEEK, [
-        {
-          op: 'set',
-          day: Weekday.MON,
-          section: MealSection.LUNCH,
-          recipeIds: [TOFU_RECIPE],
-        },
-      ]);
-      expect(fixed.ok).toBe(true);
-      expect(fixed.problems).toEqual([]);
-
-      await service.discardDraft(USER_ID, WEEK);
-      const unknown = await service.editDraft(USER_ID, WEEK, [
         {
           op: 'set',
           day: Weekday.TUE,
@@ -649,22 +684,19 @@ describe('MealPlanService', () => {
           recipeIds: ['d1a2d3e4-0000-4000-8000-000000000099'],
         },
       ]);
-      expect(unknown.ok).toBe(false);
-      expect(unknown.problems[0]?.code).toBe('UNKNOWN_RECIPE');
-      expect((await service.getDraft(USER_ID, WEEK)).days).toEqual([]);
+
+      expect(result.applied).toBe(false);
+      expect(result.problems.map(({ code }) => code)).toEqual([
+        'UNKNOWN_RECIPE',
+      ]);
+      expect(await savedIds(WEEK, Weekday.MON, MealSection.LUNCH)).toEqual([
+        TOFU_RECIPE,
+      ]);
+      expect(await entries().countDocuments({ userId: USER_ID })).toBe(1);
     });
 
-    it('returns ok=true with empty days when editDraft clears draft back to saved plan', async () => {
-      await service.editDraft(USER_ID, WEEK, [
-        {
-          op: 'set',
-          day: Weekday.FRI,
-          section: MealSection.DINNER,
-          recipeIds: [RICE_RECIPE],
-        },
-      ]);
-
-      const cleared = await service.editDraft(USER_ID, WEEK, [
+    it('editPlan reports applied: false with no days when nothing changes', async () => {
+      const cleared = await service.editPlan(USER_ID, WEEK, [
         {
           op: 'clear',
           day: Weekday.FRI,
@@ -676,7 +708,7 @@ describe('MealPlanService', () => {
         weekStart: WEEK,
         days: [],
         problems: [],
-        ok: true,
+        applied: false,
         errors: [],
       });
     });
@@ -841,10 +873,10 @@ describe('MealPlanService', () => {
       expect(await entries().countDocuments({ userId: USER_ID })).toBe(0);
     });
 
-    it('editDraft reports DAY_PASSED for a slot before today and keeps the rest', async () => {
+    it('editPlan reports DAY_PASSED for a slot before today and saves the rest', async () => {
       vi.setSystemTime(WEDNESDAY);
 
-      const result = await service.editDraft(USER_ID, WEEK, [
+      const result = await service.editPlan(USER_ID, WEEK, [
         {
           op: 'set',
           day: Weekday.TUE,
@@ -872,22 +904,11 @@ describe('MealPlanService', () => {
       expect(result.days.map(({ day: changed }) => changed)).toEqual([
         Weekday.FRI,
       ]);
-    });
-
-    it('discardAllDrafts drops the drafts of every week', async () => {
-      const set = {
-        op: 'set' as const,
-        day: Weekday.FRI,
-        section: MealSection.DINNER,
-        recipeIds: [RICE_RECIPE],
-      };
-      await service.editDraft(USER_ID, WEEK, [set]);
-      await service.editDraft(USER_ID, NEXT_WEEK, [set]);
-
-      await service.discardAllDrafts(USER_ID);
-
-      expect((await service.getDraft(USER_ID, WEEK)).days).toEqual([]);
-      expect((await service.getDraft(USER_ID, NEXT_WEEK)).days).toEqual([]);
+      expect(result.applied).toBe(true);
+      expect(await savedIds(WEEK, Weekday.FRI, MealSection.DINNER)).toEqual([
+        RICE_RECIPE,
+      ]);
+      expect(await savedIds(WEEK, Weekday.TUE, MealSection.DINNER)).toEqual([]);
     });
 
     it('refuses to preview a day before today', async () => {
@@ -937,8 +958,8 @@ describe('MealPlanService', () => {
       ]);
     });
 
-    it('gives every week its own draft', async () => {
-      await service.editDraft(USER_ID, WEEK, [
+    it('editPlan changes only the week it names', async () => {
+      await service.editPlan(USER_ID, NEXT_WEEK, [
         {
           op: 'set',
           day: Weekday.MON,
@@ -947,36 +968,18 @@ describe('MealPlanService', () => {
         },
       ]);
 
-      const thisWeek = await service.getDraft(USER_ID, WEEK);
-      const nextWeek = await service.getDraft(USER_ID, NEXT_WEEK);
-      await service.discardDraft(USER_ID, NEXT_WEEK);
-
-      expect(thisWeek.weekStart).toBe(WEEK);
-      expect(thisWeek.days).toHaveLength(1);
-      expect(nextWeek).toMatchObject({ weekStart: NEXT_WEEK, days: [] });
-      expect((await service.getDraft(USER_ID, WEEK)).days).toHaveLength(1);
+      expect(lunchIds(await service.find(USER_ID, WEEK), Weekday.MON)).toEqual(
+        [],
+      );
+      expect(
+        lunchIds(await service.find(USER_ID, NEXT_WEEK), Weekday.MON),
+      ).toEqual([TOFU_RECIPE]);
     });
 
-    it("clears only that week's draft when it is saved", async () => {
-      const lunch = {
-        op: 'set' as const,
-        day: Weekday.MON,
-        section: MealSection.LUNCH,
-        recipeIds: [TOFU_RECIPE],
-      };
-      await service.editDraft(USER_ID, WEEK, [lunch]);
-      await service.editDraft(USER_ID, NEXT_WEEK, [lunch]);
-
-      await service.apply(USER_ID, WEEK, [day(Weekday.MON, [TOFU_RECIPE])]);
-
-      expect((await service.getDraft(USER_ID, WEEK)).days).toEqual([]);
-      expect((await service.getDraft(USER_ID, NEXT_WEEK)).days).toHaveLength(1);
-    });
-
-    it('does not let the draft touch a day before today', async () => {
+    it('does not let editPlan touch a day before today', async () => {
       vi.setSystemTime(WEDNESDAY);
 
-      const result = await service.editDraft(USER_ID, WEEK, [
+      const result = await service.editPlan(USER_ID, WEEK, [
         {
           op: 'set',
           day: Weekday.MON,
@@ -993,29 +996,114 @@ describe('MealPlanService', () => {
 
       expect(result.errors).toHaveLength(1);
       expect(result.days.map(({ day: name }) => name)).toEqual([Weekday.THU]);
+      expect(await savedIds(WEEK, Weekday.MON, MealSection.LUNCH)).toEqual([]);
+      expect(await savedIds(WEEK, Weekday.THU, MealSection.LUNCH)).toEqual([
+        RICE_RECIPE,
+      ]);
     });
 
-    it('drops draft slots of a day that passed overnight', async () => {
-      await service.editDraft(USER_ID, WEEK, [
-        {
-          op: 'set',
-          day: Weekday.TUE,
-          section: MealSection.LUNCH,
-          recipeIds: [TOFU_RECIPE],
-        },
+    it('restoreDays puts days back as they were', async () => {
+      await service.apply(USER_ID, WEEK, [
+        day(Weekday.WED, [TOFU_RECIPE]),
+        day(Weekday.THU, [RICE_RECIPE]),
+      ]);
+
+      const result = await service.restoreDays(USER_ID, WEEK, [
+        day(Weekday.WED, [RICE_RECIPE]),
+        day(Weekday.THU),
+      ]);
+
+      expect(result).toEqual({
+        restored: [Weekday.WED, Weekday.THU],
+        skipped: [],
+        droppedDishes: 0,
+      });
+      const plan = await service.find(USER_ID, WEEK);
+      expect(lunchIds(plan, Weekday.WED)).toEqual([RICE_RECIPE]);
+      expect(lunchIds(plan, Weekday.THU)).toEqual([]);
+    });
+
+    it('restoreDays leaves out a dish that no longer exists and restores the rest', async () => {
+      await service.apply(USER_ID, WEEK, [day(Weekday.WED, [TOFU_RECIPE])]);
+      const deletedRecipe = randomUUID();
+
+      const result = await service.restoreDays(USER_ID, WEEK, [
+        day(Weekday.WED, [RICE_RECIPE, deletedRecipe]),
+      ]);
+
+      expect(result).toEqual({
+        restored: [Weekday.WED],
+        skipped: [],
+        droppedDishes: 1,
+      });
+      const plan = await service.find(USER_ID, WEEK);
+      expect(lunchIds(plan, Weekday.WED)).toEqual([RICE_RECIPE]);
+    });
+
+    it('restoreDays skips days that have passed and restores the rest', async () => {
+      await service.apply(USER_ID, WEEK, [
+        day(Weekday.MON, [TOFU_RECIPE]),
+        day(Weekday.THU, [TOFU_RECIPE]),
       ]);
       vi.setSystemTime(WEDNESDAY);
 
-      expect(await service.getDraft(USER_ID, WEEK)).toMatchObject({
-        days: [],
-        ok: false,
+      const result = await service.restoreDays(USER_ID, WEEK, [
+        day(Weekday.MON),
+        day(Weekday.THU, [RICE_RECIPE]),
+      ]);
+
+      expect(result).toEqual({
+        restored: [Weekday.THU],
+        skipped: [Weekday.MON],
+        droppedDishes: 0,
       });
+      const plan = await service.find(USER_ID, WEEK);
+      expect(lunchIds(plan, Weekday.MON)).toEqual([TOFU_RECIPE]);
+      expect(lunchIds(plan, Weekday.THU)).toEqual([RICE_RECIPE]);
     });
 
-    it('fills only days from today on', async () => {
+    it('restoreDays writes nothing when every day has passed', async () => {
+      await service.apply(USER_ID, WEEK, [day(Weekday.MON, [TOFU_RECIPE])]);
+      vi.setSystemTime(new Date('2026-11-25T05:00:00Z'));
+
+      const result = await service.restoreDays(USER_ID, WEEK, [
+        day(Weekday.MON),
+      ]);
+
+      expect(result).toEqual({
+        restored: [],
+        skipped: [Weekday.MON],
+        droppedDishes: 0,
+      });
+      expect(await savedIds(WEEK, Weekday.MON, MealSection.LUNCH)).toEqual([
+        TOFU_RECIPE,
+      ]);
+    });
+
+    it('autoBalancePlan changes nothing when every requested day has passed', async () => {
       vi.setSystemTime(WEDNESDAY);
 
-      const result = await service.fillDraft(USER_ID, {
+      const result = await service.autoBalancePlan(USER_ID, {
+        weekStart: WEEK,
+        days: [Weekday.MON, Weekday.TUE],
+        targetCalories: 1800,
+      });
+
+      expect(result).toEqual({
+        weekStart: WEEK,
+        days: [],
+        problems: [],
+        applied: false,
+        filled: 0,
+        targetCalories: 1800,
+      });
+      expect(await entries().countDocuments({ userId: USER_ID })).toBe(0);
+    });
+
+    it('fillPlan skips passed days and saves only days from today on', async () => {
+      vi.setSystemTime(WEDNESDAY);
+
+      const result = await service.fillPlan(USER_ID, {
         weekStart: WEEK,
         days: [Weekday.MON, Weekday.TUE, Weekday.WED],
         sections: [MealSection.LUNCH],
@@ -1023,19 +1111,25 @@ describe('MealPlanService', () => {
       });
 
       expect(result.days.map(({ day: name }) => name)).toEqual([Weekday.WED]);
+      expect(result.applied).toBe(true);
+      expect(await entries().countDocuments({ userId: USER_ID })).toBe(1);
+      expect(await savedIds(WEEK, Weekday.WED, MealSection.LUNCH)).toHaveLength(
+        1,
+      );
     });
 
-    it('fills nothing for a week that is over', async () => {
+    it('fillPlan saves nothing for a week that is over', async () => {
       vi.setSystemTime(new Date('2026-11-25T05:00:00Z'));
 
-      const result = await service.fillDraft(USER_ID, {
+      const result = await service.fillPlan(USER_ID, {
         weekStart: WEEK,
         days: [Weekday.MON],
         sections: [MealSection.LUNCH],
         onlyEmpty: true,
       });
 
-      expect(result).toMatchObject({ days: [], filled: 0 });
+      expect(result).toMatchObject({ days: [], filled: 0, applied: false });
+      expect(await entries().countDocuments({ userId: USER_ID })).toBe(0);
     });
 
     it('generates only for days from today on', async () => {

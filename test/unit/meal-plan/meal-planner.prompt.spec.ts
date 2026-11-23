@@ -42,7 +42,6 @@ describe('meal-planner prompt & refusals', () => {
     const restrictions: DietaryRestrictionsDto = {
       ingredients: [],
       groups: [],
-      terms: [],
     };
 
     const output = plannerInstructions(restrictions, emptyPlan());
@@ -57,7 +56,6 @@ describe('meal-planner prompt & refusals', () => {
     const restrictions: DietaryRestrictionsDto = {
       ingredients: [],
       groups: [],
-      terms: [],
     };
 
     const output = plannerInstructions(restrictions, emptyPlan());
@@ -78,7 +76,6 @@ describe('meal-planner prompt & refusals', () => {
     const restrictions: DietaryRestrictionsDto = {
       ingredients: [],
       groups: [],
-      terms: [],
     };
     const output = plannerInstructions(restrictions, {
       ...emptyPlan(),
@@ -97,7 +94,6 @@ describe('meal-planner prompt & refusals', () => {
     const restrictions: DietaryRestrictionsDto = {
       ingredients: [],
       groups: [],
-      terms: [],
     };
     const plan = { ...emptyPlan(), weekStart: '2026-11-09', editable: false };
 
@@ -112,7 +108,6 @@ describe('meal-planner prompt & refusals', () => {
     const restrictions: DietaryRestrictionsDto = {
       ingredients: [],
       groups: [],
-      terms: [],
     };
     const output = plannerInstructions(restrictions, {
       ...emptyPlan(),
@@ -129,7 +124,6 @@ describe('meal-planner prompt & refusals', () => {
     const restrictions: DietaryRestrictionsDto = {
       ingredients: [{ id: 'ing-1', name: 'Hành' }],
       groups: [{ id: 'grp-1', name: 'Ngũ vị tân' }],
-      terms: ['tôm khô'],
     };
     const plan = emptyPlan();
     plan.days[0].sections[1].recipes.push({
@@ -163,36 +157,6 @@ describe('meal-planner prompt & refusals', () => {
     );
   });
 
-  it('includes unsaved draft changes when provided', () => {
-    const restrictions: DietaryRestrictionsDto = {
-      ingredients: [],
-      groups: [],
-      terms: [],
-    };
-    const output = plannerInstructions(restrictions, emptyPlan(), {
-      weekStart: '2026-11-16',
-      ok: true,
-      problems: [],
-      days: [
-        {
-          day: Weekday.WED,
-          sections: [
-            {
-              section: MealSection.LUNCH,
-              recipes: [{ id: 'rec-pho', title: 'Phở chay', tag: null }],
-              previous: [],
-            },
-          ],
-        },
-      ],
-    });
-
-    expect(output).toContain('Bản nháp đang đề xuất (chưa lưu):');
-    expect(output).toContain(
-      `- ${DAY_NAMES.WED}: ${SECTION_NAMES.LUNCH}: Phở chay (id rec-pho)`,
-    );
-  });
-
   it('defines non-empty refusal messages for every non-allow moderation verdict', () => {
     const nonAllow = MODERATION_VERDICTS.filter(
       (
@@ -210,7 +174,6 @@ describe('meal-planner prompt & refusals', () => {
     const restrictions: DietaryRestrictionsDto = {
       ingredients: [],
       groups: [],
-      terms: [],
     };
     const nutrition: NutritionProfileDto = {
       heightCm: 160,
@@ -259,7 +222,6 @@ describe('meal-planner prompt & refusals', () => {
     const output = plannerInstructions(
       restrictions,
       emptyPlan(),
-      undefined,
       false,
       nutrition,
     );

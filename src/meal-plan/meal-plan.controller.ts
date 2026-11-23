@@ -45,14 +45,15 @@ import {
   GenerateMealDaysDto,
   MealPlanChatThreadDetailDto,
   MealPlanChatThreadSummaryDto,
-  MealPlanDraftDto,
   MealPlanDto,
   MealPlanPreviewDto,
   MealPlannerChatDto,
+  MealPlanChatRewindDto,
+  RewindMealPlanChatDto,
   SaveMealDaysDto,
   UpdateMealPlanChatThreadDto,
 } from './dto/meal-plan.dto.js';
-import { RequiredWeekQueryDto, WeekQueryDto } from './dto/week-start.js';
+import { WeekQueryDto } from './dto/week-start.js';
 import { MealPlanService } from './meal-plan.service.js';
 import { MealPlannerChatHistoryService } from './meal-planner-chat-history.service.js';
 import { MealPlannerChatService } from './meal-planner-chat.service.js';
@@ -153,31 +154,6 @@ export class MealPlanController {
     return this.mealPlan.generate(request.user.sub, dto);
   }
 
-  @Get('draft')
-  @ApiOperation({
-    summary:
-      'Get the unsaved draft of one week the assistant or generator is building',
-    description:
-      'Same shape as `POST /meal-plan/preview` plus `ok`; each week has its own draft, and `weekStart` defaults to the current week. `days` is empty when there is no draft. Drafts expire after 6 hours and are cleared for a day when you save it.',
-  })
-  @ApiOkResponse({ type: MealPlanDraftDto })
-  draft(
-    @Req() request: AuthenticatedRequest,
-    @Query() query: WeekQueryDto,
-  ): Promise<MealPlanDraftDto> {
-    return this.mealPlan.getDraft(request.user.sub, query.weekStart);
-  }
-
-  @Delete('draft')
-  @HttpCode(HttpStatus.NO_CONTENT)
-  @ApiOperation({ summary: 'Throw away the unsaved draft of one week' })
-  async discardDraft(
-    @Req() request: AuthenticatedRequest,
-    @Query() query: RequiredWeekQueryDto,
-  ): Promise<void> {
-    await this.mealPlan.discardDraft(request.user.sub, query.weekStart);
-  }
-
   @Put('days')
   @ApiOperation({
     summary: 'Replace the dishes of some days of one week',
@@ -202,7 +178,7 @@ export class MealPlanController {
   @ApiOperation({
     summary: 'Talk to the assistant: meal planning and nutrition questions',
     description:
-      'Streams the reply as an AI SDK UI message stream (SSE) for `useChat`. `weekStart` is the week on screen and only the default: the assistant may propose for any week from this one to `maxWeekStart`. Its `fillSlots` and `editDraft` tool outputs are checked proposals with the same shape (`weekStart`, `days`, `problems`, `ok`), each the whole draft of its week; save one with `PUT /meal-plan/days` and its own `weekStart`. Web search runs only with `allowWebSearch: true`; without it the assistant may call `requestWebSearch` (no output) to ask the user first, and web results arrive as `source-url` parts.',
+      'Streams the reply as an AI SDK UI message stream (SSE) for `useChat`. `weekStart` is the week on screen and only the default: the assistant may propose for any week from this one to `maxWeekStart`. Its `fillSlots`, `editPlan`, `autoBalancePlan` and `verifyMealPlanAllergies` tools save to the plan at once; each output is the change (`weekStart`, `days` with `previous` and `recipes`, `problems`, `applied`), which `POST /meal-plan/chat/threads/:threadId/rewind` undoes. `askUser` has no output: show its `options` as buttons and send the pick as the next message. Web search runs only with `allowWebSearch: true`; without it the assistant may call `requestWebSearch` (no output) to ask the user first, and web results arrive as `source-url` parts.',
   })
   @ApiTooManyRequestsResponse({
     type: ErrorBodyDto,
@@ -290,6 +266,30 @@ export class MealPlanController {
       request.user.sub,
       threadId,
       dto,
+    );
+  }
+
+  @Post('chat/threads/:threadId/rewind')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Go back to before one of your messages',
+    description:
+      'Puts back the dishes the assistant changed from that message on (days that have passed stay as they are and are listed in `skipped`; a dish since deleted or now avoided is left out and counted in `droppedDishes`), then removes the message and everything after it from the thread. Returns the removed message text so it can be edited and sent again.',
+  })
+  @ApiOkResponse({ type: MealPlanChatRewindDto })
+  @ApiNotFoundResponse({
+    type: ErrorBodyDto,
+    description: 'Chat thread or user message not found',
+  })
+  rewindChatThread(
+    @Req() request: AuthenticatedRequest,
+    @Param('threadId', new ParseUUIDPipe({ version: '4' })) threadId: string,
+    @Body() dto: RewindMealPlanChatDto,
+  ): Promise<MealPlanChatRewindDto> {
+    return this.requireChatHistory().rewind(
+      request.user.sub,
+      threadId,
+      dto.messageId,
     );
   }
 

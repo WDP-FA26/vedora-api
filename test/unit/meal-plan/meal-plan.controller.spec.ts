@@ -105,7 +105,7 @@ describe('MealPlanController', () => {
     expect(mealPlan.apply).toHaveBeenCalledWith(userId, '2026-11-16', days);
   });
 
-  it('delegates generate, draft, and discardDraft to MealPlanService', async () => {
+  it('delegates generate to MealPlanService', async () => {
     const generateDto = {
       weekStart: '2026-11-16',
       days: [Weekday.MON],
@@ -116,24 +116,6 @@ describe('MealPlanController', () => {
     mealPlan.generate.mockResolvedValue(preview);
     await expect(controller.generate(req, generateDto)).resolves.toBe(preview);
     expect(mealPlan.generate).toHaveBeenCalledWith(userId, generateDto);
-
-    const draft = {
-      weekStart: '2026-11-16',
-      days: [],
-      problems: [],
-      ok: false,
-    };
-    mealPlan.getDraft.mockResolvedValue(draft);
-    await expect(
-      controller.draft(req, { weekStart: '2026-11-16' }),
-    ).resolves.toBe(draft);
-    expect(mealPlan.getDraft).toHaveBeenCalledWith(userId, '2026-11-16');
-
-    mealPlan.discardDraft.mockResolvedValue(undefined);
-    await expect(
-      controller.discardDraft(req, { weekStart: '2026-11-16' }),
-    ).resolves.toBeUndefined();
-    expect(mealPlan.discardDraft).toHaveBeenCalledWith(userId, '2026-11-16');
   });
 
   it('delegates copy to MealPlanService.copyWeek, not overwriting by default', async () => {
@@ -258,5 +240,29 @@ describe('MealPlanController', () => {
       controller.deleteChatThread(req, 'thread-1'),
     ).resolves.toBeUndefined();
     expect(chatHistory.deleteThread).toHaveBeenCalledWith(userId, 'thread-1');
+  });
+
+  it('delegates rewind to MealPlannerChatHistoryService.rewind', async () => {
+    const rewound = {
+      text: 'Lên thực đơn tuần',
+      weeks: [
+        {
+          weekStart: '2026-11-16',
+          restored: [Weekday.WED],
+          skipped: [],
+          droppedDishes: 0,
+        },
+      ],
+    };
+    chatHistory.rewind.mockResolvedValue(rewound);
+
+    await expect(
+      controller.rewindChatThread(req, 'thread-1', { messageId: 'msg-1' }),
+    ).resolves.toBe(rewound);
+    expect(chatHistory.rewind).toHaveBeenCalledWith(
+      userId,
+      'thread-1',
+      'msg-1',
+    );
   });
 });

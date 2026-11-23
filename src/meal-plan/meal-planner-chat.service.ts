@@ -28,9 +28,10 @@ import { MealPlanService } from './meal-plan.service.js';
 import { MealPlannerChatHistoryService } from './meal-planner-chat-history.service.js';
 import { plannerInstructions } from './meal-planner.prompt.js';
 import { PLANNER_REFUSALS } from './meal-planner.refusals.js';
-import { editDraftTool } from './tools/edit-draft.tool.js';
+import { editPlanTool } from './tools/edit-plan.tool.js';
 import { verifyMealPlanAllergiesTool } from './tools/allergy-verifier-subagent.tool.js';
-import { autoBalanceDraftTool } from './tools/auto-balance-draft.tool.js';
+import { askUserTool } from './tools/ask-user.tool.js';
+import { autoBalancePlanTool } from './tools/auto-balance-plan.tool.js';
 import { fillSlotsTool } from './tools/fill-slots.tool.js';
 import { getPlanTool } from './tools/get-plan.tool.js';
 import { getRecipeTool } from './tools/get-recipe.tool.js';
@@ -142,15 +143,9 @@ export class MealPlannerChatService {
         return cannedReply(PLANNER_REFUSALS[verdict], assistantMessageId);
       }
 
-      // A new conversation starts from the saved plans of every week. A card
-      // the user dismisses later drops its week's draft through DELETE /draft.
-      if (messages.length === 1) {
-        await this.mealPlan.discardAllDrafts(userId);
-      }
-      const [restrictions, plan, draft, nutrition] = await Promise.all([
+      const [restrictions, plan, nutrition] = await Promise.all([
         this.dietary.find(userId),
         this.mealPlan.find(userId, weekStart),
-        this.mealPlan.getDraft(userId, weekStart),
         Promise.resolve(this.dietary.findNutrition(userId)).then(
           (value) => value ?? null,
         ),
@@ -161,7 +156,7 @@ export class MealPlannerChatService {
         plan.weekStart < plan.currentWeekStart
           ? plan.currentWeekStart
           : plan.weekStart;
-       const avoidedTerms = [
+      const avoidedTerms = [
         ...restrictions.ingredients.map(({ name }) => name),
         ...restrictions.groups.map(({ name }) => name),
         ...(restrictions.allergyNote ? [restrictions.allergyNote] : []),
@@ -171,7 +166,6 @@ export class MealPlannerChatService {
         instructions: plannerInstructions(
           restrictions,
           plan,
-          draft,
           allowWebSearch,
           nutrition,
         ),
@@ -182,12 +176,9 @@ export class MealPlannerChatService {
           getRecipe: getRecipeTool(this.mealPlan, userId),
           getPlan: getPlanTool(this.mealPlan, userId, toolWeek),
           fillSlots: fillSlotsTool(this.mealPlan, userId, toolWeek),
-          autoBalanceDraft: autoBalanceDraftTool(
-            this.mealPlan,
-            userId,
-            toolWeek,
-          ),
-          editDraft: editDraftTool(this.mealPlan, userId, toolWeek),
+          autoBalancePlan: autoBalancePlanTool(this.mealPlan, userId, toolWeek),
+          editPlan: editPlanTool(this.mealPlan, userId, toolWeek),
+          askUser: askUserTool(),
           consultNutritionSubagent: consultNutritionSubagentTool(
             this.model,
             this.mealPlan,
