@@ -1,4 +1,5 @@
 import 'reflect-metadata';
+import { runtimeConfig } from '../../../src/config/runtime-config.js';
 import { plainToInstance } from 'class-transformer';
 import { validate } from 'class-validator';
 import {
@@ -191,7 +192,7 @@ describe('MealPlan & ShoppingList DTOs', () => {
       expect(await validate(dto)).not.toHaveLength(0);
     });
 
-    it('rejects invalid requestId, empty messages, > 10 messages, or invalid message fields', async () => {
+    it('rejects invalid requestId, empty messages, too many messages, or invalid message fields', async () => {
       expect(
         await validate(
           plainToInstance(MealPlannerChatDto, {
@@ -225,10 +226,13 @@ describe('MealPlan & ShoppingList DTOs', () => {
         await validate(
           plainToInstance(MealPlannerChatDto, {
             weekStart: '2026-11-16',
-            messages: Array.from({ length: 11 }, () => ({
-              role: 'user',
-              text: 'hi',
-            })),
+            messages: Array.from(
+              { length: runtimeConfig.PLANNER_CHAT_MAX_MESSAGES + 1 },
+              () => ({
+                role: 'user',
+                text: 'hi',
+              }),
+            ),
           }),
         ),
       ).not.toHaveLength(0);
@@ -246,7 +250,14 @@ describe('MealPlan & ShoppingList DTOs', () => {
         await validate(
           plainToInstance(MealPlannerChatDto, {
             weekStart: '2026-11-16',
-            messages: [{ role: 'user', text: 'a'.repeat(4001) }],
+            messages: [
+              {
+                role: 'user',
+                text: 'a'.repeat(
+                  runtimeConfig.PLANNER_CHAT_MAX_MESSAGE_LENGTH + 1,
+                ),
+              },
+            ],
           }),
         ),
       ).not.toHaveLength(0);
