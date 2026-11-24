@@ -1,5 +1,8 @@
 /** Operational defaults, matched against the pre-refactor source. Units are part of each key. */
 export const numericDefaults = {
+  SYSTEM_LOG_QUERY_MAX_LENGTH: 100,
+  SYSTEM_LOG_WRITE_TIMEOUT_MS: 2000,
+  SYSTEM_LOG_QUERY_TIMEOUT_MS: 5000,
   VERIFICATION_CLEANUP_BATCH_SIZE: 200,
   USERS_SEARCH_MAX_LENGTH: 100,
   ACCOUNT_OPERATION_REASON_MAX_LENGTH: 500,
