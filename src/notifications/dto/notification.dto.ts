@@ -54,7 +54,7 @@ export class NotificationDto {
     nullable: true,
     type: String,
     description:
-      "Moderation: the admin's note. POST_REMOVED and REPORTED_POST_REMOVED: the removed post's blog title or opening words (the post is gone, so postId is null)",
+      "Moderation: the admin's note. Post removals: the post excerpt. Comment removals and report outcomes: a bounded comment excerpt, never the reporter's details or identity.",
   })
   note!: string | null;
 
