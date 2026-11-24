@@ -157,9 +157,7 @@ export class PostInteractionsService {
     dto: CommentBodyDto,
   ): Promise<CommentResponseDto> {
     await this.requirePublishedPost(postId);
-    await this.contentModeration.requireAllowed([
-      { kind: 'text', text: dto.body },
-    ]);
+    await this.contentModeration.requireAllowed(dto.body);
     const result = await withUserLocks(
       this.mongo,
       [authorId],
@@ -192,9 +190,7 @@ export class PostInteractionsService {
   ): Promise<CommentResponseDto> {
     await this.requirePublishedPost(postId);
     await this.requireComment(postId, targetId);
-    await this.contentModeration.requireAllowed([
-      { kind: 'text', text: dto.body },
-    ]);
+    await this.contentModeration.requireAllowed(dto.body);
     const result = await withUserLocks(
       this.mongo,
       [authorId],
@@ -257,9 +253,7 @@ export class PostInteractionsService {
         'FORBIDDEN',
         'Only the author can edit this comment',
       );
-    await this.contentModeration.requireAllowed([
-      { kind: 'text', text: dto.body },
-    ]);
+    await this.contentModeration.requireAllowed(dto.body);
     return withUserLocks(this.mongo, [actor.sub], async (session) => {
       await this.requireActiveAuthor(actor.sub, session);
       await this.beginCommentWrite(postId, session);

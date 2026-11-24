@@ -6,20 +6,14 @@ import {
   ArrayMinSize,
   ArrayUnique,
   IsInt,
-  IsNumber,
   IsOptional,
   IsString,
   Length,
   Matches,
-  Max,
   MaxLength,
   Min,
   NotEquals,
-  Validate,
   ValidateNested,
-  type ValidationArguments,
-  ValidatorConstraint,
-  type ValidatorConstraintInterface,
 } from 'class-validator';
 import { ALLOW_KEY } from '../policies/content.js';
 
@@ -30,22 +24,6 @@ const Trim = () =>
   Transform(({ value }: { value: unknown }) =>
     typeof value === 'string' ? value.trim() : value,
   );
-
-@ValidatorConstraint({ name: 'belowRejectThreshold' })
-class BelowRejectThreshold implements ValidatorConstraintInterface {
-  validate(value: unknown, { object }: ValidationArguments): boolean {
-    return (
-      typeof value === 'number' &&
-      'rejectThreshold' in object &&
-      typeof object.rejectThreshold === 'number' &&
-      value < object.rejectThreshold
-    );
-  }
-
-  defaultMessage(): string {
-    return 'reviewThreshold must be lower than rejectThreshold';
-  }
-}
 
 export class ModerationChoiceDto {
   @ApiProperty({
@@ -116,39 +94,6 @@ export class ModerationPolicyDto {
   })
   choices!: ModerationChoiceDto[];
 
-  @ApiProperty({
-    minimum: 0,
-    maximum: 1,
-    description: 'A violation chance at or above this is rejected outright',
-  })
-  @IsNumber()
-  @Min(0)
-  @Max(1)
-  rejectThreshold!: number;
-
-  @ApiProperty({
-    minimum: 0,
-    maximum: 1,
-    description:
-      'A violation chance at or above this, below the reject threshold, waits for an admin',
-  })
-  @IsNumber()
-  @Min(0)
-  @Max(1)
-  @Validate(BelowRejectThreshold)
-  reviewThreshold!: number;
-
-  @ApiPropertyOptional({
-    minimum: 0,
-    maximum: 1,
-    description:
-      'A `manipulation` chance at or above this is rejected outright, before the reviewer model decides. Omit it to keep the saved value',
-  })
-  @IsOptional()
-  @IsNumber()
-  @Min(0)
-  @Max(1)
-  manipulationThreshold?: number;
 }
 
 export class UpdateModerationSettingsDto extends ModerationPolicyDto {
@@ -172,12 +117,6 @@ export class ModerationSettingsDto extends ModerationPolicyDto {
   @ApiProperty({ nullable: true, type: Date }) updatedAt!: Date | null;
   @ApiProperty({ nullable: true, type: String }) updatedById!: string | null;
   @ApiProperty() isDefault!: boolean;
-
-  @ApiProperty({
-    description:
-      'True when MODERATION_MODE=enforce: the manipulation rule and the reviewer model decide. False (shadow): they are only recorded',
-  })
-  manipulationEnforced!: boolean;
 }
 
 export class TestModerationDto {
@@ -204,14 +143,20 @@ export class ModerationTestResultDto {
   @ApiProperty({ nullable: true, type: String })
   category!: string | null;
 
-  @ApiProperty({ minimum: 0, maximum: 1 })
-  violationScore!: number;
+  @ApiProperty({
+    nullable: true,
+    type: Number,
+    minimum: 0,
+    maximum: 3,
+    description:
+      '0 no risk, 1 low (published), 2 medium (an admin reviews it), 3 high (rejected). Null when the model refused to read it',
+  })
+  riskLevel!: number | null;
 
   @ApiProperty({
     nullable: true,
-    type: 'object',
-    additionalProperties: { type: 'number' },
-    description: "The model's chance for every choice, `allow` included",
+    type: String,
+    description: 'Why, in Vietnamese. Null when the model refused to read it',
   })
-  scores!: Record<string, number> | null;
+  summary!: string | null;
 }

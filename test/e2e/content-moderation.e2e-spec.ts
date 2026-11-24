@@ -20,7 +20,7 @@ interface PostBody {
   moderationVerdict: string | null;
   moderation?: {
     verdict: string;
-    violationScore: number;
+    riskLevel: number | null;
     reviewedById: string | null;
     reviewNote: string | null;
   };
@@ -173,7 +173,7 @@ describe('Content moderation review queue (e2e)', () => {
     expect(ids).toEqual([created.id]);
     expect((await adminView(created.id)).moderation).toMatchObject({
       verdict: 'violence',
-      violationScore: 0.6,
+      riskLevel: 2,
     });
 
     const approved = await moderate(
@@ -197,7 +197,7 @@ describe('Content moderation review queue (e2e)', () => {
     await request(server()).get(`/api/v1/posts/${created.id}`).expect(404);
     expect((await adminView(created.id)).moderation).toMatchObject({
       verdict: 'provider_blocked',
-      violationScore: 1,
+      riskLevel: null,
     });
     const queue = await request(server())
       .get('/api/v1/admin/posts?status=PENDING_REVIEW')

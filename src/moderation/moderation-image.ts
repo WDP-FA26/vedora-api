@@ -5,14 +5,14 @@ const MAX_SIDE_PX = runtimeConfig.MODERATION_IMAGE_MAX_SIDE_PX;
 const MIN_SIDE_PX = runtimeConfig.MODERATION_IMAGE_MIN_SIDE_PX;
 
 /** ffmpeg filters that fit any picture inside the moderation model's image limits. */
-export const JEV_FILTERS: readonly string[] = [
+const MODERATION_FILTERS: readonly string[] = [
   `scale=w='min(iw,${MAX_SIDE_PX})':h='min(ih,${MAX_SIDE_PX})':force_original_aspect_ratio=decrease`,
   "crop=w='trunc(iw/2)*2':h='trunc(ih/2)*2'",
   `pad=w='max(iw,${MIN_SIDE_PX})':h='max(ih,${MIN_SIDE_PX})':x='(ow-iw)/2':y='(oh-ih)/2':color=white`,
   'format=yuvj420p',
 ];
 
-export async function toJevJpeg(source: Buffer): Promise<Buffer> {
+export async function toModerationJpeg(source: Buffer): Promise<Buffer> {
   const { stdout } = await runFfmpeg(
     [
       '-loglevel',
@@ -22,7 +22,7 @@ export async function toJevJpeg(source: Buffer): Promise<Buffer> {
       '-frames:v',
       '1',
       '-vf',
-      JEV_FILTERS.join(','),
+      MODERATION_FILTERS.join(','),
       '-f',
       'mjpeg',
       'pipe:1',

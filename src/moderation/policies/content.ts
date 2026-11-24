@@ -3,7 +3,6 @@ import {
   loadJsonConfig,
   validContentPolicy,
 } from '../../config/config-files.js';
-import type { DecisionPolicy } from '../../common/decision/decision.js';
 
 export interface ContentChoice {
   key: string;
@@ -50,17 +49,3 @@ export function withReservedChoices(choices: ContentChoice[]): ContentChoice[] {
   return [...choices, { ...DEFAULT_MANIPULATION_CHOICE }];
 }
 
-export function buildContentPolicy(
-  settings: ContentPolicySettings,
-): DecisionPolicy<string> {
-  const criteria: Record<string, string> = {};
-  for (const choice of settings.choices) {
-    criteria[choice.key] = choice.description;
-  }
-  criteria[ALLOW_KEY] = settings.allowDescription;
-  return {
-    type: 'choice',
-    instructions: settings.instructions,
-    criteria,
-  };
-}

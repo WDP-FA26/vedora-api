@@ -1,6 +1,5 @@
 import { runtimeConfig } from '../config/runtime-config.js';
 import { Injectable } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
 import { InjectModel } from '@nestjs/mongoose';
 import type { Model } from 'mongoose';
 import { StateConflictException } from '../common/exceptions/state-conflict.exception.js';
@@ -11,23 +10,11 @@ import {
   DEFAULT_CONTENT_POLICY,
   withReservedChoices,
 } from './policies/content.js';
-import { isEnforced } from '../config/moderation-mode.js';
 
 const SETTINGS_ID = 'content';
 const CACHE_TTL_MS = runtimeConfig.MODERATION_CACHE_TTL_MS;
 
-export interface ContentSettingsInput extends ContentPolicySettings {
-  rejectThreshold: number;
-  reviewThreshold: number;
-  /** Omitted: keep the saved one (or the default). */
-  manipulationThreshold?: number;
-}
-
-export interface ContentSettings extends ContentSettingsInput {
-  /** A `manipulation` chance at or above this is rejected outright. */
-  manipulationThreshold: number;
-  /** Whether that rule is applied now (MODERATION_MODE=enforce) or only recorded. */
-  manipulationEnforced: boolean;
+export interface ContentSettings extends ContentPolicySettings {
   version: number;
   updatedById: string | null;
   updatedAt: Date | null;
@@ -40,28 +27,13 @@ export class ModerationSettingsService {
   constructor(
     @InjectModel(ModerationSettings.name)
     private readonly model: Model<ModerationSettings>,
-    private readonly config: ConfigService,
   ) {}
-
-  private defaultManipulationThreshold(): number {
-    return this.config.get<number>('MODERATION_MANIPULATION_THRESHOLD', 0.5);
-  }
 
   defaults(): ContentSettings {
     const policy = structuredClone(DEFAULT_CONTENT_POLICY);
     return {
       ...policy,
       choices: withReservedChoices(policy.choices),
-      manipulationThreshold: this.defaultManipulationThreshold(),
-      manipulationEnforced: isEnforced(this.config),
-      rejectThreshold: this.config.get<number>(
-        'MODERATION_REJECT_THRESHOLD',
-        0.85,
-      ),
-      reviewThreshold: this.config.get<number>(
-        'MODERATION_REVIEW_THRESHOLD',
-        0.3,
-      ),
       version: 0,
       updatedById: null,
       updatedAt: null,
@@ -79,19 +51,14 @@ export class ModerationSettingsService {
   }
 
   async save(
-    input: ContentSettingsInput,
+    input: ContentPolicySettings,
     adminId: string,
     expectedVersion: number,
   ): Promise<ContentSettings> {
-    const manipulationThreshold =
-      input.manipulationThreshold ?? (await this.get()).manipulationThreshold;
     const fields = {
       instructions: input.instructions,
       allowDescription: input.allowDescription,
       choices: withReservedChoices(input.choices),
-      rejectThreshold: input.rejectThreshold,
-      reviewThreshold: input.reviewThreshold,
-      manipulationThreshold,
       updatedById: adminId,
     };
     const saved =
@@ -136,10 +103,7 @@ export class ModerationSettingsService {
    * the row; after a reset it reuses the row and continues its version.
    */
   private async saveOverDefaults(
-    fields: Omit<
-      ContentSettings,
-      'version' | 'updatedAt' | 'manipulationEnforced'
-    >,
+    fields: Omit<ContentSettings, 'version' | 'updatedAt'>,
   ): Promise<ModerationSettings | null> {
     const afterReset = await this.model
       .findOneAndUpdate(
@@ -153,10 +117,7 @@ export class ModerationSettingsService {
   }
 
   private async createFirst(
-    fields: Omit<
-      ContentSettings,
-      'version' | 'updatedAt' | 'manipulationEnforced'
-    >,
+    fields: Omit<ContentSettings, 'version' | 'updatedAt'>,
   ): Promise<ModerationSettings | null> {
     try {
       return await this.model.create({
@@ -183,11 +144,6 @@ export class ModerationSettingsService {
       instructions: row.instructions,
       allowDescription: row.allowDescription,
       choices: withReservedChoices(choices),
-      rejectThreshold: row.rejectThreshold,
-      reviewThreshold: row.reviewThreshold,
-      manipulationThreshold:
-        row.manipulationThreshold ?? this.defaultManipulationThreshold(),
-      manipulationEnforced: isEnforced(this.config),
       version: row.version,
       updatedById: row.updatedById,
       updatedAt: row.updatedAt,

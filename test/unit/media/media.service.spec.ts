@@ -32,6 +32,7 @@ import {
 import { MediaService } from '../../../src/media/media.service.js';
 import { PostModerationService } from '../../../src/media/post-moderation.service.js';
 import { ContentModerationService } from '../../../src/moderation/content-moderation.service.js';
+import type { EvidenceSources } from '../../../src/moderation/content-evidence.js';
 import { StorageService } from '../../../src/storage/storage.service.js';
 import { Subject } from 'rxjs';
 import { NotificationsService } from '../../../src/notifications/notifications.service.js';
@@ -43,9 +44,9 @@ vi.mock('../../../src/common/http/fetch-public-image.js', () => ({
 function assessment(
   decision: 'publish' | 'review' | 'reject',
   category: string | null,
-  violationScore: number,
+  riskLevel: number,
 ) {
-  return { decision, category, violationScore, scores: {} };
+  return { decision, category, riskLevel, evidence: null };
 }
 
 describe('MediaService', () => {
@@ -84,7 +85,10 @@ describe('MediaService', () => {
         MediaService,
         CloudinaryService,
         PostModerationService,
-        { provide: ContentModerationService, useValue: { review } },
+        {
+          provide: ContentModerationService,
+          useValue: { review, modelId: 'anthropic/claude-haiku-5.5' },
+        },
         { provide: StorageService, useValue: {} },
         { provide: NotificationsService, useValue: { notify } },
         {
@@ -201,8 +205,9 @@ describe('MediaService', () => {
 
     await service.handleNotification(streamBuilt());
 
-    const parts = review.mock.calls[0]?.[0] as { kind: string }[];
-    expect(parts.filter(({ kind }) => kind === 'jpeg')).toHaveLength(4);
+    const sources = review.mock.calls[0]?.[0] as EvidenceSources;
+    expect(sources.images).toHaveLength(4);
+    expect(sources.images.every(({ field }) => field === 'frame')).toBe(true);
   });
 
   describe('when videos are transcribed first', () => {
@@ -232,18 +237,17 @@ describe('MediaService', () => {
         expect((await post())?.status).toBe(PostStatus.PUBLISHED);
       });
 
-      const parts = review.mock.calls[0]?.[0] as {
-        kind: string;
-        text?: string;
-      }[];
-      expect(parts.filter(({ kind }) => kind === 'jpeg')).toHaveLength(4);
-      expect(parts.map(({ text }) => text)).toContain(
-        'What the video says: Hôm nay mình nấu canh chua',
-      );
+      const sources = review.mock.calls[0]?.[0] as EvidenceSources;
+      expect(sources.images).toHaveLength(4);
+      expect(sources.texts).toContainEqual({
+        field: 'transcript',
+        mediaId,
+        text: 'Hôm nay mình nấu canh chua',
+      });
     });
 
     it('blocks a post whose transcript breaks the policy', async () => {
-      review.mockResolvedValue(assessment('reject', 'violence', 0.97));
+      review.mockResolvedValue(assessment('reject', 'violence', 3));
       await addMedia({ postId, status: MediaStatus.PROCESSING });
       await service.handleNotification(streamBuilt());
 
@@ -270,13 +274,13 @@ describe('MediaService', () => {
       await service.handleNotification(streamBuilt());
 
       expect((await post())?.status).toBe(PostStatus.PUBLISHED);
-      const parts = review.mock.calls[0]?.[0] as { kind: string }[];
-      expect(parts.some(({ kind }) => kind === 'text')).toBe(true);
+      const sources = review.mock.calls[0]?.[0] as EvidenceSources;
+      expect(sources.images.length).toBeGreaterThan(0);
     });
   });
 
   it('rejects the post and keeps it hidden when moderation blocks it', async () => {
-    review.mockResolvedValue(assessment('reject', 'violence', 0.97));
+    review.mockResolvedValue(assessment('reject', 'violence', 3));
     await addMedia({ postId, status: MediaStatus.PROCESSING });
 
     await service.handleNotification(streamBuilt());
@@ -295,14 +299,14 @@ describe('MediaService', () => {
   });
 
   it('holds the post for an admin when moderation is unsure', async () => {
-    review.mockResolvedValue(assessment('review', 'hate', 0.6));
+    review.mockResolvedValue(assessment('review', 'hate', 2));
     await addMedia({ postId, status: MediaStatus.PROCESSING });
 
     await service.handleNotification(streamBuilt());
 
     expect(await post()).toMatchObject({
       status: PostStatus.PENDING_REVIEW,
-      moderation: { verdict: 'hate', violationScore: 0.6 },
+      moderation: { verdict: 'hate', riskLevel: 2 },
     });
     expect(notify).toHaveBeenCalledWith({
       recipientId: ownerId,
@@ -313,15 +317,26 @@ describe('MediaService', () => {
     expect(schedule).not.toHaveBeenCalled();
   });
 
-  it('keeps the post PROCESSING when the model cannot answer, then retries', async () => {
+  it('holds the post for an admin when the model cannot answer', async () => {
     review.mockRejectedValueOnce(new Error('timeout'));
     await addMedia({ postId, status: MediaStatus.PROCESSING });
 
     await service.handleNotification(streamBuilt());
-    expect((await post())?.status).toBe(PostStatus.PROCESSING);
 
-    await service.settlePosts([postId]);
-    expect((await post())?.status).toBe(PostStatus.PUBLISHED);
+    expect(await post()).toMatchObject({
+      status: PostStatus.PENDING_REVIEW,
+      moderation: {
+        verdict: 'moderation_failed',
+        riskLevel: null,
+        evidence: { status: 'FAILED' },
+      },
+    });
+    expect(notify).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'POST_PENDING_REVIEW',
+        reason: 'moderation_failed',
+      }),
+    );
   });
 
   it('waits for every video of a post before publishing it', async () => {

@@ -25,8 +25,6 @@ function validPolicy(overrides: Record<string, unknown> = {}) {
     instructions: 'Classify content posted on Vedora for safety only.',
     allowDescription: 'Cooking recipes, food photos, and everyday chatter.',
     choices: [validChoice()],
-    rejectThreshold: 0.85,
-    reviewThreshold: 0.3,
     ...overrides,
   };
 }
@@ -149,46 +147,6 @@ describe('moderation-settings.dto', () => {
       expect(
         (await validate(tooMany)).some((e) => e.property === 'choices'),
       ).toBe(true);
-    });
-
-    it('requires reviewThreshold strictly below rejectThreshold within [0, 1]', async () => {
-      const equal = plainToInstance(
-        ModerationPolicyDto,
-        validPolicy({ reviewThreshold: 0.5, rejectThreshold: 0.5 }),
-      );
-      const equalErrors = await validate(equal);
-      expect(
-        equalErrors.find((e) => e.property === 'reviewThreshold')?.constraints,
-      ).toMatchObject({
-        belowRejectThreshold:
-          'reviewThreshold must be lower than rejectThreshold',
-      });
-
-      const higher = plainToInstance(
-        ModerationPolicyDto,
-        validPolicy({ reviewThreshold: 0.9, rejectThreshold: 0.8 }),
-      );
-      expect(
-        (await validate(higher)).some((e) => e.property === 'reviewThreshold'),
-      ).toBe(true);
-
-      const nonNumericReject = plainToInstance(
-        ModerationPolicyDto,
-        validPolicy({ reviewThreshold: 0.3, rejectThreshold: '0.85' }),
-      );
-      expect(
-        (await validate(nonNumericReject)).some(
-          (e) => e.property === 'reviewThreshold',
-        ),
-      ).toBe(true);
-
-      const outOfBounds = plainToInstance(
-        ModerationPolicyDto,
-        validPolicy({ reviewThreshold: -0.1, rejectThreshold: 1.1 }),
-      );
-      expect(
-        (await validate(outOfBounds)).map((e) => e.property).sort(),
-      ).toEqual(['rejectThreshold', 'reviewThreshold']);
     });
 
     it('validates nested choices', async () => {

@@ -1,6 +1,6 @@
 import { spawnSync } from 'node:child_process';
 import ffmpegStatic from 'ffmpeg-static';
-import { toJevJpeg } from '../../../src/moderation/moderation-image.js';
+import { toModerationJpeg } from '../../../src/moderation/moderation-image.js';
 
 function sampleImage(size: string, format: string): Buffer {
   const binary = typeof ffmpegStatic === 'string' ? ffmpegStatic : 'ffmpeg';
@@ -35,7 +35,7 @@ function dimensionsOf(jpeg: Buffer): { width: number; height: number } {
   return { width: Number(match?.[1]), height: Number(match?.[2]) };
 }
 
-describe('toJevJpeg', () => {
+describe('toModerationJpeg', () => {
   it.each([
     ['2400x1600', 'png'],
     ['1281x853', 'mjpeg'],
@@ -43,7 +43,7 @@ describe('toJevJpeg', () => {
     ['100x1000', 'mjpeg'],
   ])('fits Jev limits for a %s %s', async (size, format) => {
     const { width, height } = dimensionsOf(
-      await toJevJpeg(sampleImage(size, format)),
+      await toModerationJpeg(sampleImage(size, format)),
     );
     expect(Math.min(width, height)).toBeGreaterThanOrEqual(256);
     expect(Math.max(width, height)).toBeLessThanOrEqual(1568);

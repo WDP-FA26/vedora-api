@@ -7,6 +7,7 @@ import { AdminModerationController } from '../../../src/moderation/admin-moderat
 import {
   CONTENT_MODERATION_MODEL,
   ContentModerationService,
+  type ModerationModel,
 } from '../../../src/moderation/content-moderation.service.js';
 import { ModerationSettingsService } from '../../../src/moderation/moderation-settings.service.js';
 import { ModerationModule } from '../../../src/moderation/moderation.module.js';
@@ -42,10 +43,10 @@ describe('ModerationModule', () => {
       .compile();
   }
 
-  it('wires controller, services, and evaluation model from config', async () => {
+  it('wires controller, services, and the reviewer model from config', async () => {
     const moduleRef = await compileWithEnv({
       OPENROUTER_API_KEY: 'test-openrouter-key',
-      OPENROUTER_CONTENT_MODERATION_MODEL: 'google/gemini-decision-1',
+      OPENROUTER_CONTENT_MODERATION_MODEL: 'anthropic/claude-haiku-4.5',
     });
 
     expect(moduleRef.get(AdminModerationController)).toBeInstanceOf(
@@ -57,8 +58,9 @@ describe('ModerationModule', () => {
     expect(moduleRef.get(ModerationSettingsService)).toBeInstanceOf(
       ModerationSettingsService,
     );
-    const model = moduleRef.get<{ modelId: string }>(CONTENT_MODERATION_MODEL);
-    expect(model.modelId).toBe('google/gemini-decision-1');
+    const reviewer = moduleRef.get<ModerationModel>(CONTENT_MODERATION_MODEL);
+    expect(reviewer.id).toBe('anthropic/claude-haiku-4.5');
+    expect(reviewer.model.modelId).toBe('anthropic/claude-haiku-4.5');
   });
 
   it('fails fast when OPENROUTER_API_KEY is missing', async () => {

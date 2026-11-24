@@ -29,8 +29,6 @@ function makeSettings(
         description: 'Attacks or dehumanises people or groups.',
       },
     ],
-    rejectThreshold: 0.85,
-    reviewThreshold: 0.3,
     version: 0,
     updatedById: null,
     updatedAt: null,
@@ -93,8 +91,6 @@ describe('AdminModerationController', () => {
       instructions: saved.instructions,
       allowDescription: saved.allowDescription,
       choices: saved.choices,
-      rejectThreshold: 0.85,
-      reviewThreshold: 0.3,
       version: 1,
     };
 
@@ -105,8 +101,6 @@ describe('AdminModerationController', () => {
         instructions: dto.instructions,
         allowDescription: dto.allowDescription,
         choices: dto.choices,
-        rejectThreshold: 0.85,
-        reviewThreshold: 0.3,
       },
       'admin-1',
       1,
@@ -136,8 +130,6 @@ describe('AdminModerationController', () => {
           description: 'Attacks or dehumanises people or groups.',
         },
       ],
-      rejectThreshold: 0.85,
-      reviewThreshold: 0.3,
       version: 0,
     };
 
@@ -168,8 +160,15 @@ describe('AdminModerationController', () => {
     const assessment = {
       decision: 'review' as const,
       category: 'hate',
-      violationScore: 0.55,
-      scores: { allow: 0.45, hate: 0.55 },
+      riskLevel: 2,
+      evidence: {
+        status: 'READY' as const,
+        summary: 'Có thể là thù ghét.',
+        items: [],
+        dropped: 0,
+        model: 'anthropic/claude-haiku-5.5',
+        createdAt: new Date(),
+      },
     };
     moderationService.review.mockResolvedValue(assessment);
 
@@ -188,8 +187,6 @@ describe('AdminModerationController', () => {
           description: 'Attacks or dehumanises people or groups.',
         },
       ],
-      rejectThreshold: 0.85,
-      reviewThreshold: 0.3,
     };
     const dto: TestModerationDto = {
       text: 'sample post',
@@ -199,11 +196,18 @@ describe('AdminModerationController', () => {
     const result = await controller.test(dto);
 
     expect(moderationService.review).toHaveBeenCalledWith(
-      [{ kind: 'text', text: 'sample post' }],
-      undefined,
+      {
+        texts: [{ field: 'body', mediaId: null, text: 'sample post' }],
+        images: [],
+      },
       draftSettings,
     );
-    expect(result).toEqual(assessment);
+    expect(result).toEqual({
+      decision: 'review',
+      category: 'hate',
+      riskLevel: 2,
+      summary: 'Có thể là thù ghét.',
+    });
   });
 
   it('turns model failures during test into 503 SERVICE_UNAVAILABLE', async () => {

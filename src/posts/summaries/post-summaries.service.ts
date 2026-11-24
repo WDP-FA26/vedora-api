@@ -432,7 +432,7 @@ export class PostSummariesService {
     // Like every member comment, the AI's is moderated: its source is member
     // text that may try to steer the model.
     try {
-      await this.moderation.requireAllowed([{ kind: 'text', text: body }]);
+      await this.moderation.requireAllowed(body);
     } catch (error) {
       if (!(error instanceof UnprocessableContentException)) throw error;
       this.logger.warn(

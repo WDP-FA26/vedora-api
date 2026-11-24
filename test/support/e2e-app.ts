@@ -5,9 +5,11 @@ import { Test, type TestingModuleBuilder } from '@nestjs/testing';
 import type { Connection } from 'mongoose';
 import type { App } from 'supertest/types.js';
 import { AppModule } from '../../src/app.module.js';
-import { CONTENT_MODERATION_MODEL } from '../../src/moderation/content-moderation.service.js';
-import { MODERATION_EVIDENCE_MODEL } from '../../src/moderation/content-evidence.service.js';
-import { FakeModel } from '@nestjs/ai/testing';
+import {
+  CONTENT_MODERATION_MODEL,
+  type ModerationModel,
+} from '../../src/moderation/content-moderation.service.js';
+import { FakeModel, type FakeModelCall } from '@nestjs/ai/testing';
 import { configureApp } from '../../src/app.setup.js';
 import { MongoService } from '../../src/mongo/mongo.service.js';
 import {
@@ -31,61 +33,67 @@ export const PROVIDER_BLOCKED_MARKER = 'PROVIDERBLOCKED';
 
 const CHOICE_MARKER = /CHOICE:([a-z_0-9]+)/;
 
-function distribution(
-  keys: string[],
-  top: string,
-  chance: number,
-): Record<string, number> {
-  const chances: Record<string, number> = {};
-  for (const key of keys) chances[key] = 0;
-  chances.allow = 1 - chance;
-  chances[top] = (chances[top] ?? 0) + chance;
-  return chances;
+/** The member content of a review call: the user message, as the model reads it. */
+function reviewedContent(call: FakeModelCall): string {
+  return JSON.stringify(call.options.prompt.filter(({ role }) => role === 'user'));
 }
 
-const fakeJev = {
-  specificationVersion: 'v4',
-  provider: 'e2e',
-  modelId: 'fake-jev',
-  supportedQuestionTypes: ['choice'],
-  doEvaluate: ({
-    state,
-    questions,
-  }: {
-    state: unknown;
-    questions: Record<string, { criteria: Record<string, unknown> }>;
-  }) => {
-    const text = JSON.stringify(state);
-    if (text.includes(PROVIDER_BLOCKED_MARKER)) {
-      return Promise.reject(
-        new APICallError({
-          message: 'Input blocked',
-          url: 'https://openrouter.ai/api/v1/evaluate',
-          requestBodyValues: {},
-          statusCode: 400,
-          responseBody: '{"error":{"code":"prohibited_content"}}',
-        }),
-      );
-    }
-    const keys = Object.keys(questions.verdict?.criteria ?? {});
-    let choice = 'allow';
-    let probabilities = distribution(keys, 'violence', 0.01);
-    const marked = CHOICE_MARKER.exec(text)?.[1];
-    if (marked && keys.includes(marked)) {
-      choice = marked;
-      probabilities = distribution(keys, marked, 0.98);
-    } else if (text.includes(VIOLATION_MARKER)) {
-      choice = 'violence';
-      probabilities = distribution(keys, 'violence', 0.98);
-    } else if (text.includes(BORDERLINE_MARKER)) {
-      choice = 'violence';
-      probabilities = distribution(keys, 'violence', 0.6);
-    }
-    return Promise.resolve({
-      answers: { verdict: { type: 'choice' as const, choice, probabilities } },
-      warnings: [],
+/**
+ * The reviewer model for e2e tests, steered by markers in the content:
+ * VIOLATION is a high risk quoted as evidence (rejected), BORDERLINE a medium
+ * risk (held for an admin), CHOICE:<key> a high risk for that category,
+ * PROVIDERBLOCKED a provider refusal; anything else is no risk.
+ */
+function answerReview(call: FakeModelCall) {
+  const content = reviewedContent(call);
+  if (content.includes(PROVIDER_BLOCKED_MARKER)) {
+    return new APICallError({
+      message: 'Input blocked',
+      url: 'https://openrouter.ai/api/v1/chat/completions',
+      requestBodyValues: {},
+      statusCode: 400,
+      responseBody: '{"error":{"code":"prohibited_content"}}',
     });
-  },
+  }
+  const marked = CHOICE_MARKER.exec(content);
+  if (marked && call.instructions?.includes(`- ${marked[1]}:`)) {
+    return highRisk(marked[1], marked[0]);
+  }
+  if (content.includes(VIOLATION_MARKER)) {
+    return highRisk('violence', VIOLATION_MARKER);
+  }
+  if (content.includes(BORDERLINE_MARKER)) {
+    return {
+      object: {
+        riskLevel: 2,
+        category: 'violence',
+        summary: 'Có thể là bạo lực.',
+        evidence: [],
+      },
+    };
+  }
+  return {
+    object: { riskLevel: 0, category: null, summary: 'Ổn.', evidence: [] },
+  };
+}
+
+function highRisk(category: string, quote: string) {
+  return {
+    object: {
+      riskLevel: 3,
+      category,
+      summary: 'Vi phạm rõ ràng.',
+      evidence: [
+        { category, reason: 'Vi phạm.', quote, imageIndex: null, box: null },
+      ],
+    },
+  };
+}
+
+const fakeReviewer: ModerationModel = {
+  id: 'fake/haiku',
+  // A function (not a list) answers every call.
+  model: new FakeModel(answerReview),
 };
 
 export async function createE2eApp(
@@ -96,21 +104,7 @@ export async function createE2eApp(
   const moduleRef = await override(
     Test.createTestingModule({ imports: [AppModule] })
       .overrideProvider(CONTENT_MODERATION_MODEL)
-      .useValue(fakeJev)
-      // Flagged posts are explained in the background; never call a real model.
-      .overrideProvider(MODERATION_EVIDENCE_MODEL)
-      .useValue({
-        id: 'fake/evidence',
-        // A function (not a list) answers every call.
-        model: new FakeModel(() => ({
-          object: {
-            decision: 'escalate',
-            category: null,
-            summary: 'Không có bằng chứng.',
-            evidence: [],
-          },
-        })),
-      }),
+      .useValue(fakeReviewer),
   ).compile();
   const app = moduleRef.createNestApplication<INestApplication<App>>({
     rawBody: true,

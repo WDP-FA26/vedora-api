@@ -1,112 +1,187 @@
 import { runtimeConfig } from '../config/runtime-config.js';
 import { Inject, Injectable, Logger } from '@nestjs/common';
-import { APICallError } from 'ai';
+import {
+  APICallError,
+  generateText,
+  InvalidResponseDataError,
+  type LanguageModel,
+  Output,
+  RetryError,
+} from 'ai';
 import { FeatureUnavailableException } from '../common/exceptions/feature-unavailable.exception.js';
 import { UnprocessableContentException } from '../common/exceptions/unprocessable-content.exception.js';
-import { decide, type DecisionModel } from '../common/decision/decision.js';
 import {
-  assessContent,
   type ContentAssessment,
+  decisionFor,
   isProviderBlocked,
   providerBlockedAssessment,
 } from './content-decision.js';
-import { toJevJpeg } from './moderation-image.js';
 import {
-  ALLOW_KEY,
-  buildContentPolicy,
+  type EvidenceSources,
+  type EvidenceText,
+  HIGH_RISK,
+  reviewInstructions,
+  reviewMessageParts,
+  reviewOutput,
+  verifyEvidence,
+} from './content-evidence.js';
+import {
+  type ContentPolicySettings,
   withReservedChoices,
 } from './policies/content.js';
-import {
-  type ContentSettingsInput,
-  ModerationSettingsService,
-} from './moderation-settings.service.js';
+import { ModerationSettingsService } from './moderation-settings.service.js';
 
 export const CONTENT_MODERATION_MODEL = Symbol('CONTENT_MODERATION_MODEL');
 
-export type ContentPart =
-  | { kind: 'text'; text: string }
-  | { kind: 'image'; source: Buffer }
-  | { kind: 'jpeg'; source: Buffer };
+/** The reviewer model and the id it is billed and stored under. */
+export interface ModerationModel {
+  id: string;
+  model: Exclude<LanguageModel, string>;
+}
 
-const CONTENT_TIMEOUT_MS = runtimeConfig.MODERATION_CONTENT_TIMEOUT_MS;
+const TIMEOUT_MS = runtimeConfig.MODERATION_CONTENT_TIMEOUT_MS;
+const MAX_RETRIES = runtimeConfig.AI_DECISION_MAX_RETRIES;
+const MAX_TEXT_CHARS = runtimeConfig.MODERATION_MAX_TEXT_CHARS;
+/** Room for low-effort thinking plus the rating and its evidence. */
+const MAX_OUTPUT_TOKENS = 8000;
+const MAX_RISK = 3;
 const PROHIBITED_CONTENT_CODE = 'prohibited_content';
 
 /** True when the model's provider refused the input itself (HTTP 400 `prohibited_content`). */
-export function isProviderRefusal(error: unknown): boolean {
-  if (!APICallError.isInstance(error)) return false;
-  if (error.statusCode !== 400) return false;
-  return error.responseBody?.includes(PROHIBITED_CONTENT_CODE) === true;
+function isProviderRefusal(error: unknown): boolean {
+  if (APICallError.isInstance(error)) {
+    if (error.statusCode !== 400) return false;
+    return error.responseBody?.includes(PROHIBITED_CONTENT_CODE) === true;
+  }
+  if (RetryError.isInstance(error)) {
+    return error.errors.some((attempt) => isProviderRefusal(attempt));
+  }
+  return false;
 }
-const MAX_TEXT_CHARS = runtimeConfig.MODERATION_MAX_TEXT_CHARS;
 
+/** The texts, trimmed and cut to the length the model reads; empty ones dropped. */
+function readableSources(sources: EvidenceSources): EvidenceSources {
+  const texts: EvidenceText[] = [];
+  for (const text of sources.texts) {
+    const trimmed = text.text.trim().slice(0, MAX_TEXT_CHARS);
+    if (trimmed.length > 0) texts.push({ ...text, text: trimmed });
+  }
+  return { texts, images: sources.images };
+}
+
+function categoryKeys(policy: ContentPolicySettings): [string, ...string[]] {
+  const [first, ...rest] = policy.choices.map((choice) => choice.key);
+  if (first === undefined) {
+    throw new Error('The moderation policy has no categories');
+  }
+  return [first, ...rest];
+}
+
+/**
+ * Rates content in one call to the reviewer model (Claude Haiku through
+ * OpenRouter): a risk level, the category it breaks and the parts that break
+ * it, checked against the content before anyone sees them.
+ */
 @Injectable()
 export class ContentModerationService {
   private readonly logger = new Logger(ContentModerationService.name);
 
   constructor(
     @Inject(CONTENT_MODERATION_MODEL)
-    private readonly model: DecisionModel,
+    private readonly reviewer: ModerationModel,
     private readonly settings: ModerationSettingsService,
   ) {}
 
+  /** The model id stored with every verdict. */
+  get modelId(): string {
+    return this.reviewer.id;
+  }
+
+  /**
+   * Throws when the model does not answer or answers out of range. Content
+   * the model or its provider refuses to read is held for an admin.
+   */
   async review(
-    parts: ContentPart[],
-    abortSignal: AbortSignal = new AbortController().signal,
-    override?: ContentSettingsInput,
+    sources: EvidenceSources,
+    draftPolicy?: ContentPolicySettings,
   ): Promise<ContentAssessment> {
-    const saved = await this.settings.get();
-    // Saved settings already hold the built-in categories; a draft may not.
-    const policy = override
-      ? { ...override, choices: withReservedChoices(override.choices) }
-      : saved;
-    // The manipulation rule applies only once enforced (MODERATION_MODE).
-    const thresholds = {
-      rejectThreshold: policy.rejectThreshold,
-      reviewThreshold: policy.reviewThreshold,
-      manipulationThreshold: saved.manipulationEnforced
-        ? (policy.manipulationThreshold ?? saved.manipulationThreshold)
-        : undefined,
-    };
-    const state: (
-      string | { type: 'image_url'; image_url: { url: string } }
-    )[] = [];
-    for (const part of parts) {
-      if (part.kind === 'text') {
-        const text = part.text.trim().slice(0, MAX_TEXT_CHARS);
-        if (text) state.push(text);
-        continue;
-      }
-      const jpeg =
-        part.kind === 'image' ? await toJevJpeg(part.source) : part.source;
-      state.push({
-        type: 'image_url',
-        image_url: { url: `data:image/jpeg;base64,${jpeg.toString('base64')}` },
-      });
+    const policy = draftPolicy
+      ? { ...draftPolicy, choices: withReservedChoices(draftPolicy.choices) }
+      : await this.settings.get();
+    const readable = readableSources(sources);
+    if (readable.texts.length === 0 && readable.images.length === 0) {
+      return {
+        decision: 'publish',
+        category: null,
+        riskLevel: 0,
+        evidence: null,
+      };
     }
-    if (state.length === 0)
-      return assessContent(ALLOW_KEY, undefined, thresholds);
+    let result;
     try {
-      const { choice, probabilities } = await decide(
-        this.model,
-        state,
-        abortSignal,
-        buildContentPolicy(policy),
-        CONTENT_TIMEOUT_MS,
-      );
-      return assessContent(choice, probabilities, thresholds);
+      result = await generateText({
+        model: this.reviewer.model,
+        maxRetries: MAX_RETRIES,
+        maxOutputTokens: MAX_OUTPUT_TOKENS,
+        abortSignal: AbortSignal.timeout(TIMEOUT_MS),
+        system: reviewInstructions(policy),
+        messages: [{ role: 'user', content: reviewMessageParts(readable) }],
+        output: Output.object({
+          schema: reviewOutput(categoryKeys(policy)),
+          name: 'content_review',
+        }),
+      });
     } catch (error) {
       if (!isProviderRefusal(error)) throw error;
       this.logger.warn(
         'The model provider refused to read the content, holding it for an admin',
       );
-      return providerBlockedAssessment();
+      return providerBlockedAssessment(this.reviewer.id);
     }
+    if (result.finishReason === 'content-filter') {
+      this.logger.warn(
+        'The model refused to rate the content, holding it for an admin',
+      );
+      return providerBlockedAssessment(this.reviewer.id);
+    }
+    const output = result.output;
+    if (output.riskLevel < 0 || output.riskLevel > MAX_RISK) {
+      throw new InvalidResponseDataError({
+        data: output,
+        message: `The reviewer model answered risk level ${output.riskLevel}`,
+      });
+    }
+    const { items, dropped } = verifyEvidence(output.evidence, readable);
+    let category: string | null = null;
+    if (output.riskLevel > 0) {
+      category = output.category ?? items.at(0)?.category ?? null;
+    }
+    return {
+      decision: decisionFor(output.riskLevel, items.length),
+      category,
+      riskLevel: output.riskLevel,
+      evidence: {
+        status: 'READY',
+        summary: output.summary.trim(),
+        items,
+        dropped,
+        model: this.reviewer.id,
+        createdAt: new Date(),
+      },
+    };
   }
 
-  async requireAllowed(parts: ContentPart[]): Promise<void> {
+  /**
+   * For content with no review queue (comments, generated summaries): a high
+   * risk or content the model refused to read is turned away.
+   */
+  async requireAllowed(text: string): Promise<void> {
     let assessment: ContentAssessment;
     try {
-      assessment = await this.review(parts);
+      assessment = await this.review({
+        texts: [{ field: 'body', mediaId: null, text }],
+        images: [],
+      });
     } catch (error) {
       this.logger.error(`Content moderation failed: ${String(error)}`);
       throw new FeatureUnavailableException(
@@ -114,11 +189,8 @@ export class ContentModerationService {
         'Content review is unavailable, try again shortly',
       );
     }
-    // Comments have no review queue, so content the provider refused to read
-    // (the worst kind) is turned away like a rejection.
-    if (assessment.decision !== 'reject' && !isProviderBlocked(assessment)) {
-      return;
-    }
+    const highRisk = (assessment.riskLevel ?? 0) >= HIGH_RISK;
+    if (!highRisk && !isProviderBlocked(assessment)) return;
     throw new UnprocessableContentException(
       'CONTENT_REJECTED',
       'This content breaks the community guidelines',

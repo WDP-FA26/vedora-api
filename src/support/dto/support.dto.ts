@@ -28,10 +28,6 @@ import {
   AppealReasonCategory,
   type AppealTriggerStatus,
   PostType,
-  ROUTE_APPLIERS,
-  ROUTE_RULES,
-  type RouteApplier,
-  type RouteRule,
   SupportMessageKind,
   SupportSenderRole,
   SupportTicketCategory,
@@ -280,12 +276,6 @@ export class AppealPostSnapshotDto {
   @ApiProperty({ nullable: true, type: String }) excerpt!: string | null;
   @ApiProperty({ nullable: true, type: String }) verdict!: string | null;
   @ApiProperty({ nullable: true, type: String }) reason!: string | null;
-  @ApiProperty({ nullable: true, enum: ROUTE_RULES })
-  routeRule!: RouteRule | null;
-  @ApiProperty({ nullable: true, enum: ROUTE_APPLIERS })
-  routeAppliedBy!: RouteApplier | null;
-  @ApiProperty({ nullable: true, type: String })
-  routeCategory!: string | null;
   @ApiProperty() blockedAt!: Date;
 }
 

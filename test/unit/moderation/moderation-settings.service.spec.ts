@@ -1,5 +1,4 @@
 import type { INestApplication } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
 import { Test } from '@nestjs/testing';
 import {
   createTestMongoUrl,
@@ -8,33 +7,22 @@ import {
 } from '../../support/mongo-test-db.js';
 import { MongoModule } from '../../../src/mongo/mongo.module.js';
 import { MongoService } from '../../../src/mongo/mongo.service.js';
-import {
-  type ContentSettingsInput,
-  ModerationSettingsService,
-} from '../../../src/moderation/moderation-settings.service.js';
+import { ModerationSettingsService } from '../../../src/moderation/moderation-settings.service.js';
+import type { ContentPolicySettings } from '../../../src/moderation/policies/content.js';
 
 describe('ModerationSettingsService', () => {
   let app: INestApplication;
   let service: ModerationSettingsService;
 
-  const draft = (): ContentSettingsInput => {
+  const draft = (): ContentPolicySettings => {
     const { choices, instructions, allowDescription } = service.defaults();
-    return {
-      instructions,
-      allowDescription,
-      choices,
-      rejectThreshold: 0.9,
-      reviewThreshold: 0.4,
-    };
+    return { instructions: `${instructions} Be strict.`, allowDescription, choices };
   };
 
   beforeAll(async () => {
     const moduleRef = await Test.createTestingModule({
       imports: [MongoModule.forTest(createTestMongoUrl('modsettings'))],
-      providers: [
-        ModerationSettingsService,
-        { provide: ConfigService, useValue: new ConfigService({}) },
-      ],
+      providers: [ModerationSettingsService],
     }).compile();
     app = moduleRef.createNestApplication();
     await app.init();
@@ -76,7 +64,7 @@ describe('ModerationSettingsService', () => {
 
     const current = await service.get();
     expect(current.choices.at(-1)?.key).toBe('politics');
-    expect(current.rejectThreshold).toBe(0.9);
+    expect(current.instructions).toMatch(/Be strict\.$/);
     expect((await service.reasonTexts()).get('politics')).toBe(
       'nội dung chính trị',
     );
@@ -96,6 +84,6 @@ describe('ModerationSettingsService', () => {
   it('goes back to the defaults on reset', async () => {
     await service.save(draft(), 'admin-1', 0);
     expect((await service.reset()).version).toBe(0);
-    expect((await service.get()).rejectThreshold).toBe(0.85);
+    expect((await service.get()).instructions).not.toMatch(/Be strict\.$/);
   });
 });

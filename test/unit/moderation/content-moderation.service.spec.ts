@@ -1,223 +1,257 @@
-import type { ModerationSettingsService } from '../../../src/moderation/moderation-settings.service.js';
+import { FakeModel, providerError } from '@nestjs/ai/testing';
 import { APICallError } from 'ai';
-import type { DecisionModel } from '../../../src/common/decision/decision.js';
-import { vi } from 'vitest';
 import { FeatureUnavailableException } from '../../../src/common/exceptions/feature-unavailable.exception.js';
 import { UnprocessableContentException } from '../../../src/common/exceptions/unprocessable-content.exception.js';
+import type { EvidenceSources } from '../../../src/moderation/content-evidence.js';
 import { ContentModerationService } from '../../../src/moderation/content-moderation.service.js';
-import { DEFAULT_CONTENT_POLICY } from '../../../src/moderation/policies/content.js';
+import type { ModerationSettingsService } from '../../../src/moderation/moderation-settings.service.js';
+import {
+  DEFAULT_CONTENT_POLICY,
+  withReservedChoices,
+} from '../../../src/moderation/policies/content.js';
 
-const VERDICTS = [
-  'allow',
-  ...DEFAULT_CONTENT_POLICY.choices.map(({ key }) => key),
-];
+const POLICY = {
+  ...DEFAULT_CONTENT_POLICY,
+  choices: withReservedChoices(DEFAULT_CONTENT_POLICY.choices),
+};
 
-const settings = {
-  get: () =>
-    Promise.resolve({
-      ...DEFAULT_CONTENT_POLICY,
-      rejectThreshold: 0.85,
-      reviewThreshold: 0.3,
-    }),
-} as unknown as ModerationSettingsService;
-
-function complete(chances: Record<string, number>): Record<string, number> {
-  const all: Record<string, number> = {};
-  for (const verdict of VERDICTS) all[verdict] = chances[verdict] ?? 0;
-  return all;
+class FakeSettings implements Pick<ModerationSettingsService, 'get'> {
+  get() {
+    return Promise.resolve({
+      ...POLICY,
+      version: 0,
+      updatedById: null,
+      updatedAt: null,
+    });
+  }
 }
 
-function modelAnswering(
-  choice: string,
-  probabilities?: Record<string, number>,
-) {
-  const doEvaluate = vi.fn((_options: { state: unknown }) =>
-    Promise.resolve({
-      answers: {
-        verdict: {
-          type: 'choice' as const,
-          choice,
-          probabilities: probabilities && complete(probabilities),
-        },
-      },
-      warnings: [],
-    }),
+interface Answer {
+  riskLevel: number;
+  category: string | null;
+  summary?: string;
+  evidence?: {
+    category: string;
+    reason: string;
+    quote: string | null;
+    imageIndex: number | null;
+    box: number[] | null;
+  }[];
+}
+
+function serviceAnswering(answer: Answer | Error | (() => Error)) {
+  const model = new FakeModel(() => {
+    if (answer instanceof Error) return answer;
+    if (typeof answer === 'function') return answer();
+    return {
+      object: { summary: 'Tóm tắt.', evidence: [], ...answer },
+    };
+  });
+  const settings = new FakeSettings();
+  const service = new ContentModerationService(
+    { id: 'anthropic/claude-haiku-5.5', model },
+    // The service only reads settings.get().
+    settings as ModerationSettingsService,
   );
-  const model = {
-    specificationVersion: 'v4',
-    provider: 'test',
-    modelId: 'jev',
-    supportedQuestionTypes: ['choice'],
-    doEvaluate,
-  } as unknown as DecisionModel;
-  const service = new ContentModerationService(model, settings);
-  return { service, doEvaluate };
+  return { service, model };
 }
 
-const text = (value: string) => [{ kind: 'text' as const, text: value }];
+const text = (value: string): EvidenceSources => ({
+  texts: [{ field: 'body', mediaId: null, text: value }],
+  images: [],
+});
+
+const threat = {
+  category: 'violence',
+  reason: 'Lời đe dọa.',
+  quote: 'tao sẽ đánh mày',
+  imageIndex: null,
+  box: null,
+};
 
 describe('ContentModerationService', () => {
   it('publishes empty content without calling the model', async () => {
-    const { service, doEvaluate } = modelAnswering('sexual');
-    expect((await service.review(text('   '))).decision).toBe('publish');
-    expect(doEvaluate).not.toHaveBeenCalled();
+    const { service, model } = serviceAnswering({
+      riskLevel: 3,
+      category: 'violence',
+    });
+    expect(await service.review(text('   '))).toEqual({
+      decision: 'publish',
+      category: null,
+      riskLevel: 0,
+      evidence: null,
+    });
+    expect(model.calls).toHaveLength(0);
   });
 
-  it('sends text parts to the model', async () => {
-    const { service, doEvaluate } = modelAnswering('allow');
-    await service.review(text('hello'));
-    expect(doEvaluate.mock.calls[0]?.[0].state).toEqual(['hello']);
+  it('sends the policy as instructions and the content inside <content>', async () => {
+    const { service, model } = serviceAnswering({
+      riskLevel: 0,
+      category: null,
+    });
+    await service.review(text('cơm chay ngon'));
+    const call = model.lastCall;
+    expect(call?.instructions).toContain(POLICY.instructions);
+    expect(call?.instructions).toContain('3 - High risk');
+    expect(JSON.stringify(call?.options.prompt)).toContain('<content>');
+    expect(JSON.stringify(call?.options.prompt)).toContain('cơm chay ngon');
   });
 
   it.each([
-    ['clear', { allow: 0.99, hate: 0.01 }, 'allow', 'publish'],
-    ['a likely violation', { allow: 0.05, hate: 0.95 }, 'hate', 'reject'],
-    ['an unsure violation', { allow: 0.4, hate: 0.6 }, 'hate', 'review'],
-    ['an allow with doubt', { allow: 0.6, spam: 0.4 }, 'allow', 'review'],
-  ])('decides %s', async (_name, probabilities, choice, decision) => {
-    const { service } = modelAnswering(choice, probabilities);
-    const assessment = await service.review(text('x'));
+    [0, 'publish'],
+    [1, 'publish'],
+    [2, 'review'],
+  ] as const)('maps risk level %i to %s', async (riskLevel, decision) => {
+    const { service } = serviceAnswering({ riskLevel, category: 'violence' });
+    const assessment = await service.review(text('tao sẽ đánh mày'));
     expect(assessment.decision).toBe(decision);
-    expect(assessment.scores).toEqual(complete(probabilities));
+    expect(assessment.riskLevel).toBe(riskLevel);
+    expect(assessment.evidence?.status).toBe('READY');
   });
 
-  it('treats a verdict without probabilities as certain', async () => {
-    const { service } = modelAnswering('hate');
-    expect(await service.review(text('x'))).toMatchObject({
+  it('rejects a high risk backed by a quote found in the content', async () => {
+    const { service } = serviceAnswering({
+      riskLevel: 3,
+      category: 'violence',
+      evidence: [threat],
+    });
+    const assessment = await service.review(text('Ê, tao sẽ đánh mày'));
+    expect(assessment).toMatchObject({
       decision: 'reject',
-      category: 'hate',
-      violationScore: 1,
+      category: 'violence',
+      riskLevel: 3,
+    });
+    expect(assessment.evidence?.items).toEqual([
+      expect.objectContaining({ field: 'body', start: 3, end: 18 }),
+    ]);
+  });
+
+  it('holds a high risk for an admin when no evidence matches the content', async () => {
+    const { service } = serviceAnswering({
+      riskLevel: 3,
+      category: 'violence',
+      evidence: [{ ...threat, quote: 'not in the post' }],
+    });
+    const assessment = await service.review(text('một bài bình thường'));
+    expect(assessment.decision).toBe('review');
+    expect(assessment.evidence?.dropped).toBe(1);
+  });
+
+  it('records no category at risk level 0', async () => {
+    const { service } = serviceAnswering({ riskLevel: 0, category: 'spam' });
+    expect((await service.review(text('hi'))).category).toBeNull();
+  });
+
+  it('throws on a risk level out of range', async () => {
+    const { service } = serviceAnswering({ riskLevel: 7, category: null });
+    await expect(service.review(text('hi'))).rejects.toThrow('risk level 7');
+  });
+
+  it('throws on a category outside the policy', async () => {
+    const { service } = serviceAnswering({
+      riskLevel: 3,
+      category: 'made_up',
+    });
+    await expect(service.review(text('hi'))).rejects.toThrow();
+  });
+
+  it('holds content the model refuses to rate for an admin', async () => {
+    const model = new FakeModel(() => ({ text: '', finishReason: 'content-filter' }));
+    const service = new ContentModerationService(
+      { id: 'anthropic/claude-haiku-5.5', model },
+      new FakeSettings() as ModerationSettingsService,
+    );
+    expect(await service.review(text('x'))).toMatchObject({
+      decision: 'review',
+      category: 'provider_blocked',
+      riskLevel: null,
+      evidence: { status: 'REFUSED', items: [] },
     });
   });
 
-  it('rejects a comment only when the model is confident', async () => {
-    const confident = modelAnswering('spam', { allow: 0.02, spam: 0.98 });
-    await expect(
-      confident.service.requireAllowed(text('buy now')),
-    ).rejects.toMatchObject({
+  it('holds content the provider refuses to read for an admin', async () => {
+    const { service } = serviceAnswering(
+      new APICallError({
+        message: 'Input blocked',
+        url: 'https://openrouter.ai/api/v1/chat/completions',
+        requestBodyValues: {},
+        statusCode: 400,
+        responseBody: '{"error":{"code":"prohibited_content"}}',
+      }),
+    );
+    expect(await service.review(text('x'))).toMatchObject({
+      decision: 'review',
+      category: 'provider_blocked',
+    });
+  });
+
+  it('rejects other provider errors', async () => {
+    const { service } = serviceAnswering(providerError(400));
+    await expect(service.review(text('x'))).rejects.toBeInstanceOf(
+      APICallError,
+    );
+  });
+
+  it('tries a draft policy, adding the built-in categories', async () => {
+    const { service, model } = serviceAnswering({
+      riskLevel: 2,
+      category: 'manipulation',
+    });
+    const draft = {
+      instructions: 'Only spam matters here.',
+      allowDescription: 'Everything else.',
+      choices: [
+        {
+          key: 'spam',
+          label: 'Spam',
+          reasonText: 'spam',
+          description: 'Unrelated ads.',
+        },
+      ],
+    };
+    const assessment = await service.review(text('x'), draft);
+    expect(assessment.category).toBe('manipulation');
+    expect(model.lastCall?.instructions).toContain('- spam: Unrelated ads.');
+  });
+});
+
+describe('ContentModerationService.requireAllowed', () => {
+  it('turns away a high-risk comment', async () => {
+    const { service } = serviceAnswering({
+      riskLevel: 3,
+      category: 'spam',
+    });
+    await expect(service.requireAllowed('mua ngay')).rejects.toMatchObject({
       constructor: UnprocessableContentException,
       code: 'CONTENT_REJECTED',
       details: { category: 'spam' },
     });
-    const unsure = modelAnswering('spam', { allow: 0.45, spam: 0.55 });
-    await expect(
-      unsure.service.requireAllowed(text('hm')),
-    ).resolves.toBeUndefined();
   });
 
-  it('reports 503 instead of accepting content when the model fails', async () => {
-    const { service, doEvaluate } = modelAnswering('allow');
-    doEvaluate.mockRejectedValue(new Error('boom'));
-    await expect(service.requireAllowed(text('hi'))).rejects.toBeInstanceOf(
-      FeatureUnavailableException,
+  it('lets a medium-risk comment through, since comments have no queue', async () => {
+    const { service } = serviceAnswering({ riskLevel: 2, category: 'spam' });
+    await expect(service.requireAllowed('hm')).resolves.toBeUndefined();
+  });
+
+  it('turns away a comment the model refuses to read', async () => {
+    const { service } = serviceAnswering(
+      new APICallError({
+        message: 'Input blocked',
+        url: 'https://openrouter.ai/api/v1/chat/completions',
+        requestBodyValues: {},
+        statusCode: 400,
+        responseBody: '{"error":{"code":"prohibited_content"}}',
+      }),
     );
-  });
-});
-
-function providerError(statusCode: number, body: string): APICallError {
-  return new APICallError({
-    message: `HTTP ${statusCode}: ${body}`,
-    url: 'https://openrouter.ai/api/v1/evaluate',
-    requestBodyValues: {},
-    statusCode,
-    responseBody: body,
-  });
-}
-
-const PROHIBITED_BODY =
-  '{"error":{"message":"Input blocked","code":"prohibited_content"}}';
-
-describe('ContentModerationService when the provider refuses the content', () => {
-  it('holds the content for an admin instead of failing', async () => {
-    const { service, doEvaluate } = modelAnswering('allow');
-    doEvaluate.mockRejectedValue(providerError(400, PROHIBITED_BODY));
-    expect(await service.review(text('nội dung bị chặn'))).toEqual({
-      decision: 'review',
-      category: 'provider_blocked',
-      violationScore: 1,
-      scores: { provider_blocked: 1 },
-    });
-  });
-
-  it('turns a comment away, since comments have no review queue', async () => {
-    const { service, doEvaluate } = modelAnswering('allow');
-    doEvaluate.mockRejectedValue(providerError(400, PROHIBITED_BODY));
-    await expect(
-      service.requireAllowed(text('nội dung bị chặn')),
-    ).rejects.toMatchObject({
-      constructor: UnprocessableContentException,
-      code: 'CONTENT_REJECTED',
+    await expect(service.requireAllowed('x')).rejects.toMatchObject({
       details: { category: 'provider_blocked' },
     });
   });
 
-  it('still fails on other provider errors', async () => {
-    const { service, doEvaluate } = modelAnswering('allow');
-    doEvaluate.mockRejectedValue(
-      providerError(400, '{"error":{"code":"invalid_request"}}'),
+  it('reports 503 instead of accepting a comment when the model fails', async () => {
+    const { service } = serviceAnswering(new Error('boom'));
+    await expect(service.requireAllowed('hi')).rejects.toBeInstanceOf(
+      FeatureUnavailableException,
     );
-    await expect(service.review(text('hi'))).rejects.toBeInstanceOf(
-      APICallError,
-    );
-    doEvaluate.mockRejectedValue(providerError(401, PROHIBITED_BODY));
-    await expect(service.review(text('hi'))).rejects.toBeInstanceOf(
-      APICallError,
-    );
-  });
-});
-
-describe('ContentModerationService with an edited policy', () => {
-  it('asks the model about the saved categories and thresholds', async () => {
-    const doEvaluate = vi.fn(
-      (_options: { questions: { verdict: { criteria: object } } }) =>
-        Promise.resolve({
-          answers: {
-            verdict: {
-              type: 'choice' as const,
-              choice: 'politics',
-              probabilities: { politics: 0.6, allow: 0.4 },
-            },
-          },
-          warnings: [],
-        }),
-    );
-    const model = {
-      specificationVersion: 'v4',
-      provider: 'test',
-      modelId: 'jev',
-      supportedQuestionTypes: ['choice'],
-      doEvaluate,
-    } as unknown as DecisionModel;
-    const custom = {
-      get: () =>
-        Promise.resolve({
-          instructions: 'Judge posts on a cooking network, safety only.',
-          allowDescription: 'Cooking and everyday talk.',
-          choices: [
-            {
-              key: 'politics',
-              label: 'Chính trị',
-              reasonText: 'nội dung chính trị',
-              description: 'Campaigning or partisan political messaging.',
-            },
-          ],
-          rejectThreshold: 0.7,
-          reviewThreshold: 0.2,
-        }),
-    } as unknown as ModerationSettingsService;
-
-    const assessment = await new ContentModerationService(model, custom).review(
-      text('Bầu cho ông A'),
-    );
-
-    const question = doEvaluate.mock.calls[0]?.[0].questions.verdict;
-    expect(Object.keys(question?.criteria ?? {})).toEqual([
-      'politics',
-      'allow',
-    ]);
-    expect(assessment).toMatchObject({
-      category: 'politics',
-      decision: 'review',
-    });
   });
 });

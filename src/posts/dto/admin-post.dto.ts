@@ -8,14 +8,6 @@ import {
   PostRemovalActor,
   PostStatus,
   PostType,
-  REVIEW_DECISIONS,
-  type ReviewDecision,
-  ROUTE_APPLIERS,
-  ROUTE_OUTCOMES,
-  ROUTE_RULES,
-  type RouteApplier,
-  type RouteOutcome,
-  type RouteRule,
 } from '../../mongo/models.js';
 import { IsIn, IsEnum, IsOptional, IsString, MaxLength } from 'class-validator';
 import { PaginationQueryDto } from '../../common/pagination/index.js';
@@ -90,23 +82,15 @@ export class ModerationEvidenceDto {
   @ApiProperty({
     enum: EVIDENCE_STATUSES,
     description:
-      'READY, FAILED (the explainer did not answer; retry with POST /admin/posts/:id/moderation/evidence) or REFUSED (its provider would not read the content)',
+      'READY, FAILED (the model did not answer; the post waits for an admin) or REFUSED (the model or its provider would not read the content)',
   })
   status!: EvidenceStatus;
   @ApiProperty({
     nullable: true,
-    enum: REVIEW_DECISIONS,
-    description:
-      'The reviewer model: accept (System 1 was wrong), reject, or escalate to an admin. Null unless READY. Applied only when MODERATION_MODE=enforce, see `route`',
-  })
-  decision!: ReviewDecision | null;
-  @ApiProperty({
-    nullable: true,
     type: String,
-    description: 'Policy category the reviewer rejects for',
+    description: 'Why the post got its risk level, in Vietnamese. Null unless READY',
   })
-  category!: string | null;
-  @ApiProperty({ nullable: true, type: String }) summary!: string | null;
+  summary!: string | null;
   @ApiProperty({ type: [ModerationEvidenceItemDto] })
   items!: ModerationEvidenceItemDto[];
   @ApiProperty({
@@ -118,49 +102,21 @@ export class ModerationEvidenceDto {
   @ApiProperty() createdAt!: Date;
 }
 
-export class ModerationRouteDto {
-  @ApiProperty({ enum: ROUTE_OUTCOMES }) outcome!: RouteOutcome;
-  @ApiProperty({
-    enum: ROUTE_RULES,
-    description: 'The rule of the router that matched first',
-  })
-  rule!: RouteRule;
-  @ApiProperty({
-    nullable: true,
-    type: String,
-    description: 'The category the outcome stands for',
-  })
-  category!: string | null;
-  @ApiProperty({
-    nullable: true,
-    enum: ROUTE_APPLIERS,
-    description:
-      'Who applied the outcome; null when it was only recorded (shadow mode, or a rerun on a post already decided)',
-  })
-  appliedBy!: RouteApplier | null;
-  @ApiProperty() decidedAt!: Date;
-}
-
 export class AdminModerationDto {
   @ApiProperty({
-    description: '`allow`, or the policy category the post most likely breaks',
+    description:
+      '`allow`, the policy category the post breaks worst, `provider_blocked` (the model would not read it) or `moderation_failed` (the model did not answer)',
   })
   verdict!: string;
   @ApiProperty({
     nullable: true,
     type: Number,
     minimum: 0,
-    maximum: 1,
-    description: "Jev's chance that the post breaks the policy",
+    maximum: 3,
+    description:
+      '0 no risk, 1 low (published), 2 medium (held for an admin), 3 high (rejected when backed by evidence). Null when the model gave none, and on posts judged before risk levels',
   })
-  violationScore!: number | null;
-  @ApiProperty({
-    nullable: true,
-    type: 'object',
-    additionalProperties: { type: 'number' },
-    description: "Jev's chance for every category",
-  })
-  scores!: Record<string, number> | null;
+  riskLevel!: number | null;
   @ApiProperty() checkedAt!: Date;
   @ApiProperty({ nullable: true, type: String }) reviewedById!: string | null;
   @ApiProperty({ nullable: true, type: Date }) reviewedAt!: Date | null;
@@ -169,21 +125,9 @@ export class AdminModerationDto {
     nullable: true,
     type: ModerationEvidenceDto,
     description:
-      'Which parts break the policy, for PENDING_REVIEW and REJECTED posts; null until the explainer ran. Admin only',
+      'Why the post got its risk level and which parts break the policy, from the same model call. Admin only',
   })
   evidence!: ModerationEvidenceDto | null;
-  @ApiProperty({
-    nullable: true,
-    type: ModerationRouteDto,
-    description: 'Where the router sent the flagged post',
-  })
-  route!: ModerationRouteDto | null;
-  @ApiProperty({
-    nullable: true,
-    type: Date,
-    description: 'Set while the post waits for the reviewer model (enforce)',
-  })
-  heldAt!: Date | null;
 }
 
 export class ModeratePostDto {

@@ -6,7 +6,6 @@ import { PostInteractionsModule } from '../interactions/post-interactions.module
 import { PostsModule } from '../posts.module.js';
 import { PostSearchModule } from '../search/post-search.module.js';
 import { AdminPostsController } from './admin-posts.controller.js';
-import { AdminPostEvidenceController } from './admin-post-evidence.controller.js';
 import { AdminPostsService } from './admin-posts.service.js';
 import { AdminReportsController } from './admin-reports.controller.js';
 
@@ -21,7 +20,6 @@ import { AdminReportsController } from './admin-reports.controller.js';
   ],
   controllers: [
     AdminPostsController,
-    AdminPostEvidenceController,
     AdminReportsController,
   ],
   providers: [AdminPostsService],

@@ -1,12 +1,10 @@
 import {
-  evidenceInstructions,
-  type EvidenceOutput,
+  reviewInstructions,
+  type ReviewEvidence,
   type EvidenceSources,
   validBox,
   verifyEvidence,
 } from '../../../src/moderation/content-evidence.js';
-
-const categories = new Set(['violence', 'spam', 'harassment']);
 
 function sources(): EvidenceSources {
   return {
@@ -37,9 +35,7 @@ function sources(): EvidenceSources {
   };
 }
 
-function evidence(
-  item: Partial<EvidenceOutput['evidence'][number]>,
-): EvidenceOutput['evidence'][number] {
+function evidence(item: Partial<ReviewEvidence>): ReviewEvidence {
   return {
     category: 'violence',
     reason: 'Đe dọa',
@@ -50,16 +46,11 @@ function evidence(
   };
 }
 
-function output(items: EvidenceOutput['evidence']): EvidenceOutput {
-  return { decision: 'reject', category: null, summary: 'x', evidence: items };
-}
-
 describe('verifyEvidence', () => {
   it('finds a quote in whichever text holds it, whatever the model said', () => {
     const { items, dropped } = verifyEvidence(
-      output([evidence({ quote: 'tao sẽ giết cả nhà mày' })]),
+      [evidence({ quote: 'tao sẽ giết cả nhà mày' })],
       sources(),
-      categories,
     );
     const transcript = sources().texts[1].text;
     expect(dropped).toBe(0);
@@ -77,42 +68,38 @@ describe('verifyEvidence', () => {
 
   it('matches a quote written with decomposed diacritics', () => {
     const { items } = verifyEvidence(
-      output([evidence({ quote: 'tao sẽ giết'.normalize('NFD') })]),
+      [evidence({ quote: 'tao sẽ giết'.normalize('NFD') })],
       sources(),
-      categories,
     );
     expect(items).toHaveLength(1);
     expect(items[0].quote).toBe('tao sẽ giết');
   });
 
-  it('drops quotes that are not in the post, unknown categories and missing images', () => {
+  it('drops quotes that are not in the post and missing images', () => {
     const { items, dropped } = verifyEvidence(
-      output([
+      [
         evidence({ quote: 'tạo sẽ giết' }),
         evidence({ quote: '   ' }),
-        evidence({ quote: 'chiên vàng', category: 'cooking' }),
         evidence({ imageIndex: 5 }),
         evidence({ imageIndex: -1 }),
-      ]),
+      ],
       sources(),
-      categories,
     );
     expect(items).toEqual([]);
-    expect(dropped).toBe(5);
+    expect(dropped).toBe(4);
   });
 
   it('points a frame at its video, second and picture, keeping OCR text as is', () => {
     const { items } = verifyEvidence(
-      output([
+      [
         evidence({
           category: 'spam',
           imageIndex: 1,
           quote: 'NẠP 100K TĂNG 200K',
           box: [40, 800.4, 940, 960],
         }),
-      ]),
+      ],
       sources(),
-      categories,
     );
     expect(items).toEqual([
       {
@@ -132,14 +119,13 @@ describe('verifyEvidence', () => {
 
   it('keeps one item per place', () => {
     const { items } = verifyEvidence(
-      output([
+      [
         evidence({ quote: 'tao sẽ giết' }),
         evidence({ quote: 'tao sẽ giết', category: 'harassment' }),
         evidence({ imageIndex: 0 }),
         evidence({ imageIndex: 0 }),
-      ]),
+      ],
       sources(),
-      categories,
     );
     expect(items.map((item) => item.field)).toEqual(['transcript', 'frame']);
   });
@@ -156,9 +142,9 @@ describe('validBox', () => {
   });
 });
 
-describe('evidenceInstructions', () => {
-  it('lists the policy categories and asks for Vietnamese', () => {
-    const text = evidenceInstructions({
+describe('reviewInstructions', () => {
+  it('lists the policy categories, the risk levels, and asks for Vietnamese', () => {
+    const text = reviewInstructions({
       instructions: 'Judge safety.',
       allowDescription: 'Recipes.',
       choices: [
@@ -166,7 +152,8 @@ describe('evidenceInstructions', () => {
       ],
     });
     expect(text).toContain('- spam: Ads.');
-    expect(text).toContain('Allowed: Recipes.');
+    expect(text).toContain('<allowed>Recipes.</allowed>');
+    expect(text).toContain('2 - Medium risk');
     expect(text).toContain('Vietnamese');
   });
 });

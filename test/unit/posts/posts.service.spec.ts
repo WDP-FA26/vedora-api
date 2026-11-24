@@ -220,8 +220,7 @@ describe('PostsService', () => {
         searchIndexedAt: new Date(),
         moderation: {
           verdict: 'harassment',
-          violationScore: 0.9,
-          scores: { harassment: 0.9 },
+          riskLevel: 3,
           checkedAt: new Date(),
           reviewedById: null,
           reviewedAt: null,

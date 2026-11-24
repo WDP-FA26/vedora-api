@@ -52,8 +52,6 @@ export class MediaMaintenanceService {
     const pending = await this.posts
       .find({
         status: PostStatus.PROCESSING,
-        // A post held for the reviewer is already judged; PostEvidenceService retries it.
-        'moderation.heldAt': null,
         updatedAt: { $lt: new Date(Date.now() - RETRY_MODERATION_AFTER_MS) },
       })
       .select('_id')

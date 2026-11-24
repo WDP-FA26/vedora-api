@@ -13,8 +13,6 @@ interface Settings {
   instructions: string;
   allowDescription: string;
   choices: Choice[];
-  rejectThreshold: number;
-  reviewThreshold: number;
   version: number;
   isDefault: boolean;
 }
@@ -38,17 +36,8 @@ describe('Moderation settings (e2e)', () => {
   const asAdmin = (req: request.Test) =>
     req.auth(adminToken, { type: 'bearer' });
   const editable = (settings: Settings, changes: Partial<Settings> = {}) => {
-    const { instructions, allowDescription, choices } = settings;
-    const { rejectThreshold, reviewThreshold, version } = settings;
-    return {
-      instructions,
-      allowDescription,
-      choices,
-      rejectThreshold,
-      reviewThreshold,
-      version,
-      ...changes,
-    };
+    const { instructions, allowDescription, choices, version } = settings;
+    return { instructions, allowDescription, choices, version, ...changes };
   };
   const load = async (): Promise<Settings> =>
     (await asAdmin(request(server()).get(url)).expect(200)).body as Settings;
@@ -123,17 +112,11 @@ describe('Moderation settings (e2e)', () => {
     expect(comment.status).toBe(404);
   });
 
-  it('applies new thresholds', async () => {
+  it('no longer accepts thresholds', async () => {
     const current = await load();
     await asAdmin(request(server()).put(url))
-      .send(editable(current, { rejectThreshold: 0.99, reviewThreshold: 0.5 }))
-      .expect(200);
-    const post = await request(server())
-      .post('/api/v1/posts')
-      .auth(memberToken, { type: 'bearer' })
-      .send({ type: 'POST', body: 'CHOICE:violence' })
-      .expect(201);
-    expect((post.body as { status: string }).status).toBe('PENDING_REVIEW');
+      .send({ ...editable(current), rejectThreshold: 0.99 })
+      .expect(400);
   });
 
   it('lists every problem with a bad edit and keeps the old policy', async () => {
@@ -145,7 +128,7 @@ describe('Moderation settings (e2e)', () => {
             { ...POLITICS, key: 'allow' },
             { ...POLITICS, key: 'Bad Key' },
           ],
-          reviewThreshold: 0.95,
+          instructions: 'too short',
         }),
       )
       .expect(400);
@@ -184,6 +167,7 @@ describe('Moderation settings (e2e)', () => {
     expect(result.body).toMatchObject({
       decision: 'reject',
       category: 'politics',
+      riskLevel: 3,
     });
     expect((await load()).version).toBe(0);
   });

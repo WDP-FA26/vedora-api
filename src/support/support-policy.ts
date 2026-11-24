@@ -93,7 +93,6 @@ export function blockedAtOf(post: Post): Date | null {
     const mod = post.moderation;
     if (!mod) return post.updatedAt ?? post.createdAt;
     if (mod.reviewedById && mod.reviewedAt) return mod.reviewedAt;
-    if (mod.route?.appliedBy && mod.route.decidedAt) return mod.route.decidedAt;
     return mod.checkedAt;
   }
   return null;
@@ -261,7 +260,6 @@ export function buildPostSnapshot(
         : rawExcerpt;
   const mod = post.moderation;
   const trigger = appealTriggerStatusOf(post);
-  const route = mod?.route ?? null;
   const reason =
     trigger === 'REMOVED'
       ? (post.removal?.reason ?? null)
@@ -272,9 +270,6 @@ export function buildPostSnapshot(
     excerpt,
     verdict: mod?.verdict ?? null,
     reason,
-    routeRule: route?.rule ?? null,
-    routeAppliedBy: route?.appliedBy ?? null,
-    routeCategory: route?.category ?? null,
     blockedAt,
   };
 }

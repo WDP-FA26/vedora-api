@@ -34,16 +34,6 @@ export class ModerationSettings extends Identified {
   @Prop({ type: [ModerationChoiceSchema], required: true, default: [] })
   choices!: ModerationChoice[];
 
-  @Prop({ type: Number, required: true })
-  rejectThreshold!: number;
-
-  @Prop({ type: Number, required: true })
-  reviewThreshold!: number;
-
-  /** Null on rows saved before it existed: the default applies. */
-  @Prop({ type: Number, default: null })
-  manipulationThreshold!: number | null;
-
   @Prop({ type: Number, required: true, default: 1 })
   version!: number;
 

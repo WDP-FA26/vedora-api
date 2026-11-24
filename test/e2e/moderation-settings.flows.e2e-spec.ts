@@ -14,8 +14,6 @@ interface Settings {
   instructions: string;
   allowDescription: string;
   choices: Choice[];
-  rejectThreshold: number;
-  reviewThreshold: number;
   version: number;
   isDefault: boolean;
 }
@@ -61,12 +59,10 @@ describe('Moderation settings flows (e2e)', () => {
     req.auth(adminToken, { type: 'bearer' });
   const load = async (): Promise<Settings> =>
     (await asAdmin(request(server()).get(url)).expect(200)).body as Settings;
-  const editable = (settings: Settings, changes: Partial<Settings> = {}) => ({
+  const editable = (settings: Settings, changes: object = {}) => ({
     instructions: settings.instructions,
     allowDescription: settings.allowDescription,
     choices: settings.choices,
-    rejectThreshold: settings.rejectThreshold,
-    reviewThreshold: settings.reviewThreshold,
     version: settings.version,
     ...changes,
   });
@@ -78,8 +74,8 @@ describe('Moderation settings flows (e2e)', () => {
       const current = await load();
 
       const responses = await Promise.all([
-        save(editable(current, { rejectThreshold: 0.9 })),
-        save(editable(current, { rejectThreshold: 0.95 })),
+        save(editable(current, { instructions: `${current.instructions} A.` })),
+        save(editable(current, { instructions: `${current.instructions} B.` })),
       ]);
 
       const statuses = responses.map(({ status }) => status).sort();
@@ -90,7 +86,9 @@ describe('Moderation settings flows (e2e)', () => {
       // BUG-4: Versions restart at 1 after a reset, so a stale editor silently overwrites a newer policy
       const defaults = await load();
       const firstSave = (
-        await save(editable(defaults, { rejectThreshold: 0.9 })).expect(200)
+        await save(
+          editable(defaults, { instructions: `${defaults.instructions} A.` }),
+        ).expect(200)
       ).body as Settings;
       const staleEditor = await load();
       await asAdmin(request(server()).post(`${url}/reset`)).expect(200);
@@ -104,7 +102,9 @@ describe('Moderation settings flows (e2e)', () => {
       ).body as Settings;
 
       const stale = await save(
-        editable(staleEditor, { rejectThreshold: 0.99 }),
+        editable(staleEditor, {
+          instructions: `${staleEditor.instructions} Stale.`,
+        }),
       );
 
       expect(firstSave.version).toBe(1);
@@ -119,9 +119,7 @@ describe('Moderation settings flows (e2e)', () => {
 
   describe('validation', () => {
     it.each([
-      ['equal thresholds', { rejectThreshold: 0.5, reviewThreshold: 0.5 }],
-      ['a reject threshold over 1', { rejectThreshold: 1.01 }],
-      ['a negative review threshold', { reviewThreshold: -0.1 }],
+      ['a removed threshold field', { rejectThreshold: 0.9 }],
       [
         'seventeen categories',
         {
@@ -150,13 +148,11 @@ describe('Moderation settings flows (e2e)', () => {
       expect((await load()).version).toBe(current.version);
     });
 
-    it('accepts the boundaries 0 and 1 and sixteen categories', async () => {
+    it('accepts sixteen categories', async () => {
       const current = await load();
 
       await save(
         editable(current, {
-          rejectThreshold: 1,
-          reviewThreshold: 0,
           choices: Array.from({ length: 16 }, (_, index) =>
             choice(`group_${index}`),
           ),

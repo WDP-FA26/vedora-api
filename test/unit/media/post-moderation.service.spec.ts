@@ -14,6 +14,7 @@ import * as fetchPublicImageModule from '../../../src/common/http/fetch-public-i
 import { CaptionService } from '../../../src/media/captions/caption.service.js';
 import { PostModerationService } from '../../../src/media/post-moderation.service.js';
 import { ContentModerationService } from '../../../src/moderation/content-moderation.service.js';
+import type { EvidenceSources } from '../../../src/moderation/content-evidence.js';
 import {
   CaptionStatus,
   type MediaAsset,
@@ -33,6 +34,10 @@ import {
 
 vi.mock('../../../src/common/http/fetch-public-image.js', () => ({
   fetchPublicImage: vi.fn(() => Promise.resolve(Buffer.from('img'))),
+}));
+// Shrinking images needs ffmpeg and real pictures; the bytes are enough here.
+vi.mock('../../../src/moderation/moderation-image.js', () => ({
+  toModerationJpeg: vi.fn((source: Buffer) => Promise.resolve(source)),
 }));
 
 describe('PostModerationService', () => {
@@ -64,7 +69,10 @@ describe('PostModerationService', () => {
       providers: [
         PostModerationService,
         CloudinaryService,
-        { provide: ContentModerationService, useValue: { review } },
+        {
+          provide: ContentModerationService,
+          useValue: { review, modelId: 'anthropic/claude-haiku-5.5' },
+        },
         {
           provide: StorageService,
           useValue: { keyFromPublicUrl, getBytes },
@@ -107,8 +115,8 @@ describe('PostModerationService', () => {
     review.mockResolvedValue({
       decision: 'publish',
       category: null,
-      violationScore: 0.01,
-      scores: { allow: 0.99 },
+      riskLevel: 0,
+      evidence: null,
     });
     notify.mockReset();
     notify.mockResolvedValue(undefined);
@@ -236,8 +244,7 @@ describe('PostModerationService', () => {
         publishedAt: null,
         moderation: {
           verdict: 'harassment',
-          violationScore: 0.7,
-          scores: { harassment: 0.7 },
+          riskLevel: 2,
           checkedAt: new Date(),
           reviewedById: null,
           reviewedAt: null,
@@ -308,9 +315,16 @@ describe('PostModerationService', () => {
       expect(getBytes).toHaveBeenCalledWith(StorageTarget.Blogs, 'cover.png');
       expect(getBytes).not.toHaveBeenCalledWith(StorageTarget.Blogs, '6.jpg');
       expect(fetchPublicImage).not.toHaveBeenCalled();
-      const parts = review.mock.calls[0]?.[0] as { kind: string }[];
-      expect(parts.filter((p) => p.kind === 'text')).toHaveLength(2);
-      expect(parts.filter((p) => p.kind === 'image')).toHaveLength(6);
+      const sources = review.mock.calls[0]?.[0] as EvidenceSources;
+      expect(sources.texts.map(({ field }) => field)).toEqual([
+        'title',
+        'content',
+      ]);
+      expect(sources.images).toHaveLength(6);
+      expect(sources.images[0]).toMatchObject({
+        field: 'image',
+        url: `${storagePrefix}cover.png`,
+      });
     });
 
     it('handles a BLOG post with null blog field', async () => {
@@ -323,10 +337,10 @@ describe('PostModerationService', () => {
       });
 
       await expect(service.settle([emptyBlog.id])).resolves.toBe(1);
-      expect(review).toHaveBeenCalledWith([]);
+      expect(review).toHaveBeenCalledWith({ texts: [], images: [] });
     });
 
-    it('proceeds with video frames when captioning failed and keeps post PROCESSING if a frame fails to fetch', async () => {
+    it('proceeds with video frames when captioning failed, and holds the post for an admin if a frame fails to fetch', async () => {
       const post = await createPost(db, {
         authorId,
         status: PostStatus.PROCESSING,
@@ -341,17 +355,32 @@ describe('PostModerationService', () => {
         captionStatus: CaptionStatus.FAILED,
       });
 
-      fetchPublicImage.mockResolvedValueOnce(null);
-      await expect(service.settle([post.id])).resolves.toBe(0);
-      expect((await posts().findById(post.id).exec())?.status).toBe(
-        PostStatus.PROCESSING,
-      );
-
-      fetchPublicImage.mockResolvedValue(Buffer.from('frame'));
       await expect(service.settle([post.id])).resolves.toBe(1);
-      expect((await posts().findById(post.id).exec())?.status).toBe(
-        PostStatus.PUBLISHED,
-      );
+      const sources = review.mock.calls[0]?.[0] as EvidenceSources;
+      expect(sources.texts).toEqual([
+        { field: 'body', mediaId: null, text: 'Video caption' },
+      ]);
+      expect(sources.images.length).toBeGreaterThan(0);
+
+      const second = await createPost(db, {
+        authorId,
+        status: PostStatus.PROCESSING,
+        publishedAt: null,
+        body: 'Video caption',
+      });
+      await createMedia(db, {
+        ownerId: authorId,
+        postId: second.id,
+        status: MediaStatus.READY,
+        durationSec: 20,
+        captionStatus: CaptionStatus.FAILED,
+      });
+      fetchPublicImage.mockResolvedValueOnce(null);
+      await expect(service.settle([second.id])).resolves.toBe(0);
+      expect(await posts().findById(second.id).exec()).toMatchObject({
+        status: PostStatus.PENDING_REVIEW,
+        moderation: { verdict: 'moderation_failed' },
+      });
     });
   });
 });

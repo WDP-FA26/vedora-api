@@ -478,8 +478,7 @@ describe('PostsQueryService', () => {
         publishedAt: null,
         moderation: {
           verdict: 'spam',
-          violationScore: 0.95,
-          scores: { spam: 0.95 },
+          riskLevel: 3,
           checkedAt: new Date(),
           reviewedById: null,
           reviewedAt: null,
@@ -492,8 +491,7 @@ describe('PostsQueryService', () => {
         publishedAt: null,
         moderation: {
           verdict: 'spam',
-          violationScore: 0.5,
-          scores: { spam: 0.5 },
+          riskLevel: 2,
           checkedAt: new Date(),
           reviewedById: null,
           reviewedAt: null,

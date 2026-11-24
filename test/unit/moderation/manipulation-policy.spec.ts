@@ -1,42 +1,16 @@
-import { assessContent } from '../../../src/moderation/content-decision.js';
+import { reviewInstructions } from '../../../src/moderation/content-evidence.js';
 import {
   DEFAULT_CONTENT_POLICY,
   MANIPULATION_KEY,
   withReservedChoices,
 } from '../../../src/moderation/policies/content.js';
 
-const thresholds = { rejectThreshold: 0.85, reviewThreshold: 0.3 };
-
 describe('the manipulation rule', () => {
-  const scores = { allow: 0.35, manipulation: 0.55, spam: 0.1 };
-
-  it('rejects for manipulation at the threshold when the rule is enforced', () => {
-    expect(
-      assessContent('manipulation', scores, {
-        ...thresholds,
-        manipulationThreshold: 0.5,
-      }),
-    ).toMatchObject({ decision: 'reject', category: MANIPULATION_KEY });
-  });
-
-  it('only scores it when the rule is not enforced (shadow)', () => {
-    expect(assessContent('manipulation', scores, thresholds)).toMatchObject({
-      decision: 'review',
-      category: MANIPULATION_KEY,
-    });
-  });
-
-  it('leaves content under the threshold to the usual thresholds', () => {
-    expect(
-      assessContent(
-        'spam',
-        { allow: 0.95, manipulation: 0.03, spam: 0.02 },
-        {
-          ...thresholds,
-          manipulationThreshold: 0.5,
-        },
-      ).decision,
-    ).toBe('publish');
+  it('tells the model to rate manipulation as a high risk', () => {
+    const instructions = reviewInstructions(DEFAULT_CONTENT_POLICY);
+    expect(instructions).toContain(
+      `rate it 3 with category "${MANIPULATION_KEY}"`,
+    );
   });
 });
 

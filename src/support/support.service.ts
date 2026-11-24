@@ -113,9 +113,6 @@ export function toTicketListItem(
             excerpt: ticket.appeal.postSnapshot.excerpt,
             verdict: ticket.appeal.postSnapshot.verdict,
             reason: ticket.appeal.postSnapshot.reason,
-            routeRule: ticket.appeal.postSnapshot.routeRule,
-            routeAppliedBy: ticket.appeal.postSnapshot.routeAppliedBy,
-            routeCategory: ticket.appeal.postSnapshot.routeCategory,
             blockedAt: ticket.appeal.postSnapshot.blockedAt,
           },
         }

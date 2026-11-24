@@ -63,7 +63,7 @@ export class AdminModerationController {
 
   @Get()
   @ApiOperation({
-    summary: 'The content policy: categories, instructions and thresholds',
+    summary: 'The content policy: instructions and categories',
     description:
       'Applies to new posts, blogs, comments and videos right away (within about 15 seconds). Content already judged keeps its result.',
   })
@@ -109,11 +109,16 @@ export class AdminModerationController {
   @ApiOkResponse({ type: ModerationTestResultDto })
   async test(@Body() dto: TestModerationDto): Promise<ModerationTestResultDto> {
     try {
-      return await this.moderation.review(
-        [{ kind: 'text', text: dto.text }],
-        undefined,
+      const assessment = await this.moderation.review(
+        { texts: [{ field: 'body', mediaId: null, text: dto.text }], images: [] },
         dto.settings,
       );
+      return {
+        decision: assessment.decision,
+        category: assessment.category,
+        riskLevel: assessment.riskLevel,
+        summary: assessment.evidence?.summary ?? null,
+      };
     } catch {
       throw new FeatureUnavailableException(
         'SERVICE_UNAVAILABLE',

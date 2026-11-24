@@ -44,15 +44,12 @@ function toModerationDto(
   if (!moderation) return null;
   return {
     verdict: moderation.verdict,
-    violationScore: moderation.violationScore,
-    scores: moderation.scores,
+    riskLevel: moderation.riskLevel ?? null,
     checkedAt: moderation.checkedAt,
     reviewedById: moderation.reviewedById,
     reviewedAt: moderation.reviewedAt,
     reviewNote: moderation.reviewNote,
     evidence: moderation.evidence ?? null,
-    route: moderation.route ?? null,
-    heldAt: moderation.heldAt ?? null,
   };
 }
 

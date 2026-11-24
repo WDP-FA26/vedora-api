@@ -9,12 +9,6 @@ import {
   SupportTicketCategory,
   SupportTicketStatus,
 } from '../enums.js';
-import {
-  ROUTE_APPLIERS,
-  ROUTE_RULES,
-  type RouteApplier,
-  type RouteRule,
-} from './post.schema.js';
 import { cascadeOnDelete, collectionSchema } from './common.js';
 import { Identified } from './identified.js';
 
@@ -34,15 +28,6 @@ export class AppealPostSnapshot {
 
   @Prop({ type: String, default: null })
   reason!: string | null;
-
-  @Prop({ type: String, enum: [...ROUTE_RULES, null], default: null })
-  routeRule!: RouteRule | null;
-
-  @Prop({ type: String, enum: [...ROUTE_APPLIERS, null], default: null })
-  routeAppliedBy!: RouteApplier | null;
-
-  @Prop({ type: String, default: null })
-  routeCategory!: string | null;
 
   @Prop({ type: Date, required: true })
   blockedAt!: Date;

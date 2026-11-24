@@ -104,9 +104,9 @@ describe('PostInteractionsService', () => {
       const c1 = await service.createComment(post.id, commenter.id, {
         body: 'Bình luận 1',
       });
-      expect(contentModeration.requireAllowed).toHaveBeenCalledWith([
-        { kind: 'text', text: 'Bình luận 1' },
-      ]);
+      expect(contentModeration.requireAllowed).toHaveBeenCalledWith(
+        'Bình luận 1',
+      );
       expect(notifications.notify).toHaveBeenCalledWith({
         recipientId: author.id,
         actorId: commenter.id,
