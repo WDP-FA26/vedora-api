@@ -3,6 +3,7 @@ import {
   MediaAsset,
   MediaStatus,
   Notification,
+  NotificationType,
   Post,
   PostBookmark,
   PostComment,
@@ -98,9 +99,21 @@ describe('Post lifecycle: create, edit, delete and what hangs off a post (e2e)',
       .expect(200);
     return (response.body as PostPage).items.map(({ id }) => id);
   };
-  const publish = async (body = 'Đậu hũ sốt cà') => {
-    const response = await create({ type: 'POST', body }).expect(201);
+  /** The post as its author reads it once the background moderation ended. */
+  const settled = async (id: string): Promise<PostBody> => {
+    await e2e.settled();
+    const response = await as(
+      authorToken,
+      request(server()).get(`/api/v1/posts/${id}`),
+    ).expect(200);
     return response.body as PostBody;
+  };
+  /** Creates a text post, which answers PROCESSING, and returns its verdict. */
+  const publish = async (body = 'Đậu hũ sốt cà'): Promise<PostBody> => {
+    const response = await create({ type: 'POST', body }).expect(201);
+    const created = response.body as PostBody;
+    expect(created.status).toBe(PostStatus.PROCESSING);
+    return settled(created.id);
   };
 
   describe('creating a post', () => {
@@ -203,17 +216,8 @@ describe('Post lifecycle: create, edit, delete and what hangs off a post (e2e)',
     });
 
     it('never lets a held or rejected post show up for anyone else', async () => {
-      const held = (
-        await create({
-          type: 'POST',
-          body: `${BORDERLINE_MARKER} text`,
-        }).expect(201)
-      ).body as PostBody;
-      const rejected = (
-        await create({ type: 'POST', body: `${VIOLATION_MARKER} text` }).expect(
-          201,
-        )
-      ).body as PostBody;
+      const held = await publish(`${BORDERLINE_MARKER} text`);
+      const rejected = await publish(`${VIOLATION_MARKER} text`);
       expect(held.status).toBe(PostStatus.PENDING_REVIEW);
       expect(rejected.status).toBe(PostStatus.REJECTED);
       const listed = await publicList();
@@ -276,8 +280,10 @@ describe('Post lifecycle: create, edit, delete and what hangs off a post (e2e)',
       const edited = (
         await patch(created.id, { body: 'Đậu hũ sốt cà, bản mới' }).expect(200)
       ).body as PostBody;
-      expect(edited.status).toBe(PostStatus.PUBLISHED);
-      expect(edited.publishedAt).toBe(created.publishedAt);
+      expect(edited.status).toBe(PostStatus.PROCESSING);
+      const verdict = await settled(created.id);
+      expect(verdict.status).toBe(PostStatus.PUBLISHED);
+      expect(verdict.publishedAt).toBe(created.publishedAt);
 
       const detail = (
         await as(
@@ -367,16 +373,13 @@ describe('Post lifecycle: create, edit, delete and what hangs off a post (e2e)',
     });
 
     it('lets the author edit again after a rejection and publishes the fix', async () => {
-      const created = (
-        await create({ type: 'POST', body: `${VIOLATION_MARKER} text` }).expect(
-          201,
-        )
-      ).body as PostBody;
+      const created = await publish(`${VIOLATION_MARKER} text`);
       expect(created.status).toBe(PostStatus.REJECTED);
       const fixed = (
         await patch(created.id, { body: 'Đã sửa lại' }).expect(200)
       ).body as PostBody;
-      expect(fixed.status).toBe(PostStatus.PUBLISHED);
+      expect(fixed.status).toBe(PostStatus.PROCESSING);
+      expect((await settled(created.id)).status).toBe(PostStatus.PUBLISHED);
       expect(await publicList()).toContain(created.id);
     });
 
@@ -461,17 +464,8 @@ describe('Post lifecycle: create, edit, delete and what hangs off a post (e2e)',
           mediaIds: [upload.id],
         }).expect(201)
       ).body as PostBody;
-      const held = (
-        await create({
-          type: 'POST',
-          body: `${BORDERLINE_MARKER} text`,
-        }).expect(201)
-      ).body as PostBody;
-      const rejected = (
-        await create({ type: 'POST', body: `${VIOLATION_MARKER} text` }).expect(
-          201,
-        )
-      ).body as PostBody;
+      const held = await publish(`${BORDERLINE_MARKER} text`);
+      const rejected = await publish(`${VIOLATION_MARKER} text`);
       for (const id of [processing.id, held.id, rejected.id]) {
         await remove(id).expect(204);
         expect((await posts().findById(id).exec())?.status).toBe(
@@ -604,12 +598,7 @@ describe('Post lifecycle: create, edit, delete and what hangs off a post (e2e)',
     });
 
     it('refuses comments on a draft blog, a held post and a missing post', async () => {
-      const held = (
-        await create({
-          type: 'POST',
-          body: `${BORDERLINE_MARKER} text`,
-        }).expect(201)
-      ).body as PostBody;
+      const held = await publish(`${BORDERLINE_MARKER} text`);
       await comment(held.id, 'Chen vào bài đang chờ').expect(404);
       await comment(crypto.randomUUID(), 'Bài không có').expect(404);
     });
@@ -619,7 +608,11 @@ describe('Post lifecycle: create, edit, delete and what hangs off a post (e2e)',
       await comment(created.id, 'Của người khác').expect(201);
       await comment(created.id, 'Của chủ bài', authorToken).expect(201);
       const sent = await model<Notification>(Notification.name)
-        .find({ postId: created.id, recipientId: author.id })
+        .find({
+          postId: created.id,
+          recipientId: author.id,
+          type: { $ne: NotificationType.POST_PUBLISHED },
+        })
         .exec();
       expect(sent.map(({ actorId }) => actorId)).toEqual([stranger.id]);
     });
@@ -633,12 +626,7 @@ describe('Post lifecycle: create, edit, delete and what hangs off a post (e2e)',
         await request(server())
           .put(`/api/v1/posts/${created.id}/${action}`)
           .expect(401);
-        const held = (
-          await create({
-            type: 'POST',
-            body: `${BORDERLINE_MARKER} text`,
-          }).expect(201)
-        ).body as PostBody;
+        const held = await publish(`${BORDERLINE_MARKER} text`);
         await as(
           strangerToken,
           request(server()).put(`/api/v1/posts/${held.id}/${action}`),
@@ -665,6 +653,7 @@ describe('Post lifecycle: create, edit, delete and what hangs off a post (e2e)',
       const sent = await model<Notification>(Notification.name).countDocuments({
         postId: created.id,
         recipientId: author.id,
+        type: { $ne: NotificationType.POST_PUBLISHED },
       });
       expect(sent).toBe(1);
       await as(strangerToken, request(server()).delete(url)).expect(200);

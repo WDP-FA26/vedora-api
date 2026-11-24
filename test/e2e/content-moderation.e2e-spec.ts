@@ -63,13 +63,25 @@ describe('Content moderation review queue (e2e)', () => {
     await e2e.close();
   });
 
+  /** The post as its author reads it once the background moderation ended. */
+  const settled = async (id: string): Promise<PostBody> => {
+    await e2e.settled();
+    const response = await request(server())
+      .get(`/api/v1/posts/${id}`)
+      .auth(authorToken, { type: 'bearer' })
+      .expect(200);
+    return response.body as PostBody;
+  };
+  /** Creates a post, which answers PROCESSING, and returns its verdict. */
   const publish = async (body: string): Promise<PostBody> => {
     const response = await request(server())
       .post('/api/v1/posts')
       .auth(authorToken, { type: 'bearer' })
       .send({ type: 'POST', body })
       .expect(201);
-    return response.body as PostBody;
+    const created = response.body as PostBody;
+    expect(created.status).toBe(PostStatus.PROCESSING);
+    return settled(created.id);
   };
   const adminView = async (id: string): Promise<PostBody> => {
     const response = await request(server())
@@ -104,7 +116,8 @@ describe('Content moderation review queue (e2e)', () => {
     const blocked = await edit(created.id, `${VIOLATION_MARKER} text`).expect(
       200,
     );
-    expect(blocked.body).toMatchObject({
+    expect(blocked.body).toMatchObject({ status: PostStatus.PROCESSING });
+    expect(await settled(created.id)).toMatchObject({
       status: PostStatus.REJECTED,
       moderationVerdict: 'violence',
     });
@@ -112,8 +125,11 @@ describe('Content moderation review queue (e2e)', () => {
 
     const fixed = await edit(created.id, 'Đậu hũ sốt cà, bản sửa').expect(200);
     expect(fixed.body).toMatchObject({
-      status: PostStatus.PUBLISHED,
+      status: PostStatus.PROCESSING,
       body: 'Đậu hũ sốt cà, bản sửa',
+    });
+    expect(await settled(created.id)).toMatchObject({
+      status: PostStatus.PUBLISHED,
     });
     await request(server()).get(`/api/v1/posts/${created.id}`).expect(200);
   });
@@ -123,7 +139,10 @@ describe('Content moderation review queue (e2e)', () => {
     const held = await edit(created.id, `${BORDERLINE_MARKER} text`).expect(
       200,
     );
-    expect(held.body).toMatchObject({ status: PostStatus.PENDING_REVIEW });
+    expect(held.body).toMatchObject({ status: PostStatus.PROCESSING });
+    expect(await settled(created.id)).toMatchObject({
+      status: PostStatus.PENDING_REVIEW,
+    });
     await request(server()).get(`/api/v1/posts/${created.id}`).expect(404);
   });
 

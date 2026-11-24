@@ -71,7 +71,7 @@ export class PostsService {
       );
       await this.mediaService.claimForPost(session, authorId, id, mediaIds);
     });
-    await this.mediaService.settlePosts([id]);
+    this.mediaService.settlePostsLater([id]);
     this.searchIndex.schedule();
 
     return this.postsQuery.load(id, authorId);
@@ -174,7 +174,7 @@ export class PostsService {
         .exec();
     });
     if (changed) {
-      await this.mediaService.settlePosts([id]);
+      this.mediaService.settlePostsLater([id]);
       this.searchIndex.schedule();
     }
     if (detachedIds.length > 0) {

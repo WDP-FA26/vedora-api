@@ -1,3 +1,4 @@
+import { cachedInstructions, stickySession } from '../../ai/openrouter.js';
 import { runtimeConfig } from '../../config/runtime-config.js';
 import { generateText, type LanguageModel, Output } from 'ai';
 import { z } from 'zod';
@@ -22,20 +23,7 @@ export type DecisionState = string | readonly DecisionTurn[];
 // One budget for the whole call, retries included.
 const DEFAULT_TIMEOUT_MS = runtimeConfig.AI_DECISION_TIMEOUT_MS;
 const MAX_RETRIES = runtimeConfig.AI_DECISION_MAX_RETRIES;
-/**
- * The system prompt is the same for every call under one policy, so it ends in
- * a cache breakpoint. Chats arrive minutes apart, so the entry lives an hour
- * (written at 2x the input price, read at 0.1x).
- */
-const CACHE_PROMPT = {
-  openrouter: { cacheControl: { type: 'ephemeral', ttl: '1h' } },
-} as const;
-/**
- * OpenRouter keeps a session on one provider (Anthropic, Bedrock or Vertex,
- * each with its own cache). Without a session id it keys on the first user
- * message, which differs for every chat, so calls would scatter.
- */
-const STICKY_SESSION = { openrouter: { session_id: 'vedora-chat-guardrail' } };
+const SESSION_ID = 'vedora-chat-guardrail';
 /** Room for low-effort thinking plus the one-field answer. */
 const MAX_OUTPUT_TOKENS = 4000;
 
@@ -117,13 +105,9 @@ export async function decide<V extends string>(
     maxRetries: MAX_RETRIES,
     maxOutputTokens: MAX_OUTPUT_TOKENS,
     abortSignal: signal,
-    instructions: {
-      role: 'system',
-      content: decisionInstructions(policy),
-      providerOptions: CACHE_PROMPT,
-    },
+    instructions: cachedInstructions(decisionInstructions(policy)),
     prompt: decisionPrompt(state),
-    providerOptions: STICKY_SESSION,
+    providerOptions: stickySession(SESSION_ID),
     output: Output.object({
       schema: z.object({ choice: z.enum(choicesOf(policy)) }),
       name: 'guardrail_decision',

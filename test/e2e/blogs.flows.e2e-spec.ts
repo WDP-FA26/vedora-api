@@ -72,6 +72,24 @@ describe('Blog flows (e2e)', () => {
   const patch = (id: string, payload: object, token = authorToken) =>
     as(token, request(server()).patch(`/api/v1/blogs/${id}`)).send(payload);
   const draft = async () => (await create().expect(201)).body as BlogBody;
+  /** The blog as its author reads it once the background moderation ended. */
+  const settled = async (id: string): Promise<BlogBody> => {
+    await e2e.settled();
+    const response = await as(
+      authorToken,
+      request(server()).get(`/api/v1/blogs/${id}`),
+    ).expect(200);
+    return response.body as BlogBody;
+  };
+  /** Publishes a new blog, which answers PROCESSING, and returns its verdict. */
+  const publish = async (payload: object = {}): Promise<BlogBody> => {
+    const response = await create({ status: 'PUBLISHED', ...payload }).expect(
+      201,
+    );
+    const created = response.body as BlogBody;
+    expect(created.status).toBe(PostStatus.PROCESSING);
+    return settled(created.id);
+  };
 
   describe('validation', () => {
     it.each([
@@ -149,18 +167,19 @@ describe('Blog flows (e2e)', () => {
     it('publishes a draft and sets publishedAt once', async () => {
       const blog = await draft();
 
-      const published = (
+      const processing = (
         await patch(blog.id, { status: 'PUBLISHED' }).expect(200)
       ).body as BlogBody;
+      const published = await settled(blog.id);
 
       expect(blog.publishedAt).toBeNull();
+      expect(processing.status).toBe(PostStatus.PROCESSING);
       expect(published.status).toBe(PostStatus.PUBLISHED);
       expect(published.publishedAt).not.toBeNull();
     });
 
     it('does not check a public blog again when it is published again unchanged', async () => {
-      const blog = (await create({ status: 'PUBLISHED' }).expect(201))
-        .body as BlogBody;
+      const blog = await publish();
 
       const again = (await patch(blog.id, { status: 'PUBLISHED' }).expect(200))
         .body as BlogBody;
@@ -170,12 +189,7 @@ describe('Blog flows (e2e)', () => {
     });
 
     it('lets the author take a held blog back to a draft, out of the admin queue', async () => {
-      const held = (
-        await create({
-          status: 'PUBLISHED',
-          content: `Nội dung ${BORDERLINE_MARKER}`,
-        }).expect(201)
-      ).body as BlogBody;
+      const held = await publish({ content: `Nội dung ${BORDERLINE_MARKER}` });
 
       const withdrawn = (await patch(held.id, { status: 'DRAFT' }).expect(200))
         .body as BlogBody;
@@ -192,12 +206,8 @@ describe('Blog flows (e2e)', () => {
     });
 
     it('does not let an author publish a held blog past review by re-sending only its links', async () => {
-      const held = (
-        await create({
-          status: 'PUBLISHED',
-          content: `Nội dung ${BORDERLINE_MARKER}`,
-        }).expect(201)
-      ).body as BlogBody;
+      const held = await publish({ content: `Nội dung ${BORDERLINE_MARKER}` });
+      expect(held.status).toBe(PostStatus.PENDING_REVIEW);
 
       const resent = (await patch(held.id, { recipeIds: [] }).expect(200))
         .body as BlogBody;
@@ -259,8 +269,7 @@ describe('Blog flows (e2e)', () => {
     });
 
     it('answers 404 to a stranger deleting a published blog and keeps it', async () => {
-      const blog = (await create({ status: 'PUBLISHED' }).expect(201))
-        .body as BlogBody;
+      const blog = await publish();
 
       await as(
         strangerToken,

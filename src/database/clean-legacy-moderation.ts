@@ -1,8 +1,8 @@
 /**
  * One-off cleanup after the single-pass Claude Haiku moderation rewrite:
  * removes fields the old two-stage pipeline stored and the code no longer
- * reads (scores, router, hold markers, thresholds). Nothing breaks without it;
- * Mongoose ignores unknown fields.
+ * reads (scores, router, hold markers, thresholds, evidence boxes). Nothing
+ * breaks without it; Mongoose ignores unknown fields.
  *
  *   npm run clean:legacy-moderation            # dry run: counts what would change
  *   npm run clean:legacy-moderation -- --apply # removes the fields
@@ -49,6 +49,23 @@ const CLEANUPS: Cleanup[] = [
   },
 ];
 
+/** A field inside the elements of an array, removed from every element. */
+interface ElementCleanup {
+  collection: string;
+  /** The field as a query path, e.g. `items.box`. */
+  field: string;
+  /** The same field as an update path over every element, e.g. `items.$[].box`. */
+  unset: string;
+}
+
+const ELEMENT_CLEANUPS: ElementCleanup[] = [
+  {
+    collection: 'posts',
+    field: 'moderation.evidence.items.box',
+    unset: 'moderation.evidence.items.$[].box',
+  },
+];
+
 function required(name: string): string {
   const value = process.env[name];
   if (!value) throw new Error(`${name} is not set.`);
@@ -84,6 +101,21 @@ async function main(): Promise<void> {
         $unset: unset,
       });
       console.log(`${collection}: ${result.modifiedCount} documents updated.`);
+    }
+    for (const { collection, field, unset } of ELEMENT_CLEANUPS) {
+      const documents = connection.collection(collection);
+      const filter = { [field]: { $exists: true } };
+      if (!apply) {
+        const count = await documents.countDocuments(filter);
+        console.log(`${collection}.${field}: ${count} documents would change.`);
+        continue;
+      }
+      const result = await documents.updateMany(filter, {
+        $unset: { [unset]: '' },
+      });
+      console.log(
+        `${collection}.${field}: ${result.modifiedCount} documents updated.`,
+      );
     }
     if (!apply) console.log('Dry run; pass --apply to remove the fields.');
   } finally {

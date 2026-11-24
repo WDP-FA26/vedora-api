@@ -30,7 +30,7 @@ Backend không coi đó là lỗi của người dùng; bài chuyển `PENDING_R
 
 FE admin nên hiển thị `provider_blocked` là "Model từ chối đọc nội dung" và `moderation_failed` là "Kiểm duyệt tự động lỗi, cần duyệt tay" (không nằm trong chính sách nên không có nhãn từ `GET /admin/moderation/settings`).
 
-Bài mới và blog xuất bản (hoặc sửa tiêu đề, nội dung, ảnh bìa của blog đã xuất bản) chuyển sang `PROCESSING` cho đến khi kiểm duyệt xong (thường vài giây):
+Bài mới và blog xuất bản (hoặc sửa tiêu đề, nội dung, ảnh bìa của blog đã xuất bản) chuyển sang `PROCESSING` cho đến khi kiểm duyệt xong (thường vài giây). Request đăng hoặc sửa **không chờ** kiểm duyệt: response luôn là bài ở `PROCESSING`, kiểm duyệt chạy nền sau đó. Khi có kết quả, tác giả nhận một thông báo (bảng bên dưới); FE có thể poll `GET /posts/:id` hoặc dựa vào SSE thông báo.
 - Đạt: `PUBLISHED`.
 - Vi phạm: `status: REJECTED` và `moderationVerdict` là nhóm vi phạm. Chỉ tác giả thấy. Sửa blog bị từ chối mà không gửi `status` sẽ đưa nó về `DRAFT`.
 - Cần admin xem: `PENDING_REVIEW`.
@@ -57,6 +57,7 @@ Mỗi lần trạng thái bài thay đổi do kiểm duyệt, tác giả nhận 
 
 | `type` | Khi nào | Trường đi kèm |
 | --- | --- | --- |
+| `POST_PUBLISHED` | Bài qua kiểm duyệt tự động và được đăng | (không có) |
 | `POST_REJECTED` | Bài bị chặn tự động, hoặc admin từ chối bài đang chờ duyệt | `reason` (nhóm vi phạm), `note` (ghi chú của admin, có thể null) |
 | `POST_PENDING_REVIEW` | Bài bị giữ chờ admin | `reason` (nhóm nghi ngờ) |
 | `POST_APPROVED` | Admin cho phép đăng (kể cả bài đã bị chặn) | `note` |
@@ -91,8 +92,7 @@ Có ngay khi bài được chấm, từ cùng lần gọi model (không có lầ
       "end": 39,
       "mediaId": null,
       "seconds": null,
-      "imageUrl": null,
-      "box": null
+      "imageUrl": null
     }
   ],
   "dropped": 0,
@@ -105,10 +105,10 @@ Có ngay khi bài được chấm, từ cùng lần gọi model (không có lầ
 - `summary`, `reason`: tiếng Việt, ngắn. `summary` là `null` khi không `READY`.
 - `items[].field`:
   - `body` (chữ của bài), `title`, `content` (blog), `transcript` (lời thoại video, `mediaId` là video đó): `quote` **khớp nguyên văn** với nội dung, server đã kiểm tra. `start`/`end` là vị trí trong chuỗi đã chuẩn hoá NFC (`text.normalize("NFC").slice(start, end) === quote`). Chỉ dùng để tô sáng `body`; `content` là Markdown nên chỉ hiện danh sách trích dẫn.
-  - `frame` (khung video, có `mediaId`, `seconds`) và `image` (ảnh blog): `imageUrl` là ảnh đó. `quote` là chữ model đọc được trong ảnh, có thể sai dấu, chỉ để tham khảo. `box` là vùng gần đúng `[x0, y0, x1, y1]` theo thang 0–1000 của ảnh, hoặc `null`; chỉ là gợi ý.
+  - `frame` (khung video, có `mediaId`, `seconds`) và `image` (ảnh blog): `imageUrl` là ảnh đó. `quote` là chữ model đọc được trong ảnh, có thể sai dấu, chỉ để tham khảo.
 - `items[].category`: nhóm model cho là vi phạm.
 - `dropped`: số trích dẫn model đưa ra nhưng không có trong bài, đã bị bỏ.
-- Bản ghi cũ có thể còn `decision`/`category` trong `evidence`; FE bỏ qua.
+- Bản ghi cũ có thể còn `decision`/`category` trong `evidence` hoặc `box` trong `items[]`; FE bỏ qua.
 - Hiển thị `quote`, `summary`, `reason` như văn bản thường (không render HTML), vì chúng lấy từ nội dung người dùng.
 
 ### Chèo lái AI (`manipulation`)

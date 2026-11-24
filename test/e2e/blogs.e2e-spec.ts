@@ -33,17 +33,28 @@ describe('Blogs (HTTP)', () => {
   const server = () => e2e.app.getHttpServer();
   const asAuthor = (req: request.Test) => req.auth(token, { type: 'bearer' });
 
-  const createBlog = async (fields: object = {}) =>
-    (
-      await asAuthor(request(server()).post('/api/v1/blogs'))
-        .send({
-          title: 'Đậu hũ sốt cà',
-          content: '## Cách làm\nNấu đậu hũ với cà chua.',
-          recipeIds: [recipe.id],
-          ...fields,
-        })
-        .expect(201)
-    ).body as BlogDetailDto;
+  /** The blog as its author reads it once the background moderation ended. */
+  const settledBlog = async (id: string): Promise<BlogDetailDto> => {
+    await e2e.settled();
+    const response = await asAuthor(
+      request(server()).get(`/api/v1/blogs/${id}`),
+    ).expect(200);
+    return response.body as BlogDetailDto;
+  };
+  /** Creates a blog; a published one is returned once it has been checked. */
+  const createBlog = async (fields: object = {}): Promise<BlogDetailDto> => {
+    const response = await asAuthor(request(server()).post('/api/v1/blogs'))
+      .send({
+        title: 'Đậu hũ sốt cà',
+        content: '## Cách làm\nNấu đậu hũ với cà chua.',
+        recipeIds: [recipe.id],
+        ...fields,
+      })
+      .expect(201);
+    const created = response.body as BlogDetailDto;
+    if (created.status !== PostStatus.PROCESSING) return created;
+    return settledBlog(created.id);
+  };
 
   beforeAll(async () => {
     e2e = await createE2eApp('blogs_e2e');
@@ -293,8 +304,10 @@ describe('Blogs (HTTP)', () => {
     )
       .send({ status: 'PUBLISHED' })
       .expect(200);
-    expect(published.body).toMatchObject({ status: 'PUBLISHED' });
-    expect((published.body as BlogDetailDto).publishedAt).toBeTruthy();
+    expect(published.body).toMatchObject({ status: 'PROCESSING' });
+    const settled = await settledBlog(draft.id);
+    expect(settled).toMatchObject({ status: 'PUBLISHED' });
+    expect(settled.publishedAt).toBeTruthy();
     await request(server())
       .patch(`/api/v1/blogs/${draft.id}`)
       .auth(otherToken, { type: 'bearer' })
@@ -314,7 +327,8 @@ describe('Blogs (HTTP)', () => {
     )
       .send({ content: `${VIOLATION_MARKER} body`, status: 'PUBLISHED' })
       .expect(200);
-    expect(response.body).toMatchObject({
+    expect(response.body).toMatchObject({ status: 'PROCESSING' });
+    expect(await settledBlog(draft.id)).toMatchObject({
       status: 'REJECTED',
       moderationVerdict: 'violence',
     });

@@ -32,7 +32,7 @@ import {
 import { PostPageDto } from '../dto/post-response.dto.js';
 import { PostsQueryService } from '../posts-query.service.js';
 import { PostSearchIndexService } from '../search/post-search-index.service.js';
-import { PostModerationService } from '../../media/post-moderation.service.js';
+import { MediaService } from '../../media/media.service.js';
 import { InvalidInputException } from '../../common/exceptions/invalid-input.exception.js';
 import { ResourceNotFoundException } from '../../common/exceptions/resource-not-found.exception.js';
 import { StateConflictException } from '../../common/exceptions/state-conflict.exception.js';
@@ -44,7 +44,7 @@ export class BlogsService {
     private readonly mongo: MongoService,
     private readonly postsQuery: PostsQueryService,
     private readonly storage: StorageService,
-    private readonly postModeration: PostModerationService,
+    private readonly mediaService: MediaService,
     @InjectModel(Post.name) private readonly postsModel: Model<Post>,
     @InjectModel(Recipe.name) private readonly recipesModel: Model<Recipe>,
     @Optional() private readonly cloudinary?: CloudinaryService,
@@ -83,7 +83,7 @@ export class BlogsService {
       updatedAt: now,
     });
     if (status === PostStatus.PROCESSING) {
-      await this.postModeration.settle([post.id]);
+      this.mediaService.settlePostsLater([post.id]);
       return this.loadDetail(post.id, authorId);
     }
     return this.toDetail(post, authorId);
@@ -208,7 +208,7 @@ export class BlogsService {
         )
         .exec();
     });
-    if (needsReview) await this.postModeration.settle([id]);
+    if (needsReview) this.mediaService.settlePostsLater([id]);
     return this.loadDetail(id, authorId);
   }
 

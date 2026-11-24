@@ -74,10 +74,6 @@ export class ModerationEvidenceItem {
 
   @Prop({ type: String, default: null })
   imageUrl!: string | null;
-
-  /** Approximate region `[x0, y0, x1, y1]` scaled to 0-1000. */
-  @Prop({ type: [Number], default: null })
-  box!: number[] | null;
 }
 
 export const ModerationEvidenceItemSchema = SchemaFactory.createForClass(

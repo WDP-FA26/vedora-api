@@ -8,13 +8,12 @@ import {
 
 const MAX_ITEMS = runtimeConfig.MODERATION_EVIDENCE_MAX_ITEMS;
 const TEXT_MAX_LENGTH = runtimeConfig.MODERATION_EVIDENCE_TEXT_MAX_LENGTH;
-const BOX_SCALE = 1000;
 
-export type EvidenceTextField = Extract<
+type EvidenceTextField = Extract<
   EvidenceField,
   'body' | 'title' | 'content' | 'transcript'
 >;
-export type EvidenceImageField = Extract<EvidenceField, 'frame' | 'image'>;
+type EvidenceImageField = Extract<EvidenceField, 'frame' | 'image'>;
 
 /** A piece of text the reviewer reads, with where it came from. */
 export interface EvidenceText {
@@ -39,11 +38,6 @@ export interface EvidenceSources {
   images: EvidenceImage[];
 }
 
-/** The highest risk level: a clear violation. */
-export const HIGH_RISK = 3;
-/** The risk level from which an admin looks before the content is published. */
-export const MEDIUM_RISK = 2;
-
 /**
  * What the reviewer model answers, with category keys limited to the policy's.
  * Every field is required and absent values are null, so the JSON Schema works
@@ -62,12 +56,11 @@ export function reviewOutput(categories: [string, ...string[]]) {
         reason: z.string(),
         quote: z.string().nullable(),
         imageIndex: z.number().int().nullable(),
-        box: z.array(z.number()).nullable(),
       }),
     ),
   });
 }
-export type ReviewOutput = z.infer<ReturnType<typeof reviewOutput>>;
+type ReviewOutput = z.infer<ReturnType<typeof reviewOutput>>;
 export type ReviewEvidence = ReviewOutput['evidence'][number];
 
 const TEXT_LABELS: Record<EvidenceTextField, string> = {
@@ -196,8 +189,8 @@ export function reviewInstructions(policy: ContentPolicySettings): string {
     '- category: the key of the category it fits worst, or null at risk level 0.',
     '- summary: why it got this level, in one or two short sentences.',
     '- evidence: the parts that fit a category, so an admin can check them quickly; empty at risk level 0. Each item has a category, a reason of one short sentence, and where the part is:',
-    '  - Text: quote is the offending words copied character for character from the content (the shortest part that shows the problem), and imageIndex and box are null.',
-    '  - Images and video frames: imageIndex is the number in the image label, quote is any offending text you read in it (or null), and box is the region [x0, y0, x1, y1] scaled 0-1000, or null when the whole picture is the problem.',
+    '  - Text: quote is the offending words copied character for character from the content (the shortest part that shows the problem), and imageIndex is null.',
+    '  - Images and video frames: imageIndex is the number in the image label, and quote is any offending text you read in it (or null).',
     '  Risk level 3 needs at least one piece of evidence from the content; without one, use 2.',
   );
   return lines.join('\n');
@@ -242,19 +235,6 @@ export function reviewMessageParts(
 
 function clip(text: string): string {
   return text.trim().slice(0, TEXT_MAX_LENGTH);
-}
-
-/** The box as `[x0, y0, x1, y1]` in 0-1000, or null when it is not one. */
-export function validBox(box: number[] | null): number[] | null {
-  if (box === null || box.length !== 4) return null;
-  const clamped: number[] = [];
-  for (const value of box) {
-    if (!Number.isFinite(value)) return null;
-    clamped.push(Math.min(BOX_SCALE, Math.max(0, Math.round(value))));
-  }
-  const [x0, y0, x1, y1] = clamped;
-  if (x0 >= x1 || y0 >= y1) return null;
-  return clamped;
 }
 
 function findQuote(
@@ -319,7 +299,6 @@ function toItem(
       mediaId: image.mediaId,
       seconds: image.seconds,
       imageUrl: image.url,
-      box: validBox(evidence.box),
     };
   }
   if (evidence.quote === null) return null;
@@ -335,6 +314,5 @@ function toItem(
     mediaId: found.text.mediaId,
     seconds: null,
     imageUrl: null,
-    box: null,
   };
 }

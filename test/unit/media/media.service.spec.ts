@@ -1,4 +1,4 @@
-import type { INestApplication } from '@nestjs/common';
+import { type INestApplication, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Test } from '@nestjs/testing';
 import type { ClientSession } from 'mongoose';
@@ -197,7 +197,69 @@ describe('MediaService', () => {
       publishedAt: expect.any(Date) as Date,
     });
     expect(schedule).toHaveBeenCalled();
-    expect(notify).not.toHaveBeenCalled();
+    expect(notify).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({
+        recipientId: ownerId,
+        type: 'POST_PUBLISHED',
+        postId,
+      }),
+    );
+  });
+
+  describe('settling in the background', () => {
+    it('moderates the posts after returning, and whenSettled waits for the verdict', async () => {
+      service.settlePostsLater([postId]);
+      expect((await post())?.status).toBe(PostStatus.PROCESSING);
+
+      await service.whenSettled();
+
+      expect(await post()).toMatchObject({
+        status: PostStatus.PUBLISHED,
+        publishedAt: expect.any(Date) as Date,
+      });
+      expect(review).toHaveBeenCalledOnce();
+    });
+
+    it('does not resolve whenSettled before a slow run has ended', async () => {
+      let finish: () => void = () => undefined;
+      const settlePosts = vi.spyOn(service, 'settlePosts').mockReturnValueOnce(
+        new Promise<void>((resolve) => {
+          finish = resolve;
+        }),
+      );
+      let settled = false;
+
+      service.settlePostsLater([postId]);
+      const waiting = service.whenSettled().then(() => {
+        settled = true;
+      });
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      expect(settled).toBe(false);
+
+      finish();
+      await waiting;
+      expect(settled).toBe(true);
+      expect(settlePosts).toHaveBeenCalledWith([postId]);
+      settlePosts.mockRestore();
+    });
+
+    it('logs a failing run instead of throwing it', async () => {
+      const settlePosts = vi
+        .spyOn(service, 'settlePosts')
+        .mockRejectedValueOnce(new Error('db down'));
+      const warn = vi
+        .spyOn(Logger.prototype, 'warn')
+        .mockImplementation(() => undefined);
+
+      expect(() => service.settlePostsLater([postId])).not.toThrow();
+      await expect(service.whenSettled()).resolves.toBeUndefined();
+
+      expect(warn).toHaveBeenCalledWith(
+        expect.stringContaining(`Moderating posts ${postId} failed`),
+      );
+      settlePosts.mockRestore();
+      warn.mockRestore();
+    });
   });
 
   it('judges the text and four frames of a video before publishing', async () => {

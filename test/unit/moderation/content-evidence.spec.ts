@@ -2,7 +2,6 @@ import {
   reviewInstructions,
   type ReviewEvidence,
   type EvidenceSources,
-  validBox,
   verifyEvidence,
 } from '../../../src/moderation/content-evidence.js';
 
@@ -41,7 +40,6 @@ function evidence(item: Partial<ReviewEvidence>): ReviewEvidence {
     reason: 'Đe dọa',
     quote: null,
     imageIndex: null,
-    box: null,
     ...item,
   };
 }
@@ -96,7 +94,6 @@ describe('verifyEvidence', () => {
           category: 'spam',
           imageIndex: 1,
           quote: 'NẠP 100K TĂNG 200K',
-          box: [40, 800.4, 940, 960],
         }),
       ],
       sources(),
@@ -112,7 +109,6 @@ describe('verifyEvidence', () => {
         mediaId: 'm1',
         seconds: 7.5,
         imageUrl: 'https://cdn/f1.jpg',
-        box: [40, 800, 940, 960],
       },
     ]);
   });
@@ -128,17 +124,6 @@ describe('verifyEvidence', () => {
       sources(),
     );
     expect(items.map((item) => item.field)).toEqual(['transcript', 'frame']);
-  });
-});
-
-describe('validBox', () => {
-  it('clamps to 0-1000 and rejects boxes that are not regions', () => {
-    expect(validBox([-20, 10, 1200, 990])).toEqual([0, 10, 1000, 990]);
-    expect(validBox(null)).toBeNull();
-    expect(validBox([1, 2, 3])).toBeNull();
-    expect(validBox([500, 10, 400, 20])).toBeNull();
-    expect(validBox([10, 10, 10, 20])).toBeNull();
-    expect(validBox([0, Number.NaN, 10, 20])).toBeNull();
   });
 });
 

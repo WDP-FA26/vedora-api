@@ -26,7 +26,7 @@ import {
 import { CloudinaryService } from '../../../../src/cloudinary/cloudinary.service.js';
 import { BlogsService } from '../../../../src/posts/blogs/blogs.service.js';
 import { PostsQueryService } from '../../../../src/posts/posts-query.service.js';
-import { PostModerationService } from '../../../../src/media/post-moderation.service.js';
+import { MediaService } from '../../../../src/media/media.service.js';
 
 const STORAGE = 'http://localhost:9000/vedora-blogs';
 
@@ -47,8 +47,8 @@ describe('BlogsService covers', () => {
         { provide: PostsQueryService, useValue: mockDeep<PostsQueryService>() },
         { provide: StorageService, useValue: mockDeep<StorageService>() },
         {
-          provide: PostModerationService,
-          useValue: mockDeep<PostModerationService>(),
+          provide: MediaService,
+          useValue: mockDeep<MediaService>(),
         },
         {
           provide: CloudinaryService,
@@ -80,7 +80,7 @@ describe('BlogsService covers', () => {
       db,
       posts,
       storage,
-      mockDeep<PostModerationService>(),
+      mockDeep<MediaService>(),
       app.get(getModelToken('Post')),
       app.get(getModelToken('Recipe')),
       cloudinary,
@@ -220,7 +220,7 @@ describe('BlogsService lifecycle', () => {
   let postsModel: Model<Post>;
   let postsQuery: DeepMockProxy<PostsQueryService>;
   let storage: DeepMockProxy<StorageService>;
-  let postModeration: DeepMockProxy<PostModerationService>;
+  let mediaService: DeepMockProxy<MediaService>;
   let blogs: BlogsService;
   let authorId: string;
   let otherId: string;
@@ -233,8 +233,8 @@ describe('BlogsService lifecycle', () => {
         { provide: PostsQueryService, useValue: mockDeep<PostsQueryService>() },
         { provide: StorageService, useValue: mockDeep<StorageService>() },
         {
-          provide: PostModerationService,
-          useValue: mockDeep<PostModerationService>(),
+          provide: MediaService,
+          useValue: mockDeep<MediaService>(),
         },
       ],
     }).compile();
@@ -253,7 +253,7 @@ describe('BlogsService lifecycle', () => {
     storage.keyFromPublicUrl.mockImplementation((_target, url) =>
       url.startsWith(`${STORAGE}/`) ? url.slice(STORAGE.length + 1) : null,
     );
-    postModeration = mockDeep<PostModerationService>();
+    mediaService = mockDeep<MediaService>();
     postsQuery.toResponses.mockImplementation((rows) =>
       Promise.resolve(
         rows.map(
@@ -267,12 +267,11 @@ describe('BlogsService lifecycle', () => {
         ),
       ),
     );
-    postModeration.settle.mockResolvedValue(1);
     blogs = new BlogsService(
       db,
       postsQuery,
       storage,
-      postModeration,
+      mediaService,
       app.get(getModelToken('Post')),
       app.get(getModelToken('Recipe')),
     );
@@ -300,7 +299,7 @@ describe('BlogsService lifecycle', () => {
     expect(draft.content).toBe(longContent);
     const storedDraft = await postsModel.findOne({ _id: draft.id }).exec();
     expect(storedDraft?.blog?.excerpt).toHaveLength(280);
-    expect(postModeration.settle).not.toHaveBeenCalled();
+    expect(mediaService.settlePostsLater).not.toHaveBeenCalled();
 
     await expect(
       blogs.create(authorId, {
@@ -328,7 +327,7 @@ describe('BlogsService lifecycle', () => {
       recipeIds: [recipe.id],
     });
     expect(published.status).toBe(PostStatus.PROCESSING);
-    expect(postModeration.settle).toHaveBeenCalledWith([published.id]);
+    expect(mediaService.settlePostsLater).toHaveBeenCalledWith([published.id]);
   });
 
   it('findOne enforces draft privacy and ignores non-blog posts', async () => {
@@ -457,10 +456,10 @@ describe('BlogsService lifecycle', () => {
       coverImageUrl: `${STORAGE}/blogs/user/img.jpg`,
     });
     expect(publishing.status).toBe(PostStatus.PROCESSING);
-    expect(postModeration.settle).toHaveBeenCalledWith([draft.id]);
+    expect(mediaService.settlePostsLater).toHaveBeenCalledWith([draft.id]);
 
     // Update PENDING_REVIEW without explicit status -> keeps publishing (PROCESSING + settle)
-    postModeration.settle.mockClear();
+    mediaService.settlePostsLater.mockClear();
     await postsModel
       .updateOne(
         { _id: draft.id },
@@ -471,10 +470,10 @@ describe('BlogsService lifecycle', () => {
       title: 'Sửa khi chờ duyệt',
     });
     expect(fromPending.status).toBe(PostStatus.PROCESSING);
-    expect(postModeration.settle).toHaveBeenCalledWith([draft.id]);
+    expect(mediaService.settlePostsLater).toHaveBeenCalledWith([draft.id]);
 
     // Recipe-only edit on PUBLISHED blog -> stays PUBLISHED, no re-moderation
-    postModeration.settle.mockClear();
+    mediaService.settlePostsLater.mockClear();
     const recipe = await createRecipe(db, { title: 'Món mới' });
     await postsModel
       .updateOne(
@@ -486,7 +485,7 @@ describe('BlogsService lifecycle', () => {
       recipeIds: [recipe.id],
     });
     expect(recipeOnly.status).toBe(PostStatus.PUBLISHED);
-    expect(postModeration.settle).not.toHaveBeenCalled();
+    expect(mediaService.settlePostsLater).not.toHaveBeenCalled();
 
     // Update REJECTED without status -> transitions to DRAFT
     await postsModel

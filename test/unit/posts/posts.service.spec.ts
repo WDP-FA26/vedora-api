@@ -71,7 +71,6 @@ describe('PostsService', () => {
       Promise.resolve({ id } as PostResponseDto),
     );
     mediaService.claimForPost.mockResolvedValue();
-    mediaService.settlePosts.mockResolvedValue();
     mediaService.discard.mockResolvedValue();
     mediaService.replacePostMedia.mockResolvedValue({
       changed: false,
@@ -123,7 +122,7 @@ describe('PostsService', () => {
         result.id,
         ['m1'],
       );
-      expect(mediaService.settlePosts).toHaveBeenCalledWith([result.id]);
+      expect(mediaService.settlePostsLater).toHaveBeenCalledWith([result.id]);
       expect(searchIndex.schedule).toHaveBeenCalledOnce();
       expect(postsQuery.load).toHaveBeenCalledWith(result.id, author.id);
     });
@@ -208,7 +207,7 @@ describe('PostsService', () => {
 
       const reloaded = await postsModel.findOne({ _id: post.id }).exec();
       expect(reloaded?.status).toBe(PostStatus.PUBLISHED);
-      expect(mediaService.settlePosts).not.toHaveBeenCalled();
+      expect(mediaService.settlePostsLater).not.toHaveBeenCalled();
       expect(searchIndex.schedule).not.toHaveBeenCalled();
     });
 
@@ -242,7 +241,7 @@ describe('PostsService', () => {
       expect(reloaded?.body).toBe('Clean text');
       expect(reloaded?.moderation).toBeNull();
       expect(reloaded?.searchIndexedAt).toBeNull();
-      expect(mediaService.settlePosts).toHaveBeenCalledWith([post.id]);
+      expect(mediaService.settlePostsLater).toHaveBeenCalledWith([post.id]);
       expect(searchIndex.schedule).toHaveBeenCalledOnce();
       expect(mediaService.discard).toHaveBeenCalledWith({
         _id: { $in: ['old-media-1'] },

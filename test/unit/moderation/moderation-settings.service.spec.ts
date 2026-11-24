@@ -16,7 +16,11 @@ describe('ModerationSettingsService', () => {
 
   const draft = (): ContentPolicySettings => {
     const { choices, instructions, allowDescription } = service.defaults();
-    return { instructions: `${instructions} Be strict.`, allowDescription, choices };
+    return {
+      instructions: `${instructions} Be strict.`,
+      allowDescription,
+      choices,
+    };
   };
 
   beforeAll(async () => {

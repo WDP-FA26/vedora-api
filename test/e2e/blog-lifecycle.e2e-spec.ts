@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import request from 'supertest';
+import { MediaService } from '../../src/media/media.service.js';
 import type { BlogDetailDto } from '../../src/posts/dto/blog.dto.js';
 import {
   Notification,
@@ -81,9 +82,24 @@ describe('Blog lifecycle: publish, edit, hide, delete (e2e)', () => {
     });
   const patch = (id: string, payload: object, token = authorToken) =>
     as(token, request(server()).patch(`/api/v1/blogs/${id}`)).send(payload);
-  const published = async (payload: object = {}) =>
-    (await create({ status: 'PUBLISHED', ...payload }).expect(201))
-      .body as BlogDetailDto;
+  /** The blog as its author reads it once the background moderation ended. */
+  const settled = async (id: string): Promise<BlogDetailDto> => {
+    await e2e.settled();
+    const response = await as(
+      authorToken,
+      request(server()).get(`/api/v1/blogs/${id}`),
+    ).expect(200);
+    return response.body as BlogDetailDto;
+  };
+  /** Publishes a new blog, which answers PROCESSING, and returns its verdict. */
+  const published = async (payload: object = {}): Promise<BlogDetailDto> => {
+    const response = await create({ status: 'PUBLISHED', ...payload }).expect(
+      201,
+    );
+    const created = response.body as BlogDetailDto;
+    expect(created.status).toBe(PostStatus.PROCESSING);
+    return settled(created.id);
+  };
   const ids = async (path: string) =>
     ((await request(server()).get(path).expect(200)).body as Page).items.map(
       ({ id }) => id,
@@ -168,12 +184,23 @@ describe('Blog lifecycle: publish, edit, hide, delete (e2e)', () => {
     it('hides it from the lists while it is checked again, then returns the verdict', async () => {
       const blog = await published();
       expect(await ids('/api/v1/blogs')).toContain(blog.id);
+      // Hold the background check so the lists can be read while it waits.
+      const media = e2e.app.get(MediaService);
+      const later = vi
+        .spyOn(media, 'settlePostsLater')
+        .mockImplementation(() => undefined);
       const edited = (
         await patch(blog.id, { title: 'Tiêu đề mới' }).expect(200)
       ).body as BlogDetailDto;
-      expect(edited.status).toBe(PostStatus.PUBLISHED);
-      expect(edited.publishedAt).toBe(blog.publishedAt);
+      expect(edited.status).toBe(PostStatus.PROCESSING);
       expect(edited.blog.title).toBe('Tiêu đề mới');
+      expect(await ids('/api/v1/blogs')).not.toContain(blog.id);
+      expect(later).toHaveBeenCalledWith([blog.id]);
+      later.mockRestore();
+      media.settlePostsLater([blog.id]);
+      const verdict = await settled(blog.id);
+      expect(verdict.status).toBe(PostStatus.PUBLISHED);
+      expect(verdict.publishedAt).toBe(blog.publishedAt);
       expect(await ids('/api/v1/blogs')).toContain(blog.id);
     });
 
@@ -184,7 +211,8 @@ describe('Blog lifecycle: publish, edit, hide, delete (e2e)', () => {
           200,
         )
       ).body as BlogDetailDto;
-      expect(held.status).toBe(PostStatus.PENDING_REVIEW);
+      expect(held.status).toBe(PostStatus.PROCESSING);
+      expect((await settled(blog.id)).status).toBe(PostStatus.PENDING_REVIEW);
       expect(await ids('/api/v1/blogs')).not.toContain(blog.id);
       await request(server()).get(`/api/v1/blogs/${blog.id}`).expect(404);
       await as(
@@ -198,7 +226,8 @@ describe('Blog lifecycle: publish, edit, hide, delete (e2e)', () => {
       const blocked = (
         await patch(blog.id, { title: `${VIOLATION_MARKER} title` }).expect(200)
       ).body as BlogDetailDto;
-      expect(blocked.status).toBe(PostStatus.REJECTED);
+      expect(blocked.status).toBe(PostStatus.PROCESSING);
+      expect((await settled(blog.id)).status).toBe(PostStatus.REJECTED);
       const fixed = (
         await patch(blog.id, { title: 'Tiêu đề sạch' }).expect(200)
       ).body as BlogDetailDto;
@@ -231,8 +260,9 @@ describe('Blog lifecycle: publish, edit, hide, delete (e2e)', () => {
     it('keeps the first publish date when it is unpublished and published again', async () => {
       const blog = await published();
       await patch(blog.id, { status: 'DRAFT' }).expect(200);
-      const again = (await patch(blog.id, { status: 'PUBLISHED' }).expect(200))
-        .body as BlogDetailDto;
+      await patch(blog.id, { status: 'PUBLISHED' }).expect(200);
+      const again = await settled(blog.id);
+      expect(again.status).toBe(PostStatus.PUBLISHED);
       expect(again.publishedAt).toBe(blog.publishedAt);
     });
 
@@ -256,6 +286,7 @@ describe('Blog lifecycle: publish, edit, hide, delete (e2e)', () => {
         await model(PostComment.name).countDocuments({ postId: blog.id }),
       ).toBe(1);
       await patch(blog.id, { status: 'PUBLISHED' }).expect(200);
+      await e2e.settled();
       const detail = (
         await request(server()).get(`/api/v1/posts/${blog.id}`).expect(200)
       ).body as { commentCount: number; likeCount: number };
@@ -297,6 +328,7 @@ describe('Blog lifecycle: publish, edit, hide, delete (e2e)', () => {
       await patch(blog.id, { content: `${BORDERLINE_MARKER} text` }).expect(
         200,
       );
+      await e2e.settled();
       await as(
         adminToken,
         request(server()).post(`/api/v1/admin/posts/${blog.id}/moderation`),
@@ -308,7 +340,11 @@ describe('Blog lifecycle: publish, edit, hide, delete (e2e)', () => {
         .find({ postId: blog.id, recipientId: author.id })
         .exec();
       const types = sent.map(({ type }) => type).sort();
-      expect(types).toEqual(['POST_APPROVED', 'POST_PENDING_REVIEW']);
+      expect(types).toEqual([
+        'POST_APPROVED',
+        'POST_PENDING_REVIEW',
+        'POST_PUBLISHED',
+      ]);
       const feed = (
         await as(
           authorToken,
@@ -323,6 +359,7 @@ describe('Blog lifecycle: publish, edit, hide, delete (e2e)', () => {
     it('lets an admin overturn a rejection and a stranger cannot decide', async () => {
       const blog = await published();
       await patch(blog.id, { title: `${VIOLATION_MARKER} title` }).expect(200);
+      await e2e.settled();
       await as(
         strangerToken,
         request(server()).post(`/api/v1/admin/posts/${blog.id}/moderation`),

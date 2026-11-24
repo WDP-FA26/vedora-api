@@ -391,7 +391,7 @@ export class PostDraftsService {
       return true;
     });
     if (changed) {
-      await this.mediaService.settlePosts([id]);
+      this.mediaService.settlePostsLater([id]);
       this.search.schedule();
     }
     return this.query.load(id, ownerId);

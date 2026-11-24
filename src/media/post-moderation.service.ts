@@ -8,11 +8,11 @@ import {
 import { SupportSyncService } from '../support/support-sync.service.js';
 import { InjectModel } from '@nestjs/mongoose';
 import type { ClientSession, Model } from 'mongoose';
-import { ContentModerationService } from '../moderation/content-moderation.service.js';
 import {
   type ContentAssessment,
+  ContentModerationService,
   failedAssessment,
-} from '../moderation/content-decision.js';
+} from '../moderation/content-moderation.service.js';
 import type {
   EvidenceImage,
   EvidenceSources,
@@ -45,6 +45,15 @@ const STATUS_BY_DECISION: Record<ContentAssessment['decision'], PostStatus> = {
   reject: PostStatus.REJECTED,
 };
 
+/** What the author is told once the automatic check has decided. */
+const NOTIFICATION_BY_DECISION: Record<
+  ContentAssessment['decision'],
+  NotificationType
+> = {
+  publish: NotificationType.POST_PUBLISHED,
+  review: NotificationType.POST_PENDING_REVIEW,
+  reject: NotificationType.POST_REJECTED,
+};
 
 const FRAME_SAMPLING: FrameSampling = {
   intervalSeconds: runtimeConfig.MODERATION_VIDEO_FRAME_INTERVAL_SECONDS,
@@ -56,6 +65,8 @@ const MAX_INLINE_IMAGES = runtimeConfig.MODERATION_MAX_INLINE_IMAGES;
 @Injectable()
 export class PostModerationService implements OnModuleInit {
   private readonly logger = new Logger(PostModerationService.name);
+  /** Posts whose verdict is being worked out in this process. */
+  private readonly judging = new Set<string>();
 
   constructor(
     private readonly moderation: ContentModerationService,
@@ -87,21 +98,34 @@ export class PostModerationService implements OnModuleInit {
     }
   }
 
+  /**
+   * Rates each PROCESSING post and applies the verdict. A post already being
+   * rated (a background run and a poll at once) is skipped, so it costs one
+   * model call. Returns how many were published.
+   */
   async settle(postIds: string[]): Promise<number> {
     let published = 0;
     for (const id of postIds) {
-      const judged = await this.judge(id);
-      if (judged === null) continue;
-      const { post, assessment } = judged;
-      const settled = await this.apply(post.id, assessment);
-      if (!settled) continue;
-      if (assessment.decision === 'publish') {
-        published += 1;
-        continue;
+      if (this.judging.has(id)) continue;
+      this.judging.add(id);
+      try {
+        if (await this.settleOne(id)) published += 1;
+      } finally {
+        this.judging.delete(id);
       }
-      await this.tellAuthor(post, assessment.decision, assessment.category);
     }
     return published;
+  }
+
+  /** True when the post was published. */
+  private async settleOne(id: string): Promise<boolean> {
+    const judged = await this.judge(id);
+    if (judged === null) return false;
+    const { post, assessment } = judged;
+    const settled = await this.apply(post.id, assessment);
+    if (!settled) return false;
+    await this.tellAuthor(post, assessment.decision, assessment.category);
+    return assessment.decision === 'publish';
   }
 
   async decide(
@@ -205,13 +229,9 @@ export class PostModerationService implements OnModuleInit {
     decision: ContentAssessment['decision'],
     category: string | null,
   ): Promise<void> {
-    if (decision === 'publish') return;
     await this.notifications.notify({
       recipientId: post.authorId,
-      type:
-        decision === 'reject'
-          ? NotificationType.POST_REJECTED
-          : NotificationType.POST_PENDING_REVIEW,
+      type: NOTIFICATION_BY_DECISION[decision],
       postId: post.id,
       reason: category ?? undefined,
     });

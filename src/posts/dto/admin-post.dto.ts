@@ -69,13 +69,6 @@ export class ModerationEvidenceItemDto {
     description: 'The frame or image the item points at',
   })
   imageUrl!: string | null;
-  @ApiProperty({
-    nullable: true,
-    type: [Number],
-    description:
-      'Approximate region [x0, y0, x1, y1] of the picture, scaled 0-1000; a hint, not exact',
-  })
-  box!: number[] | null;
 }
 
 export class ModerationEvidenceDto {
@@ -88,7 +81,8 @@ export class ModerationEvidenceDto {
   @ApiProperty({
     nullable: true,
     type: String,
-    description: 'Why the post got its risk level, in Vietnamese. Null unless READY',
+    description:
+      'Why the post got its risk level, in Vietnamese. Null unless READY',
   })
   summary!: string | null;
   @ApiProperty({ type: [ModerationEvidenceItemDto] })

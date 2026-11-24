@@ -12,6 +12,7 @@ import {
 import { FakeModel, type FakeModelCall } from '@nestjs/ai/testing';
 import { configureApp } from '../../src/app.setup.js';
 import { MongoService } from '../../src/mongo/mongo.service.js';
+import { MediaService } from '../../src/media/media.service.js';
 import {
   createTestMongoUrl,
   dropTestDatabase,
@@ -23,6 +24,8 @@ export interface E2eApp {
   mongo: MongoService;
   connection: Connection;
   sign(user: { id: string; username: string }): Promise<string>;
+  /** Waits for the moderation a request started in the background. */
+  settled(): Promise<void>;
   close(): Promise<void>;
 }
 
@@ -85,9 +88,7 @@ function highRisk(category: string, quote: string) {
       riskLevel: 3,
       category,
       summary: 'Vi phạm rõ ràng.',
-      evidence: [
-        { category, reason: 'Vi phạm.', quote, imageIndex: null, box: null },
-      ],
+      evidence: [{ category, reason: 'Vi phạm.', quote, imageIndex: null }],
     },
   };
 }
@@ -120,6 +121,7 @@ export async function createE2eApp(
     connection,
     sign: (user) =>
       app.get(JwtService).signAsync({ sub: user.id, username: user.username }),
+    settled: () => app.get(MediaService).whenSettled(),
     close: async () => {
       await dropTestDatabase(app);
       await app.close();

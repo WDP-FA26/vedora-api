@@ -79,19 +79,51 @@ describe('Post moderation and media flows (e2e)', () => {
       token,
       request(server()).post(`/api/v1/admin/posts/${id}/moderation`),
     ).send(payload);
-  const postWith = async (text: string) =>
-    (await create({ type: 'POST', body: text }).expect(201)).body as PostBody;
+  /** The post as its author reads it once the background moderation ended. */
+  const settled = async (id: string): Promise<PostBody> => {
+    await e2e.settled();
+    const response = await as(
+      authorToken,
+      request(server()).get(`/api/v1/posts/${id}`),
+    ).expect(200);
+    return response.body as PostBody;
+  };
+  /** Creates a text post, which waits for moderation, and returns its verdict. */
+  const postWith = async (text: string): Promise<PostBody> => {
+    const response = await create({ type: 'POST', body: text }).expect(201);
+    const created = response.body as PostBody;
+    expect(created.status).toBe(PostStatus.PROCESSING);
+    return settled(created.id);
+  };
   const notificationsFor = (postId: string, type: NotificationType) =>
     model<Notification>(Notification.name)
       .countDocuments({ postId, type })
       .exec();
 
   describe('creating a post', () => {
-    it('publishes clean text right away', async () => {
+    it('publishes clean text once it is checked', async () => {
       const post = await postWith('Canh chua chay');
 
       expect(post.status).toBe(PostStatus.PUBLISHED);
       expect(post.publishedAt).not.toBeNull();
+    });
+
+    it('answers PROCESSING, checks the post in the background and tells the author it was published', async () => {
+      const response = await create({
+        type: 'POST',
+        body: 'Gỏi cuốn chay',
+      }).expect(201);
+      const created = response.body as PostBody;
+
+      expect(created.status).toBe(PostStatus.PROCESSING);
+      expect(created.publishedAt).toBeNull();
+
+      const post = await settled(created.id);
+      expect(post.status).toBe(PostStatus.PUBLISHED);
+      expect(post.publishedAt).not.toBeNull();
+      expect(
+        await notificationsFor(created.id, NotificationType.POST_PUBLISHED),
+      ).toBe(1);
     });
 
     it('refuses whitespace-only text without videos with EMPTY_POST', async () => {
@@ -203,8 +235,9 @@ describe('Post moderation and media flows (e2e)', () => {
       const fixed = await patch(held.id, { body: 'Đã sửa' }).expect(200);
       const late = await decide(held.id, { decision: 'REJECT' }).expect(409);
 
-      expect((fixed.body as PostBody).status).toBe(PostStatus.PUBLISHED);
+      expect((fixed.body as PostBody).status).toBe(PostStatus.PROCESSING);
       expect((late.body as ErrorBody).code).toBe('POST_NOT_REVIEWABLE');
+      expect((await settled(held.id)).status).toBe(PostStatus.PUBLISHED);
     });
   });
 

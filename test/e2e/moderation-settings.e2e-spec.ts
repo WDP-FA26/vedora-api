@@ -101,14 +101,21 @@ describe('Moderation settings (e2e)', () => {
       .auth(memberToken, { type: 'bearer' })
       .send({ type: 'POST', body: 'Bầu cho ông A CHOICE:politics' })
       .expect(201);
-    expect(post.body).toMatchObject({
+    const id = (post.body as { id: string }).id;
+    expect(post.body).toMatchObject({ status: 'PROCESSING' });
+    await e2e.settled();
+    const settled = await request(server())
+      .get(`/api/v1/posts/${id}`)
+      .auth(memberToken, { type: 'bearer' })
+      .expect(200);
+    expect(settled.body).toMatchObject({
       status: 'REJECTED',
       moderationVerdict: 'politics',
       moderationReason: 'nội dung chính trị',
     });
 
     const comment = await request(server())
-      .post(`/api/v1/posts/${(post.body as { id: string }).id}/comments`)
+      .post(`/api/v1/posts/${id}/comments`)
       .auth(memberToken, { type: 'bearer' })
       .send({ body: 'CHOICE:politics' });
     expect(comment.status).toBe(404);

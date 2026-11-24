@@ -166,6 +166,82 @@ describe('PostModerationService', () => {
     });
   });
 
+  describe('settle', () => {
+    it('publishes a clean PROCESSING post and tells the author with POST_PUBLISHED', async () => {
+      const post = await createPost(db, {
+        authorId,
+        status: PostStatus.PROCESSING,
+        publishedAt: null,
+      });
+
+      await expect(service.settle([post.id])).resolves.toBe(1);
+
+      expect((await posts().findById(post.id).exec())?.status).toBe(
+        PostStatus.PUBLISHED,
+      );
+      expect(notify).toHaveBeenCalledExactlyOnceWith({
+        recipientId: authorId,
+        type: NotificationType.POST_PUBLISHED,
+        postId: post.id,
+        reason: undefined,
+      });
+    });
+
+    it('rates a post once when it is settled twice at the same time', async () => {
+      const post = await createPost(db, {
+        authorId,
+        status: PostStatus.PROCESSING,
+        publishedAt: null,
+      });
+      let answer: (value: unknown) => void = () => undefined;
+      review.mockReturnValueOnce(
+        new Promise((resolve) => {
+          answer = resolve;
+        }),
+      );
+
+      const first = service.settle([post.id]);
+      const second = service.settle([post.id]);
+      await expect(second).resolves.toBe(0);
+      await vi.waitFor(() => {
+        expect(review).toHaveBeenCalledOnce();
+      });
+      answer({
+        decision: 'publish',
+        category: null,
+        riskLevel: 0,
+        evidence: null,
+      });
+
+      await expect(first).resolves.toBe(1);
+      expect(review).toHaveBeenCalledOnce();
+      expect(notify).toHaveBeenCalledOnce();
+      expect((await posts().findById(post.id).exec())?.status).toBe(
+        PostStatus.PUBLISHED,
+      );
+    });
+
+    it('judges a post again once the earlier run has ended', async () => {
+      const post = await createPost(db, {
+        authorId,
+        status: PostStatus.PROCESSING,
+        publishedAt: null,
+      });
+      review.mockRejectedValueOnce(new Error('provider down'));
+
+      await expect(service.settle([post.id])).resolves.toBe(0);
+      await posts()
+        .updateOne(
+          { _id: post.id },
+          { $set: { status: PostStatus.PROCESSING } },
+        )
+        .exec();
+      await expect(service.settle([post.id])).resolves.toBe(1);
+
+      expect(review).toHaveBeenCalledTimes(2);
+    });
+  });
+
   describe('decide (admin moderation)', () => {
     it('returns false when post is missing or not in PENDING_REVIEW/REJECTED', async () => {
       await expect(

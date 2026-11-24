@@ -121,12 +121,20 @@ describe('Support tickets, content appeals & soft-delete/restore (e2e)', () => {
     ]);
   });
 
-  const createPostViaApi = async (body: string) =>
-    (
+  /** Creates a post and returns it once the background moderation ended. */
+  const createPostViaApi = async (body: string): Promise<PostBody> => {
+    const created = (
       await as(authorToken, request(server()).post('/api/v1/posts'))
         .send({ type: PostType.POST, body })
         .expect(201)
     ).body as PostBody;
+    await e2e.settled();
+    const settled = await as(
+      authorToken,
+      request(server()).get(`/api/v1/posts/${created.id}`),
+    ).expect(200);
+    return settled.body as PostBody;
+  };
 
   describe('general & payment support tickets', () => {
     it('supports opening PAYMENT_ISSUE tickets, multi-turn replies, internal notes, and RESOLVE/CLOSE decisions', async () => {

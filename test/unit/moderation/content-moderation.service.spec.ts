@@ -35,7 +35,6 @@ interface Answer {
     reason: string;
     quote: string | null;
     imageIndex: number | null;
-    box: number[] | null;
   }[];
 }
 
@@ -66,7 +65,6 @@ const threat = {
   reason: 'Lời đe dọa.',
   quote: 'tao sẽ đánh mày',
   imageIndex: null,
-  box: null,
 };
 
 describe('ContentModerationService', () => {
