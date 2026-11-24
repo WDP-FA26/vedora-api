@@ -141,7 +141,7 @@ export class EnvironmentVariables {
   OPENROUTER_API_KEY!: string;
 
   @IsString()
-  OPENROUTER_MODEL = 'openrouter/auto';
+  OPENROUTER_MODEL = 'anthropic/claude-haiku-5.5';
 
   @IsIn(REASONING_EFFORTS)
   OPENROUTER_REASONING_EFFORT = 'low';

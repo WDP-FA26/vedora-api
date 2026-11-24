@@ -28,7 +28,7 @@ export {
   type StickyProviderOptions,
 } from './openrouter-cache.js';
 
-export const DEFAULT_CHAT_MODEL = 'openrouter/auto';
+export const DEFAULT_CHAT_MODEL = 'anthropic/claude-haiku-5.5';
 export const DEFAULT_MODERATION_MODEL = 'anthropic/claude-haiku-5.5';
 export const DEFAULT_CONTENT_MODERATION_MODEL = 'anthropic/claude-haiku-5.5';
 export const DEFAULT_EMBEDDING_MODEL = 'google/gemini-embedding-2';
