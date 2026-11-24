@@ -65,6 +65,8 @@ Ghi báo cáo chụp bằng chứng trong transaction. Quyết định gỡ nộ
 
 ## Triển khai và kiểm thử
 
+Thông báo cho tác giả/người báo cáo khi xử lý bình luận được mô tả trong [comment-notifications.md](./comment-notifications.md). Phần thông báo có yêu cầu phát hành FE hỗ trợ enum mới trước BE.
+
 Triển khai BE trước FE. MongoDB cần replica set theo cấu hình dự án để chạy transaction. Mongoose đăng ký collection/index khi khởi động; không cần migration Prisma hay biến env mới.
 
 Kiểm thử HTTP với MongoDB thật:
