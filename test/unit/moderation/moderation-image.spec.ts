@@ -1,6 +1,6 @@
 import { spawnSync } from 'node:child_process';
 import ffmpegStatic from 'ffmpeg-static';
-import { toModerationJpeg } from '../../../src/moderation/moderation-image.js';
+import { toModerationJpeg } from '@src/moderation/moderation-image.js';
 
 function sampleImage(size: string, format: string): Buffer {
   const binary = typeof ffmpegStatic === 'string' ? ffmpegStatic : 'ffmpeg';

@@ -1,24 +1,24 @@
 import type { Model } from 'mongoose';
 import { mockDeep } from 'vitest-mock-extended';
-import type { AuthenticatedRequest } from '../../../src/auth-core/auth.types.js';
+import type { AuthenticatedRequest } from '@src/auth-core/auth.types.js';
 import {
   BillingPlan,
   PaymentWebhookReceipt,
   UserRole,
-} from '../../../src/mongo/models.js';
+} from '@src/mongo/models.js';
 import type {
   BillingCatalogDto,
   BillingOverviewDto,
   CreatePaymentDto,
   PaymentDto,
-} from '../../../src/payments/payment.dto.js';
+} from '@src/payments/payment.dto.js';
 import {
   PaymentReconciliationController,
   PaymentsController,
   SePayWebhookController,
-} from '../../../src/payments/payments.controller.js';
-import type { PaymentsService } from '../../../src/payments/payments.service.js';
-import { PLAN_VERSION } from '../../../src/subscriptions/subscription-policy.js';
+} from '@src/payments/payments.controller.js';
+import type { PaymentsService } from '@src/payments/payments.service.js';
+import { PLAN_VERSION } from '@src/subscriptions/subscription-policy.js';
 
 describe('PaymentsController', () => {
   const userId = '00000000-0000-4000-8000-000000000001';

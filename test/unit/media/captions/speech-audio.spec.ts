@@ -1,14 +1,14 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { ExternalServiceException } from '../../../../src/common/exceptions/external-service.exception.js';
-import * as ffmpegModule from '../../../../src/common/ffmpeg/ffmpeg.js';
+import { ExternalServiceException } from '@src/common/exceptions/external-service.exception.js';
+import * as ffmpegModule from '@src/common/ffmpeg/ffmpeg.js';
 import {
   extractSpeechAudio,
   parseSilences,
   speechIntervals,
   toOriginalTime,
-} from '../../../../src/media/captions/speech-audio.js';
+} from '@src/media/captions/speech-audio.js';
 
-vi.mock('../../../../src/common/ffmpeg/ffmpeg.js', async (importOriginal) => {
+vi.mock('@src/common/ffmpeg/ffmpeg.js', async (importOriginal) => {
   const actual = await importOriginal<typeof ffmpegModule>();
   return {
     ...actual,

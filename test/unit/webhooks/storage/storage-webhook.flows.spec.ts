@@ -1,13 +1,13 @@
 import { ConfigService } from '@nestjs/config';
 import { ExecutionContextHost } from '@nestjs/core/helpers/execution-context-host';
-import { InvalidInputException } from '../../../../src/common/exceptions/invalid-input.exception.js';
-import { UnauthenticatedException } from '../../../../src/common/exceptions/unauthenticated.exception.js';
+import { InvalidInputException } from '@src/common/exceptions/invalid-input.exception.js';
+import { UnauthenticatedException } from '@src/common/exceptions/unauthenticated.exception.js';
 import {
   StorageService,
   StorageTarget,
   type StorageEvent,
-} from '../../../../src/storage/storage.service.js';
-import { StorageWebhookGuard } from '../../../../src/webhooks/storage/storage-webhook.guard.js';
+} from '@src/storage/storage.service.js';
+import { StorageWebhookGuard } from '@src/webhooks/storage/storage-webhook.guard.js';
 
 const TOKEN = 'storage-webhook-flow-token';
 

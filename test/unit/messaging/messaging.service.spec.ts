@@ -1,13 +1,13 @@
 import { randomUUID } from 'node:crypto';
 import type { INestApplication } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
-import { AccessDeniedException } from '../../../src/common/exceptions/access-denied.exception.js';
-import { InvalidInputException } from '../../../src/common/exceptions/invalid-input.exception.js';
-import { ResourceNotFoundException } from '../../../src/common/exceptions/resource-not-found.exception.js';
-import { StateConflictException } from '../../../src/common/exceptions/state-conflict.exception.js';
-import { MessagingInbox } from '../../../src/messaging/dto/messaging.dto.js';
-import { MessagingEventsService } from '../../../src/messaging/messaging-events.service.js';
-import { MessagingService } from '../../../src/messaging/messaging.service.js';
+import { AccessDeniedException } from '@src/common/exceptions/access-denied.exception.js';
+import { InvalidInputException } from '@src/common/exceptions/invalid-input.exception.js';
+import { ResourceNotFoundException } from '@src/common/exceptions/resource-not-found.exception.js';
+import { StateConflictException } from '@src/common/exceptions/state-conflict.exception.js';
+import { MessagingInbox } from '@src/messaging/dto/messaging.dto.js';
+import { MessagingEventsService } from '@src/messaging/messaging-events.service.js';
+import { MessagingService } from '@src/messaging/messaging.service.js';
 import {
   AccountStatus,
   Conversation,
@@ -20,15 +20,15 @@ import {
   PostType,
   type User,
   UserRole,
-} from '../../../src/mongo/models.js';
-import { MongoModule } from '../../../src/mongo/mongo.module.js';
-import { MongoService } from '../../../src/mongo/mongo.service.js';
-import { createPost, createUser } from '../../support/fixtures.js';
+} from '@src/mongo/models.js';
+import { MongoModule } from '@src/mongo/mongo.module.js';
+import { MongoService } from '@src/mongo/mongo.service.js';
+import { createPost, createUser } from '@test/support/fixtures.js';
 import {
   createTestMongoUrl,
   dropTestDatabase,
   prepareTestDatabase,
-} from '../../support/mongo-test-db.js';
+} from '@test/support/mongo-test-db.js';
 
 describe('MessagingService', () => {
   let app: INestApplication;

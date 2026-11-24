@@ -9,13 +9,13 @@ import {
   PostStatus,
   type PostViewDay,
   type User,
-} from '../../src/mongo/models.js';
+} from '@src/mongo/models.js';
 import type {
   PostAnalyticsPageDto,
   PostAnalyticsSummaryDto,
-} from '../../src/posts/analytics/dto/post-analytics.dto.js';
-import { createE2eApp, type E2eApp } from '../support/e2e-app.js';
-import { createPost, createUser } from '../support/fixtures.js';
+} from '@src/posts/analytics/dto/post-analytics.dto.js';
+import { createE2eApp, type E2eApp } from '@test/support/e2e-app.js';
+import { createPost, createUser } from '@test/support/fixtures.js';
 
 /** Midday in Bangkok (UTC+7) on the given day. */
 const at = (day: string) => new Date(`${day}T05:00:00Z`);

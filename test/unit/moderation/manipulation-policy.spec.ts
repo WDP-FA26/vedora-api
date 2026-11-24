@@ -1,9 +1,9 @@
-import { reviewInstructions } from '../../../src/moderation/content-evidence.js';
+import { reviewInstructions } from '@src/moderation/content-evidence.js';
 import {
   DEFAULT_CONTENT_POLICY,
   MANIPULATION_KEY,
   withReservedChoices,
-} from '../../../src/moderation/policies/content.js';
+} from '@src/moderation/policies/content.js';
 
 describe('the manipulation rule', () => {
   it('tells the model to rate manipulation as a high risk', () => {

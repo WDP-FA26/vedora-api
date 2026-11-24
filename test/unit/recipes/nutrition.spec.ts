@@ -6,7 +6,7 @@ import {
   NutritionGoal,
   NutritionPillar,
   RecipeTag,
-} from '../../../src/mongo/models.js';
+} from '@src/mongo/models.js';
 import {
   calculateBmi,
   classifyAsianBmi,
@@ -14,7 +14,7 @@ import {
   extractAllergyKeywords,
   inferNutritionPillars,
   resolveCaloriesPerServing,
-} from '../../../src/recipes/nutrition.js';
+} from '@src/recipes/nutrition.js';
 
 describe('nutrition helpers', () => {
   it('calculates BMI and classifies according to Asian WPRO thresholds', () => {
@@ -120,7 +120,9 @@ describe('nutrition helpers', () => {
     expect(soyKeywords).toContain('nước tương');
     expect(soyKeywords).toContain('hạt mè');
 
-    const peanutKeywords = extractAllergyKeywords('Không ăn được đậu phộng, kiêng ăn cay');
+    const peanutKeywords = extractAllergyKeywords(
+      'Không ăn được đậu phộng, kiêng ăn cay',
+    );
     expect(peanutKeywords).toContain('đậu phộng');
     expect(peanutKeywords).toContain('ớt');
 

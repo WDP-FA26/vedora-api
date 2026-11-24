@@ -1,9 +1,9 @@
-import { runtimeConfig } from '../../../config/runtime-config.js';
+import { runtimeConfig } from '@src/config/runtime-config.js';
 import {
   loadJsonConfig,
   validDecisionPolicy,
-} from '../../../config/config-files.js';
-import type { DecisionPolicy } from '../../../common/decision/decision.js';
+} from '@src/config/config-files.js';
+import type { DecisionPolicy } from '@src/common/decision/decision.js';
 import type { ModerationVerdict } from '../guardrail.js';
 
 export const NUTRITION_POLICY: DecisionPolicy<ModerationVerdict> =

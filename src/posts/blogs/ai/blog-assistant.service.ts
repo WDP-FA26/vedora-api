@@ -1,4 +1,4 @@
-import { runtimeConfig } from '../../../config/runtime-config.js';
+import { runtimeConfig } from '@src/config/runtime-config.js';
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { InjectModel as InjectAiModel } from '@nestjs/ai';
 import { InjectModel } from '@nestjs/mongoose';
@@ -14,38 +14,35 @@ import {
   toUIMessageStream,
   type UIMessage,
 } from 'ai';
-import { OpenRouterCacheControl } from '../../../ai/openrouter.js';
-import { cannedReply } from '../../../ai/chat/canned-reply.js';
-import { chatErrorCode } from '../../../ai/chat/errors.js';
-import { replyFilter } from '../../../ai/chat/reply-filter.js';
+import { OpenRouterCacheControl } from '@src/ai/openrouter.js';
+import { cannedReply } from '@src/ai/chat/canned-reply.js';
+import { chatErrorCode } from '@src/ai/chat/errors.js';
+import { replyFilter } from '@src/ai/chat/reply-filter.js';
 import {
   conversationModerationState,
   type ModerationTurn,
-} from '../../../ai/guardrails/conversation-state.js';
-import { MODERATION_MODEL } from '../../../ai/guardrails/guardrail.js';
-import {
-  decide,
-  type DecisionModel,
-} from '../../../common/decision/decision.js';
+} from '@src/ai/guardrails/conversation-state.js';
+import { MODERATION_MODEL } from '@src/ai/guardrails/guardrail.js';
+import { decide, type DecisionModel } from '@src/common/decision/decision.js';
 import {
   AiUsageService,
   type UsageTicket,
-} from '../../../subscriptions/ai-usage.service.js';
-import { quotaStream } from '../../../subscriptions/quota-stream.js';
-import { KnowledgeSearchService } from '../../../knowledge/retrieval/knowledge-search.service.js';
+} from '@src/subscriptions/ai-usage.service.js';
+import { quotaStream } from '@src/subscriptions/quota-stream.js';
+import { KnowledgeSearchService } from '@src/knowledge/retrieval/knowledge-search.service.js';
 import {
   AiFeature,
   Ingredient,
   Post,
   PostType,
   Recipe,
-} from '../../../mongo/models.js';
+} from '@src/mongo/models.js';
 import {
   type BlogAssistantChatDto,
   type BlogAssistantQuotaDto,
   MAX_SELECTION,
 } from '../../dto/blog-ai.dto.js';
-import { BLOG_ASSISTANT_POLICY } from '../../../ai/guardrails/policies/blog-assistant.js';
+import { BLOG_ASSISTANT_POLICY } from '@src/ai/guardrails/policies/blog-assistant.js';
 import {
   BLOG_ASSISTANT_REFUSALS,
   blogRefusal,
@@ -60,10 +57,10 @@ import {
   blogAssistantTools,
 } from './blog-assistant.tools.js';
 import { BlogImageGeneratorService } from './blog-image-generator.service.js';
-import { FeatureUnavailableException } from '../../../common/exceptions/feature-unavailable.exception.js';
-import { InvalidInputException } from '../../../common/exceptions/invalid-input.exception.js';
-import { QuotaReachedException } from '../../../common/exceptions/quota-reached.exception.js';
-import { ResourceNotFoundException } from '../../../common/exceptions/resource-not-found.exception.js';
+import { FeatureUnavailableException } from '@src/common/exceptions/feature-unavailable.exception.js';
+import { InvalidInputException } from '@src/common/exceptions/invalid-input.exception.js';
+import { QuotaReachedException } from '@src/common/exceptions/quota-reached.exception.js';
+import { ResourceNotFoundException } from '@src/common/exceptions/resource-not-found.exception.js';
 
 const MAX_STEPS = runtimeConfig.BLOG_AI_MAX_STEPS;
 const MAX_OUTPUT_TOKENS = runtimeConfig.BLOG_AI_MAX_OUTPUT_TOKENS;

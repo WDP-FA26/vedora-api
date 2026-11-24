@@ -1,24 +1,24 @@
 import type { INestApplication } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Test } from '@nestjs/testing';
-import { createMedia, createPost, createUser } from '../../support/fixtures.js';
+import { createMedia, createPost, createUser } from '@test/support/fixtures.js';
 import {
   createTestMongoUrl,
   dropTestDatabase,
   prepareTestDatabase,
-} from '../../support/mongo-test-db.js';
-import { CloudinaryService } from '../../../src/cloudinary/cloudinary.service.js';
-import { MongoModule } from '../../../src/mongo/mongo.module.js';
-import { MongoService } from '../../../src/mongo/mongo.service.js';
+} from '@test/support/mongo-test-db.js';
+import { CloudinaryService } from '@src/cloudinary/cloudinary.service.js';
+import { MongoModule } from '@src/mongo/mongo.module.js';
+import { MongoService } from '@src/mongo/mongo.service.js';
 import {
   type MediaAsset,
   MediaStatus,
   type Post,
   PostStatus,
-} from '../../../src/mongo/models.js';
-import { CaptionService } from '../../../src/media/captions/caption.service.js';
-import { MediaMaintenanceService } from '../../../src/media/media-maintenance.service.js';
-import { MediaService } from '../../../src/media/media.service.js';
+} from '@src/mongo/models.js';
+import { CaptionService } from '@src/media/captions/caption.service.js';
+import { MediaMaintenanceService } from '@src/media/media-maintenance.service.js';
+import { MediaService } from '@src/media/media.service.js';
 
 describe('MediaMaintenanceService', () => {
   let app: INestApplication;

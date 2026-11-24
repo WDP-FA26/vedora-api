@@ -15,13 +15,13 @@ import {
 } from '@aws-sdk/client-s3';
 import { ConfigService } from '@nestjs/config';
 import { mockClient } from 'aws-sdk-client-mock';
-import { FeatureUnavailableException } from '../../../src/common/exceptions/feature-unavailable.exception.js';
-import { InvalidInputException } from '../../../src/common/exceptions/invalid-input.exception.js';
+import { FeatureUnavailableException } from '@src/common/exceptions/feature-unavailable.exception.js';
+import { InvalidInputException } from '@src/common/exceptions/invalid-input.exception.js';
 import {
   StorageService,
   StorageTarget,
   type StorageEvent,
-} from '../../../src/storage/storage.service.js';
+} from '@src/storage/storage.service.js';
 
 const s3 = mockClient(S3Client);
 

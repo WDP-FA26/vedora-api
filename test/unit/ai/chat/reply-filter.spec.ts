@@ -3,7 +3,7 @@ import {
   convertReadableStreamToArray,
 } from 'ai/test';
 import type { TextStreamPart, ToolSet } from 'ai';
-import { replyFilter } from '../../../../src/ai/chat/reply-filter.js';
+import { replyFilter } from '@src/ai/chat/reply-filter.js';
 
 async function filter(deltas: string[]): Promise<string> {
   const parts: TextStreamPart<ToolSet>[] = [

@@ -1,23 +1,23 @@
 import { type DeepMockProxy, mockDeep } from 'vitest-mock-extended';
-import type { AuthenticatedRequest } from '../../../../src/auth-core/auth.types.js';
+import type { AuthenticatedRequest } from '@src/auth-core/auth.types.js';
 import {
   PostReportReason,
   PostReportStatus,
   UserRole,
-} from '../../../../src/mongo/models.js';
+} from '@src/mongo/models.js';
 import type {
   CommentPageDto,
   CommentResponseDto,
-} from '../../../../src/posts/dto/comment.dto.js';
+} from '@src/posts/dto/comment.dto.js';
 import type {
   PostBookmarkResponseDto,
   PostReportDto,
   PostRepostResponseDto,
-} from '../../../../src/posts/dto/post-interaction.dto.js';
-import type { PostLikeResponseDto } from '../../../../src/posts/dto/post-like-response.dto.js';
-import { PostInteractionsController } from '../../../../src/posts/interactions/post-interactions.controller.js';
-import type { PostInteractionsService } from '../../../../src/posts/interactions/post-interactions.service.js';
-import type { PostReportsService } from '../../../../src/posts/interactions/post-reports.service.js';
+} from '@src/posts/dto/post-interaction.dto.js';
+import type { PostLikeResponseDto } from '@src/posts/dto/post-like-response.dto.js';
+import { PostInteractionsController } from '@src/posts/interactions/post-interactions.controller.js';
+import type { PostInteractionsService } from '@src/posts/interactions/post-interactions.service.js';
+import type { PostReportsService } from '@src/posts/interactions/post-reports.service.js';
 
 describe('PostInteractionsController', () => {
   const userId = '11111111-1111-4111-8111-111111111111';

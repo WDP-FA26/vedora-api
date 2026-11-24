@@ -4,8 +4,8 @@ import { validate } from 'class-validator';
 import {
   AiCostCallsQueryDto,
   AiCostQueryDto,
-} from '../../../src/admin-ai-costs/ai-cost-query.dto.js';
-import { AI_COST_FEATURES } from '../../../src/ai/telemetry/ai-cost-context.js';
+} from '@src/admin-ai-costs/ai-cost-query.dto.js';
+import { AI_COST_FEATURES } from '@src/ai/telemetry/ai-cost-context.js';
 
 describe('AI cost query DTOs', () => {
   describe('AiCostQueryDto', () => {

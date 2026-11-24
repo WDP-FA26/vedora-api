@@ -5,9 +5,9 @@ import {
   type Notification,
   NotificationType,
   type User,
-} from '../../src/mongo/models.js';
-import { createE2eApp, type E2eApp } from '../support/e2e-app.js';
-import { createUser } from '../support/fixtures.js';
+} from '@src/mongo/models.js';
+import { createE2eApp, type E2eApp } from '@test/support/e2e-app.js';
+import { createUser } from '@test/support/fixtures.js';
 
 /**
  * Gaps in the messaging contract (realtime-messaging.md) and the HTTP side of

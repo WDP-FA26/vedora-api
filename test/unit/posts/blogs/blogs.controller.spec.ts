@@ -3,23 +3,19 @@ import { type DeepMockProxy, mockDeep } from 'vitest-mock-extended';
 import type {
   AuthenticatedRequest,
   OptionalAuthenticatedRequest,
-} from '../../../../src/auth-core/auth.types.js';
-import type { CloudinaryService } from '../../../../src/cloudinary/cloudinary.service.js';
-import {
-  PostStatus,
-  PostType,
-  UserRole,
-} from '../../../../src/mongo/models.js';
-import type { BlogImagesService } from '../../../../src/posts/blogs/blog-images.service.js';
-import { BlogsController } from '../../../../src/posts/blogs/blogs.controller.js';
-import type { BlogsService } from '../../../../src/posts/blogs/blogs.service.js';
+} from '@src/auth-core/auth.types.js';
+import type { CloudinaryService } from '@src/cloudinary/cloudinary.service.js';
+import { PostStatus, PostType, UserRole } from '@src/mongo/models.js';
+import type { BlogImagesService } from '@src/posts/blogs/blog-images.service.js';
+import { BlogsController } from '@src/posts/blogs/blogs.controller.js';
+import type { BlogsService } from '@src/posts/blogs/blogs.service.js';
 import type {
   BlogImageUploadDto,
   BlogVideoUploadDto,
-} from '../../../../src/posts/dto/blog-image.dto.js';
-import type { BlogDetailDto } from '../../../../src/posts/dto/blog.dto.js';
-import type { PostPageDto } from '../../../../src/posts/dto/post-response.dto.js';
-import type { PostsQueryService } from '../../../../src/posts/posts-query.service.js';
+} from '@src/posts/dto/blog-image.dto.js';
+import type { BlogDetailDto } from '@src/posts/dto/blog.dto.js';
+import type { PostPageDto } from '@src/posts/dto/post-response.dto.js';
+import type { PostsQueryService } from '@src/posts/posts-query.service.js';
 
 describe('BlogsController', () => {
   const userId = '11111111-1111-4111-8111-111111111111';

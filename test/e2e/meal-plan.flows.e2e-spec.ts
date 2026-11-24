@@ -6,8 +6,8 @@ import type {
   MealPlanDto,
   MealPlanPreviewDto,
   MealPlanProblemDto,
-} from '../../src/meal-plan/dto/meal-plan.dto.js';
-import type { ShoppingListDto } from '../../src/meal-plan/dto/shopping-list.dto.js';
+} from '@src/meal-plan/dto/meal-plan.dto.js';
+import type { ShoppingListDto } from '@src/meal-plan/dto/shopping-list.dto.js';
 import {
   type Ingredient,
   type IngredientGroup,
@@ -17,13 +17,13 @@ import {
   RecipeTag,
   type User,
   Weekday,
-} from '../../src/mongo/models.js';
-import { createE2eApp, type E2eApp } from '../support/e2e-app.js';
+} from '@src/mongo/models.js';
+import { createE2eApp, type E2eApp } from '@test/support/e2e-app.js';
 import {
   createIngredient,
   createRecipe,
   createUser,
-} from '../support/fixtures.js';
+} from '@test/support/fixtures.js';
 
 interface ErrorBody {
   code: string;

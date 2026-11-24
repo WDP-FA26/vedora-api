@@ -3,17 +3,17 @@ import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { Test } from '@nestjs/testing';
 import type { INestApplication } from '@nestjs/common';
-import { AuthService } from '../../src/auth/auth.service.js';
-import { AuthenticatedUser } from '../../src/auth-core/auth.types.js';
-import { EmailVerificationService } from '../../src/auth/email-verification.service.js';
-import { PasswordResetService } from '../../src/auth/password-reset.service.js';
-import { RefreshTokensService } from '../../src/auth/refresh-tokens.service.js';
-import { hashPassword } from '../../src/auth-core/password.js';
-import { hashCode } from '../../src/auth/one-time-code.js';
-import { MailService } from '../../src/mail/mail.service.js';
-import { MongoModule } from '../../src/mongo/mongo.module.js';
-import { MongoService } from '../../src/mongo/mongo.service.js';
-import { lockDocument } from '../../src/mongo/document-lock.js';
+import { AuthService } from '@src/auth/auth.service.js';
+import { AuthenticatedUser } from '@src/auth-core/auth.types.js';
+import { EmailVerificationService } from '@src/auth/email-verification.service.js';
+import { PasswordResetService } from '@src/auth/password-reset.service.js';
+import { RefreshTokensService } from '@src/auth/refresh-tokens.service.js';
+import { hashPassword } from '@src/auth-core/password.js';
+import { hashCode } from '@src/auth/one-time-code.js';
+import { MailService } from '@src/mail/mail.service.js';
+import { MongoModule } from '@src/mongo/mongo.module.js';
+import { MongoService } from '@src/mongo/mongo.service.js';
+import { lockDocument } from '@src/mongo/document-lock.js';
 import {
   AccountStatus,
   OneTimeCode,
@@ -21,16 +21,16 @@ import {
   User,
   UserAccountAudit,
   UserRole,
-} from '../../src/mongo/models.js';
-import { UpdateUserStatusDto } from '../../src/users/dto/update-user-status.dto.js';
-import { AccountsService } from '../../src/users/accounts.service.js';
-import { UsersService } from '../../src/users/users.service.js';
-import { createUser, deleteWithCascade } from '../support/fixtures.js';
+} from '@src/mongo/models.js';
+import { UpdateUserStatusDto } from '@src/users/dto/update-user-status.dto.js';
+import { AccountsService } from '@src/users/accounts.service.js';
+import { UsersService } from '@src/users/users.service.js';
+import { createUser, deleteWithCascade } from '@test/support/fixtures.js';
 import {
   createTestMongoUrl,
   dropTestDatabase,
   prepareTestDatabase,
-} from '../support/mongo-test-db.js';
+} from '@test/support/mongo-test-db.js';
 
 describe('Account administration with MongoDB', () => {
   const password = 'AccountTests123!';

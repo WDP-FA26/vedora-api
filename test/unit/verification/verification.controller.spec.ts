@@ -1,7 +1,7 @@
 import { mockDeep } from 'vitest-mock-extended';
-import type { AuthenticatedRequest } from '../../../src/auth-core/auth.types.js';
-import type { PaginatedResponseDto } from '../../../src/common/pagination/index.js';
-import { UserRole, VerificationStatus } from '../../../src/mongo/models.js';
+import type { AuthenticatedRequest } from '@src/auth-core/auth.types.js';
+import type { PaginatedResponseDto } from '@src/common/pagination/index.js';
+import { UserRole, VerificationStatus } from '@src/mongo/models.js';
 import type {
   AdminVerificationRequestDetailDto,
   AdminVerificationRequestDto,
@@ -11,9 +11,9 @@ import type {
   ProofUploadDto,
   ReviewVerificationRequestDto,
   VerificationRequestDto,
-} from '../../../src/verification/dto/verification.dto.js';
-import { VerificationController } from '../../../src/verification/verification.controller.js';
-import type { VerificationService } from '../../../src/verification/verification.service.js';
+} from '@src/verification/dto/verification.dto.js';
+import { VerificationController } from '@src/verification/verification.controller.js';
+import type { VerificationService } from '@src/verification/verification.service.js';
 
 describe('VerificationController', () => {
   const userId = '4a1e32e4-e18e-4dd7-8b4a-246ef2113ff2';

@@ -7,9 +7,9 @@ import {
   PostStatus,
   PostType,
   UserRole,
-} from '../../src/mongo/models.js';
-import { createE2eApp, type E2eApp } from '../support/e2e-app.js';
-import { createPost, createUser } from '../support/fixtures.js';
+} from '@src/mongo/models.js';
+import { createE2eApp, type E2eApp } from '@test/support/e2e-app.js';
+import { createPost, createUser } from '@test/support/fixtures.js';
 
 /**
  * Admin aggregates over HTTP: the dashboard (admin-dashboard.md) and the AI

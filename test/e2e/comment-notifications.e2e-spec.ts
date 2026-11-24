@@ -11,15 +11,15 @@ import {
   PostReportStatus,
   User,
   UserRole,
-} from '../../src/mongo/models.js';
-import { NotificationsService } from '../../src/notifications/notifications.service.js';
-import type { NotificationDto } from '../../src/notifications/dto/notification.dto.js';
-import { createE2eApp, type E2eApp } from '../support/e2e-app.js';
-import { createPost, createUser } from '../support/fixtures.js';
+} from '@src/mongo/models.js';
+import { NotificationsService } from '@src/notifications/notifications.service.js';
+import type { NotificationDto } from '@src/notifications/dto/notification.dto.js';
+import { createE2eApp, type E2eApp } from '@test/support/e2e-app.js';
+import { createPost, createUser } from '@test/support/fixtures.js';
 import {
   SYSTEM_ACCOUNT,
   SYSTEM_ACCOUNT_ID,
-} from '../../src/users/system-account.js';
+} from '@src/users/system-account.js';
 
 describe('Comment removal and report notifications (real MongoDB HTTP)', () => {
   let e2e: E2eApp;
@@ -268,7 +268,7 @@ describe('Comment removal and report notifications (real MongoDB HTTP)', () => {
   it('keeps committed notices available when realtime publishing fails', async () => {
     const id = await report();
     const settings =
-      await import('../../src/moderation/moderation-settings.service.js');
+      await import('@src/moderation/moderation-settings.service.js');
     const spy = vi
       .spyOn(e2e.app.get(settings.ModerationSettingsService), 'reasonTexts')
       .mockRejectedValueOnce(new Error('Injected realtime lookup failure'));

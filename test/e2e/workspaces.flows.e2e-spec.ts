@@ -12,11 +12,11 @@ import {
   Workspace,
   WorkspaceMember,
   WorkspaceProof,
-} from '../../src/mongo/models.js';
-import { RefreshTokensService } from '../../src/auth/refresh-tokens.service.js';
-import { StorageService } from '../../src/storage/storage.service.js';
-import { createE2eApp, type E2eApp } from '../support/e2e-app.js';
-import { createUser } from '../support/fixtures.js';
+} from '@src/mongo/models.js';
+import { RefreshTokensService } from '@src/auth/refresh-tokens.service.js';
+import { StorageService } from '@src/storage/storage.service.js';
+import { createE2eApp, type E2eApp } from '@test/support/e2e-app.js';
+import { createUser } from '@test/support/fixtures.js';
 
 /**
  * Black-box flows for restaurant pages (/workspaces): an owner applies with
@@ -555,7 +555,9 @@ describe('Restaurant page flows (e2e)', () => {
         username: 'pending.page',
       });
 
-      const all = await request(server()).get('/api/v1/restaurants').expect(200);
+      const all = await request(server())
+        .get('/api/v1/restaurants')
+        .expect(200);
       expect(all.body).toMatchObject({
         truncated: false,
         items: [{ pageUserId, username: APPLICATION.username }],

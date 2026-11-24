@@ -4,21 +4,21 @@ import { getModelToken } from '@nestjs/mongoose';
 import { Test } from '@nestjs/testing';
 import type { Model } from 'mongoose';
 import { type DeepMockProxy, mockDeep } from 'vitest-mock-extended';
-import { AccountStatus, User } from '../../../../src/mongo/models.js';
-import { MongoModule } from '../../../../src/mongo/mongo.module.js';
-import { MongoService } from '../../../../src/mongo/mongo.service.js';
+import { AccountStatus, User } from '@src/mongo/models.js';
+import { MongoModule } from '@src/mongo/mongo.module.js';
+import { MongoService } from '@src/mongo/mongo.service.js';
 import {
   profileBm25,
   profilePrefixBm25,
-} from '../../../../src/profiles/search/profile-search-collection.js';
-import { ProfileSearchIndexService } from '../../../../src/profiles/search/profile-search-index.service.js';
-import { QdrantService } from '../../../../src/qdrant/qdrant.service.js';
-import { createUser } from '../../../support/fixtures.js';
+} from '@src/profiles/search/profile-search-collection.js';
+import { ProfileSearchIndexService } from '@src/profiles/search/profile-search-index.service.js';
+import { QdrantService } from '@src/qdrant/qdrant.service.js';
+import { createUser } from '@test/support/fixtures.js';
 import {
   createTestMongoUrl,
   dropTestDatabase,
   prepareTestDatabase,
-} from '../../../support/mongo-test-db.js';
+} from '@test/support/mongo-test-db.js';
 
 describe('ProfileSearchIndexService', () => {
   let app: INestApplication;

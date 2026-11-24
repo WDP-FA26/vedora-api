@@ -1,16 +1,16 @@
 import type { INestApplication } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { compare } from 'bcryptjs';
-import { createUser } from '../../support/fixtures.js';
+import { createUser } from '@test/support/fixtures.js';
 import {
   createTestMongoUrl,
   dropTestDatabase,
   prepareTestDatabase,
-} from '../../support/mongo-test-db.js';
-import { MongoModule } from '../../../src/mongo/mongo.module.js';
-import { MongoService } from '../../../src/mongo/mongo.service.js';
-import { type User, UserRole } from '../../../src/mongo/models.js';
-import { seedDatabase } from '../../../src/database/seed.js';
+} from '@test/support/mongo-test-db.js';
+import { MongoModule } from '@src/mongo/mongo.module.js';
+import { MongoService } from '@src/mongo/mongo.service.js';
+import { type User, UserRole } from '@src/mongo/models.js';
+import { seedDatabase } from '@src/database/seed.js';
 
 describe('seedDatabase edge branches', () => {
   let app: INestApplication;

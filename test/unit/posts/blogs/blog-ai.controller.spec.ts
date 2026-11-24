@@ -1,10 +1,10 @@
 import type { Response } from 'express';
 import { type DeepMockProxy, mockDeep } from 'vitest-mock-extended';
-import type { AuthenticatedRequest } from '../../../../src/auth-core/auth.types.js';
-import { AiFeature, UserRole } from '../../../../src/mongo/models.js';
-import type { BlogAssistantService } from '../../../../src/posts/blogs/ai/blog-assistant.service.js';
-import { BlogAiController } from '../../../../src/posts/blogs/blog-ai.controller.js';
-import type { BlogAssistantQuotaDto } from '../../../../src/posts/dto/blog-ai.dto.js';
+import type { AuthenticatedRequest } from '@src/auth-core/auth.types.js';
+import { AiFeature, UserRole } from '@src/mongo/models.js';
+import type { BlogAssistantService } from '@src/posts/blogs/ai/blog-assistant.service.js';
+import { BlogAiController } from '@src/posts/blogs/blog-ai.controller.js';
+import type { BlogAssistantQuotaDto } from '@src/posts/dto/blog-ai.dto.js';
 
 const { pipeUIMessageStreamToResponse } = vi.hoisted(() => ({
   pipeUIMessageStreamToResponse: vi.fn<() => Promise<void>>(() =>

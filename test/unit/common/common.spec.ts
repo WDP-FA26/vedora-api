@@ -15,26 +15,20 @@ import { Type } from 'class-transformer';
 import {
   AppExceptionFilter,
   toErrorBody,
-} from '../../../src/common/exceptions/app-exception.filter.js';
-import { ExternalServiceException } from '../../../src/common/exceptions/external-service.exception.js';
-import { InvalidInputException } from '../../../src/common/exceptions/invalid-input.exception.js';
-import { errorResponses } from '../../../src/common/exceptions/swagger-error-responses.js';
-import { FfmpegError, runFfmpeg } from '../../../src/common/ffmpeg/ffmpeg.js';
+} from '@src/common/exceptions/app-exception.filter.js';
+import { ExternalServiceException } from '@src/common/exceptions/external-service.exception.js';
+import { InvalidInputException } from '@src/common/exceptions/invalid-input.exception.js';
+import { errorResponses } from '@src/common/exceptions/swagger-error-responses.js';
+import { FfmpegError, runFfmpeg } from '@src/common/ffmpeg/ffmpeg.js';
 import {
   fetchPublicImage,
   UnsafeImageUrlError,
-} from '../../../src/common/http/fetch-public-image.js';
-import { ApiPaginatedResponse } from '../../../src/common/pagination/api-paginated-response.decorator.js';
-import { PaginationLimitDto } from '../../../src/common/pagination/pagination-limit.dto.js';
-import { PaginationQueryDto } from '../../../src/common/pagination/pagination-query.dto.js';
-import {
-  escapeRegExp,
-  extractMarkdownMediaUrls,
-} from '../../../src/common/text.js';
-import {
-  parsePayload,
-  validatePayload,
-} from '../../../src/common/validation.js';
+} from '@src/common/http/fetch-public-image.js';
+import { ApiPaginatedResponse } from '@src/common/pagination/api-paginated-response.decorator.js';
+import { PaginationLimitDto } from '@src/common/pagination/pagination-limit.dto.js';
+import { PaginationQueryDto } from '@src/common/pagination/pagination-query.dto.js';
+import { escapeRegExp, extractMarkdownMediaUrls } from '@src/common/text.js';
+import { parsePayload, validatePayload } from '@src/common/validation.js';
 
 vi.mock('node:dns/promises', () => ({
   lookup: vi.fn(),

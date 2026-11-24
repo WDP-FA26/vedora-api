@@ -11,9 +11,9 @@ import { Type } from 'class-transformer';
 import { IsString, ValidateNested } from 'class-validator';
 import request from 'supertest';
 import type { App } from 'supertest/types.js';
-import { configureApp } from '../../src/app.setup.js';
-import { AppExceptionFilter } from '../../src/common/exceptions/app-exception.filter.js';
-import { buildApiDocument, setupSwagger } from '../../src/swagger.setup.js';
+import { configureApp } from '@src/app.setup.js';
+import { AppExceptionFilter } from '@src/common/exceptions/app-exception.filter.js';
+import { buildApiDocument, setupSwagger } from '@src/swagger.setup.js';
 
 class NestedItemDto {
   @IsString()

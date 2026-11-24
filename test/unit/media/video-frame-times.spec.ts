@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   type FrameSampling,
   videoFrameTimes,
-} from '../../../src/media/video-frame-times.js';
+} from '@src/media/video-frame-times.js';
 
 const sampling: FrameSampling = {
   intervalSeconds: 5,

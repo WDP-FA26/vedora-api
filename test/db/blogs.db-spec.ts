@@ -2,31 +2,31 @@ import { randomUUID } from 'node:crypto';
 import type { INestApplication } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { mockDeep } from 'vitest-mock-extended';
-import { MediaService } from '../../src/media/media.service.js';
-import { CloudinaryService } from '../../src/cloudinary/cloudinary.service.js';
-import { Post, PostStatus, PostType } from '../../src/mongo/models.js';
-import { MongoModule } from '../../src/mongo/mongo.module.js';
-import { MongoService } from '../../src/mongo/mongo.service.js';
-import { PostFeedService } from '../../src/posts/search/post-feed.service.js';
-import { PostSearchIndexService } from '../../src/posts/search/post-search-index.service.js';
-import { PostSearchService } from '../../src/posts/search/post-search.service.js';
-import { BlogsService } from '../../src/posts/blogs/blogs.service.js';
-import { PostInteractionsService } from '../../src/posts/interactions/post-interactions.service.js';
-import { PostsQueryService } from '../../src/posts/posts-query.service.js';
-import { PostRelationsService } from '../../src/posts/post-relations.service.js';
-import { NotificationsService } from '../../src/notifications/notifications.service.js';
-import { StorageService } from '../../src/storage/storage.service.js';
+import { MediaService } from '@src/media/media.service.js';
+import { CloudinaryService } from '@src/cloudinary/cloudinary.service.js';
+import { Post, PostStatus, PostType } from '@src/mongo/models.js';
+import { MongoModule } from '@src/mongo/mongo.module.js';
+import { MongoService } from '@src/mongo/mongo.service.js';
+import { PostFeedService } from '@src/posts/search/post-feed.service.js';
+import { PostSearchIndexService } from '@src/posts/search/post-search-index.service.js';
+import { PostSearchService } from '@src/posts/search/post-search.service.js';
+import { BlogsService } from '@src/posts/blogs/blogs.service.js';
+import { PostInteractionsService } from '@src/posts/interactions/post-interactions.service.js';
+import { PostsQueryService } from '@src/posts/posts-query.service.js';
+import { PostRelationsService } from '@src/posts/post-relations.service.js';
+import { NotificationsService } from '@src/notifications/notifications.service.js';
+import { StorageService } from '@src/storage/storage.service.js';
 import {
   createPost,
   createRecipe,
   createUser,
   deleteWithCascade,
-} from '../support/fixtures.js';
+} from '@test/support/fixtures.js';
 import {
   createTestMongoUrl,
   dropTestDatabase,
   prepareTestDatabase,
-} from '../support/mongo-test-db.js';
+} from '@test/support/mongo-test-db.js';
 
 const BLOG_STORAGE = 'http://localhost:9000/vedora-blogs';
 

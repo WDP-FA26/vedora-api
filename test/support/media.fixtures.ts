@@ -3,8 +3,8 @@ import {
   MediaAsset,
   MediaStatus,
   MediaType,
-} from '../../src/mongo/models.js';
-import type { CloudinaryNotification } from '../../src/media/dto/cloudinary-notification.js';
+} from '@src/mongo/models.js';
+import type { CloudinaryNotification } from '@src/media/dto/cloudinary-notification.js';
 
 export const mediaId = '0b0d9c3e-3f0c-4c5e-9d0a-2b7f1f4d8a11';
 export const ownerId = '4a1e32e4-e18e-4dd7-8b4a-246ef2113ff2';

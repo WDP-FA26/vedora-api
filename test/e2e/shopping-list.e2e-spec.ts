@@ -1,8 +1,8 @@
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import request from 'supertest';
-import { createE2eApp, type E2eApp } from '../support/e2e-app.js';
-import { createUser } from '../support/fixtures.js';
-import { nextWeekStart } from '../support/meal-week.js';
+import { createE2eApp, type E2eApp } from '@test/support/e2e-app.js';
+import { createUser } from '@test/support/fixtures.js';
+import { nextWeekStart } from '@test/support/meal-week.js';
 
 /** Wholly in the future: the list drops days that are already past. */
 const NEXT_WEEK = nextWeekStart();

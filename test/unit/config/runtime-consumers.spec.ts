@@ -15,10 +15,9 @@ describe('environment overrides reach actual backend consumers', () => {
     vi.stubEnv('POST_MAX_LENGTH', '20');
     vi.stubEnv('POST_MAX_MEDIA', '1');
     vi.stubEnv('JWT_SECRET', 'never-expose-this-credential');
-    const { CreatePostDto } =
-      await import('../../../src/posts/dto/create-post.dto.js');
+    const { CreatePostDto } = await import('@src/posts/dto/create-post.dto.js');
     const { publicRuntimeConfig } =
-      await import('../../../src/config/public-config.controller.js');
+      await import('@src/config/public-config.controller.js');
     expect(
       await validate(
         plainToInstance(CreatePostDto, { type: 'POST', body: 'one two three' }),
@@ -51,9 +50,9 @@ describe('environment overrides reach actual backend consumers', () => {
 
   it('uses the configured OTP length for generation and verification DTOs', async () => {
     vi.stubEnv('AUTH_OTP_LENGTH', '8');
-    const { generateCode } = await import('../../../src/auth/one-time-code.js');
+    const { generateCode } = await import('@src/auth/one-time-code.js');
     const { VerifyEmailDto } =
-      await import('../../../src/auth/dto/email-verification.dto.js');
+      await import('@src/auth/dto/email-verification.dto.js');
     expect(generateCode()).toMatch(/^\d{8}$/);
     expect(
       await validate(
@@ -76,7 +75,7 @@ describe('environment overrides reach actual backend consumers', () => {
   it('advances profile cleanup with a small configured batch rather than assuming index 99', async () => {
     vi.stubEnv('PROFILE_IMAGE_CLEANUP_BATCH_SIZE', '2');
     const { ProfilesService } =
-      await import('../../../src/profiles/profiles.service.js');
+      await import('@src/profiles/profiles.service.js');
     type Args = ConstructorParameters<typeof ProfilesService>;
     const users = mockDeep<Args[0]>();
     users.countDocuments.mockResolvedValue(0);
@@ -129,7 +128,7 @@ describe('environment overrides reach actual backend consumers', () => {
     vi.stubEnv('MESSAGE_MAX_LENGTH', '3000');
     const { Schema, model, deleteModel } = await import('mongoose');
     const { DirectMessageSchema } =
-      await import('../../../src/mongo/schemas/messaging.schema.js');
+      await import('@src/mongo/schemas/messaging.schema.js');
     const Model = model(
       'EnvMessageConstraintFixture',
       new Schema(DirectMessageSchema.obj),
@@ -159,12 +158,12 @@ describe('environment overrides reach actual backend consumers', () => {
     vi.stubEnv('PAYMENT_CODE_SUFFIX_LENGTH', '8');
     vi.stubEnv('SUBSCRIPTION_PLUS_TEXT_LIMIT', '444');
     const { PAYMENT_LIFETIME_MS, paymentExpiresAt } =
-      await import('../../../src/payments/payment-expiration.js');
+      await import('@src/payments/payment-expiration.js');
     const { generatePaymentCode } =
-      await import('../../../src/payments/payment-code.js');
+      await import('@src/payments/payment-code.js');
     const { SUBSCRIPTION_LIMITS, purchasedLimits } =
-      await import('../../../src/subscriptions/subscription-policy.js');
-    const { BillingPlan } = await import('../../../src/mongo/enums.js');
+      await import('@src/subscriptions/subscription-policy.js');
+    const { BillingPlan } = await import('@src/mongo/enums.js');
     expect(PAYMENT_LIFETIME_MS).toBe(45000);
     expect(generatePaymentCode('VED')).toMatch(/^VED[A-Z0-9]{8}$/);
     expect(SUBSCRIPTION_LIMITS.PLUS.text).toBe(444);
@@ -194,7 +193,7 @@ describe('environment overrides reach actual backend consumers', () => {
   it('registers the configured cron expression, not the former decorator literal', async () => {
     vi.stubEnv('PAYMENT_EXPIRATION_CRON', '*/7 * * * * *');
     const { PaymentMaintenanceService } =
-      await import('../../../src/payments/payment-maintenance.service.js');
+      await import('@src/payments/payment-maintenance.service.js');
     const options = Reflect.getMetadata(
       'SCHEDULE_CRON_OPTIONS',
       PaymentMaintenanceService.prototype.expireOrders,
@@ -208,7 +207,7 @@ describe('environment overrides reach actual backend consumers', () => {
   it('changes the moderation input budget without silently changing its default or model input', async () => {
     vi.stubEnv('AI_MODERATION_CONTEXT_MAX_CHARS', '100');
     const { conversationModerationState } =
-      await import('../../../src/ai/guardrails/conversation-state.js');
+      await import('@src/ai/guardrails/conversation-state.js');
     const turns = [
       { role: 'user' as const, text: 'a'.repeat(80) },
       { role: 'user' as const, text: 'b'.repeat(80) },

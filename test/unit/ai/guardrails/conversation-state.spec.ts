@@ -4,8 +4,8 @@ import {
   assertLastMessageFromUser,
   conversationModerationState,
   LastMessageFromUser,
-} from '../../../../src/ai/guardrails/conversation-state.js';
-import { InvalidInputException } from '../../../../src/common/exceptions/invalid-input.exception.js';
+} from '@src/ai/guardrails/conversation-state.js';
+import { InvalidInputException } from '@src/common/exceptions/invalid-input.exception.js';
 
 class SampleChatDto {
   @LastMessageFromUser()

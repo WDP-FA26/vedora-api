@@ -1,37 +1,34 @@
 import type { INestApplication } from '@nestjs/common';
-import { FileTooLargeException } from '../../../src/common/exceptions/file-too-large.exception.js';
-import { FeatureUnavailableException } from '../../../src/common/exceptions/feature-unavailable.exception.js';
-import { UnsupportedFileTypeException } from '../../../src/common/exceptions/unsupported-file-type.exception.js';
+import { FileTooLargeException } from '@src/common/exceptions/file-too-large.exception.js';
+import { FeatureUnavailableException } from '@src/common/exceptions/feature-unavailable.exception.js';
+import { UnsupportedFileTypeException } from '@src/common/exceptions/unsupported-file-type.exception.js';
 import { ConfigService } from '@nestjs/config';
 import { Test } from '@nestjs/testing';
 import { NoSuchKey } from '@aws-sdk/client-s3';
 import { mockDeep, type DeepMockProxy } from 'vitest-mock-extended';
-import { createUser } from '../../support/fixtures.js';
+import { createUser } from '@test/support/fixtures.js';
 import {
   createTestMongoUrl,
   dropTestDatabase,
   prepareTestDatabase,
-} from '../../support/mongo-test-db.js';
-import { MongoModule } from '../../../src/mongo/mongo.module.js';
-import { MongoService } from '../../../src/mongo/mongo.service.js';
+} from '@test/support/mongo-test-db.js';
+import { MongoModule } from '@src/mongo/mongo.module.js';
+import { MongoService } from '@src/mongo/mongo.service.js';
 import {
   type KnowledgeDocument,
   KnowledgeDocumentFailureReason,
   KnowledgeDocumentStatus,
   type KnowledgePage,
   KnowledgePageFlag,
-} from '../../../src/mongo/models.js';
-import type { PresignedUploadDto } from '../../../src/storage/presigned-upload.dto.js';
-import {
-  StorageService,
-  StorageTarget,
-} from '../../../src/storage/storage.service.js';
-import { StateConflictException } from '../../../src/common/exceptions/state-conflict.exception.js';
-import { ResourceNotFoundException } from '../../../src/common/exceptions/resource-not-found.exception.js';
-import { DocumentExtractionError } from '../../../src/knowledge/extractors/document-extractor.js';
-import { PdfExtractor } from '../../../src/knowledge/extractors/pdf-extractor.js';
-import { KnowledgeService } from '../../../src/knowledge/knowledge.service.js';
-import { KnowledgeIndexService } from '../../../src/knowledge/retrieval/knowledge-index.service.js';
+} from '@src/mongo/models.js';
+import type { PresignedUploadDto } from '@src/storage/presigned-upload.dto.js';
+import { StorageService, StorageTarget } from '@src/storage/storage.service.js';
+import { StateConflictException } from '@src/common/exceptions/state-conflict.exception.js';
+import { ResourceNotFoundException } from '@src/common/exceptions/resource-not-found.exception.js';
+import { DocumentExtractionError } from '@src/knowledge/extractors/document-extractor.js';
+import { PdfExtractor } from '@src/knowledge/extractors/pdf-extractor.js';
+import { KnowledgeService } from '@src/knowledge/knowledge.service.js';
+import { KnowledgeIndexService } from '@src/knowledge/retrieval/knowledge-index.service.js';
 
 const presigned: PresignedUploadDto = {
   url: 'https://storage.vedora.vn/vedora-knowledge/knowledge/d.pdf?X-Amz-Signature=s',
@@ -101,6 +98,8 @@ describe('KnowledgeService', () => {
     extractor.extract.mockReset();
     index.index.mockReset();
     index.remove.mockReset();
+    index.removeRun.mockReset().mockResolvedValue(undefined);
+    index.removeOtherRuns.mockReset().mockResolvedValue(undefined);
     storage.presignUpload.mockReset();
     storage.getBytes.mockReset();
     storage.delete.mockReset();

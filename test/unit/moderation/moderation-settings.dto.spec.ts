@@ -8,7 +8,7 @@ import {
   ModerationTestResultDto,
   TestModerationDto,
   UpdateModerationSettingsDto,
-} from '../../../src/moderation/dto/moderation-settings.dto.js';
+} from '@src/moderation/dto/moderation-settings.dto.js';
 
 function validChoice(overrides: Record<string, unknown> = {}) {
   return {

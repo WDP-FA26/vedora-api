@@ -1,5 +1,5 @@
-import { runtimeConfig } from '../../../src/config/runtime-config.js';
-import { FeatureUnavailableException } from '../../../src/common/exceptions/feature-unavailable.exception.js';
+import { runtimeConfig } from '@src/config/runtime-config.js';
+import { FeatureUnavailableException } from '@src/common/exceptions/feature-unavailable.exception.js';
 import { ConfigModule } from '@nestjs/config';
 import {
   FakeEmbeddingModel,
@@ -10,17 +10,19 @@ import { Test } from '@nestjs/testing';
 import { APICallError, simulateReadableStream, type UIMessageChunk } from 'ai';
 import { convertReadableStreamToArray, MockLanguageModelV4 } from 'ai/test';
 import { type DeepMockProxy, mockDeep } from 'vitest-mock-extended';
-import { AiModule } from '../../../src/ai/ai.module.js';
+import { AiModule } from '@src/ai/ai.module.js';
 import {
   DEFAULT_MODERATION_PROVIDER_ORDER,
+  DEFAULT_OPENROUTER_APP_TITLE,
+  DEFAULT_OPENROUTER_APP_URL,
   providerOrderFrom,
-} from '../../../src/ai/openrouter.js';
-import { AiCostTransportService } from '../../../src/ai/telemetry/ai-cost-transport.service.js';
-import { ModerationSettingsService } from '../../../src/moderation/moderation-settings.service.js';
-import { NUTRITION_POLICY } from '../../../src/ai/guardrails/policies/nutrition.js';
-import { KnowledgeSearchService } from '../../../src/knowledge/retrieval/knowledge-search.service.js';
-import { INSTRUCTIONS } from '../../../src/nutrition-chat/nutrition-chat.prompt.js';
-import { NutritionChatService } from '../../../src/nutrition-chat/nutrition-chat.service.js';
+} from '@src/ai/openrouter.js';
+import { AiCostTransportService } from '@src/ai/telemetry/ai-cost-transport.service.js';
+import { ModerationSettingsService } from '@src/moderation/moderation-settings.service.js';
+import { NUTRITION_POLICY } from '@src/ai/guardrails/policies/nutrition.js';
+import { KnowledgeSearchService } from '@src/knowledge/retrieval/knowledge-search.service.js';
+import { INSTRUCTIONS } from '@src/nutrition-chat/nutrition-chat.prompt.js';
+import { NutritionChatService } from '@src/nutrition-chat/nutrition-chat.service.js';
 
 type StreamPart =
   Awaited<
@@ -172,6 +174,8 @@ describe('NutritionChatService', () => {
       apiKey: 'key',
       baseURL: 'https://openrouter.ai/api/v1',
       fetch,
+      appName: DEFAULT_OPENROUTER_APP_TITLE,
+      appUrl: DEFAULT_OPENROUTER_APP_URL,
     });
     expect(languageModel).toHaveBeenCalledWith('test/model', {
       reasoning: { effort: 'low', exclude: true },

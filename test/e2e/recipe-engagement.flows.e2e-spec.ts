@@ -1,12 +1,12 @@
 import { randomUUID } from 'node:crypto';
 import request from 'supertest';
-import type { RecipeFavorite, User } from '../../src/mongo/models.js';
-import { createE2eApp, type E2eApp } from '../support/e2e-app.js';
+import type { RecipeFavorite, User } from '@src/mongo/models.js';
+import { createE2eApp, type E2eApp } from '@test/support/e2e-app.js';
 import {
   createIngredient,
   createRecipe,
   createUser,
-} from '../support/fixtures.js';
+} from '@test/support/fixtures.js';
 
 interface ErrorBody {
   code: string;

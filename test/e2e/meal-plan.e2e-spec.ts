@@ -1,18 +1,18 @@
 import { randomUUID } from 'node:crypto';
 import request from 'supertest';
-import type { MealPlanDto } from '../../src/meal-plan/dto/meal-plan.dto.js';
+import type { MealPlanDto } from '@src/meal-plan/dto/meal-plan.dto.js';
 import type {
   Ingredient,
   MealPlanEntry,
   Recipe,
   User,
-} from '../../src/mongo/models.js';
-import { createE2eApp, type E2eApp } from '../support/e2e-app.js';
+} from '@src/mongo/models.js';
+import { createE2eApp, type E2eApp } from '@test/support/e2e-app.js';
 import {
   createIngredient,
   createRecipe,
   createUser,
-} from '../support/fixtures.js';
+} from '@test/support/fixtures.js';
 
 // 00:30 on Monday 2026-11-16 in the app time zone, so every day is still ahead.
 const WEEK = '2026-11-16';

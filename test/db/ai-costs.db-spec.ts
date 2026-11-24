@@ -5,25 +5,25 @@ import { ConfigService } from '@nestjs/config';
 import { JwtModule, JwtService } from '@nestjs/jwt';
 import { Test } from '@nestjs/testing';
 import { Types } from 'mongoose';
-import { chatModel } from '../../src/ai/openrouter.js';
-import { decide } from '../../src/common/decision/decision.js';
+import { chatModel } from '@src/ai/openrouter.js';
+import { decide } from '@src/common/decision/decision.js';
 import request from 'supertest';
 import type { App } from 'supertest/types.js';
-import { AdminAiCostsModule } from '../../src/admin-ai-costs/admin-ai-costs.module.js';
-import { AdminAiCostsService } from '../../src/admin-ai-costs/admin-ai-costs.service.js';
-import { AiCostTransportService } from '../../src/ai/telemetry/ai-cost-transport.service.js';
-import { aiCostContext } from '../../src/ai/telemetry/ai-cost-context.js';
-import { MongoModule } from '../../src/mongo/mongo.module.js';
-import { MongoService } from '../../src/mongo/mongo.service.js';
-import { AiCostCall, UserRole } from '../../src/mongo/models.js';
-import { configureApp } from '../../src/app.setup.js';
-import { AppExceptionFilter } from '../../src/common/exceptions/app-exception.filter.js';
-import { createUser } from '../support/fixtures.js';
+import { AdminAiCostsModule } from '@src/admin-ai-costs/admin-ai-costs.module.js';
+import { AdminAiCostsService } from '@src/admin-ai-costs/admin-ai-costs.service.js';
+import { AiCostTransportService } from '@src/ai/telemetry/ai-cost-transport.service.js';
+import { aiCostContext } from '@src/ai/telemetry/ai-cost-context.js';
+import { MongoModule } from '@src/mongo/mongo.module.js';
+import { MongoService } from '@src/mongo/mongo.service.js';
+import { AiCostCall, UserRole } from '@src/mongo/models.js';
+import { configureApp } from '@src/app.setup.js';
+import { AppExceptionFilter } from '@src/common/exceptions/app-exception.filter.js';
+import { createUser } from '@test/support/fixtures.js';
 import {
   createTestMongoUrl,
   dropTestDatabase,
   prepareTestDatabase,
-} from '../support/mongo-test-db.js';
+} from '@test/support/mongo-test-db.js';
 
 describe('AI cost telemetry and Admin reports with MongoDB', () => {
   let app: INestApplication<App>,

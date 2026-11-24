@@ -2,10 +2,10 @@ import { randomUUID } from 'node:crypto';
 import type { INestApplication } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Test } from '@nestjs/testing';
-import { FeatureUnavailableException } from '../../../src/common/exceptions/feature-unavailable.exception.js';
-import { InvalidInputException } from '../../../src/common/exceptions/invalid-input.exception.js';
-import { ResourceNotFoundException } from '../../../src/common/exceptions/resource-not-found.exception.js';
-import { StateConflictException } from '../../../src/common/exceptions/state-conflict.exception.js';
+import { FeatureUnavailableException } from '@src/common/exceptions/feature-unavailable.exception.js';
+import { InvalidInputException } from '@src/common/exceptions/invalid-input.exception.js';
+import { ResourceNotFoundException } from '@src/common/exceptions/resource-not-found.exception.js';
+import { StateConflictException } from '@src/common/exceptions/state-conflict.exception.js';
 import {
   AccountStatus,
   AiFeature,
@@ -15,22 +15,22 @@ import {
   PaymentStatus,
   PaymentWebhookReceipt,
   User,
-} from '../../../src/mongo/models.js';
-import { MongoModule } from '../../../src/mongo/mongo.module.js';
-import { MongoService } from '../../../src/mongo/mongo.service.js';
-import * as paymentCodes from '../../../src/payments/payment-code.js';
-import { PaymentEventsService } from '../../../src/payments/payment-events.service.js';
-import { PaymentsService } from '../../../src/payments/payments.service.js';
-import { SePayProvider } from '../../../src/payments/sepay.provider.js';
-import { AiUsageService } from '../../../src/subscriptions/ai-usage.service.js';
-import { SubscriptionsModule } from '../../../src/subscriptions/subscriptions.module.js';
-import { SubscriptionsService } from '../../../src/subscriptions/subscriptions.service.js';
-import { createUser, deleteWithCascade } from '../../support/fixtures.js';
+} from '@src/mongo/models.js';
+import { MongoModule } from '@src/mongo/mongo.module.js';
+import { MongoService } from '@src/mongo/mongo.service.js';
+import * as paymentCodes from '@src/payments/payment-code.js';
+import { PaymentEventsService } from '@src/payments/payment-events.service.js';
+import { PaymentsService } from '@src/payments/payments.service.js';
+import { SePayProvider } from '@src/payments/sepay.provider.js';
+import { AiUsageService } from '@src/subscriptions/ai-usage.service.js';
+import { SubscriptionsModule } from '@src/subscriptions/subscriptions.module.js';
+import { SubscriptionsService } from '@src/subscriptions/subscriptions.service.js';
+import { createUser, deleteWithCascade } from '@test/support/fixtures.js';
 import {
   createTestMongoUrl,
   dropTestDatabase,
   prepareTestDatabase,
-} from '../../support/mongo-test-db.js';
+} from '@test/support/mongo-test-db.js';
 
 describe('PaymentsService', () => {
   const defaultSettings = {

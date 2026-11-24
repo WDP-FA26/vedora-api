@@ -1,18 +1,18 @@
 import type { INestApplication } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
-import { InvalidInputException } from '../../../src/common/exceptions/invalid-input.exception.js';
-import { ResourceNotFoundException } from '../../../src/common/exceptions/resource-not-found.exception.js';
-import { StateConflictException } from '../../../src/common/exceptions/state-conflict.exception.js';
-import type { IngredientGroup } from '../../../src/mongo/models.js';
-import { MongoModule } from '../../../src/mongo/mongo.module.js';
-import { MongoService } from '../../../src/mongo/mongo.service.js';
-import { IngredientsService } from '../../../src/recipes/ingredients.service.js';
-import { createRecipe } from '../../support/fixtures.js';
+import { InvalidInputException } from '@src/common/exceptions/invalid-input.exception.js';
+import { ResourceNotFoundException } from '@src/common/exceptions/resource-not-found.exception.js';
+import { StateConflictException } from '@src/common/exceptions/state-conflict.exception.js';
+import type { IngredientGroup } from '@src/mongo/models.js';
+import { MongoModule } from '@src/mongo/mongo.module.js';
+import { MongoService } from '@src/mongo/mongo.service.js';
+import { IngredientsService } from '@src/recipes/ingredients.service.js';
+import { createRecipe } from '@test/support/fixtures.js';
 import {
   createTestMongoUrl,
   dropTestDatabase,
   prepareTestDatabase,
-} from '../../support/mongo-test-db.js';
+} from '@test/support/mongo-test-db.js';
 
 describe('IngredientsService', () => {
   let app: INestApplication;

@@ -1,5 +1,5 @@
 import { MockLanguageModelV4 } from 'ai/test';
-import { CalorieEstimator } from '../../../src/meal-plan/meal-log/calorie-estimator.js';
+import { CalorieEstimator } from '@src/meal-plan/meal-log/calorie-estimator.js';
 
 type Content = ConstructorParameters<typeof MockLanguageModelV4>[0];
 

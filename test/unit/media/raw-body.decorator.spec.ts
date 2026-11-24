@@ -3,7 +3,7 @@ import { Test } from '@nestjs/testing';
 import request from 'supertest';
 import type { App } from 'supertest/types.js';
 import { describe, expect, it } from 'vitest';
-import { RawBody } from '../../../src/media/raw-body.decorator.js';
+import { RawBody } from '@src/media/raw-body.decorator.js';
 
 @Controller('raw-body-test')
 class RawBodyTestController {

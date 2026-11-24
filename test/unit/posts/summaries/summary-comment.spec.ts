@@ -1,8 +1,8 @@
 import {
   formatIngredient,
   formatSummaryComment,
-} from '../../../../src/posts/summaries/summary-comment.js';
-import type { SummaryRecipe } from '../../../../src/mongo/models.js';
+} from '@src/posts/summaries/summary-comment.js';
+import type { SummaryRecipe } from '@src/mongo/models.js';
 
 const recipe: SummaryRecipe = {
   title: 'Canh nấm',

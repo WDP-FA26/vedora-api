@@ -1,14 +1,9 @@
 import { randomUUID } from 'node:crypto';
 import request from 'supertest';
-import {
-  Follow,
-  type Post,
-  PostStatus,
-  type User,
-} from '../../src/mongo/models.js';
-import { PostViewsService } from '../../src/posts/post-views.service.js';
-import { createE2eApp, type E2eApp } from '../support/e2e-app.js';
-import { createPost, createUser } from '../support/fixtures.js';
+import { Follow, type Post, PostStatus, type User } from '@src/mongo/models.js';
+import { PostViewsService } from '@src/posts/post-views.service.js';
+import { createE2eApp, type E2eApp } from '@test/support/e2e-app.js';
+import { createPost, createUser } from '@test/support/fixtures.js';
 
 interface PostItem {
   id: string;

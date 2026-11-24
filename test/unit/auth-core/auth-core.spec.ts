@@ -6,24 +6,24 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { Test } from '@nestjs/testing';
 import { compare } from 'bcryptjs';
 import { randomUUID } from 'node:crypto';
-import { AuthCoreModule } from '../../../src/auth-core/auth-core.module.js';
-import { extractBearerToken } from '../../../src/auth-core/bearer-token.js';
-import { JwtAuthGuard } from '../../../src/auth-core/jwt-auth.guard.js';
-import { OptionalJwtAuthGuard } from '../../../src/auth-core/optional-jwt-auth.guard.js';
-import { PersonalSessionGuard } from '../../../src/auth-core/personal-session.guard.js';
-import { hashPassword } from '../../../src/auth-core/password.js';
-import { Roles, ROLES_KEY } from '../../../src/auth-core/roles.decorator.js';
-import { RolesGuard } from '../../../src/auth-core/roles.guard.js';
-import { UserThrottlerGuard } from '../../../src/auth-core/user-throttler.guard.js';
-import { AccessDeniedException } from '../../../src/common/exceptions/access-denied.exception.js';
-import { InvalidInputException } from '../../../src/common/exceptions/invalid-input.exception.js';
-import { UnauthenticatedException } from '../../../src/common/exceptions/unauthenticated.exception.js';
+import { AuthCoreModule } from '@src/auth-core/auth-core.module.js';
+import { extractBearerToken } from '@src/auth-core/bearer-token.js';
+import { JwtAuthGuard } from '@src/auth-core/jwt-auth.guard.js';
+import { OptionalJwtAuthGuard } from '@src/auth-core/optional-jwt-auth.guard.js';
+import { PersonalSessionGuard } from '@src/auth-core/personal-session.guard.js';
+import { hashPassword } from '@src/auth-core/password.js';
+import { Roles, ROLES_KEY } from '@src/auth-core/roles.decorator.js';
+import { RolesGuard } from '@src/auth-core/roles.guard.js';
+import { UserThrottlerGuard } from '@src/auth-core/user-throttler.guard.js';
+import { AccessDeniedException } from '@src/common/exceptions/access-denied.exception.js';
+import { InvalidInputException } from '@src/common/exceptions/invalid-input.exception.js';
+import { UnauthenticatedException } from '@src/common/exceptions/unauthenticated.exception.js';
 import {
   AccountStatus,
   User,
   UserRole,
   WorkspaceMember,
-} from '../../../src/mongo/models.js';
+} from '@src/mongo/models.js';
 
 function createHttpContext(request: Record<string, unknown>): ExecutionContext {
   return {

@@ -6,17 +6,14 @@ import {
   PostType,
   type User,
   UserRole,
-} from '../../src/mongo/models.js';
-import {
-  StorageService,
-  StorageTarget,
-} from '../../src/storage/storage.service.js';
+} from '@src/mongo/models.js';
+import { StorageService, StorageTarget } from '@src/storage/storage.service.js';
 import {
   BORDERLINE_MARKER,
   createE2eApp,
   type E2eApp,
-} from '../support/e2e-app.js';
-import { createPost, createUser } from '../support/fixtures.js';
+} from '@test/support/e2e-app.js';
+import { createPost, createUser } from '@test/support/fixtures.js';
 
 interface BlogBody {
   id: string;

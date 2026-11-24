@@ -1,5 +1,5 @@
 import { ConfigService } from '@nestjs/config';
-import { QdrantService } from '../../../src/qdrant/qdrant.service.js';
+import { QdrantService } from '@src/qdrant/qdrant.service.js';
 
 function build(overrides: Record<string, string> = {}): QdrantService {
   return new QdrantService(

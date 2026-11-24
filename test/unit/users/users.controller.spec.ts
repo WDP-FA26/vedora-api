@@ -1,11 +1,11 @@
 import { mockDeep } from 'vitest-mock-extended';
-import type { AuthenticatedRequest } from '../../../src/auth-core/auth.types.js';
-import type { PaginatedResponseDto } from '../../../src/common/pagination/index.js';
-import { AccountStatus, UserRole } from '../../../src/mongo/models.js';
-import type { AccountsService } from '../../../src/users/accounts.service.js';
-import type { PublicUser } from '../../../src/users/public-user.js';
-import { UsersController } from '../../../src/users/users.controller.js';
-import type { UsersService } from '../../../src/users/users.service.js';
+import type { AuthenticatedRequest } from '@src/auth-core/auth.types.js';
+import type { PaginatedResponseDto } from '@src/common/pagination/index.js';
+import { AccountStatus, UserRole } from '@src/mongo/models.js';
+import type { AccountsService } from '@src/users/accounts.service.js';
+import type { PublicUser } from '@src/users/public-user.js';
+import { UsersController } from '@src/users/users.controller.js';
+import type { UsersService } from '@src/users/users.service.js';
 
 describe('UsersController', () => {
   const actorId = '4a1e32e4-e18e-4dd7-8b4a-246ef2113ff2';

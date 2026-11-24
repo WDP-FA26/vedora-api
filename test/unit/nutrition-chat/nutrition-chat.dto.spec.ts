@@ -5,7 +5,7 @@ import {
   ChatMessageDto,
   CreateGuestSessionDto,
   NutritionChatDto,
-} from '../../../src/nutrition-chat/dto/nutrition-chat.dto.js';
+} from '@src/nutrition-chat/dto/nutrition-chat.dto.js';
 
 describe('NutritionChat DTOs', () => {
   describe('ChatMessageDto & NutritionChatDto', () => {

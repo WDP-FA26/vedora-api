@@ -1,26 +1,26 @@
 import { randomUUID } from 'node:crypto';
 import type { INestApplication } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
-import { MongoModule } from '../../src/mongo/mongo.module.js';
-import { MongoService } from '../../src/mongo/mongo.service.js';
+import { MongoModule } from '@src/mongo/mongo.module.js';
+import { MongoService } from '@src/mongo/mongo.service.js';
 import {
   AiFeature,
   AiRequest,
   BillingPlan,
   PaymentIntent,
   PaymentStatus,
-} from '../../src/mongo/models.js';
-import { SubscriptionsModule } from '../../src/subscriptions/subscriptions.module.js';
-import { SubscriptionsService } from '../../src/subscriptions/subscriptions.service.js';
+} from '@src/mongo/models.js';
+import { SubscriptionsModule } from '@src/subscriptions/subscriptions.module.js';
+import { SubscriptionsService } from '@src/subscriptions/subscriptions.service.js';
 import {
   AiUsageService,
   type UsageTicket,
-} from '../../src/subscriptions/ai-usage.service.js';
+} from '@src/subscriptions/ai-usage.service.js';
 import {
   createTestMongoUrl,
   dropTestDatabase,
   prepareTestDatabase,
-} from '../support/mongo-test-db.js';
+} from '@test/support/mongo-test-db.js';
 
 const USER = '4a1e32e4-e18e-4dd7-8b4a-246ef2113ff2';
 const NOW = new Date('2026-11-09T10:00:00Z');

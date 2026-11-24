@@ -2,21 +2,21 @@ import { randomUUID } from 'node:crypto';
 import { JwtService } from '@nestjs/jwt';
 import request from 'supertest';
 import { z } from 'zod';
-import { hashPassword } from '../../src/auth-core/password.js';
-import { GoogleOAuthService } from '../../src/auth/google-oauth.service.js';
-import type { GoogleProfileUser } from '../../src/auth/google-auth.types.js';
-import { UnauthenticatedException } from '../../src/common/exceptions/unauthenticated.exception.js';
-import { TurnstileService } from '../../src/captcha/turnstile.service.js';
-import { MailService } from '../../src/mail/mail.service.js';
+import { hashPassword } from '@src/auth-core/password.js';
+import { GoogleOAuthService } from '@src/auth/google-oauth.service.js';
+import type { GoogleProfileUser } from '@src/auth/google-auth.types.js';
+import { UnauthenticatedException } from '@src/common/exceptions/unauthenticated.exception.js';
+import { TurnstileService } from '@src/captcha/turnstile.service.js';
+import { MailService } from '@src/mail/mail.service.js';
 import {
   AccountStatus,
   OneTimeCode,
   RefreshToken,
   User,
   UserRole,
-} from '../../src/mongo/models.js';
-import { createE2eApp, type E2eApp } from '../support/e2e-app.js';
-import { createUser } from '../support/fixtures.js';
+} from '@src/mongo/models.js';
+import { createE2eApp, type E2eApp } from '@test/support/e2e-app.js';
+import { createUser } from '@test/support/fixtures.js';
 
 /**
  * Black-box flows for /auth: register -> verify email -> login -> refresh

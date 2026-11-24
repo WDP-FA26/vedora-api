@@ -3,7 +3,7 @@ import {
   failedAssessment,
   isProviderBlocked,
   providerBlockedAssessment,
-} from '../../../src/moderation/content-moderation.service.js';
+} from '@src/moderation/content-moderation.service.js';
 
 describe('decisionFor', () => {
   it.each([

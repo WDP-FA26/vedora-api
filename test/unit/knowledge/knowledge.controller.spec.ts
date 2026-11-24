@@ -1,14 +1,14 @@
 import { mockDeep } from 'vitest-mock-extended';
-import type { AuthenticatedRequest } from '../../../src/auth-core/auth.types.js';
+import type { AuthenticatedRequest } from '@src/auth-core/auth.types.js';
 import type {
   CreateKnowledgeUploadResponseDto,
   KnowledgeDocumentResponseDto,
   KnowledgeFileUrlResponseDto,
   KnowledgePageResponseDto,
-} from '../../../src/knowledge/dto/knowledge-document-response.dto.js';
-import { KnowledgeController } from '../../../src/knowledge/knowledge.controller.js';
-import type { KnowledgeService } from '../../../src/knowledge/knowledge.service.js';
-import { UserRole } from '../../../src/mongo/models.js';
+} from '@src/knowledge/dto/knowledge-document-response.dto.js';
+import { KnowledgeController } from '@src/knowledge/knowledge.controller.js';
+import type { KnowledgeService } from '@src/knowledge/knowledge.service.js';
+import { UserRole } from '@src/mongo/models.js';
 
 describe('KnowledgeController', () => {
   const adminId = '00000000-0000-4000-8000-000000000001';

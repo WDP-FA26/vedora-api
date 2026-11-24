@@ -1,25 +1,25 @@
 import { randomUUID } from 'node:crypto';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import request from 'supertest';
-import type { PaginatedResponseDto } from '../../src/common/pagination/index.js';
+import type { PaginatedResponseDto } from '@src/common/pagination/index.js';
 import type {
   CatalogRecipeDetailDto,
   CatalogRecipeDto,
-} from '../../src/recipes/dto/recipe-catalog.dto.js';
+} from '@src/recipes/dto/recipe-catalog.dto.js';
 import {
   type Ingredient,
   type Post,
   PostStatus,
   type Recipe,
   type User,
-} from '../../src/mongo/models.js';
-import { createE2eApp, type E2eApp } from '../support/e2e-app.js';
+} from '@src/mongo/models.js';
+import { createE2eApp, type E2eApp } from '@test/support/e2e-app.js';
 import {
   createIngredient,
   createPost,
   createRecipe,
   createUser,
-} from '../support/fixtures.js';
+} from '@test/support/fixtures.js';
 
 describe('Recipe catalog (e2e)', () => {
   let e2e: E2eApp;

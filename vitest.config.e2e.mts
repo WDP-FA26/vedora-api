@@ -1,3 +1,4 @@
+import { resolve } from 'node:path';
 import swc from 'unplugin-swc';
 import { defineConfig } from 'vitest/config';
 
@@ -14,7 +15,8 @@ export default defineConfig({
     // use databases of their own (see test/mongo-test-db.ts).
     env: {
       NODE_ENV: 'test',
-      DATABASE_URL: 'mongodb://localhost:27017/vedora_test?directConnection=true',
+      DATABASE_URL:
+        'mongodb://localhost:27017/vedora_test?directConnection=true',
       JWT_SECRET: 'e2e-secret-that-is-at-least-32-characters',
       TURNSTILE_SECRET_KEY: '1x0000000000000000000000000000000AA',
       CLOUDINARY_CLOUD_NAME: 'e2e-cloud',
@@ -35,6 +37,14 @@ export default defineConfig({
       GOOGLE_CLIENT_ID: '',
       GOOGLE_CLIENT_SECRET: '',
       GOOGLE_CALLBACK_URL: '',
+    },
+  },
+  // https://docs.nestjs.com/recipes/swc#path-aliases — Vitest does not read
+  // tsconfig "paths"; keep these in sync with tsconfig.json.
+  resolve: {
+    alias: {
+      '@src': resolve(import.meta.dirname, './src'),
+      '@test': resolve(import.meta.dirname, './test'),
     },
   },
   plugins: [swc.vite({ module: { type: 'es6' } })],

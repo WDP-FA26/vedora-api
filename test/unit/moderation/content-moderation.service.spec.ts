@@ -1,14 +1,14 @@
 import { FakeModel, providerError } from '@nestjs/ai/testing';
 import { APICallError } from 'ai';
-import { FeatureUnavailableException } from '../../../src/common/exceptions/feature-unavailable.exception.js';
-import { UnprocessableContentException } from '../../../src/common/exceptions/unprocessable-content.exception.js';
-import type { EvidenceSources } from '../../../src/moderation/content-evidence.js';
-import { ContentModerationService } from '../../../src/moderation/content-moderation.service.js';
-import type { ModerationSettingsService } from '../../../src/moderation/moderation-settings.service.js';
+import { FeatureUnavailableException } from '@src/common/exceptions/feature-unavailable.exception.js';
+import { UnprocessableContentException } from '@src/common/exceptions/unprocessable-content.exception.js';
+import type { EvidenceSources } from '@src/moderation/content-evidence.js';
+import { ContentModerationService } from '@src/moderation/content-moderation.service.js';
+import type { ModerationSettingsService } from '@src/moderation/moderation-settings.service.js';
 import {
   DEFAULT_CONTENT_POLICY,
   withReservedChoices,
-} from '../../../src/moderation/policies/content.js';
+} from '@src/moderation/policies/content.js';
 
 const POLICY = {
   ...DEFAULT_CONTENT_POLICY,

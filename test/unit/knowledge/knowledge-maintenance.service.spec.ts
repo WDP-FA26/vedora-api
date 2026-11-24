@@ -4,15 +4,15 @@ import {
   createTestMongoUrl,
   dropTestDatabase,
   prepareTestDatabase,
-} from '../../support/mongo-test-db.js';
-import { MongoModule } from '../../../src/mongo/mongo.module.js';
-import { MongoService } from '../../../src/mongo/mongo.service.js';
+} from '@test/support/mongo-test-db.js';
+import { MongoModule } from '@src/mongo/mongo.module.js';
+import { MongoService } from '@src/mongo/mongo.service.js';
 import {
   type KnowledgeDocument,
   KnowledgeDocumentFailureReason,
   KnowledgeDocumentStatus,
-} from '../../../src/mongo/models.js';
-import { KnowledgeMaintenanceService } from '../../../src/knowledge/knowledge-maintenance.service.js';
+} from '@src/mongo/models.js';
+import { KnowledgeMaintenanceService } from '@src/knowledge/knowledge-maintenance.service.js';
 
 describe('KnowledgeMaintenanceService', () => {
   let app: INestApplication;

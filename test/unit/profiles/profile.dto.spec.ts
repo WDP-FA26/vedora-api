@@ -1,16 +1,13 @@
 import 'reflect-metadata';
 import { plainToInstance } from 'class-transformer';
 import { validate } from 'class-validator';
-import {
-  FollowSuggestionReason,
-  ProfileImageKind,
-} from '../../../src/mongo/models.js';
+import { FollowSuggestionReason, ProfileImageKind } from '@src/mongo/models.js';
 import {
   FollowSuggestionDto,
   FollowSuggestionListDto,
   FollowSuggestionQueryDto,
   MAX_SUGGESTIONS,
-} from '../../../src/profiles/dto/follow-suggestion.dto.js';
+} from '@src/profiles/dto/follow-suggestion.dto.js';
 import {
   CreateProfileImageUploadDto,
   PROFILE_IMAGE_TYPES,
@@ -20,7 +17,7 @@ import {
   ProfileRelationshipDto,
   ProfileSummaryDto,
   UpdateProfileDto,
-} from '../../../src/profiles/dto/profile.dto.js';
+} from '@src/profiles/dto/profile.dto.js';
 
 describe('Profile and FollowSuggestion DTOs', () => {
   describe('FollowSuggestionQueryDto', () => {

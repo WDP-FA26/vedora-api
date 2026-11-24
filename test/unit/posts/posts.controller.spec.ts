@@ -3,16 +3,16 @@ import { type DeepMockProxy, mockDeep } from 'vitest-mock-extended';
 import type {
   AuthenticatedRequest,
   OptionalAuthenticatedRequest,
-} from '../../../src/auth-core/auth.types.js';
-import { PostType, UserRole } from '../../../src/mongo/models.js';
+} from '@src/auth-core/auth.types.js';
+import { PostType, UserRole } from '@src/mongo/models.js';
 import type {
   PostPageDto,
   PostResponseDto,
-} from '../../../src/posts/dto/post-response.dto.js';
-import type { PostViewsService } from '../../../src/posts/post-views.service.js';
-import type { PostsQueryService } from '../../../src/posts/posts-query.service.js';
-import { PostsController } from '../../../src/posts/posts.controller.js';
-import type { PostsService } from '../../../src/posts/posts.service.js';
+} from '@src/posts/dto/post-response.dto.js';
+import type { PostViewsService } from '@src/posts/post-views.service.js';
+import type { PostsQueryService } from '@src/posts/posts-query.service.js';
+import { PostsController } from '@src/posts/posts.controller.js';
+import type { PostsService } from '@src/posts/posts.service.js';
 
 describe('PostsController', () => {
   const userId = '11111111-1111-4111-8111-111111111111';

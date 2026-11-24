@@ -2,16 +2,16 @@ import type { UIMessageChunk } from 'ai';
 import type { Request, Response } from 'express';
 import { EventEmitter } from 'node:events';
 import { type DeepMockProxy, mockDeep } from 'vitest-mock-extended';
-import type { TurnstileService } from '../../../src/captcha/turnstile.service.js';
-import { AccessDeniedException } from '../../../src/common/exceptions/access-denied.exception.js';
-import type { ClientIpService } from '../../../src/nutrition-chat/guest/client-ip.service.js';
-import type { GuestQuotaService } from '../../../src/nutrition-chat/guest/guest-quota.service.js';
+import type { TurnstileService } from '@src/captcha/turnstile.service.js';
+import { AccessDeniedException } from '@src/common/exceptions/access-denied.exception.js';
+import type { ClientIpService } from '@src/nutrition-chat/guest/client-ip.service.js';
+import type { GuestQuotaService } from '@src/nutrition-chat/guest/guest-quota.service.js';
 import {
   GUEST_SESSION_TTL_SEC,
   type GuestSessionService,
-} from '../../../src/nutrition-chat/guest/guest-session.service.js';
-import { NutritionChatController } from '../../../src/nutrition-chat/nutrition-chat.controller.js';
-import type { NutritionChatService } from '../../../src/nutrition-chat/nutrition-chat.service.js';
+} from '@src/nutrition-chat/guest/guest-session.service.js';
+import { NutritionChatController } from '@src/nutrition-chat/nutrition-chat.controller.js';
+import type { NutritionChatService } from '@src/nutrition-chat/nutrition-chat.service.js';
 
 const { pipeUIMessageStreamToResponse } = vi.hoisted(() => ({
   pipeUIMessageStreamToResponse: vi.fn<() => Promise<void>>(() =>

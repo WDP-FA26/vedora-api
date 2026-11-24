@@ -9,16 +9,16 @@ import {
   PostStatus,
   SuggestionDismissal,
   User,
-} from '../../../src/mongo/models.js';
-import { MongoModule } from '../../../src/mongo/mongo.module.js';
-import { MongoService } from '../../../src/mongo/mongo.service.js';
-import { FollowSuggestionsService } from '../../../src/profiles/follow-suggestions.service.js';
-import { createPost, createUser } from '../../support/fixtures.js';
+} from '@src/mongo/models.js';
+import { MongoModule } from '@src/mongo/mongo.module.js';
+import { MongoService } from '@src/mongo/mongo.service.js';
+import { FollowSuggestionsService } from '@src/profiles/follow-suggestions.service.js';
+import { createPost, createUser } from '@test/support/fixtures.js';
 import {
   createTestMongoUrl,
   dropTestDatabase,
   prepareTestDatabase,
-} from '../../support/mongo-test-db.js';
+} from '@test/support/mongo-test-db.js';
 
 describe('FollowSuggestionsService', () => {
   let app: INestApplication;

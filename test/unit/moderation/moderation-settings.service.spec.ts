@@ -4,11 +4,11 @@ import {
   createTestMongoUrl,
   dropTestDatabase,
   prepareTestDatabase,
-} from '../../support/mongo-test-db.js';
-import { MongoModule } from '../../../src/mongo/mongo.module.js';
-import { MongoService } from '../../../src/mongo/mongo.service.js';
-import { ModerationSettingsService } from '../../../src/moderation/moderation-settings.service.js';
-import type { ContentPolicySettings } from '../../../src/moderation/policies/content.js';
+} from '@test/support/mongo-test-db.js';
+import { MongoModule } from '@src/mongo/mongo.module.js';
+import { MongoService } from '@src/mongo/mongo.service.js';
+import { ModerationSettingsService } from '@src/moderation/moderation-settings.service.js';
+import type { ContentPolicySettings } from '@src/moderation/policies/content.js';
 
 describe('ModerationSettingsService', () => {
   let app: INestApplication;

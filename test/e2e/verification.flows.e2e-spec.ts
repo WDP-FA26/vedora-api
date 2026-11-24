@@ -7,10 +7,10 @@ import {
   VerificationProof,
   VerificationRequest,
   VerificationStatus,
-} from '../../src/mongo/models.js';
-import { StorageService } from '../../src/storage/storage.service.js';
-import { createE2eApp, type E2eApp } from '../support/e2e-app.js';
-import { createUser } from '../support/fixtures.js';
+} from '@src/mongo/models.js';
+import { StorageService } from '@src/storage/storage.service.js';
+import { createE2eApp, type E2eApp } from '@test/support/e2e-app.js';
+import { createUser } from '@test/support/fixtures.js';
 
 /**
  * Black-box flows for the verified-chef badge (/verification): applicant

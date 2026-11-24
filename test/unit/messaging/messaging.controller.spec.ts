@@ -3,8 +3,8 @@ import type { JwtService } from '@nestjs/jwt';
 import type { Model } from 'mongoose';
 import { Subject } from 'rxjs';
 import { mockDeep } from 'vitest-mock-extended';
-import type { AuthenticatedRequest } from '../../../src/auth-core/auth.types.js';
-import { UnauthenticatedException } from '../../../src/common/exceptions/unauthenticated.exception.js';
+import type { AuthenticatedRequest } from '@src/auth-core/auth.types.js';
+import { UnauthenticatedException } from '@src/common/exceptions/unauthenticated.exception.js';
 import type {
   ConversationDto,
   ConversationPageDto,
@@ -12,20 +12,20 @@ import type {
   MessagePageDto,
   MessagingContactDto,
   SendMessageResponseDto,
-} from '../../../src/messaging/dto/messaging.dto.js';
-import { MessagingInbox } from '../../../src/messaging/dto/messaging.dto.js';
+} from '@src/messaging/dto/messaging.dto.js';
+import { MessagingInbox } from '@src/messaging/dto/messaging.dto.js';
 import type {
   MessagingEventsService,
   MessagingSignal,
-} from '../../../src/messaging/messaging-events.service.js';
-import { MessagingController } from '../../../src/messaging/messaging.controller.js';
-import type { MessagingService } from '../../../src/messaging/messaging.service.js';
+} from '@src/messaging/messaging-events.service.js';
+import { MessagingController } from '@src/messaging/messaging.controller.js';
+import type { MessagingService } from '@src/messaging/messaging.service.js';
 import {
   AccountStatus,
   MessagingEventType,
   User,
   UserRole,
-} from '../../../src/mongo/models.js';
+} from '@src/mongo/models.js';
 
 describe('MessagingController', () => {
   const userId = '00000000-0000-4000-8000-000000000001';

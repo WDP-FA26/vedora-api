@@ -3,20 +3,20 @@ import { JwtService } from '@nestjs/jwt';
 import { getModelToken } from '@nestjs/mongoose';
 import { Test } from '@nestjs/testing';
 import { describe, expect, it } from 'vitest';
-import { AdminModerationController } from '../../../src/moderation/admin-moderation.controller.js';
+import { AdminModerationController } from '@src/moderation/admin-moderation.controller.js';
 import {
   CONTENT_MODERATION_MODEL,
   ContentModerationService,
   type ModerationModel,
-} from '../../../src/moderation/content-moderation.service.js';
-import { ModerationSettingsService } from '../../../src/moderation/moderation-settings.service.js';
-import { ModerationModule } from '../../../src/moderation/moderation.module.js';
+} from '@src/moderation/content-moderation.service.js';
+import { ModerationSettingsService } from '@src/moderation/moderation-settings.service.js';
+import { ModerationModule } from '@src/moderation/moderation.module.js';
 import {
   AiCostCall,
   ModerationSettings,
   User,
   WorkspaceMember,
-} from '../../../src/mongo/models.js';
+} from '@src/mongo/models.js';
 
 describe('ModerationModule', () => {
   async function compileWithEnv(env: Record<string, string>) {

@@ -4,8 +4,8 @@ import { mockDeep } from 'vitest-mock-extended';
 import {
   documentText,
   KnowledgeModelsService,
-} from '../../../../src/knowledge/retrieval/knowledge-models.service.js';
-import { AiCostTransportService } from '../../../../src/ai/telemetry/ai-cost-transport.service.js';
+} from '@src/knowledge/retrieval/knowledge-models.service.js';
+import { AiCostTransportService } from '@src/ai/telemetry/ai-cost-transport.service.js';
 
 const fetchMock = vi.fn<typeof fetch>();
 let ai = mockDeep<AiService>();

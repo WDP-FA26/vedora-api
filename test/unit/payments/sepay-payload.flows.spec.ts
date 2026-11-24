@@ -1,5 +1,5 @@
-import { InvalidInputException } from '../../../src/common/exceptions/invalid-input.exception.js';
-import { parseBankWebhook } from '../../../src/payments/sepay-payload.js';
+import { InvalidInputException } from '@src/common/exceptions/invalid-input.exception.js';
+import { parseBankWebhook } from '@src/payments/sepay-payload.js';
 
 const valid = {
   id: 9001,

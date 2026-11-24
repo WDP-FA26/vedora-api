@@ -1,9 +1,9 @@
 import type { Response } from 'express';
 import { type DeepMockProxy, mockDeep } from 'vitest-mock-extended';
-import type { AuthenticatedRequest } from '../../../src/auth-core/auth.types.js';
-import { UserRole } from '../../../src/mongo/models.js';
-import { RecipeRatingsController } from '../../../src/recipes/recipe-ratings.controller.js';
-import type { RecipeRatingsService } from '../../../src/recipes/recipe-ratings.service.js';
+import type { AuthenticatedRequest } from '@src/auth-core/auth.types.js';
+import { UserRole } from '@src/mongo/models.js';
+import { RecipeRatingsController } from '@src/recipes/recipe-ratings.controller.js';
+import type { RecipeRatingsService } from '@src/recipes/recipe-ratings.service.js';
 
 function mockResponse() {
   const setHeader = vi.fn();

@@ -5,13 +5,13 @@ import {
   type Recipe,
   type User,
   UserRole,
-} from '../../src/mongo/models.js';
-import { createE2eApp, type E2eApp } from '../support/e2e-app.js';
+} from '@src/mongo/models.js';
+import { createE2eApp, type E2eApp } from '@test/support/e2e-app.js';
 import {
   createIngredient,
   createRecipe,
   createUser,
-} from '../support/fixtures.js';
+} from '@test/support/fixtures.js';
 
 describe('Recipes and ingredients (e2e)', () => {
   let e2e: E2eApp;

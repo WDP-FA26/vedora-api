@@ -2,8 +2,8 @@ import {
   CostObservation,
   CostResponseParser,
   costValue,
-} from '../../../../src/ai/telemetry/cost-observation.js';
-import { requestCostContext } from '../../../../src/ai/telemetry/ai-cost-context.js';
+} from '@src/ai/telemetry/cost-observation.js';
+import { requestCostContext } from '@src/ai/telemetry/ai-cost-context.js';
 
 describe('provider billing metadata', () => {
   it('distinguishes a reported zero from an unavailable or invalid charge', () => {

@@ -6,7 +6,7 @@ import {
   AiCostContextInterceptor,
   requestCostContext,
   type AiCostContext,
-} from '../../../../src/ai/telemetry/ai-cost-context.js';
+} from '@src/ai/telemetry/ai-cost-context.js';
 
 describe('ai-cost-context', () => {
   describe('requestCostContext', () => {

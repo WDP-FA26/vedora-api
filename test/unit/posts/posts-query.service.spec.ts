@@ -3,10 +3,10 @@ import { getModelToken } from '@nestjs/mongoose';
 import { Test } from '@nestjs/testing';
 import type { Model } from 'mongoose';
 import { type DeepMockProxy, mockDeep } from 'vitest-mock-extended';
-import { CloudinaryService } from '../../../src/cloudinary/cloudinary.service.js';
-import { ResourceNotFoundException } from '../../../src/common/exceptions/resource-not-found.exception.js';
-import { MediaService } from '../../../src/media/media.service.js';
-import { ModerationSettingsService } from '../../../src/moderation/moderation-settings.service.js';
+import { CloudinaryService } from '@src/cloudinary/cloudinary.service.js';
+import { ResourceNotFoundException } from '@src/common/exceptions/resource-not-found.exception.js';
+import { MediaService } from '@src/media/media.service.js';
+import { ModerationSettingsService } from '@src/moderation/moderation-settings.service.js';
 import {
   Follow,
   MediaAsset,
@@ -17,25 +17,25 @@ import {
   PostStatus,
   PostType,
   type User,
-} from '../../../src/mongo/models.js';
-import { MongoModule } from '../../../src/mongo/mongo.module.js';
-import { MongoService } from '../../../src/mongo/mongo.service.js';
-import { PostRelationsService } from '../../../src/posts/post-relations.service.js';
-import { PostsQueryService } from '../../../src/posts/posts-query.service.js';
+} from '@src/mongo/models.js';
+import { MongoModule } from '@src/mongo/mongo.module.js';
+import { MongoService } from '@src/mongo/mongo.service.js';
+import { PostRelationsService } from '@src/posts/post-relations.service.js';
+import { PostsQueryService } from '@src/posts/posts-query.service.js';
 import {
   MAX_FEED_RESULTS,
   PostFeedService,
-} from '../../../src/posts/search/post-feed.service.js';
+} from '@src/posts/search/post-feed.service.js';
 import {
   MAX_SEARCH_RESULTS,
   PostSearchService,
-} from '../../../src/posts/search/post-search.service.js';
-import { createMedia, createPost, createUser } from '../../support/fixtures.js';
+} from '@src/posts/search/post-search.service.js';
+import { createMedia, createPost, createUser } from '@test/support/fixtures.js';
 import {
   createTestMongoUrl,
   dropTestDatabase,
   prepareTestDatabase,
-} from '../../support/mongo-test-db.js';
+} from '@test/support/mongo-test-db.js';
 
 describe('PostsQueryService', () => {
   let app: INestApplication;

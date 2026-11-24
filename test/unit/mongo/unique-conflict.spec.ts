@@ -1,6 +1,6 @@
 import { mongo } from 'mongoose';
-import { StateConflictException } from '../../../src/common/exceptions/state-conflict.exception.js';
-import { rethrowAsStateConflict } from '../../../src/mongo/unique-conflict.js';
+import { StateConflictException } from '@src/common/exceptions/state-conflict.exception.js';
+import { rethrowAsStateConflict } from '@src/mongo/unique-conflict.js';
 
 function duplicateKeyError(): mongo.MongoServerError {
   return new mongo.MongoServerError({

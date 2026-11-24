@@ -1,21 +1,21 @@
-import { InvalidInputException } from '../../../src/common/exceptions/invalid-input.exception.js';
-import { ResourceNotFoundException } from '../../../src/common/exceptions/resource-not-found.exception.js';
-import { StateConflictException } from '../../../src/common/exceptions/state-conflict.exception.js';
+import { InvalidInputException } from '@src/common/exceptions/invalid-input.exception.js';
+import { ResourceNotFoundException } from '@src/common/exceptions/resource-not-found.exception.js';
+import { StateConflictException } from '@src/common/exceptions/state-conflict.exception.js';
 import type { INestApplication } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
-import { createIngredient } from '../../support/fixtures.js';
+import { createIngredient } from '@test/support/fixtures.js';
 import {
   createTestMongoUrl,
   dropTestDatabase,
   prepareTestDatabase,
-} from '../../support/mongo-test-db.js';
-import { MongoModule } from '../../../src/mongo/mongo.module.js';
+} from '@test/support/mongo-test-db.js';
+import { MongoModule } from '@src/mongo/mongo.module.js';
 import type {
   IngredientGroup,
   IncompatibilityRule,
-} from '../../../src/mongo/models.js';
-import { MongoService } from '../../../src/mongo/mongo.service.js';
-import { IncompatibilityRulesService } from '../../../src/recipes/incompatibility-rules.service.js';
+} from '@src/mongo/models.js';
+import { MongoService } from '@src/mongo/mongo.service.js';
+import { IncompatibilityRulesService } from '@src/recipes/incompatibility-rules.service.js';
 
 const tofu = 'a1a2d3e4-0000-4000-8000-000000000001';
 const spinach = 'a1a2d3e4-0000-4000-8000-000000000002';

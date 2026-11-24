@@ -13,8 +13,8 @@ import {
   type Recipe,
   type User,
   UserRole,
-} from '../../src/mongo/models.js';
-import type { MongoService } from '../../src/mongo/mongo.service.js';
+} from '@src/mongo/models.js';
+import type { MongoService } from '@src/mongo/mongo.service.js';
 
 function model<T>(db: MongoService, name: string): Model<T> {
   return db.connection.model<T>(name);

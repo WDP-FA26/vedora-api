@@ -2,26 +2,26 @@ import { plainToInstance } from 'class-transformer';
 import { validate } from 'class-validator';
 import { describe, expect, it } from 'vitest';
 import { mockDeep } from 'vitest-mock-extended';
-import type { AuthenticatedRequest } from '../../../src/auth-core/auth.types.js';
-import { StateConflictException } from '../../../src/common/exceptions/state-conflict.exception.js';
-import { QuotaReachedException } from '../../../src/common/exceptions/quota-reached.exception.js';
-import { ResourceNotFoundException } from '../../../src/common/exceptions/resource-not-found.exception.js';
-import { CreateUploadDto } from '../../../src/media/dto/create-upload.dto.js';
+import type { AuthenticatedRequest } from '@src/auth-core/auth.types.js';
+import { StateConflictException } from '@src/common/exceptions/state-conflict.exception.js';
+import { QuotaReachedException } from '@src/common/exceptions/quota-reached.exception.js';
+import { ResourceNotFoundException } from '@src/common/exceptions/resource-not-found.exception.js';
+import { CreateUploadDto } from '@src/media/dto/create-upload.dto.js';
 import {
   AdminMediaDto,
   CaptionTrackDto,
   CreateUploadResponseDto,
   MediaResponseDto,
   SignedUploadDto,
-} from '../../../src/media/dto/media-response.dto.js';
-import { MediaController } from '../../../src/media/media.controller.js';
-import { MediaService } from '../../../src/media/media.service.js';
+} from '@src/media/dto/media-response.dto.js';
+import { MediaController } from '@src/media/media.controller.js';
+import { MediaService } from '@src/media/media.service.js';
 import {
   CaptionStatus,
   MediaStatus,
   MediaType,
   UserRole,
-} from '../../../src/mongo/models.js';
+} from '@src/mongo/models.js';
 
 const userRequest = {
   user: { sub: 'user-1', username: 'cook', role: UserRole.USER },

@@ -1,8 +1,8 @@
 import { ConfigService } from '@nestjs/config';
 import { type DeepMockProxy, mockDeep } from 'vitest-mock-extended';
-import { QdrantService } from '../../../../src/qdrant/qdrant.service.js';
-import { KnowledgeIndexService } from '../../../../src/knowledge/retrieval/knowledge-index.service.js';
-import { KnowledgeModelsService } from '../../../../src/knowledge/retrieval/knowledge-models.service.js';
+import { QdrantService } from '@src/qdrant/qdrant.service.js';
+import { KnowledgeIndexService } from '@src/knowledge/retrieval/knowledge-index.service.js';
+import { KnowledgeModelsService } from '@src/knowledge/retrieval/knowledge-models.service.js';
 
 /**
  * Chunking rules, black-box through what gets embedded and upserted:

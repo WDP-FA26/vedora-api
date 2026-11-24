@@ -1,8 +1,8 @@
 import type { Response } from 'express';
 import { mockDeep } from 'vitest-mock-extended';
-import { AdminAiCostsController } from '../../../src/admin-ai-costs/admin-ai-costs.controller.js';
-import type { AdminAiCostsService } from '../../../src/admin-ai-costs/admin-ai-costs.service.js';
-import { AiCostCallsQueryDto } from '../../../src/admin-ai-costs/ai-cost-query.dto.js';
+import { AdminAiCostsController } from '@src/admin-ai-costs/admin-ai-costs.controller.js';
+import type { AdminAiCostsService } from '@src/admin-ai-costs/admin-ai-costs.service.js';
+import { AiCostCallsQueryDto } from '@src/admin-ai-costs/ai-cost-query.dto.js';
 
 describe('AdminAiCostsController', () => {
   let service: ReturnType<typeof mockDeep<AdminAiCostsService>>;

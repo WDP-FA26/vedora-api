@@ -3,18 +3,18 @@ import { ConfigService } from '@nestjs/config';
 import { Test } from '@nestjs/testing';
 import { Subject } from 'rxjs';
 import { vi } from 'vitest';
-import { createMedia, createPost, createUser } from '../../support/fixtures.js';
+import { createMedia, createPost, createUser } from '@test/support/fixtures.js';
 import {
   createTestMongoUrl,
   dropTestDatabase,
   prepareTestDatabase,
-} from '../../support/mongo-test-db.js';
-import { CloudinaryService } from '../../../src/cloudinary/cloudinary.service.js';
-import * as fetchPublicImageModule from '../../../src/common/http/fetch-public-image.js';
-import { CaptionService } from '../../../src/media/captions/caption.service.js';
-import { PostModerationService } from '../../../src/media/post-moderation.service.js';
-import { ContentModerationService } from '../../../src/moderation/content-moderation.service.js';
-import type { EvidenceSources } from '../../../src/moderation/content-evidence.js';
+} from '@test/support/mongo-test-db.js';
+import { CloudinaryService } from '@src/cloudinary/cloudinary.service.js';
+import * as fetchPublicImageModule from '@src/common/http/fetch-public-image.js';
+import { CaptionService } from '@src/media/captions/caption.service.js';
+import { PostModerationService } from '@src/media/post-moderation.service.js';
+import { ContentModerationService } from '@src/moderation/content-moderation.service.js';
+import type { EvidenceSources } from '@src/moderation/content-evidence.js';
 import {
   CaptionStatus,
   type MediaAsset,
@@ -23,20 +23,17 @@ import {
   type Post,
   PostStatus,
   PostType,
-} from '../../../src/mongo/models.js';
-import { MongoModule } from '../../../src/mongo/mongo.module.js';
-import { MongoService } from '../../../src/mongo/mongo.service.js';
-import { NotificationsService } from '../../../src/notifications/notifications.service.js';
-import {
-  StorageService,
-  StorageTarget,
-} from '../../../src/storage/storage.service.js';
+} from '@src/mongo/models.js';
+import { MongoModule } from '@src/mongo/mongo.module.js';
+import { MongoService } from '@src/mongo/mongo.service.js';
+import { NotificationsService } from '@src/notifications/notifications.service.js';
+import { StorageService, StorageTarget } from '@src/storage/storage.service.js';
 
-vi.mock('../../../src/common/http/fetch-public-image.js', () => ({
+vi.mock('@src/common/http/fetch-public-image.js', () => ({
   fetchPublicImage: vi.fn(() => Promise.resolve(Buffer.from('img'))),
 }));
 // Shrinking images needs ffmpeg and real pictures; the bytes are enough here.
-vi.mock('../../../src/moderation/moderation-image.js', () => ({
+vi.mock('@src/moderation/moderation-image.js', () => ({
   toModerationJpeg: vi.fn((source: Buffer) => Promise.resolve(source)),
 }));
 

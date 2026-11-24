@@ -11,13 +11,13 @@ import {
   PostStatus,
   User,
   UserRole,
-} from '../../src/mongo/models.js';
+} from '@src/mongo/models.js';
 import type {
   AdminCommentReportDto,
   CommentReportDto,
-} from '../../src/posts/dto/comment-report.dto.js';
-import { createE2eApp, type E2eApp } from '../support/e2e-app.js';
-import { createPost, createUser } from '../support/fixtures.js';
+} from '@src/posts/dto/comment-report.dto.js';
+import { createE2eApp, type E2eApp } from '@test/support/e2e-app.js';
+import { createPost, createUser } from '@test/support/fixtures.js';
 
 describe('Comment reporting and admin handling (real MongoDB HTTP)', () => {
   let e2e: E2eApp;

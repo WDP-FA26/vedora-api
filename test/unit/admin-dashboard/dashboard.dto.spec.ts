@@ -4,7 +4,7 @@ import { validate } from 'class-validator';
 import {
   DashboardQueryDto,
   UNAVAILABLE_DASHBOARD_METRICS,
-} from '../../../src/admin-dashboard/dto/dashboard.dto.js';
+} from '@src/admin-dashboard/dto/dashboard.dto.js';
 
 describe('DashboardQueryDto', () => {
   it('accepts an empty query and valid YYYY-MM-DD dates', async () => {

@@ -1,6 +1,6 @@
 import { mongo } from 'mongoose';
-import { StateConflictException } from '../../../src/common/exceptions/state-conflict.exception.js';
-import { rethrowUniqueViolation } from '../../../src/users/unique-conflict.js';
+import { StateConflictException } from '@src/common/exceptions/state-conflict.exception.js';
+import { rethrowUniqueViolation } from '@src/users/unique-conflict.js';
 
 function makeMongoError(
   code: number,

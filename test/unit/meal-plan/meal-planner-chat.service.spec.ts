@@ -1,4 +1,4 @@
-import { runtimeConfig } from '../../../src/config/runtime-config.js';
+import { runtimeConfig } from '@src/config/runtime-config.js';
 import {
   FakeEmbeddingModel,
   FakeModel,
@@ -9,27 +9,27 @@ import { Test } from '@nestjs/testing';
 import { APICallError, simulateReadableStream, type UIMessageChunk } from 'ai';
 import { convertReadableStreamToArray, MockLanguageModelV4 } from 'ai/test';
 import { type DeepMockProxy, mockDeep } from 'vitest-mock-extended';
-import { AiModule } from '../../../src/ai/ai.module.js';
+import { AiModule } from '@src/ai/ai.module.js';
 import {
   DEFAULT_MODERATION_PROVIDER_ORDER,
   providerOrderFrom,
-} from '../../../src/ai/openrouter.js';
-import { NUTRITION_POLICY } from '../../../src/ai/guardrails/policies/nutrition.js';
-import { AiCostTransportService } from '../../../src/ai/telemetry/ai-cost-transport.service.js';
-import { FeatureUnavailableException } from '../../../src/common/exceptions/feature-unavailable.exception.js';
-import { QuotaReachedException } from '../../../src/common/exceptions/quota-reached.exception.js';
-import { KnowledgeSearchService } from '../../../src/knowledge/retrieval/knowledge-search.service.js';
-import { MealPlanService } from '../../../src/meal-plan/meal-plan.service.js';
-import { MealPlannerChatHistoryService } from '../../../src/meal-plan/meal-planner-chat-history.service.js';
-import { MealPlannerChatService } from '../../../src/meal-plan/meal-planner-chat.service.js';
-import { ModerationSettingsService } from '../../../src/moderation/moderation-settings.service.js';
-import { AiFeature, MealSection, Weekday } from '../../../src/mongo/models.js';
-import { DietaryService } from '../../../src/recipes/dietary.service.js';
+} from '@src/ai/openrouter.js';
+import { NUTRITION_POLICY } from '@src/ai/guardrails/policies/nutrition.js';
+import { AiCostTransportService } from '@src/ai/telemetry/ai-cost-transport.service.js';
+import { FeatureUnavailableException } from '@src/common/exceptions/feature-unavailable.exception.js';
+import { QuotaReachedException } from '@src/common/exceptions/quota-reached.exception.js';
+import { KnowledgeSearchService } from '@src/knowledge/retrieval/knowledge-search.service.js';
+import { MealPlanService } from '@src/meal-plan/meal-plan.service.js';
+import { MealPlannerChatHistoryService } from '@src/meal-plan/meal-planner-chat-history.service.js';
+import { MealPlannerChatService } from '@src/meal-plan/meal-planner-chat.service.js';
+import { ModerationSettingsService } from '@src/moderation/moderation-settings.service.js';
+import { AiFeature, MealSection, Weekday } from '@src/mongo/models.js';
+import { DietaryService } from '@src/recipes/dietary.service.js';
 import {
   AiUsageService,
   type UsageTicket,
-} from '../../../src/subscriptions/ai-usage.service.js';
-import { RestaurantMenuService } from '../../../src/workspaces/restaurant-menu.service.js';
+} from '@src/subscriptions/ai-usage.service.js';
+import { RestaurantMenuService } from '@src/workspaces/restaurant-menu.service.js';
 
 type StreamPart =
   Awaited<

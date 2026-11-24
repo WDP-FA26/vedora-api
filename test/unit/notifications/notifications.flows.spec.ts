@@ -2,21 +2,21 @@ import { randomUUID } from 'node:crypto';
 import type { INestApplication } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Test } from '@nestjs/testing';
-import { ModerationSettingsService } from '../../../src/moderation/moderation-settings.service.js';
+import { ModerationSettingsService } from '@src/moderation/moderation-settings.service.js';
 import {
   type Notification,
   NotificationType,
   type User,
-} from '../../../src/mongo/models.js';
-import { MongoModule } from '../../../src/mongo/mongo.module.js';
-import { MongoService } from '../../../src/mongo/mongo.service.js';
-import { NotificationsService } from '../../../src/notifications/notifications.service.js';
-import { createUser } from '../../support/fixtures.js';
+} from '@src/mongo/models.js';
+import { MongoModule } from '@src/mongo/mongo.module.js';
+import { MongoService } from '@src/mongo/mongo.service.js';
+import { NotificationsService } from '@src/notifications/notifications.service.js';
+import { createUser } from '@test/support/fixtures.js';
 import {
   createTestMongoUrl,
   dropTestDatabase,
   prepareTestDatabase,
-} from '../../support/mongo-test-db.js';
+} from '@test/support/mongo-test-db.js';
 
 /**
  * Fan-out and read-state flows of notifications (notifications.md):

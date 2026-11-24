@@ -9,9 +9,13 @@ import {
   PostType,
   type User,
   UserRole,
-} from '../../src/mongo/models.js';
-import { createE2eApp, type E2eApp } from '../support/e2e-app.js';
-import { createPost, createRecipe, createUser } from '../support/fixtures.js';
+} from '@src/mongo/models.js';
+import { createE2eApp, type E2eApp } from '@test/support/e2e-app.js';
+import {
+  createPost,
+  createRecipe,
+  createUser,
+} from '@test/support/fixtures.js';
 
 describe('Admin dashboard (HTTP)', () => {
   let e2e: E2eApp;

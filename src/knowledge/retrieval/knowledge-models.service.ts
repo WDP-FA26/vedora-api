@@ -3,6 +3,7 @@ import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { AiService } from '@nestjs/ai';
 import { AiCostTransportService } from '../../ai/telemetry/ai-cost-transport.service.js';
+import { openRouterAttributionHeaders } from '../../ai/openrouter.js';
 import type { OpenRouter } from '@openrouter/sdk';
 import {
   createOpenRouterClient,
@@ -227,6 +228,7 @@ export class KnowledgeModelsService {
       headers: {
         Authorization: `Bearer ${this.apiKey}`,
         'Content-Type': 'application/json',
+        ...openRouterAttributionHeaders(),
       },
       body: JSON.stringify(body),
       signal,

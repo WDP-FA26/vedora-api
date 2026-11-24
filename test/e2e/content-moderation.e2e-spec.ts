@@ -1,18 +1,13 @@
 import request from 'supertest';
-import {
-  Post,
-  PostStatus,
-  type User,
-  UserRole,
-} from '../../src/mongo/models.js';
+import { Post, PostStatus, type User, UserRole } from '@src/mongo/models.js';
 import {
   BORDERLINE_MARKER,
   createE2eApp,
   type E2eApp,
   PROVIDER_BLOCKED_MARKER,
   VIOLATION_MARKER,
-} from '../support/e2e-app.js';
-import { createUser } from '../support/fixtures.js';
+} from '@test/support/e2e-app.js';
+import { createUser } from '@test/support/fixtures.js';
 
 interface PostBody {
   id: string;

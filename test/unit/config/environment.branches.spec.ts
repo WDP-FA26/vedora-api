@@ -1,5 +1,5 @@
 import 'reflect-metadata';
-import { validateEnvironment } from '../../../src/config/environment.js';
+import { validateEnvironment } from '@src/config/environment.js';
 
 const base = {
   NODE_ENV: 'development',

@@ -8,7 +8,7 @@ import {
   ReadConversationDto,
   SendMessageDto,
   SharePostDto,
-} from '../../../src/messaging/dto/messaging.dto.js';
+} from '@src/messaging/dto/messaging.dto.js';
 
 const validUuid = '00000000-0000-4000-8000-000000000001';
 

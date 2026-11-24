@@ -1,6 +1,6 @@
 import request from 'supertest';
-import { TurnstileService } from '../../src/captcha/turnstile.service.js';
-import { CaptionService } from '../../src/media/captions/caption.service.js';
+import { TurnstileService } from '@src/captcha/turnstile.service.js';
+import { CaptionService } from '@src/media/captions/caption.service.js';
 import {
   CaptionStatus,
   MediaStatus,
@@ -12,25 +12,25 @@ import {
   PostType,
   User,
   UserRole,
-} from '../../src/mongo/models.js';
-import type { CommentPageDto } from '../../src/posts/dto/comment.dto.js';
-import { PostSummariesService } from '../../src/posts/summaries/post-summaries.service.js';
+} from '@src/mongo/models.js';
+import type { CommentPageDto } from '@src/posts/dto/comment.dto.js';
+import { PostSummariesService } from '@src/posts/summaries/post-summaries.service.js';
 import {
   PostSummaryGenerator,
   type SummaryOutput,
   type SummarySourcePart,
-} from '../../src/posts/summaries/post-summary.generator.js';
-import type { PostSummaryDto } from '../../src/posts/summaries/post-summary.dto.js';
+} from '@src/posts/summaries/post-summary.generator.js';
+import type { PostSummaryDto } from '@src/posts/summaries/post-summary.dto.js';
 import {
   SYSTEM_ACCOUNT,
   SYSTEM_ACCOUNT_ID,
-} from '../../src/users/system-account.js';
+} from '@src/users/system-account.js';
 import {
   createE2eApp,
   type E2eApp,
   VIOLATION_MARKER,
-} from '../support/e2e-app.js';
-import { createMedia, createPost, createUser } from '../support/fixtures.js';
+} from '@test/support/e2e-app.js';
+import { createMedia, createPost, createUser } from '@test/support/fixtures.js';
 
 const RECIPE_TEXT =
   'Hôm nay mình làm đậu hũ sốt cà chua chay cho 2 người. Nguyên liệu gồm 300 g đậu hũ non cắt khối, 3 quả cà chua, 1 muỗng canh nước tương và hành lá. ' +

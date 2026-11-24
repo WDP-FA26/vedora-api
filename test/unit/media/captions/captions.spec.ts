@@ -2,15 +2,15 @@ import {
   parseSilences,
   speechIntervals,
   toOriginalTime,
-} from '../../../../src/media/captions/speech-audio.js';
+} from '@src/media/captions/speech-audio.js';
 import {
   cuesFromWords,
   languageCode,
   languageName,
   splitLongCue,
   translationTarget,
-} from '../../../../src/media/captions/transcription.service.js';
-import { toVtt, vttText } from '../../../../src/media/captions/vtt.js';
+} from '@src/media/captions/transcription.service.js';
+import { toVtt, vttText } from '@src/media/captions/vtt.js';
 
 describe('silence removal', () => {
   const log = [

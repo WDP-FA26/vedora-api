@@ -1,10 +1,10 @@
 import request from 'supertest';
 import { mockDeep, mockReset } from 'vitest-mock-extended';
-import { Follow, User } from '../../src/mongo/models.js';
-import { ProfileSearchIndexService } from '../../src/profiles/search/profile-search-index.service.js';
-import { ProfileSearchService } from '../../src/profiles/search/profile-search.service.js';
-import { createE2eApp, type E2eApp } from '../support/e2e-app.js';
-import { createPost, createUser } from '../support/fixtures.js';
+import { Follow, User } from '@src/mongo/models.js';
+import { ProfileSearchIndexService } from '@src/profiles/search/profile-search-index.service.js';
+import { ProfileSearchService } from '@src/profiles/search/profile-search.service.js';
+import { createE2eApp, type E2eApp } from '@test/support/e2e-app.js';
+import { createPost, createUser } from '@test/support/fixtures.js';
 
 describe('Profiles and follows (e2e)', () => {
   let e2e: E2eApp;

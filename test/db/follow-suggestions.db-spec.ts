@@ -1,15 +1,15 @@
 import { randomUUID } from 'node:crypto';
 import { Test } from '@nestjs/testing';
 import type { INestApplication } from '@nestjs/common';
-import { FollowSuggestionsService } from '../../src/profiles/follow-suggestions.service.js';
-import { MongoModule } from '../../src/mongo/mongo.module.js';
-import { MongoService } from '../../src/mongo/mongo.service.js';
-import { createUser } from '../support/fixtures.js';
+import { FollowSuggestionsService } from '@src/profiles/follow-suggestions.service.js';
+import { MongoModule } from '@src/mongo/mongo.module.js';
+import { MongoService } from '@src/mongo/mongo.service.js';
+import { createUser } from '@test/support/fixtures.js';
 import {
   createTestMongoUrl,
   dropTestDatabase,
   prepareTestDatabase,
-} from '../support/mongo-test-db.js';
+} from '@test/support/mongo-test-db.js';
 
 describe('Follow suggestions with MongoDB', () => {
   let app: INestApplication;

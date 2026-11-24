@@ -11,13 +11,13 @@ import { FakeModel } from '@nestjs/ai/testing';
 import { simulateReadableStream } from 'ai';
 import { MockLanguageModelV4 } from 'ai/test';
 import request from 'supertest';
-import { MODERATION_MODEL } from '../../src/ai/guardrails/guardrail.js';
-import { runtimeConfig } from '../../src/config/runtime-config.js';
-import { type AiRequest, type User, UserRole } from '../../src/mongo/models.js';
-import { GuestSessionService } from '../../src/nutrition-chat/guest/guest-session.service.js';
-import { nextWeekStart } from '../support/meal-week.js';
-import { createE2eApp, type E2eApp } from '../support/e2e-app.js';
-import { createUser } from '../support/fixtures.js';
+import { MODERATION_MODEL } from '@src/ai/guardrails/guardrail.js';
+import { runtimeConfig } from '@src/config/runtime-config.js';
+import { type AiRequest, type User, UserRole } from '@src/mongo/models.js';
+import { GuestSessionService } from '@src/nutrition-chat/guest/guest-session.service.js';
+import { nextWeekStart } from '@test/support/meal-week.js';
+import { createE2eApp, type E2eApp } from '@test/support/e2e-app.js';
+import { createUser } from '@test/support/fixtures.js';
 
 type StreamPart =
   Awaited<

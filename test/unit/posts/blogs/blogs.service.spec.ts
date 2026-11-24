@@ -1,32 +1,29 @@
 import type { INestApplication } from '@nestjs/common';
-import { InvalidInputException } from '../../../../src/common/exceptions/invalid-input.exception.js';
+import { InvalidInputException } from '@src/common/exceptions/invalid-input.exception.js';
 import { getModelToken } from '@nestjs/mongoose';
 import { Test } from '@nestjs/testing';
 import type { Model } from 'mongoose';
 import { type DeepMockProxy, mockDeep } from 'vitest-mock-extended';
-import { ResourceNotFoundException } from '../../../../src/common/exceptions/resource-not-found.exception.js';
+import { ResourceNotFoundException } from '@src/common/exceptions/resource-not-found.exception.js';
 import {
   createPost,
   createRecipe,
   createUser,
-} from '../../../support/fixtures.js';
+} from '@test/support/fixtures.js';
 import {
   createTestMongoUrl,
   dropTestDatabase,
   prepareTestDatabase,
-} from '../../../support/mongo-test-db.js';
-import { Post, PostStatus, PostType } from '../../../../src/mongo/models.js';
-import type { PostResponseDto } from '../../../../src/posts/dto/post-response.dto.js';
-import { MongoModule } from '../../../../src/mongo/mongo.module.js';
-import { MongoService } from '../../../../src/mongo/mongo.service.js';
-import {
-  StorageService,
-  StorageTarget,
-} from '../../../../src/storage/storage.service.js';
-import { CloudinaryService } from '../../../../src/cloudinary/cloudinary.service.js';
-import { BlogsService } from '../../../../src/posts/blogs/blogs.service.js';
-import { PostsQueryService } from '../../../../src/posts/posts-query.service.js';
-import { MediaService } from '../../../../src/media/media.service.js';
+} from '@test/support/mongo-test-db.js';
+import { Post, PostStatus, PostType } from '@src/mongo/models.js';
+import type { PostResponseDto } from '@src/posts/dto/post-response.dto.js';
+import { MongoModule } from '@src/mongo/mongo.module.js';
+import { MongoService } from '@src/mongo/mongo.service.js';
+import { StorageService, StorageTarget } from '@src/storage/storage.service.js';
+import { CloudinaryService } from '@src/cloudinary/cloudinary.service.js';
+import { BlogsService } from '@src/posts/blogs/blogs.service.js';
+import { PostsQueryService } from '@src/posts/posts-query.service.js';
+import { MediaService } from '@src/media/media.service.js';
 
 const STORAGE = 'http://localhost:9000/vedora-blogs';
 

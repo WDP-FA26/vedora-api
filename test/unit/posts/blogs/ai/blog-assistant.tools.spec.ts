@@ -1,8 +1,8 @@
 import { type DeepMockProxy, mockDeep } from 'vitest-mock-extended';
-import type { KnowledgeSearchService } from '../../../../../src/knowledge/retrieval/knowledge-search.service.js';
-import { blogAssistantInstructions } from '../../../../../src/posts/blogs/ai/blog-assistant.prompt.js';
-import { blogAssistantTools } from '../../../../../src/posts/blogs/ai/blog-assistant.tools.js';
-import type { BlogImageGeneratorService } from '../../../../../src/posts/blogs/ai/blog-image-generator.service.js';
+import type { KnowledgeSearchService } from '@src/knowledge/retrieval/knowledge-search.service.js';
+import { blogAssistantInstructions } from '@src/posts/blogs/ai/blog-assistant.prompt.js';
+import { blogAssistantTools } from '@src/posts/blogs/ai/blog-assistant.tools.js';
+import type { BlogImageGeneratorService } from '@src/posts/blogs/ai/blog-image-generator.service.js';
 
 describe('blogAssistantTools & blogAssistantInstructions', () => {
   const userId = '11111111-1111-4111-8111-111111111111';

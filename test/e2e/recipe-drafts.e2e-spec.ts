@@ -6,21 +6,21 @@ import {
   MediaStatus,
   type User,
   UserRole,
-} from '../../src/mongo/models.js';
-import type { PostSourcePart } from '../../src/posts/summaries/post-source.js';
+} from '@src/mongo/models.js';
+import type { PostSourcePart } from '@src/posts/summaries/post-source.js';
 import type {
   DraftCatalog,
   DraftOutput,
-} from '../../src/recipes/drafts/recipe-draft.js';
-import { RecipeDraftGenerator } from '../../src/recipes/drafts/recipe-draft.generator.js';
-import type { RecipeDraftDto } from '../../src/recipes/dto/recipe-draft.dto.js';
-import { createE2eApp, type E2eApp } from '../support/e2e-app.js';
+} from '@src/recipes/drafts/recipe-draft.js';
+import { RecipeDraftGenerator } from '@src/recipes/drafts/recipe-draft.generator.js';
+import type { RecipeDraftDto } from '@src/recipes/dto/recipe-draft.dto.js';
+import { createE2eApp, type E2eApp } from '@test/support/e2e-app.js';
 import {
   createIngredient,
   createMedia,
   createPost,
   createUser,
-} from '../support/fixtures.js';
+} from '@test/support/fixtures.js';
 
 interface ErrorBody {
   code: string;

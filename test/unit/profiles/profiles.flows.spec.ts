@@ -1,11 +1,11 @@
 import type { INestApplication } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { randomUUID } from 'node:crypto';
-import { InvalidInputException } from '../../../src/common/exceptions/invalid-input.exception.js';
-import { ResourceNotFoundException } from '../../../src/common/exceptions/resource-not-found.exception.js';
-import { UnauthenticatedException } from '../../../src/common/exceptions/unauthenticated.exception.js';
-import { FileTooLargeException } from '../../../src/common/exceptions/file-too-large.exception.js';
-import { MessagingEventsService } from '../../../src/messaging/messaging-events.service.js';
+import { InvalidInputException } from '@src/common/exceptions/invalid-input.exception.js';
+import { ResourceNotFoundException } from '@src/common/exceptions/resource-not-found.exception.js';
+import { UnauthenticatedException } from '@src/common/exceptions/unauthenticated.exception.js';
+import { FileTooLargeException } from '@src/common/exceptions/file-too-large.exception.js';
+import { MessagingEventsService } from '@src/messaging/messaging-events.service.js';
 import {
   AccountStatus,
   Follow,
@@ -14,21 +14,18 @@ import {
   ProfileImageStatus,
   ProfileImageUpload,
   User,
-} from '../../../src/mongo/models.js';
-import { MongoModule } from '../../../src/mongo/mongo.module.js';
-import { MongoService } from '../../../src/mongo/mongo.service.js';
-import { NotificationsService } from '../../../src/notifications/notifications.service.js';
-import { ProfilesService } from '../../../src/profiles/profiles.service.js';
-import {
-  StorageService,
-  StorageTarget,
-} from '../../../src/storage/storage.service.js';
-import { createUser } from '../../support/fixtures.js';
+} from '@src/mongo/models.js';
+import { MongoModule } from '@src/mongo/mongo.module.js';
+import { MongoService } from '@src/mongo/mongo.service.js';
+import { NotificationsService } from '@src/notifications/notifications.service.js';
+import { ProfilesService } from '@src/profiles/profiles.service.js';
+import { StorageService, StorageTarget } from '@src/storage/storage.service.js';
+import { createUser } from '@test/support/fixtures.js';
 import {
   createTestMongoUrl,
   dropTestDatabase,
   prepareTestDatabase,
-} from '../../support/mongo-test-db.js';
+} from '@test/support/mongo-test-db.js';
 
 describe('ProfilesService flows', () => {
   let app: INestApplication;

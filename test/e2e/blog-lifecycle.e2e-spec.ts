@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import request from 'supertest';
-import { MediaService } from '../../src/media/media.service.js';
-import type { BlogDetailDto } from '../../src/posts/dto/blog.dto.js';
+import { MediaService } from '@src/media/media.service.js';
+import type { BlogDetailDto } from '@src/posts/dto/blog.dto.js';
 import {
   Notification,
   Post,
@@ -13,18 +13,19 @@ import {
   Recipe,
   type User,
   UserRole,
-} from '../../src/mongo/models.js';
-import {
-  StorageService,
-  StorageTarget,
-} from '../../src/storage/storage.service.js';
+} from '@src/mongo/models.js';
+import { StorageService, StorageTarget } from '@src/storage/storage.service.js';
 import {
   BORDERLINE_MARKER,
   createE2eApp,
   type E2eApp,
   VIOLATION_MARKER,
-} from '../support/e2e-app.js';
-import { createPost, createRecipe, createUser } from '../support/fixtures.js';
+} from '@test/support/e2e-app.js';
+import {
+  createPost,
+  createRecipe,
+  createUser,
+} from '@test/support/fixtures.js';
 
 interface Page {
   items: { id: string }[];

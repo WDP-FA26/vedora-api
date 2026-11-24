@@ -2,14 +2,14 @@ import { MessageEvent } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { Subject } from 'rxjs';
 import type { Model } from 'mongoose';
-import type { AuthenticatedRequest } from '../../../src/auth-core/auth.types.js';
-import type { User } from '../../../src/mongo/models.js';
+import type { AuthenticatedRequest } from '@src/auth-core/auth.types.js';
+import type { User } from '@src/mongo/models.js';
 import {
   PaymentEventsService,
   PaymentSignal,
-} from '../../../src/payments/payment-events.service.js';
-import { PaymentsService } from '../../../src/payments/payments.service.js';
-import { PaymentStreamController } from '../../../src/payments/payment-stream.controller.js';
+} from '@src/payments/payment-events.service.js';
+import { PaymentsService } from '@src/payments/payments.service.js';
+import { PaymentStreamController } from '@src/payments/payment-stream.controller.js';
 
 describe('Payment stream lifecycle', () => {
   const userId = '00000000-0000-4000-8000-000000000001';

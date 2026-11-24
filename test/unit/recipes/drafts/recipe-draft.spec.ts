@@ -1,12 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { RecipeTag } from '../../../../src/mongo/models.js';
+import { RecipeTag } from '@src/mongo/models.js';
 import {
   buildDraftCatalog,
   describeCatalog,
   type DraftOutput,
   normalizeName,
   toRecipeDraft,
-} from '../../../../src/recipes/drafts/recipe-draft.js';
+} from '@src/recipes/drafts/recipe-draft.js';
 
 const TOFU = {
   id: '11111111-1111-4111-8111-111111111111',

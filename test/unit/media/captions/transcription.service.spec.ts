@@ -1,14 +1,18 @@
 import type { AiService } from '@nestjs/ai';
 import { ConfigService } from '@nestjs/config';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { AiCostTransportService } from '../../../../src/ai/telemetry/ai-cost-transport.service.js';
-import { ExternalServiceException } from '../../../../src/common/exceptions/external-service.exception.js';
+import type { AiCostTransportService } from '@src/ai/telemetry/ai-cost-transport.service.js';
+import {
+  DEFAULT_OPENROUTER_APP_TITLE,
+  DEFAULT_OPENROUTER_APP_URL,
+} from '@src/ai/openrouter.js';
+import { ExternalServiceException } from '@src/common/exceptions/external-service.exception.js';
 import {
   TranscriptionService,
   languageCode,
   languageName,
   splitLongCue,
-} from '../../../../src/media/captions/transcription.service.js';
+} from '@src/media/captions/transcription.service.js';
 
 describe('TranscriptionService', () => {
   let fetchSpy: ReturnType<typeof vi.fn>;
@@ -75,6 +79,8 @@ describe('TranscriptionService', () => {
           headers: {
             Authorization: 'Bearer or-key',
             'Content-Type': 'application/json',
+            'HTTP-Referer': DEFAULT_OPENROUTER_APP_URL,
+            'X-OpenRouter-Title': DEFAULT_OPENROUTER_APP_TITLE,
           },
         }),
       );

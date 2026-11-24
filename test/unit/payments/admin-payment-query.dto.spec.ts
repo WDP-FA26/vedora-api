@@ -1,14 +1,14 @@
 import 'reflect-metadata';
 import { plainToInstance } from 'class-transformer';
 import { validate } from 'class-validator';
-import { PaymentStatus } from '../../../src/mongo/models.js';
+import { PaymentStatus } from '@src/mongo/models.js';
 import {
   AdminPaymentListDto,
   AdminPaymentPageDto,
   AdminPaymentQueryDto,
   AdminReceiptQueryDto,
   AdminSubscriptionQueryDto,
-} from '../../../src/payments/admin/admin-payment-query.dto.js';
+} from '@src/payments/admin/admin-payment-query.dto.js';
 
 async function errorsFor<T extends object>(
   cls: new () => T,

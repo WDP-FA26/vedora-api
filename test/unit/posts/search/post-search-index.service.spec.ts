@@ -5,31 +5,27 @@ import { getModelToken } from '@nestjs/mongoose';
 import { Test } from '@nestjs/testing';
 import type { Model } from 'mongoose';
 import { type DeepMockProxy, mockDeep } from 'vitest-mock-extended';
-import {
-  createMedia,
-  createPost,
-  createUser,
-} from '../../../support/fixtures.js';
+import { createMedia, createPost, createUser } from '@test/support/fixtures.js';
 import {
   createTestMongoUrl,
   dropTestDatabase,
   prepareTestDatabase,
-} from '../../../support/mongo-test-db.js';
+} from '@test/support/mongo-test-db.js';
 import {
   MediaAsset,
   Post,
   PostStatus,
   PostType,
   type User,
-} from '../../../../src/mongo/models.js';
-import { MongoModule } from '../../../../src/mongo/mongo.module.js';
-import { MongoService } from '../../../../src/mongo/mongo.service.js';
-import { QdrantService } from '../../../../src/qdrant/qdrant.service.js';
+} from '@src/mongo/models.js';
+import { MongoModule } from '@src/mongo/mongo.module.js';
+import { MongoService } from '@src/mongo/mongo.service.js';
+import { QdrantService } from '@src/qdrant/qdrant.service.js';
 import {
   chunkText,
   meanVector,
   PostSearchIndexService,
-} from '../../../../src/posts/search/post-search-index.service.js';
+} from '@src/posts/search/post-search-index.service.js';
 
 describe('PostSearchIndexService', () => {
   let app: INestApplication;

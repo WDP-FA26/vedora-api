@@ -1,9 +1,6 @@
 import { mock } from 'vitest-mock-extended';
-import {
-  StorageService,
-  StorageTarget,
-} from '../../../../src/storage/storage.service.js';
-import { BlogImagesService } from '../../../../src/posts/blogs/blog-images.service.js';
+import { StorageService, StorageTarget } from '@src/storage/storage.service.js';
+import { BlogImagesService } from '@src/posts/blogs/blog-images.service.js';
 
 describe('BlogImagesService', () => {
   it('presigns a per-owner key and returns the public URL', async () => {

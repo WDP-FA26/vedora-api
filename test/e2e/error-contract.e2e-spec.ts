@@ -1,8 +1,8 @@
 import request from 'supertest';
 import { z } from 'zod';
-import { ERROR_CODES } from '../../src/common/exceptions/error-code.js';
-import { buildApiDocument } from '../../src/swagger.setup.js';
-import { createE2eApp, type E2eApp } from '../support/e2e-app.js';
+import { ERROR_CODES } from '@src/common/exceptions/error-code.js';
+import { buildApiDocument } from '@src/swagger.setup.js';
+import { createE2eApp, type E2eApp } from '@test/support/e2e-app.js';
 
 const HTTP_METHODS = ['get', 'put', 'post', 'delete', 'patch'] as const;
 

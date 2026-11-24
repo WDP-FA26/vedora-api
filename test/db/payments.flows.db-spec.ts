@@ -6,10 +6,10 @@ import { JwtModule, JwtService } from '@nestjs/jwt';
 import { Test } from '@nestjs/testing';
 import request from 'supertest';
 import type { App } from 'supertest/types.js';
-import { AppExceptionFilter } from '../../src/common/exceptions/app-exception.filter.js';
-import { configureApp } from '../../src/app.setup.js';
-import { MongoModule } from '../../src/mongo/mongo.module.js';
-import { MongoService } from '../../src/mongo/mongo.service.js';
+import { AppExceptionFilter } from '@src/common/exceptions/app-exception.filter.js';
+import { configureApp } from '@src/app.setup.js';
+import { MongoModule } from '@src/mongo/mongo.module.js';
+import { MongoService } from '@src/mongo/mongo.service.js';
 import {
   AccountStatus,
   BillingPlan,
@@ -18,28 +18,28 @@ import {
   PaymentStatus,
   PaymentWebhookReceipt,
   User,
-} from '../../src/mongo/models.js';
+} from '@src/mongo/models.js';
 import {
   PaymentReconciliationController,
   PaymentsController,
   SePayWebhookController,
-} from '../../src/payments/payments.controller.js';
-import { PaymentStreamController } from '../../src/payments/payment-stream.controller.js';
-import { PaymentEventsService } from '../../src/payments/payment-events.service.js';
-import { PaymentsService } from '../../src/payments/payments.service.js';
-import { SePayProvider } from '../../src/payments/sepay.provider.js';
-import { SePayWebhookGuard } from '../../src/payments/sepay-webhook.guard.js';
+} from '@src/payments/payments.controller.js';
+import { PaymentStreamController } from '@src/payments/payment-stream.controller.js';
+import { PaymentEventsService } from '@src/payments/payment-events.service.js';
+import { PaymentsService } from '@src/payments/payments.service.js';
+import { SePayProvider } from '@src/payments/sepay.provider.js';
+import { SePayWebhookGuard } from '@src/payments/sepay-webhook.guard.js';
 import type {
   BillingOverviewDto,
   PaymentDto,
-} from '../../src/payments/payment.dto.js';
-import { SubscriptionsModule } from '../../src/subscriptions/subscriptions.module.js';
-import { createUser } from '../support/fixtures.js';
+} from '@src/payments/payment.dto.js';
+import { SubscriptionsModule } from '@src/subscriptions/subscriptions.module.js';
+import { createUser } from '@test/support/fixtures.js';
 import {
   createTestMongoUrl,
   dropTestDatabase,
   prepareTestDatabase,
-} from '../support/mongo-test-db.js';
+} from '@test/support/mongo-test-db.js';
 
 interface ErrorBody {
   statusCode: number;

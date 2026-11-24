@@ -1,27 +1,25 @@
 import { createHash, randomUUID } from 'node:crypto';
 import request from 'supertest';
-import { MediaService } from '../../src/media/media.service.js';
-import {
-  StorageService,
-  StorageTarget,
-} from '../../src/storage/storage.service.js';
-import {
-  MAX_BLOG_CONTENT,
-  BlogDetailDto,
-} from '../../src/posts/dto/blog.dto.js';
+import { MediaService } from '@src/media/media.service.js';
+import { StorageService, StorageTarget } from '@src/storage/storage.service.js';
+import { MAX_BLOG_CONTENT, BlogDetailDto } from '@src/posts/dto/blog.dto.js';
 import {
   Post,
   PostStatus,
   PostType,
   type Recipe,
   type User,
-} from '../../src/mongo/models.js';
+} from '@src/mongo/models.js';
 import {
   createE2eApp,
   type E2eApp,
   VIOLATION_MARKER,
-} from '../support/e2e-app.js';
-import { createPost, createRecipe, createUser } from '../support/fixtures.js';
+} from '@test/support/e2e-app.js';
+import {
+  createPost,
+  createRecipe,
+  createUser,
+} from '@test/support/fixtures.js';
 
 describe('Blogs (HTTP)', () => {
   let e2e: E2eApp;

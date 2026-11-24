@@ -4,7 +4,7 @@ import { createClient } from 'redis';
 import {
   PaymentEventsService,
   PaymentSignal,
-} from '../../../src/payments/payment-events.service.js';
+} from '@src/payments/payment-events.service.js';
 
 vi.mock('redis', () => ({ createClient: vi.fn() }));
 

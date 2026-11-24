@@ -1,18 +1,14 @@
 import { mockDeep } from 'vitest-mock-extended';
-import type { AuthenticatedRequest } from '../../../src/auth-core/auth.types.js';
-import { AuthController } from '../../../src/auth/auth.controller.js';
-import type { AuthService } from '../../../src/auth/auth.service.js';
-import type { AuthResponseDto } from '../../../src/auth/dto/auth-response.dto.js';
-import type { GoogleAuthorizationDto } from '../../../src/auth/dto/google.dto.js';
-import type { GoogleOAuthService } from '../../../src/auth/google-oauth.service.js';
-import type { TurnstileService } from '../../../src/captcha/turnstile.service.js';
-import { AccessDeniedException } from '../../../src/common/exceptions/access-denied.exception.js';
-import {
-  AccountStatus,
-  AccountType,
-  UserRole,
-} from '../../../src/mongo/models.js';
-import type { PublicUser } from '../../../src/users/public-user.js';
+import type { AuthenticatedRequest } from '@src/auth-core/auth.types.js';
+import { AuthController } from '@src/auth/auth.controller.js';
+import type { AuthService } from '@src/auth/auth.service.js';
+import type { AuthResponseDto } from '@src/auth/dto/auth-response.dto.js';
+import type { GoogleAuthorizationDto } from '@src/auth/dto/google.dto.js';
+import type { GoogleOAuthService } from '@src/auth/google-oauth.service.js';
+import type { TurnstileService } from '@src/captcha/turnstile.service.js';
+import { AccessDeniedException } from '@src/common/exceptions/access-denied.exception.js';
+import { AccountStatus, AccountType, UserRole } from '@src/mongo/models.js';
+import type { PublicUser } from '@src/users/public-user.js';
 
 describe('AuthController', () => {
   const userId = '4a1e32e4-e18e-4dd7-8b4a-246ef2113ff2';

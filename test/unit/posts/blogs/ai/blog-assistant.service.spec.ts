@@ -1,41 +1,41 @@
 import type { INestApplication } from '@nestjs/common';
-import { FeatureUnavailableException } from '../../../../../src/common/exceptions/feature-unavailable.exception.js';
-import { QuotaReachedException } from '../../../../../src/common/exceptions/quota-reached.exception.js';
-import { InvalidInputException } from '../../../../../src/common/exceptions/invalid-input.exception.js';
-import { ResourceNotFoundException } from '../../../../../src/common/exceptions/resource-not-found.exception.js';
+import { FeatureUnavailableException } from '@src/common/exceptions/feature-unavailable.exception.js';
+import { QuotaReachedException } from '@src/common/exceptions/quota-reached.exception.js';
+import { InvalidInputException } from '@src/common/exceptions/invalid-input.exception.js';
+import { ResourceNotFoundException } from '@src/common/exceptions/resource-not-found.exception.js';
 import { FakeModel } from '@nestjs/ai/testing';
 import { getModelToken } from '@nestjs/mongoose';
 import { Test } from '@nestjs/testing';
-import { AiFeature } from '../../../../../src/mongo/models.js';
+import { AiFeature } from '@src/mongo/models.js';
 import { simulateReadableStream, type UIMessageChunk } from 'ai';
 import { convertReadableStreamToArray, MockLanguageModelV4 } from 'ai/test';
 import type { Model } from 'mongoose';
 import { type DeepMockProxy, mockDeep } from 'vitest-mock-extended';
-import { AiUsageService } from '../../../../../src/subscriptions/ai-usage.service.js';
-import { KnowledgeSearchService } from '../../../../../src/knowledge/retrieval/knowledge-search.service.js';
+import { AiUsageService } from '@src/subscriptions/ai-usage.service.js';
+import { KnowledgeSearchService } from '@src/knowledge/retrieval/knowledge-search.service.js';
 import {
   createIngredient,
   createPost,
   createRecipe,
-} from '../../../../support/fixtures.js';
+} from '@test/support/fixtures.js';
 import {
   createTestMongoUrl,
   dropTestDatabase,
   prepareTestDatabase,
-} from '../../../../support/mongo-test-db.js';
+} from '@test/support/mongo-test-db.js';
 import {
   Ingredient,
   Post,
   PostStatus,
   PostType,
   Recipe,
-} from '../../../../../src/mongo/models.js';
-import { MongoModule } from '../../../../../src/mongo/mongo.module.js';
-import { MongoService } from '../../../../../src/mongo/mongo.service.js';
-import type { BlogAssistantChatDto } from '../../../../../src/posts/dto/blog-ai.dto.js';
-import { BLOG_ASSISTANT_POLICY } from '../../../../../src/ai/guardrails/policies/blog-assistant.js';
-import { BlogAssistantService } from '../../../../../src/posts/blogs/ai/blog-assistant.service.js';
-import { BlogImageGeneratorService } from '../../../../../src/posts/blogs/ai/blog-image-generator.service.js';
+} from '@src/mongo/models.js';
+import { MongoModule } from '@src/mongo/mongo.module.js';
+import { MongoService } from '@src/mongo/mongo.service.js';
+import type { BlogAssistantChatDto } from '@src/posts/dto/blog-ai.dto.js';
+import { BLOG_ASSISTANT_POLICY } from '@src/ai/guardrails/policies/blog-assistant.js';
+import { BlogAssistantService } from '@src/posts/blogs/ai/blog-assistant.service.js';
+import { BlogImageGeneratorService } from '@src/posts/blogs/ai/blog-image-generator.service.js';
 
 type StreamPart =
   Awaited<
@@ -504,14 +504,18 @@ describe('BlogAssistantService', () => {
     await send({ blogId: blogWithMissing.id });
     expect(
       JSON.stringify(
-        model.doStreamCalls[0].prompt.find((message) => message.role === 'user'),
+        model.doStreamCalls[0].prompt.find(
+          (message) => message.role === 'user',
+        ),
       ),
     ).toContain('- Canh nấm (2 người ăn, nấu 20 phút): hành lá');
 
     await send({ blogId: emptyRecipeBlog.id });
     expect(
       JSON.stringify(
-        model.doStreamCalls[1].prompt.find((message) => message.role === 'user'),
+        model.doStreamCalls[1].prompt.find(
+          (message) => message.role === 'user',
+        ),
       ),
     ).not.toContain('<recipes>\\n');
   });

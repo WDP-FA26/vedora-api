@@ -5,8 +5,8 @@ import {
   createTestMongoUrl,
   dropTestDatabase,
   prepareTestDatabase,
-} from '../../support/mongo-test-db.js';
-import { MailService } from '../../../src/mail/mail.service.js';
+} from '@test/support/mongo-test-db.js';
+import { MailService } from '@src/mail/mail.service.js';
 import {
   AccountStatus,
   EmailVerificationGuesses,
@@ -14,10 +14,10 @@ import {
   OneTimeCodePurpose,
   User,
   UserRole,
-} from '../../../src/mongo/models.js';
-import { MongoModule } from '../../../src/mongo/mongo.module.js';
-import { MongoService } from '../../../src/mongo/mongo.service.js';
-import { EmailVerificationService } from '../../../src/auth/email-verification.service.js';
+} from '@src/mongo/models.js';
+import { MongoModule } from '@src/mongo/mongo.module.js';
+import { MongoService } from '@src/mongo/mongo.service.js';
+import { EmailVerificationService } from '@src/auth/email-verification.service.js';
 
 const user = {
   id: '4a1e32e4-e18e-4dd7-8b4a-246ef2113ff2',

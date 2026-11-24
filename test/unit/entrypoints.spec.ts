@@ -15,11 +15,11 @@ describe('Process entrypoints (main & seed-cli)', () => {
     vi.doMock('@nestjs/core', () => ({
       NestFactory: { create: vi.fn().mockResolvedValue(fakeApp) },
     }));
-    vi.doMock('../../src/app.module.js', () => ({ AppModule: class {} }));
-    vi.doMock('../../src/app.setup.js', () => ({ configureApp: vi.fn() }));
-    vi.doMock('../../src/swagger.setup.js', () => ({ setupSwagger: vi.fn() }));
+    vi.doMock('@src/app.module.js', () => ({ AppModule: class {} }));
+    vi.doMock('@src/app.setup.js', () => ({ configureApp: vi.fn() }));
+    vi.doMock('@src/swagger.setup.js', () => ({ setupSwagger: vi.fn() }));
 
-    await import('../../src/main.js');
+    await import('@src/main.js');
     await new Promise((r) => setTimeout(r, 10));
 
     expect(enableShutdownHooks).toHaveBeenCalled();
@@ -36,16 +36,16 @@ describe('Process entrypoints (main & seed-cli)', () => {
     vi.doMock('mongoose', () => ({
       default: { createConnection: vi.fn(() => ({ close })) },
     }));
-    vi.doMock('../../src/mongo/schemas/model-definitions.js', () => ({
+    vi.doMock('@src/mongo/schemas/model-definitions.js', () => ({
       registerModels: vi.fn(),
     }));
-    vi.doMock('../../src/mongo/mongo.service.js', () => ({
+    vi.doMock('@src/mongo/mongo.service.js', () => ({
       MongoService: class {},
     }));
-    vi.doMock('../../src/database/seed.js', () => ({ seedDatabase }));
-    vi.doMock('../../src/database/seed-catalog.js', () => ({ seedCatalog }));
+    vi.doMock('@src/database/seed.js', () => ({ seedDatabase }));
+    vi.doMock('@src/database/seed-catalog.js', () => ({ seedCatalog }));
 
-    await import('../../src/database/seed-cli.js');
+    await import('@src/database/seed-cli.js');
     await new Promise((r) => setTimeout(r, 10));
 
     expect(seedDatabase).toHaveBeenCalled();
@@ -58,17 +58,17 @@ describe('Process entrypoints (main & seed-cli)', () => {
     vi.doMock('mongoose', () => ({
       default: { createConnection: vi.fn(() => ({ close })) },
     }));
-    vi.doMock('../../../src/mongo/schemas/model-definitions.js', () => ({
+    vi.doMock('@src/mongo/schemas/model-definitions.js', () => ({
       registerModels: vi.fn(),
     }));
-    vi.doMock('../../../src/mongo/mongo.service.js', () => ({
+    vi.doMock('@src/mongo/mongo.service.js', () => ({
       MongoService: class {},
     }));
-    vi.doMock('../../../src/database/seed.js', () => ({ seedDatabase }));
-    vi.doMock('../../../src/database/seed-catalog.js', () => ({ seedCatalog }));
+    vi.doMock('@src/database/seed.js', () => ({ seedDatabase }));
+    vi.doMock('@src/database/seed-catalog.js', () => ({ seedCatalog }));
 
     const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
-    await import('../../../src/database/seed-cli.js');
+    await import('@src/database/seed-cli.js');
     await new Promise((r) => setTimeout(r, 10));
     expect(process.exitCode).toBe(1);
     expect(errSpy).toHaveBeenCalled();

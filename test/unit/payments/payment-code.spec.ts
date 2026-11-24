@@ -1,5 +1,5 @@
 import * as crypto from 'node:crypto';
-import { generatePaymentCode } from '../../../src/payments/payment-code.js';
+import { generatePaymentCode } from '@src/payments/payment-code.js';
 
 vi.mock('node:crypto', async (importOriginal) => {
   const actual = await importOriginal<typeof crypto>();

@@ -4,15 +4,15 @@ import { JwtService } from '@nestjs/jwt';
 import { Test, type TestingModuleBuilder } from '@nestjs/testing';
 import type { Connection } from 'mongoose';
 import type { App } from 'supertest/types.js';
-import { AppModule } from '../../src/app.module.js';
+import { AppModule } from '@src/app.module.js';
 import {
   CONTENT_MODERATION_MODEL,
   type ModerationModel,
-} from '../../src/moderation/content-moderation.service.js';
+} from '@src/moderation/content-moderation.service.js';
 import { FakeModel, type FakeModelCall } from '@nestjs/ai/testing';
-import { configureApp } from '../../src/app.setup.js';
-import { MongoService } from '../../src/mongo/mongo.service.js';
-import { MediaService } from '../../src/media/media.service.js';
+import { configureApp } from '@src/app.setup.js';
+import { MongoService } from '@src/mongo/mongo.service.js';
+import { MediaService } from '@src/media/media.service.js';
 import {
   createTestMongoUrl,
   dropTestDatabase,

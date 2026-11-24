@@ -8,6 +8,23 @@ import {
 } from 'ai';
 import type { ReasoningEffort } from './reasoning.js';
 
+import {
+  DEFAULT_OPENROUTER_APP_TITLE,
+  DEFAULT_OPENROUTER_APP_URL,
+  openRouterAttribution,
+  openRouterAttributionHeaders,
+  type OpenRouterAttribution,
+  type OpenRouterAttributionHeaders,
+} from './openrouter-attribution.js';
+
+export {
+  DEFAULT_OPENROUTER_APP_TITLE,
+  DEFAULT_OPENROUTER_APP_URL,
+  openRouterAttribution,
+  openRouterAttributionHeaders,
+  type OpenRouterAttribution,
+  type OpenRouterAttributionHeaders,
+};
 export {
   OpenRouterCacheControl,
   type AutoCachedProviderOptions,
@@ -26,11 +43,13 @@ const EMBEDDING_BATCH_SIZE = runtimeConfig.AI_EMBEDDING_BATCH_SIZE;
 
 /**
  * Providers tried first for the Haiku moderation calls, by OpenRouter slug.
- * One provider first keeps the prompt cache on one provider; the others are
- * fallbacks when it is down.
+ * Both moderation callers require `structured_outputs` (`Output.object`), so
+ * only endpoints supporting `structured_outputs` on `anthropic/claude-haiku-5.5`
+ * are listed (`claude-on-aws` and `amazon-bedrock` do not support it and are
+ * filtered out by OpenRouter before `order` applies).
  */
 export const DEFAULT_MODERATION_PROVIDER_ORDER =
-  'claude-on-aws,anthropic,amazon-bedrock,google-vertex,azure';
+  'anthropic,google-vertex/global,azure/global';
 
 /** Provider slugs from a comma-separated list; empty leaves routing to OpenRouter. */
 export function providerOrderFrom(value: string): string[] {
@@ -56,6 +75,7 @@ export function chatModel({
   providerOrder?: readonly string[];
   fetch?: typeof fetch;
 }): Exclude<LanguageModel, string> {
+  const { appUrl, appTitle } = openRouterAttribution();
   const routing =
     providerOrder.length > 0
       ? { provider: { order: [...providerOrder], allow_fallbacks: true } }
@@ -64,6 +84,8 @@ export function chatModel({
     apiKey,
     fetch: customFetch,
     baseURL: runtimeConfig.OPENROUTER_API_BASE_URL,
+    appName: appTitle,
+    appUrl,
   })(modelId, {
     reasoning: { effort: reasoningEffort, exclude: true },
     ...routing,
@@ -81,11 +103,14 @@ export function embeddingModel({
   dimensions: number;
   fetch?: typeof fetch;
 }): EmbeddingModel {
+  const { appUrl, appTitle } = openRouterAttribution();
   return wrapEmbeddingModel({
     model: createOpenRouter({
       apiKey,
       fetch: customFetch,
       baseURL: runtimeConfig.OPENROUTER_API_BASE_URL,
+      appName: appTitle,
+      appUrl,
     }).textEmbeddingModel(modelId, {
       extraBody: { dimensions, encoding_format: 'float' },
     }),
@@ -104,9 +129,12 @@ export function imageModel({
   modelId: string;
   fetch?: typeof fetch;
 }): ImageModel {
+  const { appUrl, appTitle } = openRouterAttribution();
   return createOpenRouter({
     apiKey,
     fetch: customFetch,
     baseURL: runtimeConfig.OPENROUTER_API_BASE_URL,
+    appName: appTitle,
+    appUrl,
   }).imageModel(modelId);
 }

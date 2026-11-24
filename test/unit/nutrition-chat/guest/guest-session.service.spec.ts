@@ -2,7 +2,7 @@ import { JwtService } from '@nestjs/jwt';
 import {
   GUEST_SESSION_TTL_SEC,
   GuestSessionService,
-} from '../../../../src/nutrition-chat/guest/guest-session.service.js';
+} from '@src/nutrition-chat/guest/guest-session.service.js';
 
 describe('GuestSessionService', () => {
   let jwtService: JwtService;

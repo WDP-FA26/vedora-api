@@ -3,9 +3,9 @@ import {
   AdminIncompatibilityRulesController,
   AdminIngredientGroupsController,
   AdminIngredientsController,
-} from '../../../src/recipes/admin-ingredients.controller.js';
-import type { IncompatibilityRulesService } from '../../../src/recipes/incompatibility-rules.service.js';
-import type { IngredientsService } from '../../../src/recipes/ingredients.service.js';
+} from '@src/recipes/admin-ingredients.controller.js';
+import type { IncompatibilityRulesService } from '@src/recipes/incompatibility-rules.service.js';
+import type { IngredientsService } from '@src/recipes/ingredients.service.js';
 
 const emptyMeta = {
   page: 1,

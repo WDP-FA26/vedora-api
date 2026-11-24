@@ -2,7 +2,7 @@ import type { INestApplication } from '@nestjs/common';
 import { getConnectionToken } from '@nestjs/mongoose';
 import type { Connection } from 'mongoose';
 import { randomUUID } from 'node:crypto';
-import { MODEL_DEFINITIONS } from '../../src/mongo/schemas/model-definitions.js';
+import { MODEL_DEFINITIONS } from '@src/mongo/schemas/model-definitions.js';
 
 const LOCAL_TEST_URL =
   'mongodb://vedora:vedora_local_password@localhost:27017/?authSource=admin&directConnection=true';

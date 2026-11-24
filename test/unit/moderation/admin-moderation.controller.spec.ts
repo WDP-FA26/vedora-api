@@ -1,19 +1,19 @@
 import { describe, expect, it, vi } from 'vitest';
 import { mockDeep } from 'vitest-mock-extended';
-import type { AuthenticatedRequest } from '../../../src/auth-core/auth.types.js';
-import { FeatureUnavailableException } from '../../../src/common/exceptions/feature-unavailable.exception.js';
-import { StateConflictException } from '../../../src/common/exceptions/state-conflict.exception.js';
-import { AdminModerationController } from '../../../src/moderation/admin-moderation.controller.js';
-import { ContentModerationService } from '../../../src/moderation/content-moderation.service.js';
+import type { AuthenticatedRequest } from '@src/auth-core/auth.types.js';
+import { FeatureUnavailableException } from '@src/common/exceptions/feature-unavailable.exception.js';
+import { StateConflictException } from '@src/common/exceptions/state-conflict.exception.js';
+import { AdminModerationController } from '@src/moderation/admin-moderation.controller.js';
+import { ContentModerationService } from '@src/moderation/content-moderation.service.js';
 import type {
   TestModerationDto,
   UpdateModerationSettingsDto,
-} from '../../../src/moderation/dto/moderation-settings.dto.js';
+} from '@src/moderation/dto/moderation-settings.dto.js';
 import {
   type ContentSettings,
   ModerationSettingsService,
-} from '../../../src/moderation/moderation-settings.service.js';
-import { UserRole } from '../../../src/mongo/models.js';
+} from '@src/moderation/moderation-settings.service.js';
+import { UserRole } from '@src/mongo/models.js';
 
 function makeSettings(
   overrides: Partial<ContentSettings> = {},

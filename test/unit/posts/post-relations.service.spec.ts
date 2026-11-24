@@ -9,21 +9,21 @@ import {
   PostRepost,
   PostStatus,
   PostType,
-} from '../../../src/mongo/models.js';
-import { MongoModule } from '../../../src/mongo/mongo.module.js';
-import { MongoService } from '../../../src/mongo/mongo.service.js';
-import { PostRelationsService } from '../../../src/posts/post-relations.service.js';
+} from '@src/mongo/models.js';
+import { MongoModule } from '@src/mongo/mongo.module.js';
+import { MongoService } from '@src/mongo/mongo.service.js';
+import { PostRelationsService } from '@src/posts/post-relations.service.js';
 import {
   createMedia,
   createPost,
   createRecipe,
   createUser,
-} from '../../support/fixtures.js';
+} from '@test/support/fixtures.js';
 import {
   createTestMongoUrl,
   dropTestDatabase,
   prepareTestDatabase,
-} from '../../support/mongo-test-db.js';
+} from '@test/support/mongo-test-db.js';
 
 describe('PostRelationsService', () => {
   let app: INestApplication;

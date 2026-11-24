@@ -2,11 +2,8 @@ import type { ClientSession, Model } from 'mongoose';
 import {
   MessagingEventsService,
   type MessagingSignal,
-} from '../../../src/messaging/messaging-events.service.js';
-import {
-  MessagingEvent,
-  MessagingEventType,
-} from '../../../src/mongo/models.js';
+} from '@src/messaging/messaging-events.service.js';
+import { MessagingEvent, MessagingEventType } from '@src/mongo/models.js';
 
 interface FakeWatcher {
   closed: boolean;

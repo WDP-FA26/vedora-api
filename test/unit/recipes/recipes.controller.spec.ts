@@ -3,11 +3,11 @@ import { type DeepMockProxy, mockDeep } from 'vitest-mock-extended';
 import type {
   AuthenticatedRequest,
   OptionalAuthenticatedRequest,
-} from '../../../src/auth-core/auth.types.js';
-import { UserRole } from '../../../src/mongo/models.js';
-import type { RecipeCatalogService } from '../../../src/recipes/recipe-catalog.service.js';
-import type { RecipeFavoritesService } from '../../../src/recipes/recipe-favorites.service.js';
-import { RecipesController } from '../../../src/recipes/recipes.controller.js';
+} from '@src/auth-core/auth.types.js';
+import { UserRole } from '@src/mongo/models.js';
+import type { RecipeCatalogService } from '@src/recipes/recipe-catalog.service.js';
+import type { RecipeFavoritesService } from '@src/recipes/recipe-favorites.service.js';
+import { RecipesController } from '@src/recipes/recipes.controller.js';
 
 function mockResponse() {
   const vary = vi.fn();

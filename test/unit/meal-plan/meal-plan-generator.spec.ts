@@ -5,12 +5,12 @@ import {
   NutritionPillar,
   RecipeTag,
   Weekday,
-} from '../../../src/mongo/models.js';
+} from '@src/mongo/models.js';
 import {
   generateMealDays,
   type GeneratorCandidate,
   type SlotRecipeIds,
-} from '../../../src/meal-plan/meal-plan-generator.js';
+} from '@src/meal-plan/meal-plan-generator.js';
 
 function candidate(
   id: string,

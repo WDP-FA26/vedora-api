@@ -10,14 +10,14 @@ import {
   PostStatus,
   type User,
   UserRole,
-} from '../../src/mongo/models.js';
+} from '@src/mongo/models.js';
 import {
   BORDERLINE_MARKER,
   createE2eApp,
   type E2eApp,
   VIOLATION_MARKER,
-} from '../support/e2e-app.js';
-import { createMedia, createPost, createUser } from '../support/fixtures.js';
+} from '@test/support/e2e-app.js';
+import { createMedia, createPost, createUser } from '@test/support/fixtures.js';
 
 interface PostBody {
   id: string;

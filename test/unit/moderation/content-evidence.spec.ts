@@ -3,7 +3,7 @@ import {
   type ReviewEvidence,
   type EvidenceSources,
   verifyEvidence,
-} from '../../../src/moderation/content-evidence.js';
+} from '@src/moderation/content-evidence.js';
 
 function sources(): EvidenceSources {
   return {

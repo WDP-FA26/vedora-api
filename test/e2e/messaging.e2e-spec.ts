@@ -8,10 +8,10 @@ import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import request from 'supertest';
 import type { App } from 'supertest/types.js';
 import { firstValueFrom, filter, timeout } from 'rxjs';
-import { configureApp } from '../../src/app.setup.js';
-import { AppExceptionFilter } from '../../src/common/exceptions/app-exception.filter.js';
-import { MongoModule } from '../../src/mongo/mongo.module.js';
-import { MongoService } from '../../src/mongo/mongo.service.js';
+import { configureApp } from '@src/app.setup.js';
+import { AppExceptionFilter } from '@src/common/exceptions/app-exception.filter.js';
+import { MongoModule } from '@src/mongo/mongo.module.js';
+import { MongoService } from '@src/mongo/mongo.service.js';
 import {
   AccountStatus,
   Conversation,
@@ -22,26 +22,26 @@ import {
   PostStatus,
   User,
   UserRole,
-} from '../../src/mongo/models.js';
-import { MessagingModule } from '../../src/messaging/messaging.module.js';
-import { MessagingEventsService } from '../../src/messaging/messaging-events.service.js';
-import { ProfilesModule } from '../../src/profiles/profiles.module.js';
-import { ModerationSettingsService } from '../../src/moderation/moderation-settings.service.js';
-import { StorageService } from '../../src/storage/storage.service.js';
-import { QdrantService } from '../../src/qdrant/qdrant.service.js';
+} from '@src/mongo/models.js';
+import { MessagingModule } from '@src/messaging/messaging.module.js';
+import { MessagingEventsService } from '@src/messaging/messaging-events.service.js';
+import { ProfilesModule } from '@src/profiles/profiles.module.js';
+import { ModerationSettingsService } from '@src/moderation/moderation-settings.service.js';
+import { StorageService } from '@src/storage/storage.service.js';
+import { QdrantService } from '@src/qdrant/qdrant.service.js';
 import type {
   ConversationDto,
   ConversationPageDto,
   ConversationReadDto,
   MessagePageDto,
   SendMessageResponseDto,
-} from '../../src/messaging/dto/messaging.dto.js';
-import { createPost, createUser } from '../support/fixtures.js';
+} from '@src/messaging/dto/messaging.dto.js';
+import { createPost, createUser } from '@test/support/fixtures.js';
 import {
   createTestMongoUrl,
   dropTestDatabase,
   prepareTestDatabase,
-} from '../support/mongo-test-db.js';
+} from '@test/support/mongo-test-db.js';
 
 @Global()
 @Module({

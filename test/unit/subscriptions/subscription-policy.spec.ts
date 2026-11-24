@@ -1,4 +1,4 @@
-import { BillingPlan } from '../../../src/mongo/enums.js';
+import { BillingPlan } from '@src/mongo/enums.js';
 import {
   effectivePlan,
   freePeriod,
@@ -6,7 +6,7 @@ import {
   PLAN_VERSION,
   purchasedPlanName,
   SUBSCRIPTION_LIMITS,
-} from '../../../src/subscriptions/subscription-policy.js';
+} from '@src/subscriptions/subscription-policy.js';
 
 describe('subscription catalogue compatibility', () => {
   it('exposes catalogue v2 constants and allowance limits', () => {

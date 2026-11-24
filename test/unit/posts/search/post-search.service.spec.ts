@@ -1,9 +1,9 @@
 import { ConfigService } from '@nestjs/config';
 import { AiService } from '@nestjs/ai';
 import { type DeepMockProxy, mockDeep } from 'vitest-mock-extended';
-import { QdrantService } from '../../../../src/qdrant/qdrant.service.js';
-import { PostSearchIndexService } from '../../../../src/posts/search/post-search-index.service.js';
-import { PostSearchService } from '../../../../src/posts/search/post-search.service.js';
+import { QdrantService } from '@src/qdrant/qdrant.service.js';
+import { PostSearchIndexService } from '@src/posts/search/post-search-index.service.js';
+import { PostSearchService } from '@src/posts/search/post-search.service.js';
 
 describe('PostSearchService', () => {
   let qdrant: DeepMockProxy<QdrantService>;

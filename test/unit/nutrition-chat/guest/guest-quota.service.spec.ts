@@ -1,5 +1,5 @@
 import { ConfigService } from '@nestjs/config';
-import { GuestQuotaService } from '../../../../src/nutrition-chat/guest/guest-quota.service.js';
+import { GuestQuotaService } from '@src/nutrition-chat/guest/guest-quota.service.js';
 
 function quota(caps: Record<string, number> = {}) {
   return new GuestQuotaService(

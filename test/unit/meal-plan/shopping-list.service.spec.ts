@@ -1,24 +1,20 @@
 import type { INestApplication } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { randomUUID } from 'node:crypto';
-import { ShoppingListService } from '../../../src/meal-plan/shopping-list.service.js';
-import {
-  type MealPlanEntry,
-  MealSection,
-  Weekday,
-} from '../../../src/mongo/models.js';
-import { MongoModule } from '../../../src/mongo/mongo.module.js';
-import { MongoService } from '../../../src/mongo/mongo.service.js';
+import { ShoppingListService } from '@src/meal-plan/shopping-list.service.js';
+import { type MealPlanEntry, MealSection, Weekday } from '@src/mongo/models.js';
+import { MongoModule } from '@src/mongo/mongo.module.js';
+import { MongoService } from '@src/mongo/mongo.service.js';
 import {
   createIngredient,
   createRecipe,
   createUser,
-} from '../../support/fixtures.js';
+} from '@test/support/fixtures.js';
 import {
   createTestMongoUrl,
   dropTestDatabase,
   prepareTestDatabase,
-} from '../../support/mongo-test-db.js';
+} from '@test/support/mongo-test-db.js';
 
 const USER_ID = '4a1e32e4-e18e-4dd7-8b4a-246ef2113ff2';
 const WEEK = '2026-11-16';

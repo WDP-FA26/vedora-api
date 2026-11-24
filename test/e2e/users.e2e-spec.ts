@@ -1,9 +1,9 @@
 import { randomUUID } from 'node:crypto';
 import { JwtService } from '@nestjs/jwt';
 import request from 'supertest';
-import { User, UserAccountAudit, UserRole } from '../../src/mongo/models.js';
-import { createE2eApp, type E2eApp } from '../support/e2e-app.js';
-import { createUser } from '../support/fixtures.js';
+import { User, UserAccountAudit, UserRole } from '@src/mongo/models.js';
+import { createE2eApp, type E2eApp } from '@test/support/e2e-app.js';
+import { createUser } from '@test/support/fixtures.js';
 
 function responseId(body: unknown): unknown {
   return typeof body === 'object' && body !== null && 'id' in body

@@ -1,23 +1,23 @@
 import type { INestApplication } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
-import { InvalidInputException } from '../../../src/common/exceptions/invalid-input.exception.js';
-import { ResourceNotFoundException } from '../../../src/common/exceptions/resource-not-found.exception.js';
-import { PostStatus, type RecipeFavorite } from '../../../src/mongo/models.js';
-import { MongoModule } from '../../../src/mongo/mongo.module.js';
-import { MongoService } from '../../../src/mongo/mongo.service.js';
-import { IncompatibilityRulesService } from '../../../src/recipes/incompatibility-rules.service.js';
-import { RecipeRelationsService } from '../../../src/recipes/recipe-relations.service.js';
-import { RecipesService } from '../../../src/recipes/recipes.service.js';
+import { InvalidInputException } from '@src/common/exceptions/invalid-input.exception.js';
+import { ResourceNotFoundException } from '@src/common/exceptions/resource-not-found.exception.js';
+import { PostStatus, type RecipeFavorite } from '@src/mongo/models.js';
+import { MongoModule } from '@src/mongo/mongo.module.js';
+import { MongoService } from '@src/mongo/mongo.service.js';
+import { IncompatibilityRulesService } from '@src/recipes/incompatibility-rules.service.js';
+import { RecipeRelationsService } from '@src/recipes/recipe-relations.service.js';
+import { RecipesService } from '@src/recipes/recipes.service.js';
 import {
   createIngredient,
   createPost,
   createUser,
-} from '../../support/fixtures.js';
+} from '@test/support/fixtures.js';
 import {
   createTestMongoUrl,
   dropTestDatabase,
   prepareTestDatabase,
-} from '../../support/mongo-test-db.js';
+} from '@test/support/mongo-test-db.js';
 
 const ADMIN_ID = '4a1e32e4-e18e-4dd7-8b4a-246ef2113ff2';
 const TOFU_ID = 'a1a2d3e4-0000-4000-8000-000000000001';

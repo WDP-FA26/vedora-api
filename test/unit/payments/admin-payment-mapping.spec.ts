@@ -1,4 +1,4 @@
-import { BillingPlan, PaymentStatus } from '../../../src/mongo/models.js';
+import { BillingPlan, PaymentStatus } from '@src/mongo/models.js';
 import {
   csvCell,
   customerJoin,
@@ -7,7 +7,7 @@ import {
   orderRow,
   receiptRow,
   type AdminIntent,
-} from '../../../src/payments/admin/admin-payment-mapping.js';
+} from '@src/payments/admin/admin-payment-mapping.js';
 
 function makeIntent(overrides: Partial<AdminIntent> = {}): AdminIntent {
   return {

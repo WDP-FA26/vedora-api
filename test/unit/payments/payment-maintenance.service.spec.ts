@@ -1,6 +1,6 @@
 import { Logger } from '@nestjs/common';
-import { PaymentMaintenanceService } from '../../../src/payments/payment-maintenance.service.js';
-import type { PaymentsService } from '../../../src/payments/payments.service.js';
+import { PaymentMaintenanceService } from '@src/payments/payment-maintenance.service.js';
+import type { PaymentsService } from '@src/payments/payments.service.js';
 
 describe('payment expiration maintenance', () => {
   afterEach(() => vi.restoreAllMocks());

@@ -2,21 +2,17 @@ import type { INestApplication } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Test } from '@nestjs/testing';
 import { createHash } from 'node:crypto';
-import { RefreshTokensService } from '../../../src/auth/refresh-tokens.service.js';
-import { UnauthenticatedException } from '../../../src/common/exceptions/unauthenticated.exception.js';
-import {
-  AccountStatus,
-  RefreshToken,
-  User,
-} from '../../../src/mongo/models.js';
-import { MongoModule } from '../../../src/mongo/mongo.module.js';
-import { MongoService } from '../../../src/mongo/mongo.service.js';
-import { createUser } from '../../support/fixtures.js';
+import { RefreshTokensService } from '@src/auth/refresh-tokens.service.js';
+import { UnauthenticatedException } from '@src/common/exceptions/unauthenticated.exception.js';
+import { AccountStatus, RefreshToken, User } from '@src/mongo/models.js';
+import { MongoModule } from '@src/mongo/mongo.module.js';
+import { MongoService } from '@src/mongo/mongo.service.js';
+import { createUser } from '@test/support/fixtures.js';
 import {
   createTestMongoUrl,
   dropTestDatabase,
   prepareTestDatabase,
-} from '../../support/mongo-test-db.js';
+} from '@test/support/mongo-test-db.js';
 
 const TTL_SECONDS = 3600;
 const GRACE_SECONDS = 30;

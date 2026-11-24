@@ -3,15 +3,15 @@ import request from 'supertest';
 import type {
   MealLogEntryDto,
   MealLogWeekDto,
-} from '../../src/meal-plan/dto/meal-log.dto.js';
+} from '@src/meal-plan/dto/meal-log.dto.js';
 import type {
   MealLogEntry,
   MealPlanEntry,
   Recipe,
   User,
-} from '../../src/mongo/models.js';
-import { createE2eApp, type E2eApp } from '../support/e2e-app.js';
-import { createRecipe, createUser } from '../support/fixtures.js';
+} from '@src/mongo/models.js';
+import { createE2eApp, type E2eApp } from '@test/support/e2e-app.js';
+import { createRecipe, createUser } from '@test/support/fixtures.js';
 
 // 00:30 on Wednesday 2026-11-18 in the app time zone.
 const WEEK = '2026-11-16';

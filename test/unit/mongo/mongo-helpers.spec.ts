@@ -5,22 +5,19 @@ import {
   type Model,
 } from 'mongoose';
 import { randomUUID } from 'node:crypto';
-import { FeatureUnavailableException } from '../../../src/common/exceptions/feature-unavailable.exception.js';
-import { StateConflictException } from '../../../src/common/exceptions/state-conflict.exception.js';
-import {
-  DocumentLock,
-  lockDocument,
-} from '../../../src/mongo/document-lock.js';
-import { MongoModule } from '../../../src/mongo/mongo.module.js';
-import { MongoService } from '../../../src/mongo/mongo.service.js';
-import { allExist } from '../../../src/mongo/references.js';
+import { FeatureUnavailableException } from '@src/common/exceptions/feature-unavailable.exception.js';
+import { StateConflictException } from '@src/common/exceptions/state-conflict.exception.js';
+import { DocumentLock, lockDocument } from '@src/mongo/document-lock.js';
+import { MongoModule } from '@src/mongo/mongo.module.js';
+import { MongoService } from '@src/mongo/mongo.service.js';
+import { allExist } from '@src/mongo/references.js';
 import {
   _everyModelNameIsRegistered,
   MODEL_DEFINITIONS,
   registerModels,
-} from '../../../src/mongo/schemas/model-definitions.js';
-import { MODEL_NAMES } from '../../../src/mongo/schemas/model-names.js';
-import { withUserLocks } from '../../../src/mongo/with-user-locks.js';
+} from '@src/mongo/schemas/model-definitions.js';
+import { MODEL_NAMES } from '@src/mongo/schemas/model-names.js';
+import { withUserLocks } from '@src/mongo/with-user-locks.js';
 
 describe('mongo helpers & module', () => {
   afterEach(() => {
@@ -58,7 +55,7 @@ describe('mongo helpers & module', () => {
     ).rejects.toThrow('DATABASE_URL is not set');
 
     const { createTestMongoUrl, dropTestDatabase } =
-      await import('../../support/mongo-test-db.js');
+      await import('@test/support/mongo-test-db.js');
     vi.stubEnv('DATABASE_URL', createTestMongoUrl('mongo_root'));
     const mod = await Test.createTestingModule({
       imports: [MongoModule.forRoot()],

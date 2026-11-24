@@ -1,11 +1,11 @@
 import { type DeepMockProxy, mockDeep } from 'vitest-mock-extended';
-import type { AuthenticatedRequest } from '../../../src/auth-core/auth.types.js';
-import type { CloudinaryService } from '../../../src/cloudinary/cloudinary.service.js';
-import { UserRole } from '../../../src/mongo/models.js';
-import { AdminRecipesController } from '../../../src/recipes/admin-recipes.controller.js';
-import type { IncompatibilityRulesService } from '../../../src/recipes/incompatibility-rules.service.js';
-import type { RecipesService } from '../../../src/recipes/recipes.service.js';
-import type { RecipeDraftsService } from '../../../src/recipes/drafts/recipe-drafts.service.js';
+import type { AuthenticatedRequest } from '@src/auth-core/auth.types.js';
+import type { CloudinaryService } from '@src/cloudinary/cloudinary.service.js';
+import { UserRole } from '@src/mongo/models.js';
+import { AdminRecipesController } from '@src/recipes/admin-recipes.controller.js';
+import type { IncompatibilityRulesService } from '@src/recipes/incompatibility-rules.service.js';
+import type { RecipesService } from '@src/recipes/recipes.service.js';
+import type { RecipeDraftsService } from '@src/recipes/drafts/recipe-drafts.service.js';
 
 describe('AdminRecipesController', () => {
   const adminId = '4a1e32e4-e18e-4dd7-8b4a-246ef2113ff2';

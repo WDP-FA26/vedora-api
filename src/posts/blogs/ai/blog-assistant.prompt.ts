@@ -1,5 +1,5 @@
-import { runtimeConfig } from '../../../config/runtime-config.js';
-import { loadTextConfig } from '../../../config/config-files.js';
+import { runtimeConfig } from '@src/config/runtime-config.js';
+import { loadTextConfig } from '@src/config/config-files.js';
 export interface EditorSnapshot {
   title: string;
   content: string;

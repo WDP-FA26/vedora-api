@@ -1,3 +1,4 @@
+import { resolve } from 'node:path';
 import swc from 'unplugin-swc';
 import { defineConfig } from 'vitest/config';
 
@@ -20,6 +21,14 @@ export default defineConfig({
       include: ['src/**/*.ts'],
       reportsDirectory: './coverage',
       reportOnFailure: true,
+    },
+  },
+  // https://docs.nestjs.com/recipes/swc#path-aliases — Vitest does not read
+  // tsconfig "paths"; keep these in sync with tsconfig.json.
+  resolve: {
+    alias: {
+      '@src': resolve(import.meta.dirname, './src'),
+      '@test': resolve(import.meta.dirname, './test'),
     },
   },
   plugins: [swc.vite({ module: { type: 'es6' } })],

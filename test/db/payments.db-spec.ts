@@ -1,5 +1,5 @@
 import { APP_FILTER } from '@nestjs/core';
-import { AppExceptionFilter } from '../../src/common/exceptions/app-exception.filter.js';
+import { AppExceptionFilter } from '@src/common/exceptions/app-exception.filter.js';
 import { randomUUID } from 'node:crypto';
 import { INestApplication } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
@@ -7,9 +7,9 @@ import { JwtModule, JwtService } from '@nestjs/jwt';
 import { Test } from '@nestjs/testing';
 import request from 'supertest';
 import type { App } from 'supertest/types.js';
-import { configureApp } from '../../src/app.setup.js';
-import { MongoModule } from '../../src/mongo/mongo.module.js';
-import { MongoService } from '../../src/mongo/mongo.service.js';
+import { configureApp } from '@src/app.setup.js';
+import { MongoModule } from '@src/mongo/mongo.module.js';
+import { MongoService } from '@src/mongo/mongo.service.js';
 import {
   BillingPlan,
   PaymentIntent,
@@ -18,29 +18,29 @@ import {
   PaymentWebhookReceipt,
   User,
   UserRole,
-} from '../../src/mongo/models.js';
+} from '@src/mongo/models.js';
 import {
   PaymentsController,
   PaymentReconciliationController,
   SePayWebhookController,
-} from '../../src/payments/payments.controller.js';
-import { SubscriptionsModule } from '../../src/subscriptions/subscriptions.module.js';
-import { AiUsageService } from '../../src/subscriptions/ai-usage.service.js';
-import { AiFeature } from '../../src/mongo/models.js';
-import { PaymentsService } from '../../src/payments/payments.service.js';
-import { SePayProvider } from '../../src/payments/sepay.provider.js';
-import { SePayWebhookGuard } from '../../src/payments/sepay-webhook.guard.js';
-import type { PaymentDto } from '../../src/payments/payment.dto.js';
-import { PaymentEventsService } from '../../src/payments/payment-events.service.js';
-import { PaymentStreamController } from '../../src/payments/payment-stream.controller.js';
-import * as paymentCodes from '../../src/payments/payment-code.js';
-import { PaymentMaintenanceService } from '../../src/payments/payment-maintenance.service.js';
-import { createUser, deleteWithCascade } from '../support/fixtures.js';
+} from '@src/payments/payments.controller.js';
+import { SubscriptionsModule } from '@src/subscriptions/subscriptions.module.js';
+import { AiUsageService } from '@src/subscriptions/ai-usage.service.js';
+import { AiFeature } from '@src/mongo/models.js';
+import { PaymentsService } from '@src/payments/payments.service.js';
+import { SePayProvider } from '@src/payments/sepay.provider.js';
+import { SePayWebhookGuard } from '@src/payments/sepay-webhook.guard.js';
+import type { PaymentDto } from '@src/payments/payment.dto.js';
+import { PaymentEventsService } from '@src/payments/payment-events.service.js';
+import { PaymentStreamController } from '@src/payments/payment-stream.controller.js';
+import * as paymentCodes from '@src/payments/payment-code.js';
+import { PaymentMaintenanceService } from '@src/payments/payment-maintenance.service.js';
+import { createUser, deleteWithCascade } from '@test/support/fixtures.js';
 import {
   createTestMongoUrl,
   dropTestDatabase,
   prepareTestDatabase,
-} from '../support/mongo-test-db.js';
+} from '@test/support/mongo-test-db.js';
 
 describe('SePay payments with MongoDB and HTTP', () => {
   const secret = 'sepay-integration-webhook-secret';

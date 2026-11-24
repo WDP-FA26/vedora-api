@@ -1,6 +1,6 @@
 import { ConfigService } from '@nestjs/config';
 import type { Request } from 'express';
-import { ClientIpService } from '../../../../src/nutrition-chat/guest/client-ip.service.js';
+import { ClientIpService } from '@src/nutrition-chat/guest/client-ip.service.js';
 
 const request = (
   headers: Record<string, string | string[]>,

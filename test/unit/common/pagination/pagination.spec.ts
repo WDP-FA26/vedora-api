@@ -1,7 +1,7 @@
 import {
   createCursorPaginatedResponse,
   createPaginatedResponse,
-} from '../../../../src/common/pagination/pagination.js';
+} from '@src/common/pagination/pagination.js';
 
 describe('Page pagination responses', () => {
   it('describes a first page with remaining results', () => {

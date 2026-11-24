@@ -1,5 +1,5 @@
-import { InvalidInputException } from '../../../src/common/exceptions/invalid-input.exception.js';
-import { UnauthenticatedException } from '../../../src/common/exceptions/unauthenticated.exception.js';
+import { InvalidInputException } from '@src/common/exceptions/invalid-input.exception.js';
+import { UnauthenticatedException } from '@src/common/exceptions/unauthenticated.exception.js';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { Test } from '@nestjs/testing';
@@ -9,25 +9,25 @@ import {
   createTestMongoUrl,
   dropTestDatabase,
   prepareTestDatabase,
-} from '../../support/mongo-test-db.js';
-import { createUser } from '../../support/fixtures.js';
-import { MailService } from '../../../src/mail/mail.service.js';
+} from '@test/support/mongo-test-db.js';
+import { createUser } from '@test/support/fixtures.js';
+import { MailService } from '@src/mail/mail.service.js';
 import {
   EmailVerificationGuesses,
   OneTimeCode,
   OneTimeCodePurpose,
   RefreshToken,
   User,
-} from '../../../src/mongo/models.js';
-import { MongoModule } from '../../../src/mongo/mongo.module.js';
-import { MongoService } from '../../../src/mongo/mongo.service.js';
-import { EmailVerificationService } from '../../../src/auth/email-verification.service.js';
-import { PasswordResetService } from '../../../src/auth/password-reset.service.js';
-import { RefreshTokensService } from '../../../src/auth/refresh-tokens.service.js';
-import { hashCode } from '../../../src/auth/one-time-code.js';
-import { hashPassword } from '../../../src/auth-core/password.js';
-import { AuthService } from '../../../src/auth/auth.service.js';
-import { AccountsService } from '../../../src/users/accounts.service.js';
+} from '@src/mongo/models.js';
+import { MongoModule } from '@src/mongo/mongo.module.js';
+import { MongoService } from '@src/mongo/mongo.service.js';
+import { EmailVerificationService } from '@src/auth/email-verification.service.js';
+import { PasswordResetService } from '@src/auth/password-reset.service.js';
+import { RefreshTokensService } from '@src/auth/refresh-tokens.service.js';
+import { hashCode } from '@src/auth/one-time-code.js';
+import { hashPassword } from '@src/auth-core/password.js';
+import { AuthService } from '@src/auth/auth.service.js';
+import { AccountsService } from '@src/users/accounts.service.js';
 
 const PASSWORD = 'StrongPassword123!';
 const verificationHash = (userId: string, code: string) =>

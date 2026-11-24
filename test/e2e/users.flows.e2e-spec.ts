@@ -7,10 +7,10 @@ import {
   User,
   UserAccountAudit,
   UserRole,
-} from '../../src/mongo/models.js';
-import { RefreshTokensService } from '../../src/auth/refresh-tokens.service.js';
-import { createE2eApp, type E2eApp } from '../support/e2e-app.js';
-import { createUser } from '../support/fixtures.js';
+} from '@src/mongo/models.js';
+import { RefreshTokensService } from '@src/auth/refresh-tokens.service.js';
+import { createE2eApp, type E2eApp } from '@test/support/e2e-app.js';
+import { createUser } from '@test/support/fixtures.js';
 
 /**
  * Black-box flows for /users account management: self-service edits,

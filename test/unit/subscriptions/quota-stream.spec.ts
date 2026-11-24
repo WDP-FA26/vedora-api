@@ -1,7 +1,7 @@
 import type { UIMessageChunk } from 'ai';
 import { mockDeep } from 'vitest-mock-extended';
-import { quotaStream } from '../../../src/subscriptions/quota-stream.js';
-import { AiUsageService } from '../../../src/subscriptions/ai-usage.service.js';
+import { quotaStream } from '@src/subscriptions/quota-stream.js';
+import { AiUsageService } from '@src/subscriptions/ai-usage.service.js';
 
 const ticket = { id: 'request', token: 'lease', hash: 'payload' };
 const source = (chunks: UIMessageChunk[]) =>

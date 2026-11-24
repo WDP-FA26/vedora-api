@@ -1,22 +1,18 @@
 import type { INestApplication } from '@nestjs/common';
 import { getModelToken } from '@nestjs/mongoose';
-import { StateConflictException } from '../../../../src/common/exceptions/state-conflict.exception.js';
-import { ResourceNotFoundException } from '../../../../src/common/exceptions/resource-not-found.exception.js';
+import { StateConflictException } from '@src/common/exceptions/state-conflict.exception.js';
+import { ResourceNotFoundException } from '@src/common/exceptions/resource-not-found.exception.js';
 import { Test } from '@nestjs/testing';
 import type { Model } from 'mongoose';
 import { type DeepMockProxy, mockDeep } from 'vitest-mock-extended';
-import {
-  createMedia,
-  createPost,
-  createUser,
-} from '../../../support/fixtures.js';
+import { createMedia, createPost, createUser } from '@test/support/fixtures.js';
 import {
   createTestMongoUrl,
   dropTestDatabase,
   prepareTestDatabase,
-} from '../../../support/mongo-test-db.js';
-import { MediaService } from '../../../../src/media/media.service.js';
-import { PostModerationService } from '../../../../src/media/post-moderation.service.js';
+} from '@test/support/mongo-test-db.js';
+import { MediaService } from '@src/media/media.service.js';
+import { PostModerationService } from '@src/media/post-moderation.service.js';
 import {
   CaptionStatus,
   MediaStatus,
@@ -25,16 +21,16 @@ import {
   PostLike,
   PostRemovalActor,
   PostStatus,
-} from '../../../../src/mongo/models.js';
-import { MongoModule } from '../../../../src/mongo/mongo.module.js';
-import { MongoService } from '../../../../src/mongo/mongo.service.js';
-import { AdminPostsService } from '../../../../src/posts/admin/admin-posts.service.js';
-import { PostRelationsService } from '../../../../src/posts/post-relations.service.js';
-import { PostReportsService } from '../../../../src/posts/interactions/post-reports.service.js';
-import { CaptionService } from '../../../../src/media/captions/caption.service.js';
-import { NotificationsService } from '../../../../src/notifications/notifications.service.js';
-import { PostSearchIndexService } from '../../../../src/posts/search/post-search-index.service.js';
-import { SupportSyncService } from '../../../../src/support/support-sync.service.js';
+} from '@src/mongo/models.js';
+import { MongoModule } from '@src/mongo/mongo.module.js';
+import { MongoService } from '@src/mongo/mongo.service.js';
+import { AdminPostsService } from '@src/posts/admin/admin-posts.service.js';
+import { PostRelationsService } from '@src/posts/post-relations.service.js';
+import { PostReportsService } from '@src/posts/interactions/post-reports.service.js';
+import { CaptionService } from '@src/media/captions/caption.service.js';
+import { NotificationsService } from '@src/notifications/notifications.service.js';
+import { PostSearchIndexService } from '@src/posts/search/post-search-index.service.js';
+import { SupportSyncService } from '@src/support/support-sync.service.js';
 
 describe('AdminPostsService', () => {
   let app: INestApplication;

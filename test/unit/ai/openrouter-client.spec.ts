@@ -1,13 +1,19 @@
 import { OpenRouterError } from '@openrouter/sdk/models/errors';
-import { OpenRouterCacheControl } from '../../../src/ai/openrouter.js';
+import {
+  DEFAULT_OPENROUTER_APP_TITLE,
+  DEFAULT_OPENROUTER_APP_URL,
+  openRouterAttribution,
+  openRouterAttributionHeaders,
+  OpenRouterCacheControl,
+} from '@src/ai/openrouter.js';
 import {
   createOpenRouterClient,
   openRouterFailure,
-} from '../../../src/ai/openrouter-client.js';
-import { ExternalServiceException } from '../../../src/common/exceptions/external-service.exception.js';
+} from '@src/ai/openrouter-client.js';
+import { ExternalServiceException } from '@src/common/exceptions/external-service.exception.js';
 
 describe('openrouter-client', () => {
-  it('creates a client with a custom fetcher when provided and without one when omitted', async () => {
+  it('creates a client with a custom fetcher when provided and attaches attribution headers', async () => {
     const plain = createOpenRouterClient('test-key');
     expect(plain).toBeDefined();
 
@@ -27,6 +33,38 @@ describe('openrouter-client', () => {
       },
     });
     expect(customFetch).toHaveBeenCalledOnce();
+    const [request] = customFetch.mock.calls[0];
+    expect(request).toBeInstanceOf(Request);
+    const headers = request instanceof Request ? request.headers : new Headers();
+    expect(headers.get('HTTP-Referer')).toBe(DEFAULT_OPENROUTER_APP_URL);
+    expect(headers.get('X-OpenRouter-Title')).toBe(
+      DEFAULT_OPENROUTER_APP_TITLE,
+    );
+  });
+
+  it('resolves attribution defaults and env overrides', () => {
+    const prevUrl = process.env.OPENROUTER_APP_URL;
+    const prevTitle = process.env.OPENROUTER_APP_TITLE;
+    try {
+      delete process.env.OPENROUTER_APP_URL;
+      delete process.env.OPENROUTER_APP_TITLE;
+      expect(openRouterAttribution()).toEqual({
+        appUrl: DEFAULT_OPENROUTER_APP_URL,
+        appTitle: DEFAULT_OPENROUTER_APP_TITLE,
+      });
+
+      process.env.OPENROUTER_APP_URL = ' https://custom.vedora.test ';
+      process.env.OPENROUTER_APP_TITLE = ' Custom Vedora ';
+      expect(openRouterAttributionHeaders()).toEqual({
+        'HTTP-Referer': 'https://custom.vedora.test',
+        'X-OpenRouter-Title': 'Custom Vedora',
+      });
+    } finally {
+      if (prevUrl === undefined) delete process.env.OPENROUTER_APP_URL;
+      else process.env.OPENROUTER_APP_URL = prevUrl;
+      if (prevTitle === undefined) delete process.env.OPENROUTER_APP_TITLE;
+      else process.env.OPENROUTER_APP_TITLE = prevTitle;
+    }
   });
 
   it('returns an existing ExternalServiceException unchanged', () => {
@@ -114,7 +152,9 @@ describe('OpenRouterCacheControl', () => {
           {
             type: 'text',
             text: '<catalog/>',
-            providerOptions: { openrouter: { cacheControl: { type: 'ephemeral' } } },
+            providerOptions: {
+              openrouter: { cacheControl: { type: 'ephemeral' } },
+            },
           },
           { type: 'text', text: '<source/>' },
         ],
@@ -269,7 +309,10 @@ describe('OpenRouterCacheControl', () => {
     const withReminder = OpenRouterCacheControl.finalStepGuard(3, ' Wrap up ');
     expect(withReminder({ stepNumber: 1, messages: [] })).toEqual({});
     expect(
-      withReminder({ stepNumber: 2, messages: [{ role: 'user', content: 'q' }] }),
+      withReminder({
+        stepNumber: 2,
+        messages: [{ role: 'user', content: 'q' }],
+      }),
     ).toEqual({
       toolChoice: 'none',
       messages: [

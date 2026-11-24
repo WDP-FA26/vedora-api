@@ -2,13 +2,13 @@ import 'reflect-metadata';
 import type { ExecutionContext } from '@nestjs/common';
 import type { Request } from 'express';
 import { type DeepMockProxy, mockDeep } from 'vitest-mock-extended';
-import { FeatureUnavailableException } from '../../../../src/common/exceptions/feature-unavailable.exception.js';
-import { QuotaReachedException } from '../../../../src/common/exceptions/quota-reached.exception.js';
-import { UnauthenticatedException } from '../../../../src/common/exceptions/unauthenticated.exception.js';
-import type { ClientIpService } from '../../../../src/nutrition-chat/guest/client-ip.service.js';
-import { GuestChatGuard } from '../../../../src/nutrition-chat/guest/guest-chat.guard.js';
-import type { GuestQuotaService } from '../../../../src/nutrition-chat/guest/guest-quota.service.js';
-import type { GuestSessionService } from '../../../../src/nutrition-chat/guest/guest-session.service.js';
+import { FeatureUnavailableException } from '@src/common/exceptions/feature-unavailable.exception.js';
+import { QuotaReachedException } from '@src/common/exceptions/quota-reached.exception.js';
+import { UnauthenticatedException } from '@src/common/exceptions/unauthenticated.exception.js';
+import type { ClientIpService } from '@src/nutrition-chat/guest/client-ip.service.js';
+import { GuestChatGuard } from '@src/nutrition-chat/guest/guest-chat.guard.js';
+import type { GuestQuotaService } from '@src/nutrition-chat/guest/guest-quota.service.js';
+import type { GuestSessionService } from '@src/nutrition-chat/guest/guest-session.service.js';
 
 function contextWithAuth(
   authorization?: string,

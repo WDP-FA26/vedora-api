@@ -1,22 +1,16 @@
-import { runtimeConfig } from '../../../config/runtime-config.js';
+import { runtimeConfig } from '@src/config/runtime-config.js';
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { AiFeature } from '../../../mongo/models.js';
+import { AiFeature } from '@src/mongo/models.js';
 import { generateImage, type ImageModel } from 'ai';
 import { randomUUID } from 'node:crypto';
-import { MODERATION_MODEL } from '../../../ai/guardrails/guardrail.js';
-import {
-  decide,
-  type DecisionModel,
-} from '../../../common/decision/decision.js';
-import { DEFAULT_IMAGE_MODEL, imageModel } from '../../../ai/openrouter.js';
-import { AiUsageService } from '../../../subscriptions/ai-usage.service.js';
-import { AiCostTransportService } from '../../../ai/telemetry/ai-cost-transport.service.js';
-import {
-  StorageService,
-  StorageTarget,
-} from '../../../storage/storage.service.js';
-import { BLOG_ASSISTANT_POLICY } from '../../../ai/guardrails/policies/blog-assistant.js';
+import { MODERATION_MODEL } from '@src/ai/guardrails/guardrail.js';
+import { decide, type DecisionModel } from '@src/common/decision/decision.js';
+import { DEFAULT_IMAGE_MODEL, imageModel } from '@src/ai/openrouter.js';
+import { AiUsageService } from '@src/subscriptions/ai-usage.service.js';
+import { AiCostTransportService } from '@src/ai/telemetry/ai-cost-transport.service.js';
+import { StorageService, StorageTarget } from '@src/storage/storage.service.js';
+import { BLOG_ASSISTANT_POLICY } from '@src/ai/guardrails/policies/blog-assistant.js';
 import { blogRefusal } from './blog-assistant.moderation.js';
 
 export const IMAGE_ASPECT_RATIOS =

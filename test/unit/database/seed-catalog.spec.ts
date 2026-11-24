@@ -4,14 +4,11 @@ import {
   createTestMongoUrl,
   dropTestDatabase,
   prepareTestDatabase,
-} from '../../support/mongo-test-db.js';
-import { MongoModule } from '../../../src/mongo/mongo.module.js';
-import type { IngredientGroup, Recipe } from '../../../src/mongo/models.js';
-import { MongoService } from '../../../src/mongo/mongo.service.js';
-import {
-  type SeedData,
-  seedCatalog,
-} from '../../../src/database/seed-catalog.js';
+} from '@test/support/mongo-test-db.js';
+import { MongoModule } from '@src/mongo/mongo.module.js';
+import type { IngredientGroup, Recipe } from '@src/mongo/models.js';
+import { MongoService } from '@src/mongo/mongo.service.js';
+import { type SeedData, seedCatalog } from '@src/database/seed-catalog.js';
 
 const imageUrl = 'https://upload.wikimedia.org/dish.jpg';
 const data: SeedData = {

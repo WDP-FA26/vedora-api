@@ -1,17 +1,13 @@
 import { INestApplication } from '@nestjs/common';
-import { AccessDeniedException } from '../../src/common/exceptions/access-denied.exception.js';
-import { UnauthenticatedException } from '../../src/common/exceptions/unauthenticated.exception.js';
+import { AccessDeniedException } from '@src/common/exceptions/access-denied.exception.js';
+import { UnauthenticatedException } from '@src/common/exceptions/unauthenticated.exception.js';
 import request from 'supertest';
 import type { App } from 'supertest/types.js';
 import { mockDeep, mockReset } from 'vitest-mock-extended';
-import { AuthService } from '../../src/auth/auth.service.js';
-import { TurnstileService } from '../../src/captcha/turnstile.service.js';
-import {
-  AccountStatus,
-  AccountType,
-  UserRole,
-} from '../../src/mongo/models.js';
-import { createE2eApp, type E2eApp } from '../support/e2e-app.js';
+import { AuthService } from '@src/auth/auth.service.js';
+import { TurnstileService } from '@src/captcha/turnstile.service.js';
+import { AccountStatus, AccountType, UserRole } from '@src/mongo/models.js';
+import { createE2eApp, type E2eApp } from '@test/support/e2e-app.js';
 
 describe('Password login requires Turnstile (HTTP)', () => {
   const auth = mockDeep<AuthService>();

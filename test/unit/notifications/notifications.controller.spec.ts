@@ -1,15 +1,15 @@
 import type { MessageEvent } from '@nestjs/common';
 import { Subject } from 'rxjs';
 import { mockDeep } from 'vitest-mock-extended';
-import type { AuthenticatedRequest } from '../../../src/auth-core/auth.types.js';
-import { UserRole } from '../../../src/mongo/models.js';
+import type { AuthenticatedRequest } from '@src/auth-core/auth.types.js';
+import { UserRole } from '@src/mongo/models.js';
 import type {
   NotificationDto,
   NotificationPageDto,
   UnreadCountDto,
-} from '../../../src/notifications/dto/notification.dto.js';
-import { NotificationsController } from '../../../src/notifications/notifications.controller.js';
-import type { NotificationsService } from '../../../src/notifications/notifications.service.js';
+} from '@src/notifications/dto/notification.dto.js';
+import { NotificationsController } from '@src/notifications/notifications.controller.js';
+import type { NotificationsService } from '@src/notifications/notifications.service.js';
 
 describe('NotificationsController', () => {
   const userId = '00000000-0000-4000-8000-000000000001';

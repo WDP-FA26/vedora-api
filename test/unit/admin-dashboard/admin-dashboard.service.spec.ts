@@ -1,9 +1,9 @@
 import { randomUUID } from 'node:crypto';
 import type { INestApplication } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
-import { AdminDashboardService } from '../../../src/admin-dashboard/admin-dashboard.service.js';
-import { UNAVAILABLE_DASHBOARD_METRICS } from '../../../src/admin-dashboard/dto/dashboard.dto.js';
-import { InvalidInputException } from '../../../src/common/exceptions/invalid-input.exception.js';
+import { AdminDashboardService } from '@src/admin-dashboard/admin-dashboard.service.js';
+import { UNAVAILABLE_DASHBOARD_METRICS } from '@src/admin-dashboard/dto/dashboard.dto.js';
+import { InvalidInputException } from '@src/common/exceptions/invalid-input.exception.js';
 import {
   AccountStatus,
   PostReport,
@@ -12,19 +12,19 @@ import {
   PostStatus,
   PostType,
   UserRole,
-} from '../../../src/mongo/models.js';
-import { MongoModule } from '../../../src/mongo/mongo.module.js';
-import { MongoService } from '../../../src/mongo/mongo.service.js';
+} from '@src/mongo/models.js';
+import { MongoModule } from '@src/mongo/mongo.module.js';
+import { MongoService } from '@src/mongo/mongo.service.js';
 import {
   createPost,
   createRecipe,
   createUser,
-} from '../../support/fixtures.js';
+} from '@test/support/fixtures.js';
 import {
   createTestMongoUrl,
   dropTestDatabase,
   prepareTestDatabase,
-} from '../../support/mongo-test-db.js';
+} from '@test/support/mongo-test-db.js';
 
 describe('AdminDashboardService', () => {
   let app: INestApplication;

@@ -3,30 +3,30 @@ import { INestApplication } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtModule, JwtService } from '@nestjs/jwt';
 import { Test } from '@nestjs/testing';
-import { MongoModule } from '../../src/mongo/mongo.module.js';
+import { MongoModule } from '@src/mongo/mongo.module.js';
 import {
   type Recipe,
   type RecipeRating,
   type User,
   UserRole,
-} from '../../src/mongo/models.js';
-import { MongoService } from '../../src/mongo/mongo.service.js';
+} from '@src/mongo/models.js';
+import { MongoService } from '@src/mongo/mongo.service.js';
 import request from 'supertest';
 import type { App } from 'supertest/types.js';
-import { configureApp } from '../../src/app.setup.js';
-import { RecipeRatingsController } from '../../src/recipes/recipe-ratings.controller.js';
-import { RecipeRatingsService } from '../../src/recipes/recipe-ratings.service.js';
-import type { MyRecipeRatingDto } from '../../src/recipes/dto/recipe-rating.dto.js';
+import { configureApp } from '@src/app.setup.js';
+import { RecipeRatingsController } from '@src/recipes/recipe-ratings.controller.js';
+import { RecipeRatingsService } from '@src/recipes/recipe-ratings.service.js';
+import type { MyRecipeRatingDto } from '@src/recipes/dto/recipe-rating.dto.js';
 import {
   createRecipe,
   createUser,
   deleteWithCascade,
-} from '../support/fixtures.js';
+} from '@test/support/fixtures.js';
 import {
   createTestMongoUrl,
   dropTestDatabase,
   prepareTestDatabase,
-} from '../support/mongo-test-db.js';
+} from '@test/support/mongo-test-db.js';
 
 describe('Recipe ratings with MongoDB', () => {
   const recipeId = randomUUID();

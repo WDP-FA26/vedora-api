@@ -1,8 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import type { INestApplication } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
-import { InvalidInputException } from '../../../src/common/exceptions/invalid-input.exception.js';
-import { ResourceNotFoundException } from '../../../src/common/exceptions/resource-not-found.exception.js';
+import { InvalidInputException } from '@src/common/exceptions/invalid-input.exception.js';
+import { ResourceNotFoundException } from '@src/common/exceptions/resource-not-found.exception.js';
 import {
   AccountStatus,
   BillingPlan,
@@ -10,24 +10,24 @@ import {
   PaymentStatus,
   PaymentWebhookReceipt,
   User,
-} from '../../../src/mongo/models.js';
-import { MongoModule } from '../../../src/mongo/mongo.module.js';
-import { MongoService } from '../../../src/mongo/mongo.service.js';
+} from '@src/mongo/models.js';
+import { MongoModule } from '@src/mongo/mongo.module.js';
+import { MongoService } from '@src/mongo/mongo.service.js';
 import {
   AdminPaymentListDto,
   AdminPaymentPageDto,
   AdminPaymentQueryDto,
   AdminReceiptQueryDto,
   AdminSubscriptionQueryDto,
-} from '../../../src/payments/admin/admin-payment-query.dto.js';
-import { AdminPaymentsService } from '../../../src/payments/admin/admin-payments.service.js';
-import { SubscriptionsModule } from '../../../src/subscriptions/subscriptions.module.js';
-import { createUser } from '../../support/fixtures.js';
+} from '@src/payments/admin/admin-payment-query.dto.js';
+import { AdminPaymentsService } from '@src/payments/admin/admin-payments.service.js';
+import { SubscriptionsModule } from '@src/subscriptions/subscriptions.module.js';
+import { createUser } from '@test/support/fixtures.js';
 import {
   createTestMongoUrl,
   dropTestDatabase,
   prepareTestDatabase,
-} from '../../support/mongo-test-db.js';
+} from '@test/support/mongo-test-db.js';
 
 describe('AdminPaymentsService', () => {
   const NOW = new Date('2026-10-02T10:00:00Z');

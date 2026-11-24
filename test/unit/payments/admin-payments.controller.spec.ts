@@ -6,9 +6,9 @@ import {
   AdminPaymentQueryDto,
   AdminReceiptQueryDto,
   AdminSubscriptionQueryDto,
-} from '../../../src/payments/admin/admin-payment-query.dto.js';
-import { AdminPaymentsController } from '../../../src/payments/admin/admin-payments.controller.js';
-import type { AdminPaymentsService } from '../../../src/payments/admin/admin-payments.service.js';
+} from '@src/payments/admin/admin-payment-query.dto.js';
+import { AdminPaymentsController } from '@src/payments/admin/admin-payments.controller.js';
+import type { AdminPaymentsService } from '@src/payments/admin/admin-payments.service.js';
 
 describe('AdminPaymentsController', () => {
   const intentId = '00000000-0000-4000-8000-000000000002';

@@ -4,28 +4,28 @@ import type {
   PostDraftDto,
   PostDraftPageDto,
   DraftUploadResponseDto,
-} from '../../src/posts/dto/post-draft.dto.js';
-import type { PostResponseDto } from '../../src/posts/dto/post-response.dto.js';
+} from '@src/posts/dto/post-draft.dto.js';
+import type { PostResponseDto } from '@src/posts/dto/post-response.dto.js';
 const typed = <T>(response: Response) => ({
   ...response,
   body: response.body as T,
 });
-import { CloudinaryService } from '../../src/cloudinary/cloudinary.service.js';
-import { MediaService } from '../../src/media/media.service.js';
-import { PostSearchIndexService } from '../../src/posts/search/post-search-index.service.js';
+import { CloudinaryService } from '@src/cloudinary/cloudinary.service.js';
+import { MediaService } from '@src/media/media.service.js';
+import { PostSearchIndexService } from '@src/posts/search/post-search-index.service.js';
 import {
   MediaAsset,
   MediaStatus,
   Post,
   PostStatus,
   PostType,
-} from '../../src/mongo/models.js';
-import { createE2eApp, type E2eApp } from '../support/e2e-app.js';
-import { createPost, createUser } from '../support/fixtures.js';
-import { runtimeConfig } from '../../src/config/runtime-config.js';
+} from '@src/mongo/models.js';
+import { createE2eApp, type E2eApp } from '@test/support/e2e-app.js';
+import { createPost, createUser } from '@test/support/fixtures.js';
+import { runtimeConfig } from '@src/config/runtime-config.js';
 
 // Exercise real moderation/settlement without downloading frames or calling a paid provider.
-vi.mock('../../src/common/http/fetch-public-image.js', () => ({
+vi.mock('@src/common/http/fetch-public-image.js', () => ({
   fetchPublicImage: vi.fn().mockResolvedValue(Buffer.from('fixture-image')),
 }));
 

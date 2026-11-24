@@ -2,12 +2,12 @@ import { createHash } from 'node:crypto';
 import { ConfigService } from '@nestjs/config';
 import { Test } from '@nestjs/testing';
 import { type DeepMockProxy, mockDeep } from 'vitest-mock-extended';
-import { CloudinaryService } from '../../../src/cloudinary/cloudinary.service.js';
-import { FeatureUnavailableException } from '../../../src/common/exceptions/feature-unavailable.exception.js';
-import { InvalidInputException } from '../../../src/common/exceptions/invalid-input.exception.js';
-import { CloudinaryWebhookController } from '../../../src/media/cloudinary-webhook.controller.js';
-import { MediaService } from '../../../src/media/media.service.js';
-import { streamBuilt } from '../../support/media.fixtures.js';
+import { CloudinaryService } from '@src/cloudinary/cloudinary.service.js';
+import { FeatureUnavailableException } from '@src/common/exceptions/feature-unavailable.exception.js';
+import { InvalidInputException } from '@src/common/exceptions/invalid-input.exception.js';
+import { CloudinaryWebhookController } from '@src/media/cloudinary-webhook.controller.js';
+import { MediaService } from '@src/media/media.service.js';
+import { streamBuilt } from '@test/support/media.fixtures.js';
 
 describe('CloudinaryWebhookController', () => {
   const secret = 'test-api-secret';

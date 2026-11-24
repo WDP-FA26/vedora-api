@@ -8,15 +8,15 @@ import {
   SupportTicketStatus,
   type User,
   UserRole,
-} from '../../src/mongo/models.js';
+} from '@src/mongo/models.js';
 import {
   MailService,
   type SupportFollowUpEmail,
-} from '../../src/mail/mail.service.js';
-import { StorageService } from '../../src/storage/storage.service.js';
-import { SupportMaintenanceService } from '../../src/support/support-maintenance.service.js';
-import { createE2eApp, type E2eApp } from '../support/e2e-app.js';
-import { createUser } from '../support/fixtures.js';
+} from '@src/mail/mail.service.js';
+import { StorageService } from '@src/storage/storage.service.js';
+import { SupportMaintenanceService } from '@src/support/support-maintenance.service.js';
+import { createE2eApp, type E2eApp } from '@test/support/e2e-app.js';
+import { createUser } from '@test/support/fixtures.js';
 
 interface TicketBody {
   id: string;

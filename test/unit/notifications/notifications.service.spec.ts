@@ -1,20 +1,20 @@
-import { ModerationSettingsService } from '../../../src/moderation/moderation-settings.service.js';
+import { ModerationSettingsService } from '@src/moderation/moderation-settings.service.js';
 import { INestApplication } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { getModelToken } from '@nestjs/mongoose';
 import { Test } from '@nestjs/testing';
 import type { Model } from 'mongoose';
-import type { Notification, User } from '../../../src/mongo/models.js';
-import { MongoModule } from '../../../src/mongo/mongo.module.js';
-import { MongoService } from '../../../src/mongo/mongo.service.js';
+import type { Notification, User } from '@src/mongo/models.js';
+import { MongoModule } from '@src/mongo/mongo.module.js';
+import { MongoService } from '@src/mongo/mongo.service.js';
 import {
   createTestMongoUrl,
   dropTestDatabase,
   prepareTestDatabase,
-} from '../../support/mongo-test-db.js';
-import { createUser } from '../../support/fixtures.js';
-import { NotificationType } from '../../../src/mongo/models.js';
-import { NotificationsService } from '../../../src/notifications/notifications.service.js';
+} from '@test/support/mongo-test-db.js';
+import { createUser } from '@test/support/fixtures.js';
+import { NotificationType } from '@src/mongo/models.js';
+import { NotificationsService } from '@src/notifications/notifications.service.js';
 
 const postId = 'b7f6f651-b0fc-43a5-b589-edbda60e5983';
 

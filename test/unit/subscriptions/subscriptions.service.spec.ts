@@ -5,16 +5,16 @@ import {
   BillingPlan,
   PaymentIntent,
   PaymentStatus,
-} from '../../../src/mongo/models.js';
-import { MongoModule } from '../../../src/mongo/mongo.module.js';
-import { MongoService } from '../../../src/mongo/mongo.service.js';
-import { SubscriptionsModule } from '../../../src/subscriptions/subscriptions.module.js';
-import { SubscriptionsService } from '../../../src/subscriptions/subscriptions.service.js';
+} from '@src/mongo/models.js';
+import { MongoModule } from '@src/mongo/mongo.module.js';
+import { MongoService } from '@src/mongo/mongo.service.js';
+import { SubscriptionsModule } from '@src/subscriptions/subscriptions.module.js';
+import { SubscriptionsService } from '@src/subscriptions/subscriptions.service.js';
 import {
   createTestMongoUrl,
   dropTestDatabase,
   prepareTestDatabase,
-} from '../../support/mongo-test-db.js';
+} from '@test/support/mongo-test-db.js';
 
 const USER_ID = '00000000-0000-4000-8000-000000000101';
 const NOW = new Date('2026-11-09T10:00:00Z');

@@ -9,25 +9,25 @@ import {
   type Recipe,
   UserRole,
   Weekday,
-} from '../../src/mongo/models.js';
+} from '@src/mongo/models.js';
 import request from 'supertest';
 import type { App } from 'supertest/types.js';
-import { configureApp } from '../../src/app.setup.js';
-import { MongoModule } from '../../src/mongo/mongo.module.js';
-import { MongoService } from '../../src/mongo/mongo.service.js';
-import { ShoppingListController } from '../../src/meal-plan/shopping-list.controller.js';
-import { ShoppingListService } from '../../src/meal-plan/shopping-list.service.js';
-import type { ShoppingListDto } from '../../src/meal-plan/dto/shopping-list.dto.js';
+import { configureApp } from '@src/app.setup.js';
+import { MongoModule } from '@src/mongo/mongo.module.js';
+import { MongoService } from '@src/mongo/mongo.service.js';
+import { ShoppingListController } from '@src/meal-plan/shopping-list.controller.js';
+import { ShoppingListService } from '@src/meal-plan/shopping-list.service.js';
+import type { ShoppingListDto } from '@src/meal-plan/dto/shopping-list.dto.js';
 import {
   createIngredient,
   createRecipe,
   createUser,
-} from '../support/fixtures.js';
+} from '@test/support/fixtures.js';
 import {
   createTestMongoUrl,
   dropTestDatabase,
   prepareTestDatabase,
-} from '../support/mongo-test-db.js';
+} from '@test/support/mongo-test-db.js';
 
 // 00:30 on Monday 2026-11-16 in the app time zone, so every day is still ahead.
 const WEEK = '2026-11-16';

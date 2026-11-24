@@ -1,15 +1,15 @@
 import type { INestApplication } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
-import { createPost, createUser } from '../../support/fixtures.js';
+import { createPost, createUser } from '@test/support/fixtures.js';
 import {
   createTestMongoUrl,
   dropTestDatabase,
   prepareTestDatabase,
-} from '../../support/mongo-test-db.js';
-import { Post, PostStatus, PostViewDay } from '../../../src/mongo/models.js';
-import { MongoModule } from '../../../src/mongo/mongo.module.js';
-import { MongoService } from '../../../src/mongo/mongo.service.js';
-import { PostViewsService } from '../../../src/posts/post-views.service.js';
+} from '@test/support/mongo-test-db.js';
+import { Post, PostStatus, PostViewDay } from '@src/mongo/models.js';
+import { MongoModule } from '@src/mongo/mongo.module.js';
+import { MongoService } from '@src/mongo/mongo.service.js';
+import { PostViewsService } from '@src/posts/post-views.service.js';
 
 const MINUTE = 60_000;
 

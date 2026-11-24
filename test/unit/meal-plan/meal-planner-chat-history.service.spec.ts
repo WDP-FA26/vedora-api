@@ -2,31 +2,31 @@ import type { INestApplication } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import type { UIMessage } from 'ai';
 import { randomUUID } from 'node:crypto';
-import { InvalidInputException } from '../../../src/common/exceptions/invalid-input.exception.js';
-import { ResourceNotFoundException } from '../../../src/common/exceptions/resource-not-found.exception.js';
-import { MEAL_SECTIONS } from '../../../src/meal-plan/dto/meal-plan.dto.js';
-import { MealPlanService } from '../../../src/meal-plan/meal-plan.service.js';
-import { MealPlannerChatHistoryService } from '../../../src/meal-plan/meal-planner-chat-history.service.js';
+import { InvalidInputException } from '@src/common/exceptions/invalid-input.exception.js';
+import { ResourceNotFoundException } from '@src/common/exceptions/resource-not-found.exception.js';
+import { MEAL_SECTIONS } from '@src/meal-plan/dto/meal-plan.dto.js';
+import { MealPlanService } from '@src/meal-plan/meal-plan.service.js';
+import { MealPlannerChatHistoryService } from '@src/meal-plan/meal-planner-chat-history.service.js';
 import {
   MealPlanChatMessage,
   MealPlanChatThread,
   MealSection,
   Weekday,
-} from '../../../src/mongo/models.js';
-import { MongoModule } from '../../../src/mongo/mongo.module.js';
-import { MongoService } from '../../../src/mongo/mongo.service.js';
-import { DietaryService } from '../../../src/recipes/dietary.service.js';
-import { IncompatibilityRulesService } from '../../../src/recipes/incompatibility-rules.service.js';
+} from '@src/mongo/models.js';
+import { MongoModule } from '@src/mongo/mongo.module.js';
+import { MongoService } from '@src/mongo/mongo.service.js';
+import { DietaryService } from '@src/recipes/dietary.service.js';
+import { IncompatibilityRulesService } from '@src/recipes/incompatibility-rules.service.js';
 import {
   createIngredient,
   createRecipe,
   createUser,
-} from '../../support/fixtures.js';
+} from '@test/support/fixtures.js';
 import {
   createTestMongoUrl,
   dropTestDatabase,
   prepareTestDatabase,
-} from '../../support/mongo-test-db.js';
+} from '@test/support/mongo-test-db.js';
 
 const USER_A = '4a1e32e4-e18e-4dd7-8b4a-246ef2113ff2';
 const USER_B = '5b2f43f5-f29f-4ee8-9c5b-357fe3224aa3';

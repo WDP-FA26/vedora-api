@@ -1,26 +1,26 @@
 import { MockLanguageModelV4 } from 'ai/test';
 import { z } from 'zod';
 import { type DeepMockProxy, mockDeep } from 'vitest-mock-extended';
-import type { MealPlanDto } from '../../../src/meal-plan/dto/meal-plan.dto.js';
-import type { MealPlanService } from '../../../src/meal-plan/meal-plan.service.js';
-import { verifyMealPlanAllergiesTool } from '../../../src/meal-plan/tools/allergy-verifier-subagent.tool.js';
-import { askUserTool } from '../../../src/meal-plan/tools/ask-user.tool.js';
-import { autoBalancePlanTool } from '../../../src/meal-plan/tools/auto-balance-plan.tool.js';
-import { editPlanTool } from '../../../src/meal-plan/tools/edit-plan.tool.js';
-import { fillSlotsTool } from '../../../src/meal-plan/tools/fill-slots.tool.js';
-import { getPlanTool } from '../../../src/meal-plan/tools/get-plan.tool.js';
-import { getRecipeTool } from '../../../src/meal-plan/tools/get-recipe.tool.js';
+import type { MealPlanDto } from '@src/meal-plan/dto/meal-plan.dto.js';
+import type { MealPlanService } from '@src/meal-plan/meal-plan.service.js';
+import { verifyMealPlanAllergiesTool } from '@src/meal-plan/tools/allergy-verifier-subagent.tool.js';
+import { askUserTool } from '@src/meal-plan/tools/ask-user.tool.js';
+import { autoBalancePlanTool } from '@src/meal-plan/tools/auto-balance-plan.tool.js';
+import { editPlanTool } from '@src/meal-plan/tools/edit-plan.tool.js';
+import { fillSlotsTool } from '@src/meal-plan/tools/fill-slots.tool.js';
+import { getPlanTool } from '@src/meal-plan/tools/get-plan.tool.js';
+import { getRecipeTool } from '@src/meal-plan/tools/get-recipe.tool.js';
 import {
   changeFeedback,
   mergeChanges,
-} from '../../../src/meal-plan/tools/proposal-text.js';
-import { searchRecipesTool } from '../../../src/meal-plan/tools/search-recipes.tool.js';
+} from '@src/meal-plan/tools/proposal-text.js';
+import { searchRecipesTool } from '@src/meal-plan/tools/search-recipes.tool.js';
 import {
   updateAllergyNoteTool,
   updatePreferencesTool,
-} from '../../../src/meal-plan/tools/dietary-notes.tool.js';
-import type { DietaryService } from '../../../src/recipes/dietary.service.js';
-import { MealSection, RecipeTag, Weekday } from '../../../src/mongo/models.js';
+} from '@src/meal-plan/tools/dietary-notes.tool.js';
+import type { DietaryService } from '@src/recipes/dietary.service.js';
+import { MealSection, RecipeTag, Weekday } from '@src/mongo/models.js';
 
 function isZodSchema(schema: unknown): schema is z.ZodType {
   return schema instanceof z.ZodType;

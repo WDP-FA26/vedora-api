@@ -1,8 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import request from 'supertest';
 import { mockDeep, mockReset } from 'vitest-mock-extended';
-import { PostSearchIndexService } from '../../src/posts/search/post-search-index.service.js';
-import { PostSearchService } from '../../src/posts/search/post-search.service.js';
+import { PostSearchIndexService } from '@src/posts/search/post-search-index.service.js';
+import { PostSearchService } from '@src/posts/search/post-search.service.js';
 import {
   Post,
   PostReport,
@@ -10,9 +10,9 @@ import {
   PostType,
   type User,
   UserRole,
-} from '../../src/mongo/models.js';
-import { createE2eApp, type E2eApp } from '../support/e2e-app.js';
-import { createPost, createUser } from '../support/fixtures.js';
+} from '@src/mongo/models.js';
+import { createE2eApp, type E2eApp } from '@test/support/e2e-app.js';
+import { createPost, createUser } from '@test/support/fixtures.js';
 
 describe('Post reads and admin posts (e2e)', () => {
   const postSearch = mockDeep<PostSearchService>();

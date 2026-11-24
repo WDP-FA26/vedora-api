@@ -11,7 +11,7 @@ import {
   evaluateAppealEligibility,
   generateTicketCode,
   incidentKeyOf,
-} from '../../../src/support/support-policy.js';
+} from '@src/support/support-policy.js';
 import {
   AppealOutcome,
   AppealReasonCategory,
@@ -23,7 +23,7 @@ import {
   SupportTicketStatus,
   type Post,
   type SupportTicket,
-} from '../../../src/mongo/models.js';
+} from '@src/mongo/models.js';
 
 function makePost(overrides: Partial<Post> = {}): Post {
   const now = new Date('2026-11-10T10:00:00.000Z');

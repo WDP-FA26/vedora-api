@@ -1,9 +1,9 @@
 import type { ExecutionContext } from '@nestjs/common';
 import { mockDeep } from 'vitest-mock-extended';
-import { FeatureUnavailableException } from '../../../src/common/exceptions/feature-unavailable.exception.js';
-import { UnauthenticatedException } from '../../../src/common/exceptions/unauthenticated.exception.js';
-import { SePayWebhookGuard } from '../../../src/payments/sepay-webhook.guard.js';
-import type { SePayProvider } from '../../../src/payments/sepay.provider.js';
+import { FeatureUnavailableException } from '@src/common/exceptions/feature-unavailable.exception.js';
+import { UnauthenticatedException } from '@src/common/exceptions/unauthenticated.exception.js';
+import { SePayWebhookGuard } from '@src/payments/sepay-webhook.guard.js';
+import type { SePayProvider } from '@src/payments/sepay.provider.js';
 
 function createContext(authorization?: string): ExecutionContext {
   const request = {

@@ -3,10 +3,10 @@ import { getModelToken } from '@nestjs/mongoose';
 import { Test } from '@nestjs/testing';
 import type { Model } from 'mongoose';
 import { type DeepMockProxy, mockDeep } from 'vitest-mock-extended';
-import { AccessDeniedException } from '../../../../src/common/exceptions/access-denied.exception.js';
-import { InvalidInputException } from '../../../../src/common/exceptions/invalid-input.exception.js';
-import { ResourceNotFoundException } from '../../../../src/common/exceptions/resource-not-found.exception.js';
-import { ContentModerationService } from '../../../../src/moderation/content-moderation.service.js';
+import { AccessDeniedException } from '@src/common/exceptions/access-denied.exception.js';
+import { InvalidInputException } from '@src/common/exceptions/invalid-input.exception.js';
+import { ResourceNotFoundException } from '@src/common/exceptions/resource-not-found.exception.js';
+import { ContentModerationService } from '@src/moderation/content-moderation.service.js';
 import {
   NotificationType,
   Post,
@@ -17,17 +17,17 @@ import {
   PostStatus,
   type User,
   UserRole,
-} from '../../../../src/mongo/models.js';
-import { MongoModule } from '../../../../src/mongo/mongo.module.js';
-import { MongoService } from '../../../../src/mongo/mongo.service.js';
-import { NotificationsService } from '../../../../src/notifications/notifications.service.js';
-import { PostInteractionsService } from '../../../../src/posts/interactions/post-interactions.service.js';
-import { createPost, createUser } from '../../../support/fixtures.js';
+} from '@src/mongo/models.js';
+import { MongoModule } from '@src/mongo/mongo.module.js';
+import { MongoService } from '@src/mongo/mongo.service.js';
+import { NotificationsService } from '@src/notifications/notifications.service.js';
+import { PostInteractionsService } from '@src/posts/interactions/post-interactions.service.js';
+import { createPost, createUser } from '@test/support/fixtures.js';
 import {
   createTestMongoUrl,
   dropTestDatabase,
   prepareTestDatabase,
-} from '../../../support/mongo-test-db.js';
+} from '@test/support/mongo-test-db.js';
 
 describe('PostInteractionsService', () => {
   let app: INestApplication;

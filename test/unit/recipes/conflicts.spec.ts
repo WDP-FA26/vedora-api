@@ -1,7 +1,4 @@
-import {
-  type ConflictRule,
-  detectConflicts,
-} from '../../../src/recipes/conflicts.js';
+import { type ConflictRule, detectConflicts } from '@src/recipes/conflicts.js';
 
 const tofu = 'tofu';
 const honey = 'honey';

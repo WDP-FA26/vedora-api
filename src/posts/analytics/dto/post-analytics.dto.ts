@@ -3,8 +3,8 @@ import { IsDateString, IsIn, IsOptional, Matches } from 'class-validator';
 import {
   PaginatedResponseDto,
   PaginationQueryDto,
-} from '../../../common/pagination/index.js';
-import { PostType } from '../../../mongo/models.js';
+} from '@src/common/pagination/index.js';
+import { PostType } from '@src/mongo/models.js';
 
 export class PostAnalyticsRangeQueryDto {
   @ApiPropertyOptional({

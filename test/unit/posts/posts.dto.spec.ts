@@ -5,34 +5,34 @@ import {
   PostReportStatus,
   PostStatus,
   PostType,
-} from '../../../src/mongo/models.js';
+} from '@src/mongo/models.js';
 import {
   AdminPostsQueryDto,
   ModeratePostDto,
-} from '../../../src/posts/dto/admin-post.dto.js';
+} from '@src/posts/dto/admin-post.dto.js';
 import {
   BLOG_IMAGE_TYPES,
   CreateBlogImageUploadDto,
   MAX_BLOG_IMAGE_BYTES,
-} from '../../../src/posts/dto/blog-image.dto.js';
+} from '@src/posts/dto/blog-image.dto.js';
 import {
   CreateBlogDto,
   MAX_BLOG_CONTENT,
   MAX_BLOG_RECIPES,
   MyBlogsQueryDto,
   UpdateBlogDto,
-} from '../../../src/posts/dto/blog.dto.js';
+} from '@src/posts/dto/blog.dto.js';
 import {
   CommentBodyDto,
   MAX_COMMENT_BODY_LENGTH,
-} from '../../../src/posts/dto/comment.dto.js';
+} from '@src/posts/dto/comment.dto.js';
 import {
   countWords,
   CreatePostDto,
   MAX_POST_BODY_LENGTH,
   MAX_POST_BODY_WORDS,
   MAX_POST_MEDIA,
-} from '../../../src/posts/dto/create-post.dto.js';
+} from '@src/posts/dto/create-post.dto.js';
 import {
   CreatePostReportDto,
   MAX_REPORT_DETAILS_LENGTH,
@@ -40,11 +40,11 @@ import {
   PostReportsQueryDto,
   RecordViewsDto,
   ReviewPostReportDto,
-} from '../../../src/posts/dto/post-interaction.dto.js';
+} from '@src/posts/dto/post-interaction.dto.js';
 import {
   MAX_SEARCH_QUERY_LENGTH,
   SearchPostsQueryDto,
-} from '../../../src/posts/dto/search-posts-query.dto.js';
+} from '@src/posts/dto/search-posts-query.dto.js';
 
 const UUID_1 = '11111111-1111-4111-8111-111111111111';
 const UUID_2 = '22222222-2222-4222-8222-222222222222';

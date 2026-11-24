@@ -1,6 +1,6 @@
 import { plainToInstance } from 'class-transformer';
 import { describe, expect, it } from 'vitest';
-import { PresignedUploadDto } from '../../../src/storage/presigned-upload.dto.js';
+import { PresignedUploadDto } from '@src/storage/presigned-upload.dto.js';
 
 describe('PresignedUploadDto', () => {
   it('constructs and transforms presigned upload payload fields', () => {

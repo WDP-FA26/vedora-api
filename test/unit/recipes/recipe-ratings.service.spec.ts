@@ -1,17 +1,17 @@
 import type { INestApplication } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
-import { AccessDeniedException } from '../../../src/common/exceptions/access-denied.exception.js';
-import { ResourceNotFoundException } from '../../../src/common/exceptions/resource-not-found.exception.js';
-import { UnauthenticatedException } from '../../../src/common/exceptions/unauthenticated.exception.js';
-import { MongoModule } from '../../../src/mongo/mongo.module.js';
-import { MongoService } from '../../../src/mongo/mongo.service.js';
-import { RecipeRatingsService } from '../../../src/recipes/recipe-ratings.service.js';
-import { createRecipe, createUser } from '../../support/fixtures.js';
+import { AccessDeniedException } from '@src/common/exceptions/access-denied.exception.js';
+import { ResourceNotFoundException } from '@src/common/exceptions/resource-not-found.exception.js';
+import { UnauthenticatedException } from '@src/common/exceptions/unauthenticated.exception.js';
+import { MongoModule } from '@src/mongo/mongo.module.js';
+import { MongoService } from '@src/mongo/mongo.service.js';
+import { RecipeRatingsService } from '@src/recipes/recipe-ratings.service.js';
+import { createRecipe, createUser } from '@test/support/fixtures.js';
 import {
   createTestMongoUrl,
   dropTestDatabase,
   prepareTestDatabase,
-} from '../../support/mongo-test-db.js';
+} from '@test/support/mongo-test-db.js';
 
 const AUTHOR_ID = '4a1e32e4-e18e-4dd7-8b4a-246ef2113ff1';
 const USER_1 = '4a1e32e4-e18e-4dd7-8b4a-246ef2113ff2';

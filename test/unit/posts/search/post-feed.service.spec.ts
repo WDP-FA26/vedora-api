@@ -3,12 +3,12 @@ import { getModelToken } from '@nestjs/mongoose';
 import { Test } from '@nestjs/testing';
 import type { Model } from 'mongoose';
 import { type DeepMockProxy, mockDeep } from 'vitest-mock-extended';
-import { createPost, createUser } from '../../../support/fixtures.js';
+import { createPost, createUser } from '@test/support/fixtures.js';
 import {
   createTestMongoUrl,
   dropTestDatabase,
   prepareTestDatabase,
-} from '../../../support/mongo-test-db.js';
+} from '@test/support/mongo-test-db.js';
 import {
   Post,
   PostBookmark,
@@ -16,15 +16,15 @@ import {
   PostLike,
   PostStatus,
   type User,
-} from '../../../../src/mongo/models.js';
-import { MongoModule } from '../../../../src/mongo/mongo.module.js';
-import { MongoService } from '../../../../src/mongo/mongo.service.js';
-import { QdrantService } from '../../../../src/qdrant/qdrant.service.js';
+} from '@src/mongo/models.js';
+import { MongoModule } from '@src/mongo/mongo.module.js';
+import { MongoService } from '@src/mongo/mongo.service.js';
+import { QdrantService } from '@src/qdrant/qdrant.service.js';
 import {
   PostFeedService,
   interleave,
-} from '../../../../src/posts/search/post-feed.service.js';
-import { PostSearchIndexService } from '../../../../src/posts/search/post-search-index.service.js';
+} from '@src/posts/search/post-feed.service.js';
+import { PostSearchIndexService } from '@src/posts/search/post-search-index.service.js';
 
 const AS_OF = new Date('2026-10-27T00:00:00.000Z');
 const NOW = 1_793_059_200;

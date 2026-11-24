@@ -1,5 +1,5 @@
-import type { ModerationVerdict } from '../../../ai/guardrails/guardrail.js';
-import type { BlogRefusal } from '../../../ai/guardrails/policies/blog-assistant.js';
+import type { ModerationVerdict } from '@src/ai/guardrails/guardrail.js';
+import type { BlogRefusal } from '@src/ai/guardrails/policies/blog-assistant.js';
 
 export const BLOG_ASSISTANT_REFUSALS: Record<BlogRefusal, string> = {
   unsupported_language:

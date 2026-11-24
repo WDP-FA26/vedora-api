@@ -1,5 +1,5 @@
-import { HealthController } from '../../../src/health/health.controller.js';
-import type { MongoService } from '../../../src/mongo/mongo.service.js';
+import { HealthController } from '@src/health/health.controller.js';
+import type { MongoService } from '@src/mongo/mongo.service.js';
 
 describe('HealthController', () => {
   it('returns liveness payload with ISO timestamp', () => {

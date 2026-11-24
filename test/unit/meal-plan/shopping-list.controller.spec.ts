@@ -1,10 +1,10 @@
 import type { Response } from 'express';
 import { type DeepMockProxy, mockDeep } from 'vitest-mock-extended';
-import type { AuthenticatedRequest } from '../../../src/auth-core/auth.types.js';
-import type { ShoppingListDto } from '../../../src/meal-plan/dto/shopping-list.dto.js';
-import { ShoppingListController } from '../../../src/meal-plan/shopping-list.controller.js';
-import type { ShoppingListService } from '../../../src/meal-plan/shopping-list.service.js';
-import { UserRole, Weekday } from '../../../src/mongo/models.js';
+import type { AuthenticatedRequest } from '@src/auth-core/auth.types.js';
+import type { ShoppingListDto } from '@src/meal-plan/dto/shopping-list.dto.js';
+import { ShoppingListController } from '@src/meal-plan/shopping-list.controller.js';
+import type { ShoppingListService } from '@src/meal-plan/shopping-list.service.js';
+import { UserRole, Weekday } from '@src/mongo/models.js';
 
 describe('ShoppingListController', () => {
   const userId = '4a1e32e4-e18e-4dd7-8b4a-246ef2113ff2';

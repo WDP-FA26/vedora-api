@@ -2,7 +2,7 @@ import 'reflect-metadata';
 import { plainToInstance } from 'class-transformer';
 import { validate } from 'class-validator';
 import { randomUUID } from 'node:crypto';
-import { VerificationStatus } from '../../../src/mongo/models.js';
+import { VerificationStatus } from '@src/mongo/models.js';
 import {
   AdminVerificationRequestDetailDto,
   AdminVerificationRequestDto,
@@ -20,7 +20,7 @@ import {
   VerificationProofDto,
   VerificationRequestDto,
   VerificationRequestsQueryDto,
-} from '../../../src/verification/dto/verification.dto.js';
+} from '@src/verification/dto/verification.dto.js';
 
 describe('Verification DTOs', () => {
   describe('CreateProofUploadDto', () => {

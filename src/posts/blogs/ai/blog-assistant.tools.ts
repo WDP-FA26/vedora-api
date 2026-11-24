@@ -1,8 +1,8 @@
-import { runtimeConfig } from '../../../config/runtime-config.js';
+import { runtimeConfig } from '@src/config/runtime-config.js';
 import { tool } from 'ai';
 import { z } from 'zod';
-import type { KnowledgeSearchService } from '../../../knowledge/retrieval/knowledge-search.service.js';
-import { searchKnowledgeTool } from '../../../knowledge/tools/search-knowledge.tool.js';
+import type { KnowledgeSearchService } from '@src/knowledge/retrieval/knowledge-search.service.js';
+import { searchKnowledgeTool } from '@src/knowledge/tools/search-knowledge.tool.js';
 import {
   type BlogImageGeneratorService,
   type ImageAspectRatio,

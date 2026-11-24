@@ -19,6 +19,8 @@ import {
   DEFAULT_CONTENT_MODERATION_MODEL,
   DEFAULT_MODERATION_MODEL,
   DEFAULT_MODERATION_PROVIDER_ORDER,
+  DEFAULT_OPENROUTER_APP_TITLE,
+  DEFAULT_OPENROUTER_APP_URL,
 } from '../ai/openrouter.js';
 import { REASONING_EFFORTS } from '../ai/reasoning.js';
 import {
@@ -210,6 +212,15 @@ export class EnvironmentVariables {
   /** Comma-separated OpenRouter provider slugs for both moderation models; empty lets OpenRouter route. */
   @IsString()
   OPENROUTER_MODERATION_PROVIDER_ORDER = DEFAULT_MODERATION_PROVIDER_ORDER;
+
+  /** App URL sent as `HTTP-Referer` so OpenRouter logs attribute requests instead of `Unknown`. */
+  @IsUrl({ require_tld: false })
+  OPENROUTER_APP_URL = DEFAULT_OPENROUTER_APP_URL;
+
+  /** App display name sent as `X-OpenRouter-Title` to OpenRouter. */
+  @IsString()
+  @IsNotEmpty()
+  OPENROUTER_APP_TITLE = DEFAULT_OPENROUTER_APP_TITLE;
 
   @ValidateIf((env: EnvironmentVariables) => env.NODE_ENV === 'production')
   @IsString()

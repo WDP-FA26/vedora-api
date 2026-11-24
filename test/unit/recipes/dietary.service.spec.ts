@@ -7,16 +7,16 @@ import {
   BodyFeeling,
   type IngredientGroup,
   NutritionGoal,
-} from '../../../src/mongo/models.js';
-import { MongoModule } from '../../../src/mongo/mongo.module.js';
-import { MongoService } from '../../../src/mongo/mongo.service.js';
-import { DietaryService } from '../../../src/recipes/dietary.service.js';
-import { createIngredient, createUser } from '../../support/fixtures.js';
+} from '@src/mongo/models.js';
+import { MongoModule } from '@src/mongo/mongo.module.js';
+import { MongoService } from '@src/mongo/mongo.service.js';
+import { DietaryService } from '@src/recipes/dietary.service.js';
+import { createIngredient, createUser } from '@test/support/fixtures.js';
 import {
   createTestMongoUrl,
   dropTestDatabase,
   prepareTestDatabase,
-} from '../../support/mongo-test-db.js';
+} from '@test/support/mongo-test-db.js';
 
 const USER_ID = '4a1e32e4-e18e-4dd7-8b4a-246ef2113ff2';
 const TOFU_ID = 'a1a2d3e4-0000-4000-8000-000000000001';

@@ -5,12 +5,12 @@ import { JwtModule, JwtService } from '@nestjs/jwt';
 import { Test } from '@nestjs/testing';
 import request from 'supertest';
 import type { App } from 'supertest/types.js';
-import { AdminDashboardController } from '../../src/admin-dashboard/admin-dashboard.controller.js';
-import { AdminDashboardService } from '../../src/admin-dashboard/admin-dashboard.service.js';
-import { configureApp } from '../../src/app.setup.js';
-import type { DashboardDto } from '../../src/admin-dashboard/dto/dashboard.dto.js';
-import { MongoModule } from '../../src/mongo/mongo.module.js';
-import { MongoService } from '../../src/mongo/mongo.service.js';
+import { AdminDashboardController } from '@src/admin-dashboard/admin-dashboard.controller.js';
+import { AdminDashboardService } from '@src/admin-dashboard/admin-dashboard.service.js';
+import { configureApp } from '@src/app.setup.js';
+import type { DashboardDto } from '@src/admin-dashboard/dto/dashboard.dto.js';
+import { MongoModule } from '@src/mongo/mongo.module.js';
+import { MongoService } from '@src/mongo/mongo.service.js';
 import {
   AccountStatus,
   Post,
@@ -22,13 +22,17 @@ import {
   Recipe,
   User,
   UserRole,
-} from '../../src/mongo/models.js';
-import { createPost, createRecipe, createUser } from '../support/fixtures.js';
+} from '@src/mongo/models.js';
+import {
+  createPost,
+  createRecipe,
+  createUser,
+} from '@test/support/fixtures.js';
 import {
   createTestMongoUrl,
   dropTestDatabase,
   prepareTestDatabase,
-} from '../support/mongo-test-db.js';
+} from '@test/support/mongo-test-db.js';
 
 describe('Admin dashboard with MongoDB', () => {
   let db: MongoService;

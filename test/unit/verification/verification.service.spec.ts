@@ -1,7 +1,7 @@
-import { InvalidInputException } from '../../../src/common/exceptions/invalid-input.exception.js';
-import { StateConflictException } from '../../../src/common/exceptions/state-conflict.exception.js';
-import { ResourceNotFoundException } from '../../../src/common/exceptions/resource-not-found.exception.js';
-import { FileTooLargeException } from '../../../src/common/exceptions/file-too-large.exception.js';
+import { InvalidInputException } from '@src/common/exceptions/invalid-input.exception.js';
+import { StateConflictException } from '@src/common/exceptions/state-conflict.exception.js';
+import { ResourceNotFoundException } from '@src/common/exceptions/resource-not-found.exception.js';
+import { FileTooLargeException } from '@src/common/exceptions/file-too-large.exception.js';
 import type { INestApplication } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { randomUUID } from 'node:crypto';
@@ -9,21 +9,18 @@ import {
   createTestMongoUrl,
   dropTestDatabase,
   prepareTestDatabase,
-} from '../../support/mongo-test-db.js';
-import { createUser } from '../../support/fixtures.js';
-import { MongoModule } from '../../../src/mongo/mongo.module.js';
-import { MongoService } from '../../../src/mongo/mongo.service.js';
-import {
-  StorageService,
-  StorageTarget,
-} from '../../../src/storage/storage.service.js';
+} from '@test/support/mongo-test-db.js';
+import { createUser } from '@test/support/fixtures.js';
+import { MongoModule } from '@src/mongo/mongo.module.js';
+import { MongoService } from '@src/mongo/mongo.service.js';
+import { StorageService, StorageTarget } from '@src/storage/storage.service.js';
 import {
   User,
   VerificationProof,
   VerificationRequest,
   VerificationStatus,
-} from '../../../src/mongo/models.js';
-import { VerificationService } from '../../../src/verification/verification.service.js';
+} from '@src/mongo/models.js';
+import { VerificationService } from '@src/verification/verification.service.js';
 
 const userId = '4a1e32e4-e18e-4dd7-8b4a-246ef2113ff2';
 const adminId = '0b8f0c1e-3c55-4c1b-9d0e-2f7f3a9f7a10';

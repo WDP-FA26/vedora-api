@@ -7,7 +7,7 @@ import {
   loadTextConfig,
   validContentPolicy,
   validDecisionPolicy,
-} from '../../../src/config/config-files.js';
+} from '@src/config/config-files.js';
 
 describe('external prompt and policy files', () => {
   it('preserves the three prompt texts and three policy objects extracted from the original source', () => {

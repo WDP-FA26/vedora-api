@@ -1,8 +1,8 @@
 import { type DeepMockProxy, mockDeep } from 'vitest-mock-extended';
-import { profileBm25 } from '../../../../src/profiles/search/profile-search-collection.js';
-import { QdrantService } from '../../../../src/qdrant/qdrant.service.js';
-import { ProfileSearchIndexService } from '../../../../src/profiles/search/profile-search-index.service.js';
-import { ProfileSearchService } from '../../../../src/profiles/search/profile-search.service.js';
+import { profileBm25 } from '@src/profiles/search/profile-search-collection.js';
+import { QdrantService } from '@src/qdrant/qdrant.service.js';
+import { ProfileSearchIndexService } from '@src/profiles/search/profile-search-index.service.js';
+import { ProfileSearchService } from '@src/profiles/search/profile-search.service.js';
 
 describe('ProfileSearchService', () => {
   let qdrant: DeepMockProxy<QdrantService>;

@@ -1,9 +1,5 @@
-import { runtimeConfig } from '../../src/config/runtime-config.js';
-import {
-  addDays,
-  calendarDate,
-  mondayOf,
-} from '../../src/meal-plan/meal-week.js';
+import { runtimeConfig } from '@src/config/runtime-config.js';
+import { addDays, calendarDate, mondayOf } from '@src/meal-plan/meal-week.js';
 
 /**
  * Monday of next week in the app time zone. The whole week is in the future,

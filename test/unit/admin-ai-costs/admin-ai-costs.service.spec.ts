@@ -4,19 +4,19 @@ import { ConfigService } from '@nestjs/config';
 import { getModelToken } from '@nestjs/mongoose';
 import { Test } from '@nestjs/testing';
 import { Types, type Model } from 'mongoose';
-import { AdminAiCostsService } from '../../../src/admin-ai-costs/admin-ai-costs.service.js';
-import { AiCostTransportService } from '../../../src/ai/telemetry/ai-cost-transport.service.js';
-import { FeatureUnavailableException } from '../../../src/common/exceptions/feature-unavailable.exception.js';
-import { InvalidInputException } from '../../../src/common/exceptions/invalid-input.exception.js';
-import { ResourceNotFoundException } from '../../../src/common/exceptions/resource-not-found.exception.js';
-import { StateConflictException } from '../../../src/common/exceptions/state-conflict.exception.js';
-import { AiCostCall } from '../../../src/mongo/models.js';
-import { MongoModule } from '../../../src/mongo/mongo.module.js';
+import { AdminAiCostsService } from '@src/admin-ai-costs/admin-ai-costs.service.js';
+import { AiCostTransportService } from '@src/ai/telemetry/ai-cost-transport.service.js';
+import { FeatureUnavailableException } from '@src/common/exceptions/feature-unavailable.exception.js';
+import { InvalidInputException } from '@src/common/exceptions/invalid-input.exception.js';
+import { ResourceNotFoundException } from '@src/common/exceptions/resource-not-found.exception.js';
+import { StateConflictException } from '@src/common/exceptions/state-conflict.exception.js';
+import { AiCostCall } from '@src/mongo/models.js';
+import { MongoModule } from '@src/mongo/mongo.module.js';
 import {
   createTestMongoUrl,
   dropTestDatabase,
   prepareTestDatabase,
-} from '../../support/mongo-test-db.js';
+} from '@test/support/mongo-test-db.js';
 
 describe('AdminAiCostsService', () => {
   let app: INestApplication;

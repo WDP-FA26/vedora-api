@@ -2,7 +2,7 @@ import {
   coverFromContent,
   isVideoUrl,
   MAX_COVER_URL_LENGTH,
-} from '../../../../src/posts/blogs/blog-cover.js';
+} from '@src/posts/blogs/blog-cover.js';
 
 const httpsOnly = (url: string) => url.startsWith('https://');
 

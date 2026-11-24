@@ -1,21 +1,21 @@
-import { MODERATION_VERDICTS } from '../../../src/ai/guardrails/guardrail.js';
-import type { MealPlanDto } from '../../../src/meal-plan/dto/meal-plan.dto.js';
+import { MODERATION_VERDICTS } from '@src/ai/guardrails/guardrail.js';
+import type { MealPlanDto } from '@src/meal-plan/dto/meal-plan.dto.js';
 import {
   DAY_NAMES,
   plannerInstructions,
   SECTION_NAMES,
-} from '../../../src/meal-plan/meal-planner.prompt.js';
-import { PLANNER_REFUSALS } from '../../../src/meal-plan/meal-planner.refusals.js';
+} from '@src/meal-plan/meal-planner.prompt.js';
+import { PLANNER_REFUSALS } from '@src/meal-plan/meal-planner.refusals.js';
 import {
   BmiCategory,
   MealSection,
   NutritionGoal,
   Weekday,
-} from '../../../src/mongo/models.js';
+} from '@src/mongo/models.js';
 import type {
   DietaryRestrictionsDto,
   NutritionProfileDto,
-} from '../../../src/recipes/dto/dietary.dto.js';
+} from '@src/recipes/dto/dietary.dto.js';
 
 // Wednesday 2026-11-18: Monday and Tuesday have passed.
 const emptyPlan = (): MealPlanDto => ({

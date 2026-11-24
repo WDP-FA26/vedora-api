@@ -1,5 +1,5 @@
 import 'reflect-metadata';
-import { runtimeConfig } from '../../../src/config/runtime-config.js';
+import { runtimeConfig } from '@src/config/runtime-config.js';
 import { plainToInstance } from 'class-transformer';
 import { validate } from 'class-validator';
 import {
@@ -11,13 +11,13 @@ import {
   SaveMealDaysDto,
   UpdateMealPlanChatThreadDto,
   WEEKDAYS,
-} from '../../../src/meal-plan/dto/meal-plan.dto.js';
+} from '@src/meal-plan/dto/meal-plan.dto.js';
 import {
   RequiredWeekQueryDto,
   WeekQueryDto,
-} from '../../../src/meal-plan/dto/week-start.js';
-import { ShoppingListQueryDto } from '../../../src/meal-plan/dto/shopping-list.dto.js';
-import { MealSection, Weekday } from '../../../src/mongo/models.js';
+} from '@src/meal-plan/dto/week-start.js';
+import { ShoppingListQueryDto } from '@src/meal-plan/dto/shopping-list.dto.js';
+import { MealSection, Weekday } from '@src/mongo/models.js';
 
 const uuid1 = 'd1a2d3e4-0000-4000-8000-000000000001';
 const uuid2 = 'd1a2d3e4-0000-4000-8000-000000000002';

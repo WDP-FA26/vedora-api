@@ -1,8 +1,8 @@
 import { ConfigModule } from '@nestjs/config';
 import { Test } from '@nestjs/testing';
 import type { Mailer } from '@nestjs/mail';
-import { MailModule } from '../../../src/mail/mail.module.js';
-import { MailService } from '../../../src/mail/mail.service.js';
+import { MailModule } from '@src/mail/mail.module.js';
+import { MailService } from '@src/mail/mail.service.js';
 
 describe('MailService & MailModule', () => {
   it('sends formatted verification and password reset emails', async () => {

@@ -1,10 +1,10 @@
 import { mockDeep } from 'vitest-mock-extended';
-import type { AuthenticatedRequest } from '../../../src/auth-core/auth.types.js';
-import { ProfileImageKind, UserRole } from '../../../src/mongo/models.js';
+import type { AuthenticatedRequest } from '@src/auth-core/auth.types.js';
+import { ProfileImageKind, UserRole } from '@src/mongo/models.js';
 import type {
   FollowSuggestionListDto,
   FollowSuggestionQueryDto,
-} from '../../../src/profiles/dto/follow-suggestion.dto.js';
+} from '@src/profiles/dto/follow-suggestion.dto.js';
 import type {
   CreateProfileImageUploadDto,
   ProfileDto,
@@ -12,11 +12,11 @@ import type {
   ProfileListDto,
   ProfileRelationshipDto,
   ProfileSearchPageDto,
-} from '../../../src/profiles/dto/profile.dto.js';
-import type { SearchProfilesQueryDto } from '../../../src/profiles/dto/search-profiles-query.dto.js';
-import type { FollowSuggestionsService } from '../../../src/profiles/follow-suggestions.service.js';
-import { ProfilesController } from '../../../src/profiles/profiles.controller.js';
-import type { ProfilesService } from '../../../src/profiles/profiles.service.js';
+} from '@src/profiles/dto/profile.dto.js';
+import type { SearchProfilesQueryDto } from '@src/profiles/dto/search-profiles-query.dto.js';
+import type { FollowSuggestionsService } from '@src/profiles/follow-suggestions.service.js';
+import { ProfilesController } from '@src/profiles/profiles.controller.js';
+import type { ProfilesService } from '@src/profiles/profiles.service.js';
 
 describe('ProfilesController', () => {
   const userId = '4a1e32e4-e18e-4dd7-8b4a-246ef2113ff2';

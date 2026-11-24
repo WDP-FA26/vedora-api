@@ -1,11 +1,11 @@
 import { Logger } from '@nestjs/common';
-import { FeatureUnavailableException } from '../../../src/common/exceptions/feature-unavailable.exception.js';
-import { UnauthenticatedException } from '../../../src/common/exceptions/unauthenticated.exception.js';
+import { FeatureUnavailableException } from '@src/common/exceptions/feature-unavailable.exception.js';
+import { UnauthenticatedException } from '@src/common/exceptions/unauthenticated.exception.js';
 import { ConfigService } from '@nestjs/config';
 import { Test } from '@nestjs/testing';
 import { OAuth2Client } from 'google-auth-library';
 import type { Mock } from 'vitest';
-import { GoogleOAuthService } from '../../../src/auth/google-oauth.service.js';
+import { GoogleOAuthService } from '@src/auth/google-oauth.service.js';
 
 describe('GoogleOAuthService', () => {
   const env: Record<string, string> = {

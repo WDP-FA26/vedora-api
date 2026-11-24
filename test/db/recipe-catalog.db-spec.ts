@@ -13,36 +13,36 @@ import {
   type Recipe,
   type User,
   Weekday,
-} from '../../src/mongo/models.js';
-import { MongoModule } from '../../src/mongo/mongo.module.js';
-import { MongoService } from '../../src/mongo/mongo.service.js';
+} from '@src/mongo/models.js';
+import { MongoModule } from '@src/mongo/mongo.module.js';
+import { MongoService } from '@src/mongo/mongo.service.js';
 import request from 'supertest';
 import type { App } from 'supertest/types.js';
-import { configureApp } from '../../src/app.setup.js';
-import { MealPlanController } from '../../src/meal-plan/meal-plan.controller.js';
-import { MealPlannerChatService } from '../../src/meal-plan/meal-planner-chat.service.js';
-import { UserThrottlerGuard } from '../../src/auth-core/user-throttler.guard.js';
+import { configureApp } from '@src/app.setup.js';
+import { MealPlanController } from '@src/meal-plan/meal-plan.controller.js';
+import { MealPlannerChatService } from '@src/meal-plan/meal-planner-chat.service.js';
+import { UserThrottlerGuard } from '@src/auth-core/user-throttler.guard.js';
 import type {
   MealPlanDto,
   SaveMealDayDto,
-} from '../../src/meal-plan/dto/meal-plan.dto.js';
-import { RecipeCatalogQueryDto } from '../../src/recipes/dto/recipe-catalog.dto.js';
-import { IncompatibilityRulesService } from '../../src/recipes/incompatibility-rules.service.js';
-import { RecipeCatalogService } from '../../src/recipes/recipe-catalog.service.js';
-import { RecipeRelationsService } from '../../src/recipes/recipe-relations.service.js';
-import { MealPlanService } from '../../src/meal-plan/meal-plan.service.js';
-import { DietaryService } from '../../src/recipes/dietary.service.js';
+} from '@src/meal-plan/dto/meal-plan.dto.js';
+import { RecipeCatalogQueryDto } from '@src/recipes/dto/recipe-catalog.dto.js';
+import { IncompatibilityRulesService } from '@src/recipes/incompatibility-rules.service.js';
+import { RecipeCatalogService } from '@src/recipes/recipe-catalog.service.js';
+import { RecipeRelationsService } from '@src/recipes/recipe-relations.service.js';
+import { MealPlanService } from '@src/meal-plan/meal-plan.service.js';
+import { DietaryService } from '@src/recipes/dietary.service.js';
 import {
   createIngredient,
   createPost,
   createRecipe,
   createUser,
-} from '../support/fixtures.js';
+} from '@test/support/fixtures.js';
 import {
   createTestMongoUrl,
   dropTestDatabase,
   prepareTestDatabase,
-} from '../support/mongo-test-db.js';
+} from '@test/support/mongo-test-db.js';
 
 // 00:30 on Monday 2026-11-16 in the app time zone, so every day is still ahead.
 const WEEK = '2026-11-16';

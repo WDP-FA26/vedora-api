@@ -2,8 +2,8 @@ import { randomUUID } from 'node:crypto';
 import type { INestApplication } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { mongo } from 'mongoose';
-import { InvalidInputException } from '../../../src/common/exceptions/invalid-input.exception.js';
-import { StateConflictException } from '../../../src/common/exceptions/state-conflict.exception.js';
+import { InvalidInputException } from '@src/common/exceptions/invalid-input.exception.js';
+import { StateConflictException } from '@src/common/exceptions/state-conflict.exception.js';
 import {
   AccountStatus,
   AiFeature,
@@ -13,21 +13,21 @@ import {
   PaymentStatus,
   User,
   UserRole,
-} from '../../../src/mongo/models.js';
-import { MongoModule } from '../../../src/mongo/mongo.module.js';
-import { MongoService } from '../../../src/mongo/mongo.service.js';
+} from '@src/mongo/models.js';
+import { MongoModule } from '@src/mongo/mongo.module.js';
+import { MongoService } from '@src/mongo/mongo.service.js';
 import {
   AiUsageService,
   usageHash,
   type UsageTicket,
-} from '../../../src/subscriptions/ai-usage.service.js';
-import { SubscriptionsModule } from '../../../src/subscriptions/subscriptions.module.js';
-import { SubscriptionsService } from '../../../src/subscriptions/subscriptions.service.js';
+} from '@src/subscriptions/ai-usage.service.js';
+import { SubscriptionsModule } from '@src/subscriptions/subscriptions.module.js';
+import { SubscriptionsService } from '@src/subscriptions/subscriptions.service.js';
 import {
   createTestMongoUrl,
   dropTestDatabase,
   prepareTestDatabase,
-} from '../../support/mongo-test-db.js';
+} from '@test/support/mongo-test-db.js';
 
 const USER_ID = '00000000-0000-4000-8000-000000000202';
 const NOW = new Date('2026-11-09T10:00:00Z');

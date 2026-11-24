@@ -11,13 +11,13 @@ import {
   WorkspaceProof,
   RestaurantMenuItem,
   RestaurantReview,
-} from '../../src/mongo/models.js';
-import { RefreshTokensService } from '../../src/auth/refresh-tokens.service.js';
-import { QdrantService } from '../../src/qdrant/qdrant.service.js';
-import { StorageService } from '../../src/storage/storage.service.js';
-import { MenuSearchIndexService } from '../../src/workspaces/search/menu-search-index.service.js';
-import { createE2eApp, type E2eApp } from '../support/e2e-app.js';
-import { createUser } from '../support/fixtures.js';
+} from '@src/mongo/models.js';
+import { RefreshTokensService } from '@src/auth/refresh-tokens.service.js';
+import { QdrantService } from '@src/qdrant/qdrant.service.js';
+import { StorageService } from '@src/storage/storage.service.js';
+import { MenuSearchIndexService } from '@src/workspaces/search/menu-search-index.service.js';
+import { createE2eApp, type E2eApp } from '@test/support/e2e-app.js';
+import { createUser } from '@test/support/fixtures.js';
 
 const errorSchema = z.object({ statusCode: z.number(), code: z.string() });
 const restaurantPinSchema = z.object({
@@ -67,7 +67,11 @@ const reviewPageSchema = z.object({
     }),
   }),
   myReview: z
-    .object({ id: z.string(), rating: z.number(), comment: z.string().nullable() })
+    .object({
+      id: z.string(),
+      rating: z.number(),
+      comment: z.string().nullable(),
+    })
     .nullable(),
   items: z.array(
     z.object({

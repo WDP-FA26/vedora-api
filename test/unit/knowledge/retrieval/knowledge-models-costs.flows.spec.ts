@@ -3,18 +3,18 @@ import { ConfigService } from '@nestjs/config';
 import { AiService } from '@nestjs/ai';
 import { Test } from '@nestjs/testing';
 import { mockDeep } from 'vitest-mock-extended';
-import { aiCostContext } from '../../../../src/ai/telemetry/ai-cost-context.js';
-import { AiCostTransportService } from '../../../../src/ai/telemetry/ai-cost-transport.service.js';
-import { ExternalServiceException } from '../../../../src/common/exceptions/external-service.exception.js';
-import { KnowledgeModelsService } from '../../../../src/knowledge/retrieval/knowledge-models.service.js';
-import type { AiCostCall } from '../../../../src/mongo/models.js';
-import { MongoModule } from '../../../../src/mongo/mongo.module.js';
-import { MongoService } from '../../../../src/mongo/mongo.service.js';
+import { aiCostContext } from '@src/ai/telemetry/ai-cost-context.js';
+import { AiCostTransportService } from '@src/ai/telemetry/ai-cost-transport.service.js';
+import { ExternalServiceException } from '@src/common/exceptions/external-service.exception.js';
+import { KnowledgeModelsService } from '@src/knowledge/retrieval/knowledge-models.service.js';
+import type { AiCostCall } from '@src/mongo/models.js';
+import { MongoModule } from '@src/mongo/mongo.module.js';
+import { MongoService } from '@src/mongo/mongo.service.js';
 import {
   createTestMongoUrl,
   dropTestDatabase,
   prepareTestDatabase,
-} from '../../../support/mongo-test-db.js';
+} from '@test/support/mongo-test-db.js';
 
 /**
  * ai-cost-tracking.md: every HTTP attempt to OpenRouter through an integrated

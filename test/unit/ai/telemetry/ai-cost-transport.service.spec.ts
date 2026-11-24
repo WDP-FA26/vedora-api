@@ -3,16 +3,16 @@ import type { INestApplication } from '@nestjs/common';
 import { getModelToken } from '@nestjs/mongoose';
 import { Test } from '@nestjs/testing';
 import type { Model } from 'mongoose';
-import { aiCostContext } from '../../../../src/ai/telemetry/ai-cost-context.js';
-import { AiCostTransportService } from '../../../../src/ai/telemetry/ai-cost-transport.service.js';
-import { CostObservation } from '../../../../src/ai/telemetry/cost-observation.js';
-import { AiCostCall } from '../../../../src/mongo/models.js';
-import { MongoModule } from '../../../../src/mongo/mongo.module.js';
+import { aiCostContext } from '@src/ai/telemetry/ai-cost-context.js';
+import { AiCostTransportService } from '@src/ai/telemetry/ai-cost-transport.service.js';
+import { CostObservation } from '@src/ai/telemetry/cost-observation.js';
+import { AiCostCall } from '@src/mongo/models.js';
+import { MongoModule } from '@src/mongo/mongo.module.js';
 import {
   createTestMongoUrl,
   dropTestDatabase,
   prepareTestDatabase,
-} from '../../../support/mongo-test-db.js';
+} from '@test/support/mongo-test-db.js';
 
 describe('AiCostTransportService', () => {
   let app: INestApplication;

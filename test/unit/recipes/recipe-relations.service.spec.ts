@@ -1,28 +1,25 @@
 import type { INestApplication } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
-import { InvalidInputException } from '../../../src/common/exceptions/invalid-input.exception.js';
-import {
-  type IncompatibilityRule,
-  PostStatus,
-} from '../../../src/mongo/models.js';
-import { MongoModule } from '../../../src/mongo/mongo.module.js';
-import { MongoService } from '../../../src/mongo/mongo.service.js';
-import { IncompatibilityRulesService } from '../../../src/recipes/incompatibility-rules.service.js';
+import { InvalidInputException } from '@src/common/exceptions/invalid-input.exception.js';
+import { type IncompatibilityRule, PostStatus } from '@src/mongo/models.js';
+import { MongoModule } from '@src/mongo/mongo.module.js';
+import { MongoService } from '@src/mongo/mongo.service.js';
+import { IncompatibilityRulesService } from '@src/recipes/incompatibility-rules.service.js';
 import {
   RecipeRelationsService,
   sourcePostIds,
-} from '../../../src/recipes/recipe-relations.service.js';
+} from '@src/recipes/recipe-relations.service.js';
 import {
   createIngredient,
   createPost,
   createRecipe,
   createUser,
-} from '../../support/fixtures.js';
+} from '@test/support/fixtures.js';
 import {
   createTestMongoUrl,
   dropTestDatabase,
   prepareTestDatabase,
-} from '../../support/mongo-test-db.js';
+} from '@test/support/mongo-test-db.js';
 
 const USER_ID = '4a1e32e4-e18e-4dd7-8b4a-246ef2113ff2';
 const TOFU_ID = 'a1a2d3e4-0000-4000-8000-000000000001';

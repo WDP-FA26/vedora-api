@@ -3,13 +3,10 @@ import { readFileSync } from 'node:fs';
 import {
   numericDefaults,
   stringDefaults,
-} from '../../../src/config/runtime-defaults.js';
-import { parseRuntimeSettings } from '../../../src/config/runtime-settings.js';
-import { validateEnvironment } from '../../../src/config/environment.js';
-import {
-  nextCalendarDay,
-  zonedMidnight,
-} from '../../../src/config/time-zone.js';
+} from '@src/config/runtime-defaults.js';
+import { parseRuntimeSettings } from '@src/config/runtime-settings.js';
+import { validateEnvironment } from '@src/config/environment.js';
+import { nextCalendarDay, zonedMidnight } from '@src/config/time-zone.js';
 
 describe('backend operational environment settings', () => {
   it('preserves captured defaults and explicit changes from main, including units', () => {

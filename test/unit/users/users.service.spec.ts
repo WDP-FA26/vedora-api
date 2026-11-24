@@ -1,28 +1,28 @@
 import type { INestApplication } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { randomUUID } from 'node:crypto';
-import type { AuthenticatedUser } from '../../../src/auth-core/auth.types.js';
-import { AccessDeniedException } from '../../../src/common/exceptions/access-denied.exception.js';
-import { ResourceNotFoundException } from '../../../src/common/exceptions/resource-not-found.exception.js';
-import { StateConflictException } from '../../../src/common/exceptions/state-conflict.exception.js';
-import { UnauthenticatedException } from '../../../src/common/exceptions/unauthenticated.exception.js';
+import type { AuthenticatedUser } from '@src/auth-core/auth.types.js';
+import { AccessDeniedException } from '@src/common/exceptions/access-denied.exception.js';
+import { ResourceNotFoundException } from '@src/common/exceptions/resource-not-found.exception.js';
+import { StateConflictException } from '@src/common/exceptions/state-conflict.exception.js';
+import { UnauthenticatedException } from '@src/common/exceptions/unauthenticated.exception.js';
 import {
   AccountStatus,
   User,
   UserAccountAction,
   UserAccountAudit,
   UserRole,
-} from '../../../src/mongo/models.js';
-import { MongoModule } from '../../../src/mongo/mongo.module.js';
-import { MongoService } from '../../../src/mongo/mongo.service.js';
-import { AccountsService } from '../../../src/users/accounts.service.js';
-import { UsersService } from '../../../src/users/users.service.js';
-import { createUser } from '../../support/fixtures.js';
+} from '@src/mongo/models.js';
+import { MongoModule } from '@src/mongo/mongo.module.js';
+import { MongoService } from '@src/mongo/mongo.service.js';
+import { AccountsService } from '@src/users/accounts.service.js';
+import { UsersService } from '@src/users/users.service.js';
+import { createUser } from '@test/support/fixtures.js';
 import {
   createTestMongoUrl,
   dropTestDatabase,
   prepareTestDatabase,
-} from '../../support/mongo-test-db.js';
+} from '@test/support/mongo-test-db.js';
 
 describe('UsersService', () => {
   let app: INestApplication;

@@ -9,14 +9,14 @@ import {
   type RecipeFavorite,
   type User,
   UserRole,
-} from '../../src/mongo/models.js';
-import { createE2eApp, type E2eApp } from '../support/e2e-app.js';
-import { nextWeekStart } from '../support/meal-week.js';
+} from '@src/mongo/models.js';
+import { createE2eApp, type E2eApp } from '@test/support/e2e-app.js';
+import { nextWeekStart } from '@test/support/meal-week.js';
 import {
   createIngredient,
   createRecipe,
   createUser,
-} from '../support/fixtures.js';
+} from '@test/support/fixtures.js';
 
 interface ErrorBody {
   statusCode: number;

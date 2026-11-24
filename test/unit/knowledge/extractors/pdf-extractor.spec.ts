@@ -1,11 +1,11 @@
 import {
   KnowledgeDocumentFailureReason,
   KnowledgePageFlag,
-} from '../../../../src/mongo/models.js';
+} from '@src/mongo/models.js';
 import { type DeepMockProxy, mockDeep } from 'vitest-mock-extended';
-import { KnowledgeModelsService } from '../../../../src/knowledge/retrieval/knowledge-models.service.js';
-import { DocumentExtractionError } from '../../../../src/knowledge/extractors/document-extractor.js';
-import { PdfExtractor } from '../../../../src/knowledge/extractors/pdf-extractor.js';
+import { KnowledgeModelsService } from '@src/knowledge/retrieval/knowledge-models.service.js';
+import { DocumentExtractionError } from '@src/knowledge/extractors/document-extractor.js';
+import { PdfExtractor } from '@src/knowledge/extractors/pdf-extractor.js';
 
 type Page = { text?: string; image?: boolean };
 

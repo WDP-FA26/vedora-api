@@ -2,13 +2,13 @@ import type { UIMessageChunk } from 'ai';
 import type { Response } from 'express';
 import { EventEmitter } from 'node:events';
 import { type DeepMockProxy, mockDeep } from 'vitest-mock-extended';
-import type { AuthenticatedRequest } from '../../../src/auth-core/auth.types.js';
-import type { MealPlanDto } from '../../../src/meal-plan/dto/meal-plan.dto.js';
-import { MealPlanController } from '../../../src/meal-plan/meal-plan.controller.js';
-import type { MealPlanService } from '../../../src/meal-plan/meal-plan.service.js';
-import type { MealPlannerChatHistoryService } from '../../../src/meal-plan/meal-planner-chat-history.service.js';
-import type { MealPlannerChatService } from '../../../src/meal-plan/meal-planner-chat.service.js';
-import { MealSection, UserRole, Weekday } from '../../../src/mongo/models.js';
+import type { AuthenticatedRequest } from '@src/auth-core/auth.types.js';
+import type { MealPlanDto } from '@src/meal-plan/dto/meal-plan.dto.js';
+import { MealPlanController } from '@src/meal-plan/meal-plan.controller.js';
+import type { MealPlanService } from '@src/meal-plan/meal-plan.service.js';
+import type { MealPlannerChatHistoryService } from '@src/meal-plan/meal-planner-chat-history.service.js';
+import type { MealPlannerChatService } from '@src/meal-plan/meal-planner-chat.service.js';
+import { MealSection, UserRole, Weekday } from '@src/mongo/models.js';
 
 const { pipeUIMessageStreamToResponse } = vi.hoisted(() => ({
   pipeUIMessageStreamToResponse: vi.fn<() => Promise<void>>(() =>

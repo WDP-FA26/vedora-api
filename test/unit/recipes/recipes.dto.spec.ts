@@ -7,31 +7,31 @@ import {
   SaveDietaryRestrictionsDto,
   SaveNutritionProfileDto,
   WeightCheckInDto,
-} from '../../../src/recipes/dto/dietary.dto.js';
+} from '@src/recipes/dto/dietary.dto.js';
 import {
   ActivityLevel,
   BiologicalSex,
   BodyFeeling,
   NutritionGoal,
-} from '../../../src/mongo/models.js';
+} from '@src/mongo/models.js';
 import {
   MAX_ALIASES,
   MAX_NAME_LENGTH,
   SaveIncompatibilityRuleDto,
   SaveIngredientDto,
   SaveIngredientGroupDto,
-} from '../../../src/recipes/dto/ingredient.dto.js';
+} from '@src/recipes/dto/ingredient.dto.js';
 import {
   RecipeCatalogQueryDto,
   totalMinutes,
-} from '../../../src/recipes/dto/recipe-catalog.dto.js';
-import { SetRecipeRatingDto } from '../../../src/recipes/dto/recipe-rating.dto.js';
+} from '@src/recipes/dto/recipe-catalog.dto.js';
+import { SetRecipeRatingDto } from '@src/recipes/dto/recipe-rating.dto.js';
 import {
   CheckConflictsDto,
   type RecipeDetailDto,
   SaveRecipeDto,
   toRecipeCard,
-} from '../../../src/recipes/dto/recipe.dto.js';
+} from '@src/recipes/dto/recipe.dto.js';
 
 const uuid = (n: number) =>
   `a1a2d3e4-0000-4000-8000-${String(n).padStart(12, '0')}`;

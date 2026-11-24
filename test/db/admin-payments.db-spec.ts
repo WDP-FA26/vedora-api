@@ -6,8 +6,8 @@ import { JwtModule, JwtService } from '@nestjs/jwt';
 import { Test } from '@nestjs/testing';
 import request from 'supertest';
 import type { App } from 'supertest/types.js';
-import { MongoModule } from '../../src/mongo/mongo.module.js';
-import { MongoService } from '../../src/mongo/mongo.service.js';
+import { MongoModule } from '@src/mongo/mongo.module.js';
+import { MongoService } from '@src/mongo/mongo.service.js';
 import {
   AccountStatus,
   BillingPlan,
@@ -16,24 +16,24 @@ import {
   PaymentWebhookReceipt,
   User,
   UserRole,
-} from '../../src/mongo/models.js';
-import { SubscriptionsModule } from '../../src/subscriptions/subscriptions.module.js';
-import { AdminPaymentsController } from '../../src/payments/admin/admin-payments.controller.js';
-import { AdminPaymentsService } from '../../src/payments/admin/admin-payments.service.js';
+} from '@src/mongo/models.js';
+import { SubscriptionsModule } from '@src/subscriptions/subscriptions.module.js';
+import { AdminPaymentsController } from '@src/payments/admin/admin-payments.controller.js';
+import { AdminPaymentsService } from '@src/payments/admin/admin-payments.service.js';
 import {
   AdminPaymentListDto,
   AdminPaymentPageDto,
   AdminReceiptQueryDto,
   AdminSubscriptionQueryDto,
-} from '../../src/payments/admin/admin-payment-query.dto.js';
-import { AppExceptionFilter } from '../../src/common/exceptions/app-exception.filter.js';
-import { configureApp } from '../../src/app.setup.js';
-import { createUser } from '../support/fixtures.js';
+} from '@src/payments/admin/admin-payment-query.dto.js';
+import { AppExceptionFilter } from '@src/common/exceptions/app-exception.filter.js';
+import { configureApp } from '@src/app.setup.js';
+import { createUser } from '@test/support/fixtures.js';
 import {
   createTestMongoUrl,
   dropTestDatabase,
   prepareTestDatabase,
-} from '../support/mongo-test-db.js';
+} from '@test/support/mongo-test-db.js';
 
 describe('Admin payment management with MongoDB', () => {
   let app: INestApplication<App>,

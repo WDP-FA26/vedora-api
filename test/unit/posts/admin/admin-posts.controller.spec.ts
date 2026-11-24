@@ -1,10 +1,10 @@
 import { type DeepMockProxy, mockDeep } from 'vitest-mock-extended';
-import type { AuthenticatedRequest } from '../../../../src/auth-core/auth.types.js';
-import type { PaginatedResponseDto } from '../../../../src/common/pagination/index.js';
-import { PostStatus, UserRole } from '../../../../src/mongo/models.js';
-import { AdminPostsController } from '../../../../src/posts/admin/admin-posts.controller.js';
-import type { AdminPostsService } from '../../../../src/posts/admin/admin-posts.service.js';
-import type { AdminPostDto } from '../../../../src/posts/dto/admin-post.dto.js';
+import type { AuthenticatedRequest } from '@src/auth-core/auth.types.js';
+import type { PaginatedResponseDto } from '@src/common/pagination/index.js';
+import { PostStatus, UserRole } from '@src/mongo/models.js';
+import { AdminPostsController } from '@src/posts/admin/admin-posts.controller.js';
+import type { AdminPostsService } from '@src/posts/admin/admin-posts.service.js';
+import type { AdminPostDto } from '@src/posts/dto/admin-post.dto.js';
 
 describe('AdminPostsController', () => {
   const adminId = '11111111-1111-4111-8111-111111111111';

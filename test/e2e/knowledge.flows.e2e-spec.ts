@@ -1,12 +1,12 @@
 import { randomUUID } from 'node:crypto';
 import request from 'supertest';
-import { KnowledgeMaintenanceService } from '../../src/knowledge/knowledge-maintenance.service.js';
-import { KnowledgeService } from '../../src/knowledge/knowledge.service.js';
-import { PdfExtractor } from '../../src/knowledge/extractors/pdf-extractor.js';
-import type { ExtractedSection } from '../../src/knowledge/extractors/document-extractor.js';
-import { KnowledgeIndexService } from '../../src/knowledge/retrieval/knowledge-index.service.js';
-import { KnowledgeModelsService } from '../../src/knowledge/retrieval/knowledge-models.service.js';
-import { KnowledgeSearchService } from '../../src/knowledge/retrieval/knowledge-search.service.js';
+import { KnowledgeMaintenanceService } from '@src/knowledge/knowledge-maintenance.service.js';
+import { KnowledgeService } from '@src/knowledge/knowledge.service.js';
+import { PdfExtractor } from '@src/knowledge/extractors/pdf-extractor.js';
+import type { ExtractedSection } from '@src/knowledge/extractors/document-extractor.js';
+import { KnowledgeIndexService } from '@src/knowledge/retrieval/knowledge-index.service.js';
+import { KnowledgeModelsService } from '@src/knowledge/retrieval/knowledge-models.service.js';
+import { KnowledgeSearchService } from '@src/knowledge/retrieval/knowledge-search.service.js';
 import {
   type KnowledgeDocument,
   KnowledgeDocumentFailureReason,
@@ -14,11 +14,11 @@ import {
   type KnowledgePage,
   type User,
   UserRole,
-} from '../../src/mongo/models.js';
-import { QdrantService } from '../../src/qdrant/qdrant.service.js';
-import { StorageService } from '../../src/storage/storage.service.js';
-import { createE2eApp, type E2eApp } from '../support/e2e-app.js';
-import { createUser } from '../support/fixtures.js';
+} from '@src/mongo/models.js';
+import { QdrantService } from '@src/qdrant/qdrant.service.js';
+import { StorageService } from '@src/storage/storage.service.js';
+import { createE2eApp, type E2eApp } from '@test/support/e2e-app.js';
+import { createUser } from '@test/support/fixtures.js';
 
 /**
  * Black-box flows of the admin knowledge base: upload → OCR → review →

@@ -3,11 +3,11 @@ import { getModelToken } from '@nestjs/mongoose';
 import { Test } from '@nestjs/testing';
 import type { Model } from 'mongoose';
 import { type DeepMockProxy, mockDeep } from 'vitest-mock-extended';
-import { AccessDeniedException } from '../../../src/common/exceptions/access-denied.exception.js';
-import { InvalidInputException } from '../../../src/common/exceptions/invalid-input.exception.js';
-import { ResourceNotFoundException } from '../../../src/common/exceptions/resource-not-found.exception.js';
-import { StateConflictException } from '../../../src/common/exceptions/state-conflict.exception.js';
-import { MediaService } from '../../../src/media/media.service.js';
+import { AccessDeniedException } from '@src/common/exceptions/access-denied.exception.js';
+import { InvalidInputException } from '@src/common/exceptions/invalid-input.exception.js';
+import { ResourceNotFoundException } from '@src/common/exceptions/resource-not-found.exception.js';
+import { StateConflictException } from '@src/common/exceptions/state-conflict.exception.js';
+import { MediaService } from '@src/media/media.service.js';
 import {
   MediaAsset,
   Post,
@@ -15,19 +15,19 @@ import {
   PostStatus,
   PostType,
   type User,
-} from '../../../src/mongo/models.js';
-import { MongoModule } from '../../../src/mongo/mongo.module.js';
-import { MongoService } from '../../../src/mongo/mongo.service.js';
-import type { PostResponseDto } from '../../../src/posts/dto/post-response.dto.js';
-import { PostsQueryService } from '../../../src/posts/posts-query.service.js';
-import { PostsService } from '../../../src/posts/posts.service.js';
-import { PostSearchIndexService } from '../../../src/posts/search/post-search-index.service.js';
-import { createMedia, createPost, createUser } from '../../support/fixtures.js';
+} from '@src/mongo/models.js';
+import { MongoModule } from '@src/mongo/mongo.module.js';
+import { MongoService } from '@src/mongo/mongo.service.js';
+import type { PostResponseDto } from '@src/posts/dto/post-response.dto.js';
+import { PostsQueryService } from '@src/posts/posts-query.service.js';
+import { PostsService } from '@src/posts/posts.service.js';
+import { PostSearchIndexService } from '@src/posts/search/post-search-index.service.js';
+import { createMedia, createPost, createUser } from '@test/support/fixtures.js';
 import {
   createTestMongoUrl,
   dropTestDatabase,
   prepareTestDatabase,
-} from '../../support/mongo-test-db.js';
+} from '@test/support/mongo-test-db.js';
 
 describe('PostsService', () => {
   let app: INestApplication;

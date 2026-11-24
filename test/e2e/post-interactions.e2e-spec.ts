@@ -1,21 +1,21 @@
 import { randomUUID } from 'node:crypto';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import request from 'supertest';
-import type { CommentPageDto } from '../../src/posts/dto/comment.dto.js';
-import type { PostPageDto } from '../../src/posts/dto/post-response.dto.js';
+import type { CommentPageDto } from '@src/posts/dto/comment.dto.js';
+import type { PostPageDto } from '@src/posts/dto/post-response.dto.js';
 import {
   Post,
   PostComment,
   PostStatus,
   User,
   UserRole,
-} from '../../src/mongo/models.js';
+} from '@src/mongo/models.js';
 import {
   createE2eApp,
   type E2eApp,
   VIOLATION_MARKER,
-} from '../support/e2e-app.js';
-import { createPost, createUser } from '../support/fixtures.js';
+} from '@test/support/e2e-app.js';
+import { createPost, createUser } from '@test/support/fixtures.js';
 
 describe('Post comments and likes (e2e)', () => {
   let e2e: E2eApp;

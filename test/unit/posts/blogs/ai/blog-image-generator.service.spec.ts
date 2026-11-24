@@ -2,13 +2,10 @@ import { FakeModel } from '@nestjs/ai/testing';
 import { ConfigService } from '@nestjs/config';
 import { MockImageModelV4 } from 'ai/test';
 import { type DeepMockProxy, mockDeep } from 'vitest-mock-extended';
-import { AiUsageService } from '../../../../../src/subscriptions/ai-usage.service.js';
-import {
-  StorageService,
-  StorageTarget,
-} from '../../../../../src/storage/storage.service.js';
-import { BlogImageGeneratorService } from '../../../../../src/posts/blogs/ai/blog-image-generator.service.js';
-import { AiCostTransportService } from '../../../../../src/ai/telemetry/ai-cost-transport.service.js';
+import { AiUsageService } from '@src/subscriptions/ai-usage.service.js';
+import { StorageService, StorageTarget } from '@src/storage/storage.service.js';
+import { BlogImageGeneratorService } from '@src/posts/blogs/ai/blog-image-generator.service.js';
+import { AiCostTransportService } from '@src/ai/telemetry/ai-cost-transport.service.js';
 
 const USER_ID = '4a1e32e4-e18e-4dd7-8b4a-246ef2113ff2';
 const OTHER_ID = '9b2f43f5-f29f-4ee8-9c5b-357f03224003';

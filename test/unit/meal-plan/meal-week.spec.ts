@@ -6,8 +6,8 @@ import {
   isWeekStart,
   mealWeek,
   mondayOf,
-} from '../../../src/meal-plan/meal-week.js';
-import { Weekday } from '../../../src/mongo/models.js';
+} from '@src/meal-plan/meal-week.js';
+import { Weekday } from '@src/mongo/models.js';
 
 const ZONE = 'Asia/Bangkok';
 

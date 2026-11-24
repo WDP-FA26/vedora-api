@@ -6,8 +6,8 @@ import {
   CloudinaryService,
   STREAM_TRANSFORMATION,
   UPLOAD_CHUNK_BYTES,
-} from '../../../src/cloudinary/cloudinary.service.js';
-import { FeatureUnavailableException } from '../../../src/common/exceptions/feature-unavailable.exception.js';
+} from '@src/cloudinary/cloudinary.service.js';
+import { FeatureUnavailableException } from '@src/common/exceptions/feature-unavailable.exception.js';
 
 function createService(
   overrides: Record<string, unknown> = {},

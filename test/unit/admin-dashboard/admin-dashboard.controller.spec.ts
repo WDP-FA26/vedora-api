@@ -1,7 +1,7 @@
 import { mockDeep } from 'vitest-mock-extended';
-import { AdminDashboardController } from '../../../src/admin-dashboard/admin-dashboard.controller.js';
-import type { AdminDashboardService } from '../../../src/admin-dashboard/admin-dashboard.service.js';
-import type { DashboardDto } from '../../../src/admin-dashboard/dto/dashboard.dto.js';
+import { AdminDashboardController } from '@src/admin-dashboard/admin-dashboard.controller.js';
+import type { AdminDashboardService } from '@src/admin-dashboard/admin-dashboard.service.js';
+import type { DashboardDto } from '@src/admin-dashboard/dto/dashboard.dto.js';
 
 describe('AdminDashboardController', () => {
   it('delegates get() with query to AdminDashboardService', async () => {

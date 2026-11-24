@@ -2,7 +2,10 @@ import { runtimeConfig } from '../../config/runtime-config.js';
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { AiService } from '@nestjs/ai';
-import { OpenRouterCacheControl } from '../../ai/openrouter.js';
+import {
+  OpenRouterCacheControl,
+  openRouterAttributionHeaders,
+} from '../../ai/openrouter.js';
 import { AiCostTransportService } from '../../ai/telemetry/ai-cost-transport.service.js';
 import { z } from 'zod';
 import { parsePayload, validatePayload } from '../../common/validation.js';
@@ -95,6 +98,7 @@ export class TranscriptionService {
         headers: {
           Authorization: `Bearer ${this.apiKey}`,
           'Content-Type': 'application/json',
+          ...openRouterAttributionHeaders(),
         },
         body: JSON.stringify({
           model: this.transcriptionModel,

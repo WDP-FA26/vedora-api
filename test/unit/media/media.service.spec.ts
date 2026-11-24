@@ -3,15 +3,15 @@ import { ConfigService } from '@nestjs/config';
 import { Test } from '@nestjs/testing';
 import type { ClientSession } from 'mongoose';
 import type { MockInstance } from 'vitest';
-import { createMedia, createPost, createUser } from '../../support/fixtures.js';
+import { createMedia, createPost, createUser } from '@test/support/fixtures.js';
 import {
   createTestMongoUrl,
   dropTestDatabase,
   prepareTestDatabase,
-} from '../../support/mongo-test-db.js';
-import { CloudinaryService } from '../../../src/cloudinary/cloudinary.service.js';
-import { MongoModule } from '../../../src/mongo/mongo.module.js';
-import { MongoService } from '../../../src/mongo/mongo.service.js';
+} from '@test/support/mongo-test-db.js';
+import { CloudinaryService } from '@src/cloudinary/cloudinary.service.js';
+import { MongoModule } from '@src/mongo/mongo.module.js';
+import { MongoService } from '@src/mongo/mongo.service.js';
 import {
   CaptionStatus,
   type MediaAsset,
@@ -20,24 +20,24 @@ import {
   MediaType,
   type Post,
   PostStatus,
-} from '../../../src/mongo/models.js';
-import { CaptionService } from '../../../src/media/captions/caption.service.js';
+} from '@src/mongo/models.js';
+import { CaptionService } from '@src/media/captions/caption.service.js';
 import {
   mediaId,
   ownerId,
   publicId,
   streamBuilt,
   uploaded,
-} from '../../support/media.fixtures.js';
-import { MediaService } from '../../../src/media/media.service.js';
-import { PostModerationService } from '../../../src/media/post-moderation.service.js';
-import { ContentModerationService } from '../../../src/moderation/content-moderation.service.js';
-import type { EvidenceSources } from '../../../src/moderation/content-evidence.js';
-import { StorageService } from '../../../src/storage/storage.service.js';
+} from '@test/support/media.fixtures.js';
+import { MediaService } from '@src/media/media.service.js';
+import { PostModerationService } from '@src/media/post-moderation.service.js';
+import { ContentModerationService } from '@src/moderation/content-moderation.service.js';
+import type { EvidenceSources } from '@src/moderation/content-evidence.js';
+import { StorageService } from '@src/storage/storage.service.js';
 import { Subject } from 'rxjs';
-import { NotificationsService } from '../../../src/notifications/notifications.service.js';
+import { NotificationsService } from '@src/notifications/notifications.service.js';
 
-vi.mock('../../../src/common/http/fetch-public-image.js', () => ({
+vi.mock('@src/common/http/fetch-public-image.js', () => ({
   fetchPublicImage: vi.fn(() => Promise.resolve(Buffer.from('frame'))),
 }));
 
