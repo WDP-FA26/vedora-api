@@ -24,7 +24,7 @@ export type DecisionState = string | readonly DecisionTurn[];
 const DEFAULT_TIMEOUT_MS = runtimeConfig.AI_DECISION_TIMEOUT_MS;
 const MAX_RETRIES = runtimeConfig.AI_DECISION_MAX_RETRIES;
 /** Room for low-effort thinking plus the one-field answer. */
-const MAX_OUTPUT_TOKENS = 4000;
+const MAX_OUTPUT_TOKENS = runtimeConfig.AI_DECISION_MAX_OUTPUT_TOKENS;
 
 function escapeDecisionTags(text: string): string {
   return text.replace(/<\/?(?:message|conversation|turn)\b[^>]*>?/gi, '');

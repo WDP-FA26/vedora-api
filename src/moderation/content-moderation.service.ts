@@ -38,7 +38,7 @@ const TIMEOUT_MS = runtimeConfig.MODERATION_CONTENT_TIMEOUT_MS;
 const MAX_RETRIES = runtimeConfig.AI_DECISION_MAX_RETRIES;
 const MAX_TEXT_CHARS = runtimeConfig.MODERATION_MAX_TEXT_CHARS;
 /** Room for low-effort thinking plus the rating and its evidence. */
-const MAX_OUTPUT_TOKENS = 8000;
+const MAX_OUTPUT_TOKENS = runtimeConfig.MODERATION_CONTENT_MAX_OUTPUT_TOKENS;
 const MAX_RISK = 3;
 const SESSION_ID = 'vedora-content-moderation';
 /** The highest risk level: a clear violation. */

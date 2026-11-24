@@ -2,6 +2,7 @@ import { Logger } from '@nestjs/common';
 import { isStepCount, type LanguageModel, tool, ToolLoopAgent } from 'ai';
 import { z } from 'zod';
 import { OpenRouterCacheControl } from '../../ai/openrouter.js';
+import { runtimeConfig } from '../../config/runtime-config.js';
 import type { KnowledgeSearchService } from '../../knowledge/retrieval/knowledge-search.service.js';
 import { searchKnowledgeTool } from '../../knowledge/tools/search-knowledge.tool.js';
 import type { NutritionProfileDto } from '../../recipes/dto/dietary.dto.js';
@@ -13,7 +14,8 @@ import { SUBAGENT_STATIC_INSTRUCTIONS } from './nutrition-subagent.prompt.js';
 const logger = new Logger('NutritionSubagentTool');
 const SUBAGENT_MAX_STEPS = 6;
 /** Room for medium-effort thinking plus the answer: thinking counts toward it. */
-const SUBAGENT_MAX_OUTPUT_TOKENS = 8000;
+const SUBAGENT_MAX_OUTPUT_TOKENS =
+  runtimeConfig.PLANNER_NUTRITION_SUBAGENT_MAX_OUTPUT_TOKENS;
 
 function userNutritionContext(
   nutrition: NutritionProfileDto | null | undefined,

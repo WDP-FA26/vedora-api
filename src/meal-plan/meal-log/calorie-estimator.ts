@@ -17,7 +17,8 @@ import { CALORIE_ESTIMATE_INSTRUCTIONS } from './calorie-estimator.prompt.js';
 
 const TIMEOUT_MS = runtimeConfig.MEAL_LOG_CALORIE_ESTIMATE_TIMEOUT_MS;
 /** Room for medium-effort reasoning plus the JSON answer: 700 cut the JSON off. */
-const MAX_OUTPUT_TOKENS = 8000;
+const MAX_OUTPUT_TOKENS =
+  runtimeConfig.MEAL_LOG_CALORIE_ESTIMATE_MAX_OUTPUT_TOKENS;
 
 const estimateOutput = z.object({
   caloriesPerServing: z.number().nullable().optional(),

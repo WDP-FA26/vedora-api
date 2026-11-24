@@ -28,7 +28,8 @@ const TIMEOUT_MS = runtimeConfig.RECIPE_DRAFT_TIMEOUT_MS;
 const WEB_RESEARCH_TIMEOUT_MS =
   runtimeConfig.RECIPE_DRAFT_WEB_RESEARCH_TIMEOUT_MS;
 /** Room for medium-effort reasoning plus the JSON answer: 700 cut the JSON off. */
-const WEB_RESEARCH_MAX_OUTPUT_TOKENS = 8000;
+const WEB_RESEARCH_MAX_OUTPUT_TOKENS =
+  runtimeConfig.RECIPE_DRAFT_WEB_RESEARCH_MAX_OUTPUT_TOKENS;
 
 const calorieResearchSchema = z.object({
   caloriesPerServing: z.number().min(10).max(3000).nullable().optional(),
