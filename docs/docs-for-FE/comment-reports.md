@@ -74,3 +74,11 @@ npx vitest run --config vitest.config.e2e.mts test/e2e/comment-reports.e2e-spec.
 ```
 
 Bao phủ phân quyền, validation, tự báo cáo, association sai, nội dung ẩn, receipt riêng tư, trim và snapshot, gửi trùng đồng thời, phân trang, bỏ qua, xóa phản hồi/cả luồng, bằng chứng sau khi xóa, race giữa các admin, rollback và race với xóa thường.
+
+### Kết quả xác minh ngày 24/11/2026
+
+- `npm run build` và `npm run lint`: pass, kể cả sau khi đồng bộ main `b36ec9b`.
+- 16 kiểm thử HTTP mới và 93 kiểm thử hồi quy post interactions: pass với MongoDB replica set trong Docker.
+- 34 unit test hiện có của interactions, admin reports và Mongo helpers: pass.
+- Image production Docker build thành công. Smoke test gọi API trong container bằng tài khoản fixture, xác nhận 401/403, receipt 201, chống trùng 409, admin đọc hàng đợi, gỡ cả luồng trong transaction, đóng báo cáo liên quan và giữ bằng chứng.
+- Provider credentials trong smoke test là placeholder cục bộ; luồng báo cáo không gọi AI hoặc gửi email.
