@@ -31,6 +31,7 @@ import {
   CommentResponseDto,
 } from '../dto/comment.dto.js';
 import { isSystemAccount } from '../../users/system-account.js';
+import { commentRemovalNotifications } from './comment-notifications.js';
 import {
   PostBookmarkResponseDto,
   PostRepostResponseDto,
@@ -276,24 +277,50 @@ export class PostInteractionsService {
     commentId: string,
     actor: AuthenticatedUser,
   ): Promise<void> {
-    await withUserLocks(this.mongo, [actor.sub], async (session) => {
-      const currentActor = await this.requireActiveAuthor(actor.sub, session);
-      const post = await this.beginCommentWrite(postId, session);
-      const comment = await this.requireComment(postId, commentId, session);
-      if (
-        comment.authorId !== actor.sub &&
-        post.authorId !== actor.sub &&
-        currentActor.role !== UserRole.ADMIN
-      )
-        throw new AccessDeniedException(
-          'FORBIDDEN',
-          'You cannot delete this comment',
+    const notifications = await withUserLocks(
+      this.mongo,
+      [actor.sub],
+      async (session) => {
+        const currentActor = await this.requireActiveAuthor(actor.sub, session);
+        const post = await this.beginCommentWrite(postId, session);
+        const comment = await this.requireComment(postId, commentId, session);
+        if (
+          comment.authorId !== actor.sub &&
+          post.authorId !== actor.sub &&
+          currentActor.role !== UserRole.ADMIN
+        )
+          throw new AccessDeniedException(
+            'FORBIDDEN',
+            'You cannot delete this comment',
+          );
+        const affected = await this.comments
+          .find(
+            comment.parentId
+              ? { _id: comment.id, postId }
+              : {
+                  postId,
+                  $or: [{ _id: comment.id }, { parentId: comment.id }],
+                },
+          )
+          .session(session)
+          .exec();
+        // The schema cascades root children and notifications and clears surviving reply-to pointers.
+        await this.comments
+          .deleteOne({ _id: commentId, postId }, { session })
+          .exec();
+        return this.notifications.storeSystemNotifications(
+          commentRemovalNotifications(
+            affected,
+            comment.id,
+            actor.sub,
+            currentActor.role === UserRole.ADMIN ? 'ADMIN' : 'POST_OWNER',
+            postId,
+          ),
+          session,
         );
-      // The schema cascades root children and notifications and clears surviving reply-to pointers.
-      await this.comments
-        .deleteOne({ _id: commentId, postId }, { session })
-        .exec();
-    });
+      },
+    );
+    await this.notifications.publishStored(notifications);
   }
 
   private async requireActiveAuthor(
