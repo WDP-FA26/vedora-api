@@ -1,4 +1,7 @@
 /**
+ * Calls with OpenRouter's `web_search` server tool need this: OpenRouter
+ * ignores `response_format` on them, so `Output.object` cannot be used.
+ *
  * The JSON object in a model's text reply, which may be wrapped in a code
  * fence or surrounded by prose. Null when there is none or it does not parse:
  * callers validate the result with a schema anyway.

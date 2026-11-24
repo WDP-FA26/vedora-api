@@ -13,11 +13,18 @@ import { StorageService, StorageTarget } from '@src/storage/storage.service.js';
 import { BLOG_ASSISTANT_POLICY } from '@src/ai/guardrails/policies/blog-assistant.js';
 import { blogRefusal } from './blog-assistant.moderation.js';
 
+const SUPPORTED_ASPECT_RATIOS = ['1:1', '4:3', '3:4', '16:9'] as const;
+export type ImageAspectRatio = (typeof SUPPORTED_ASPECT_RATIOS)[number];
+
+export function isImageAspectRatio(value: string): value is ImageAspectRatio {
+  return SUPPORTED_ASPECT_RATIOS.some((ratio) => ratio === value);
+}
+
+/** Runtime settings reject any other ratio, so the filter drops nothing. */
 export const IMAGE_ASPECT_RATIOS =
-  runtimeConfig.AI_IMAGE_ALLOWED_ASPECT_RATIOS.split(',').map((value) =>
-    value.trim(),
-  ) as ('1:1' | '4:3' | '3:4' | '16:9')[];
-export type ImageAspectRatio = (typeof IMAGE_ASPECT_RATIOS)[number];
+  runtimeConfig.AI_IMAGE_ALLOWED_ASPECT_RATIOS.split(',')
+    .map((value) => value.trim())
+    .filter(isImageAspectRatio);
 
 export const IMAGE_ERRORS = [
   'IMAGE_QUOTA_EXCEEDED',
@@ -47,14 +54,14 @@ export class BlogImageGeneratorService {
     private readonly usage: AiUsageService,
     costs: AiCostTransportService,
   ) {
-    const apiKey = configService.getOrThrow<string>('OPENROUTER_API_KEY');
+    const modelId = configService.get<string>(
+      'OPENROUTER_IMAGE_MODEL',
+      DEFAULT_IMAGE_MODEL,
+    );
     this.imageModel = imageModel({
-      apiKey,
-      modelId: configService.get<string>(
-        'OPENROUTER_IMAGE_MODEL',
-        DEFAULT_IMAGE_MODEL,
-      ),
-      fetch: costs.forModel(DEFAULT_IMAGE_MODEL),
+      apiKey: configService.getOrThrow<string>('OPENROUTER_API_KEY'),
+      modelId,
+      fetch: costs.forModel(modelId),
     });
   }
 

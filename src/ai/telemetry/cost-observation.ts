@@ -1,15 +1,11 @@
 import { runtimeConfig } from '../../config/runtime-config.js';
 /** Only allowlisted billing metadata survives; never persist prompts, headers or outputs. */
 export function metadataText(value: unknown): string | null {
-  return typeof value === 'string' &&
-    value.length > 0 &&
-    value.length <= 200 &&
-    !Array.from(value).some(
-      (character) =>
-        character.charCodeAt(0) < 32 || character.charCodeAt(0) === 127,
-    )
-    ? value
-    : null;
+  if (typeof value !== 'string') return null;
+  if (value.length === 0 || value.length > 200) return null;
+  // eslint-disable-next-line no-control-regex -- rejects control characters
+  if (/[\x00-\x1f\x7f]/.test(value)) return null;
+  return value;
 }
 function object(value: unknown): Record<string, unknown> {
   return value !== null && typeof value === 'object'

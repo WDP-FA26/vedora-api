@@ -2,23 +2,19 @@ import { runtimeConfig } from '../../config/runtime-config.js';
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { AiService } from '@nestjs/ai';
+import type { OpenRouter } from '@openrouter/sdk';
+import type { STTWord } from '@openrouter/sdk/models';
+import { OpenRouterCacheControl } from '../../ai/openrouter.js';
 import {
-  OpenRouterCacheControl,
-  openRouterAttributionHeaders,
-} from '../../ai/openrouter.js';
+  createOpenRouterClient,
+  openRouterFailure,
+} from '../../ai/openrouter-client.js';
 import { AiCostTransportService } from '../../ai/telemetry/ai-cost-transport.service.js';
 import { z } from 'zod';
-import { parsePayload, validatePayload } from '../../common/validation.js';
 import { ExternalServiceException } from '../../common/exceptions/external-service.exception.js';
 import { type SpeechAudio, toOriginalTime } from './speech-audio.js';
-import {
-  OpenRouterErrorBody,
-  TranscriptionResponse,
-  type TranscriptionWord,
-} from './transcription.dto.js';
 import type { Cue } from './vtt.js';
 
-const OPENROUTER_API = runtimeConfig.OPENROUTER_API_BASE_URL;
 const TRANSCRIBE_TIMEOUT_MS = runtimeConfig.TRANSCRIPTION_TIMEOUT_MS;
 
 const CAPTION_PROMPT =
@@ -64,8 +60,8 @@ const LANGUAGE_CODES: Record<string, string> = {
 const translationOutput = z.object({ lines: z.array(z.string()) });
 
 interface TimedText extends Cue {
-  no_speech_prob?: number;
-  avg_logprob?: number;
+  noSpeechProb?: number;
+  avgLogprob?: number;
 }
 
 export interface Transcript {
@@ -75,15 +71,18 @@ export interface Transcript {
 
 @Injectable()
 export class TranscriptionService {
-  private readonly apiKey: string;
+  private readonly openrouter: OpenRouter;
   private readonly transcriptionModel: string;
 
   constructor(
     configService: ConfigService,
     private readonly ai: AiService,
-    private readonly costs: AiCostTransportService,
+    costs: AiCostTransportService,
   ) {
-    this.apiKey = configService.getOrThrow<string>('OPENROUTER_API_KEY');
+    this.openrouter = createOpenRouterClient(
+      configService.getOrThrow<string>('OPENROUTER_API_KEY'),
+      costs.fetch,
+    );
     this.transcriptionModel = configService.get<string>(
       'TRANSCRIPTION_MODEL',
       'elevenlabs/scribe-v2',
@@ -91,36 +90,23 @@ export class TranscriptionService {
   }
 
   async transcribe({ audio, speech }: SpeechAudio): Promise<Transcript> {
-    const response = await this.costs.fetch(
-      `${OPENROUTER_API}/audio/transcriptions`,
-      {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${this.apiKey}`,
-          'Content-Type': 'application/json',
-          ...openRouterAttributionHeaders(),
+    const result = await this.openrouter.stt
+      .createTranscription(
+        {
+          sttRequest: {
+            model: this.transcriptionModel,
+            inputAudio: { data: audio.toString('base64'), format: 'mp3' },
+            responseFormat: 'verbose_json',
+            timestampGranularities: ['word'],
+            prompt: CAPTION_PROMPT,
+            temperature: 0,
+          },
         },
-        body: JSON.stringify({
-          model: this.transcriptionModel,
-          input_audio: { data: audio.toString('base64'), format: 'mp3' },
-          response_format: 'verbose_json',
-          timestamp_granularities: ['word'],
-          prompt: CAPTION_PROMPT,
-          temperature: 0,
-        }),
-        signal: AbortSignal.timeout(TRANSCRIBE_TIMEOUT_MS),
-      },
-    );
-    const body: unknown = await response.json().catch(() => null);
-    if (!response.ok) {
-      const message = validatePayload(OpenRouterErrorBody, body).value?.error
-        ?.message;
-      throw new ExternalServiceException(
-        'openrouter',
-        `Transcription answered ${response.status}${message ? `: ${message}` : ''}`,
-      );
-    }
-    const result = parsePayload('openrouter', TranscriptionResponse, body);
+        { signal: AbortSignal.timeout(TRANSCRIBE_TIMEOUT_MS) },
+      )
+      .catch((error: unknown) => {
+        throw openRouterFailure('Transcription', error);
+      });
     const audioEnd = speech.reduce(
       (sum, { start, end }) => sum + end - start,
       0,
@@ -132,8 +118,8 @@ export class TranscriptionService {
     const cues = timed
       .filter(
         (segment) =>
-          (segment.no_speech_prob ?? 0) <= MAX_NO_SPEECH_PROB &&
-          (segment.avg_logprob ?? 0) >= MIN_AVG_LOGPROB &&
+          (segment.noSpeechProb ?? 0) <= MAX_NO_SPEECH_PROB &&
+          (segment.avgLogprob ?? 0) >= MIN_AVG_LOGPROB &&
           !HALLUCINATIONS.some((pattern) => pattern.test(segment.text)),
       )
       .map((segment) => ({
@@ -172,9 +158,9 @@ export class TranscriptionService {
   }
 }
 
-export function cuesFromWords(words: TranscriptionWord[]): Cue[] {
+export function cuesFromWords(words: STTWord[]): Cue[] {
   const cues: Cue[] = [];
-  let current: TranscriptionWord[] = [];
+  let current: STTWord[] = [];
   const flush = () => {
     const first = current[0];
     const last = current.at(-1);

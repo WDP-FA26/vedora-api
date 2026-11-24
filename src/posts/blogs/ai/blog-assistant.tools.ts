@@ -8,6 +8,7 @@ import {
   type ImageAspectRatio,
   IMAGE_ASPECT_RATIOS,
   IMAGE_ERRORS,
+  isImageAspectRatio,
 } from './blog-image-generator.service.js';
 
 export const MAX_EDIT_MARKDOWN = runtimeConfig.BLOG_AI_MAX_EDIT_LENGTH;
@@ -24,6 +25,14 @@ const editorOutput = z.object({
 export type EditorToolOutput = z.infer<typeof editorOutput>;
 
 const markdown = z.string().min(1).max(MAX_EDIT_MARKDOWN);
+
+function defaultAspectRatio(): ImageAspectRatio {
+  const ratio = runtimeConfig.AI_IMAGE_DEFAULT_ASPECT_RATIO;
+  if (!isImageAspectRatio(ratio)) {
+    throw new Error(`Unsupported default aspect ratio ${ratio}`);
+  }
+  return ratio;
+}
 
 export const editorTools = {
   replaceSelection: tool({
@@ -107,11 +116,7 @@ export function blogAssistantTools(
           .string()
           .min(1)
           .max(runtimeConfig.BLOG_AI_IMAGE_PROMPT_MAX_LENGTH),
-        aspectRatio: z
-          .enum(IMAGE_ASPECT_RATIOS)
-          .default(
-            runtimeConfig.AI_IMAGE_DEFAULT_ASPECT_RATIO as ImageAspectRatio,
-          ),
+        aspectRatio: z.enum(IMAGE_ASPECT_RATIOS).default(defaultAspectRatio()),
       }),
       outputSchema: imageOutput,
       execute: ({ prompt, aspectRatio }, { abortSignal }) =>

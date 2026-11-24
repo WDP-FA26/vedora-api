@@ -1,7 +1,7 @@
 import { runtimeConfig } from '../../config/runtime-config.js';
-import { Injectable, Optional } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { AiService, InjectModel } from '@nestjs/ai';
+import { InjectModel } from '@nestjs/ai';
 import { generateText, type LanguageModel, Output } from 'ai';
 import { z } from 'zod';
 import { loadTextConfig } from '../../config/config-files.js';
@@ -51,9 +51,8 @@ export class PostSummaryGenerator {
   readonly modelId: string;
 
   constructor(
-    private readonly ai: AiService,
     config: ConfigService,
-    @Optional() @InjectModel() private readonly model?: LanguageModel,
+    @InjectModel() private readonly model: LanguageModel,
   ) {
     this.modelId = config.get<string>('OPENROUTER_MODEL', DEFAULT_CHAT_MODEL);
   }
@@ -64,29 +63,17 @@ export class PostSummaryGenerator {
       sections.push(`## ${part.label}\n${part.text}`);
     }
     const prompt = `<post>\n${sections.join('\n\n')}\n</post>`;
-    if (this.model) {
-      const result = await generateText({
-        model: this.model,
-        ...OpenRouterCacheControl.singleTurn({
-          session: 'vedora-post-summary',
-          instructions: INSTRUCTIONS,
-        }),
-        prompt,
-        output: Output.object({ schema: summaryOutput, name: 'post_summary' }),
-        maxRetries: runtimeConfig.AI_DECISION_MAX_RETRIES,
-        abortSignal: AbortSignal.timeout(TIMEOUT_MS),
-      });
-      return result.output;
-    }
-    const { object } = await this.ai.generateObject({
-      label: 'summarize-post',
-      instructions: INSTRUCTIONS,
+    const result = await generateText({
+      model: this.model,
+      ...OpenRouterCacheControl.singleTurn({
+        session: 'vedora-post-summary',
+        instructions: INSTRUCTIONS,
+      }),
       prompt,
-      providerOptions: OpenRouterCacheControl.sticky('vedora-post-summary'),
-      schema: summaryOutput,
-      schemaName: 'post_summary',
-      timeout: TIMEOUT_MS,
+      output: Output.object({ schema: summaryOutput, name: 'post_summary' }),
+      maxRetries: runtimeConfig.AI_DECISION_MAX_RETRIES,
+      abortSignal: AbortSignal.timeout(TIMEOUT_MS),
     });
-    return object;
+    return result.output;
   }
 }

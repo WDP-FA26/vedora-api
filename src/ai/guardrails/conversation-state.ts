@@ -44,7 +44,7 @@ function endsWithUserRole(value: unknown): boolean {
     typeof last === 'object' &&
     last !== null &&
     'role' in last &&
-    (last as { role?: unknown }).role === 'user'
+    last.role === 'user'
   );
 }
 

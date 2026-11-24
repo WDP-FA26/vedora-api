@@ -1,5 +1,8 @@
 import { runtimeConfig } from '../config/runtime-config.js';
-import { createOpenRouter } from '@openrouter/ai-sdk-provider';
+import {
+  createOpenRouter,
+  type OpenRouterProvider,
+} from '@openrouter/ai-sdk-provider';
 import {
   type EmbeddingModel,
   type ImageModel,
@@ -7,15 +10,7 @@ import {
   wrapEmbeddingModel,
 } from 'ai';
 import type { ReasoningEffort } from './reasoning.js';
-
-import {
-  DEFAULT_OPENROUTER_APP_TITLE,
-  DEFAULT_OPENROUTER_APP_URL,
-  openRouterAttribution,
-  openRouterAttributionHeaders,
-  type OpenRouterAttribution,
-  type OpenRouterAttributionHeaders,
-} from './openrouter-attribution.js';
+import { openRouterAttribution } from './openrouter-attribution.js';
 
 export {
   DEFAULT_OPENROUTER_APP_TITLE,
@@ -24,7 +19,7 @@ export {
   openRouterAttributionHeaders,
   type OpenRouterAttribution,
   type OpenRouterAttributionHeaders,
-};
+} from './openrouter-attribution.js';
 export {
   OpenRouterCacheControl,
   type AutoCachedProviderOptions,
@@ -51,6 +46,13 @@ const EMBEDDING_BATCH_SIZE = runtimeConfig.AI_EMBEDDING_BATCH_SIZE;
 export const DEFAULT_MODERATION_PROVIDER_ORDER =
   'anthropic,google-vertex/global,azure/global';
 
+interface ProviderOptions {
+  apiKey: string;
+  modelId: string;
+  /** The cost transport's fetch, so each call is recorded. */
+  fetch?: typeof fetch;
+}
+
 /** Provider slugs from a comma-separated list; empty leaves routing to OpenRouter. */
 export function providerOrderFrom(value: string): string[] {
   const order: string[] = [];
@@ -61,32 +63,37 @@ export function providerOrderFrom(value: string): string[] {
   return order;
 }
 
-export function chatModel({
-  apiKey,
-  modelId,
-  reasoningEffort = 'low',
-  providerOrder = [],
-  fetch: customFetch,
-}: {
-  apiKey: string;
-  modelId: string;
-  reasoningEffort?: ReasoningEffort;
-  /** OpenRouter provider slugs to try in this order, falling back to the rest. */
-  providerOrder?: readonly string[];
-  fetch?: typeof fetch;
-}): Exclude<LanguageModel, string> {
+/** The OpenRouter provider with Vedora's base URL and app attribution. */
+function openRouter(
+  apiKey: string,
+  customFetch?: typeof fetch,
+): OpenRouterProvider {
   const { appUrl, appTitle } = openRouterAttribution();
-  const routing =
-    providerOrder.length > 0
-      ? { provider: { order: [...providerOrder], allow_fallbacks: true } }
-      : {};
   return createOpenRouter({
     apiKey,
     fetch: customFetch,
     baseURL: runtimeConfig.OPENROUTER_API_BASE_URL,
     appName: appTitle,
     appUrl,
-  })(modelId, {
+  });
+}
+
+export function chatModel({
+  apiKey,
+  modelId,
+  reasoningEffort = 'low',
+  providerOrder = [],
+  fetch: customFetch,
+}: ProviderOptions & {
+  reasoningEffort?: ReasoningEffort;
+  /** OpenRouter provider slugs to try in this order, falling back to the rest. */
+  providerOrder?: readonly string[];
+}): Exclude<LanguageModel, string> {
+  const routing =
+    providerOrder.length > 0
+      ? { provider: { order: [...providerOrder], allow_fallbacks: true } }
+      : {};
+  return openRouter(apiKey, customFetch)(modelId, {
     reasoning: { effort: reasoningEffort, exclude: true },
     ...routing,
   });
@@ -97,26 +104,14 @@ export function embeddingModel({
   modelId,
   dimensions,
   fetch: customFetch,
-}: {
-  apiKey: string;
-  modelId: string;
-  dimensions: number;
-  fetch?: typeof fetch;
-}): EmbeddingModel {
-  const { appUrl, appTitle } = openRouterAttribution();
+}: ProviderOptions & { dimensions: number }): EmbeddingModel {
+  // The provider has no `dimensions` setting, so it goes in the request body.
+  const model = openRouter(apiKey, customFetch).textEmbeddingModel(modelId, {
+    extraBody: { dimensions, encoding_format: 'float' },
+  });
   return wrapEmbeddingModel({
-    model: createOpenRouter({
-      apiKey,
-      fetch: customFetch,
-      baseURL: runtimeConfig.OPENROUTER_API_BASE_URL,
-      appName: appTitle,
-      appUrl,
-    }).textEmbeddingModel(modelId, {
-      extraBody: { dimensions, encoding_format: 'float' },
-    }),
-    middleware: {
-      overrideMaxEmbeddingsPerCall: () => EMBEDDING_BATCH_SIZE,
-    },
+    model,
+    middleware: { overrideMaxEmbeddingsPerCall: () => EMBEDDING_BATCH_SIZE },
   });
 }
 
@@ -124,17 +119,6 @@ export function imageModel({
   apiKey,
   modelId,
   fetch: customFetch,
-}: {
-  apiKey: string;
-  modelId: string;
-  fetch?: typeof fetch;
-}): ImageModel {
-  const { appUrl, appTitle } = openRouterAttribution();
-  return createOpenRouter({
-    apiKey,
-    fetch: customFetch,
-    baseURL: runtimeConfig.OPENROUTER_API_BASE_URL,
-    appName: appTitle,
-    appUrl,
-  }).imageModel(modelId);
+}: ProviderOptions): ImageModel {
+  return openRouter(apiKey, customFetch).imageModel(modelId);
 }

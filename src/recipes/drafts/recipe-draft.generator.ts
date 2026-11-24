@@ -1,5 +1,5 @@
 import { runtimeConfig } from '../../config/runtime-config.js';
-import { Injectable, Logger, Optional } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { AiService, InjectModel } from '@nestjs/ai';
 import { generateText, type LanguageModel } from 'ai';
@@ -63,7 +63,7 @@ export class RecipeDraftGenerator {
   constructor(
     private readonly ai: AiService,
     config: ConfigService,
-    @Optional() @InjectModel() private readonly model?: LanguageModel,
+    @InjectModel() private readonly model: LanguageModel,
   ) {
     this.modelId = config.get<string>('OPENROUTER_MODEL', DEFAULT_CHAT_MODEL);
   }
@@ -89,31 +89,27 @@ export class RecipeDraftGenerator {
       timeout: TIMEOUT_MS,
     });
 
-    if (!object.recipe || !this.model) return object;
+    if (!object.recipe) return object;
 
     const researched = await this.researchCaloriesFromWeb(
-      this.model,
       object.recipe,
       sections,
     );
     if (!researched) return object;
 
+    const { recipe } = object;
     return {
       recipe: {
-        ...object.recipe,
-        ...(researched.caloriesPerServing !== undefined
-          ? { caloriesPerServing: researched.caloriesPerServing }
-          : {}),
-        ...(researched.calorieNote !== undefined
-          ? { calorieNote: researched.calorieNote }
-          : {}),
+        ...recipe,
+        caloriesPerServing:
+          researched.caloriesPerServing ?? recipe.caloriesPerServing,
+        calorieNote: researched.calorieNote ?? recipe.calorieNote,
         calorieSources: researched.calorieSources,
       },
     };
   }
 
   private async researchCaloriesFromWeb(
-    model: LanguageModel,
     recipe: NonNullable<DraftOutput['recipe']>,
     sourceSections: readonly string[],
   ): Promise<{
@@ -135,7 +131,7 @@ export class RecipeDraftGenerator {
 
     try {
       const result = await generateText({
-        model,
+        model: this.model,
         maxOutputTokens: 700,
         tools: { webSearch: webSearchTool() },
         abortSignal: AbortSignal.timeout(WEB_RESEARCH_TIMEOUT_MS),
@@ -193,11 +189,7 @@ export class RecipeDraftGenerator {
         return null;
       }
 
-      return {
-        ...(caloriesPerServing !== undefined ? { caloriesPerServing } : {}),
-        ...(calorieNote !== undefined ? { calorieNote } : {}),
-        calorieSources,
-      };
+      return { caloriesPerServing, calorieNote, calorieSources };
     } catch (error) {
       this.logger.warn(
         `Recipe calorie web research failed cleanly, keeping initial estimate: ${String(error)}`,

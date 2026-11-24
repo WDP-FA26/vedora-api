@@ -155,28 +155,17 @@ export class OpenRouterCacheControl {
     messages: readonly ModelMessage[],
     contextText: string,
   ): ModelMessage[] {
-    let lastUserIndex = -1;
-    for (let index = messages.length - 1; index >= 0; index -= 1) {
-      if (messages[index].role === 'user') {
-        lastUserIndex = index;
-        break;
-      }
-    }
-    if (lastUserIndex < 0) return [...messages];
     const result = [...messages];
+    const lastUserIndex = result.findLastIndex(({ role }) => role === 'user');
     const target = result[lastUserIndex];
-    if (target.role !== 'user') return result;
-    const contextPart = { type: 'text' as const, text: contextText };
-    if (typeof target.content === 'string') {
-      result[lastUserIndex] = {
-        ...target,
-        content: [contextPart, { type: 'text' as const, text: target.content }],
-      };
-      return result;
-    }
+    if (target?.role !== 'user') return result;
+    const content =
+      typeof target.content === 'string'
+        ? [{ type: 'text' as const, text: target.content }]
+        : target.content;
     result[lastUserIndex] = {
       ...target,
-      content: [contextPart, ...target.content],
+      content: [{ type: 'text', text: contextText }, ...content],
     };
     return result;
   }

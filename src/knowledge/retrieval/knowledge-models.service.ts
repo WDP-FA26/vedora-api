@@ -176,16 +176,7 @@ export class KnowledgeModelsService {
             dimensions: this.dimensions,
             encodingFormat: 'float',
             input: inputs.map((input) => ({
-              content: [
-                typeof input === 'string'
-                  ? { type: 'text' as const, text: input }
-                  : {
-                      type: 'image_url' as const,
-                      imageUrl: {
-                        url: `data:image/jpeg;base64,${Buffer.from(input.image).toString('base64')}`,
-                      },
-                    },
-              ],
+              content: [embeddingContent(input)],
             })),
           },
         },
@@ -234,6 +225,15 @@ export class KnowledgeModelsService {
       signal,
     });
   }
+}
+
+function embeddingContent(input: EmbeddingInput) {
+  if (typeof input === 'string') return { type: 'text' as const, text: input };
+  const base64 = Buffer.from(input.image).toString('base64');
+  return {
+    type: 'image_url' as const,
+    imageUrl: { url: `data:image/jpeg;base64,${base64}` },
+  };
 }
 
 export function documentText(title: string, text: string): string {

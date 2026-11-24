@@ -36,6 +36,16 @@ import { runtimeConfig } from '../config/runtime-config.js';
           'OPENROUTER_REASONING_EFFORT',
           'low',
         );
+        const blogModelId =
+          config.get<string>('BLOG_AI_MODEL') || defaultModelId;
+        const knowledgeEmbeddingModelId = config.get<string>(
+          'OPENROUTER_EMBEDDING_MODEL',
+          DEFAULT_EMBEDDING_MODEL,
+        );
+        const postsEmbeddingModelId = config.get<string>(
+          'POST_SEARCH_EMBEDDING_MODEL',
+          DEFAULT_EMBEDDING_MODEL,
+        );
         return {
           models: {
             default: chatModel({
@@ -46,38 +56,30 @@ import { runtimeConfig } from '../config/runtime-config.js';
             }),
             blog: chatModel({
               apiKey,
-              modelId: config.get<string>('BLOG_AI_MODEL') || defaultModelId,
+              modelId: blogModelId,
               reasoningEffort,
-              fetch: costs.forModel(
-                config.get<string>('BLOG_AI_MODEL') || defaultModelId,
-              ),
+              fetch: costs.forModel(blogModelId),
             }),
           },
           embeddingModels: {
             default: embeddingModel({
               apiKey,
-              modelId: config.get<string>(
-                'OPENROUTER_EMBEDDING_MODEL',
-                DEFAULT_EMBEDDING_MODEL,
-              ),
+              modelId: knowledgeEmbeddingModelId,
               dimensions: config.get<number>(
                 'KNOWLEDGE_EMBEDDING_DIMENSIONS',
                 1536,
               ),
-              fetch: costs.forModel(DEFAULT_EMBEDDING_MODEL, 'KNOWLEDGE'),
+              fetch: costs.forModel(knowledgeEmbeddingModelId, 'KNOWLEDGE'),
             }),
             posts: {
               model: embeddingModel({
                 apiKey,
-                modelId: config.get<string>(
-                  'POST_SEARCH_EMBEDDING_MODEL',
-                  DEFAULT_EMBEDDING_MODEL,
-                ),
+                modelId: postsEmbeddingModelId,
                 dimensions: config.get<number>(
                   'POST_SEARCH_EMBEDDING_DIMENSIONS',
                   768,
                 ),
-                fetch: costs.forModel(DEFAULT_EMBEDDING_MODEL, 'POSTS'),
+                fetch: costs.forModel(postsEmbeddingModelId, 'POSTS'),
               }),
               timeout: runtimeConfig.POST_SEARCH_EMBED_TIMEOUT_MS,
             },

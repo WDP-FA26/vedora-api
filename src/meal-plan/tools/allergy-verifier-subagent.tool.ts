@@ -18,6 +18,10 @@ import {
 
 const logger = new Logger('AllergyVerifierSubagentTool');
 
+type RecipeDetails = NonNullable<
+  Awaited<ReturnType<MealPlanService['recipeInstructions']>>
+>;
+
 const allergyAuditSchema = z.object({
   flagged: z
     .array(
@@ -79,11 +83,7 @@ function editableSlots(
   return result;
 }
 
-function recipeHaystack(
-  recipe: NonNullable<
-    Awaited<ReturnType<MealPlanService['recipeInstructions']>>
-  >,
-): string {
+function recipeHaystack(recipe: RecipeDetails): string {
   const ingredientText = recipe.ingredients
     .map((item) => `${item.name} ${item.note ?? ''}`)
     .join(' ');
@@ -114,9 +114,7 @@ async function runSemanticAllergyAudit(
   model: LanguageModel,
   combinedNotes: string,
   avoidedTerms: readonly string[],
-  recipes: NonNullable<
-    Awaited<ReturnType<MealPlanService['recipeInstructions']>>
-  >[],
+  recipes: RecipeDetails[],
   abortSignal?: AbortSignal,
 ): Promise<{
   flagged: { recipeId: string; reason: string }[];
@@ -202,11 +200,10 @@ export function verifyMealPlanAllergiesTool(
       const loaded = await Promise.all(
         uniqueIds.map((id) => mealPlan.recipeInstructions(userId, id)),
       );
-      const recipeMap = new Map(
-        loaded
-          .filter((item): item is NonNullable<typeof item> => item !== null)
-          .map((item) => [item.id, item]),
-      );
+      const recipeMap = new Map<string, RecipeDetails>();
+      for (const item of loaded) {
+        if (item) recipeMap.set(item.id, item);
+      }
 
       const combinedNotes = [restrictions.allergyNote, allergyDescription]
         .filter((value): value is string => Boolean(value && value.trim()))
@@ -238,9 +235,7 @@ export function verifyMealPlanAllergiesTool(
         }
       }
 
-      const unflaggedRecipes: NonNullable<
-        Awaited<ReturnType<MealPlanService['recipeInstructions']>>
-      >[] = [];
+      const unflaggedRecipes: RecipeDetails[] = [];
       for (const recipe of recipeMap.values()) {
         if (!flaggedReasons.has(recipe.id)) unflaggedRecipes.push(recipe);
       }

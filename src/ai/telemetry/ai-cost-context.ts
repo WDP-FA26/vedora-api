@@ -29,40 +29,58 @@ export const AI_COST_FEATURES = [
   'SYSTEM',
 ] as const;
 
+type AiCostFeature = (typeof AI_COST_FEATURES)[number];
+
+/** The first route a request path matches names its feature; none is SYSTEM. */
+const FEATURE_ROUTES: readonly [RegExp, AiCostFeature][] = [
+  [/\/meal-plan\/chat\/?$/, 'MEAL_PLAN_CHAT'],
+  [/\/blogs\/ai\/chat\/?$/, 'BLOG_CHAT'],
+  [/\/nutrition-chat\/?$/, 'GUEST_CHAT'],
+  [/\/knowledge(?:\/|$)/, 'KNOWLEDGE'],
+  [/\/moderation(?:\/|$)/, 'CONTENT_MODERATION'],
+  [/\/posts(?:\/|$)/, 'POSTS'],
+];
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
+}
+
+function featureOf(path: string): AiCostFeature {
+  for (const [pattern, feature] of FEATURE_ROUTES) {
+    if (pattern.test(path)) return feature;
+  }
+  return 'SYSTEM';
+}
+
+/** The client's id for this turn, which a retry of the same turn repeats. */
+function clientTurnId(
+  feature: AiCostFeature,
+  body: Record<string, unknown>,
+): unknown {
+  if (feature === 'MEAL_PLAN_CHAT') return body.requestId;
+  if (feature !== 'BLOG_CHAT' || !Array.isArray(body.messages))
+    return undefined;
+  const messages: unknown[] = body.messages;
+  const lastUser = messages.findLast(
+    (message) => isRecord(message) && message.role === 'user',
+  );
+  return isRecord(lastUser) ? lastUser.id : undefined;
+}
+
 export function requestCostContext(
   request: Pick<Request, 'path' | 'body'> & { user?: { sub: string } },
 ): AiCostContext {
-  const path = request.path;
-  const feature = /\/meal-plan\/chat\/?$/.test(path)
-    ? 'MEAL_PLAN_CHAT'
-    : /\/blogs\/ai\/chat\/?$/.test(path)
-      ? 'BLOG_CHAT'
-      : /\/nutrition-chat\/?$/.test(path)
-        ? 'GUEST_CHAT'
-        : /\/knowledge(?:\/|$)/.test(path)
-          ? 'KNOWLEDGE'
-          : /\/moderation(?:\/|$)/.test(path)
-            ? 'CONTENT_MODERATION'
-            : /\/posts(?:\/|$)/.test(path)
-              ? 'POSTS'
-              : 'SYSTEM';
+  const feature = featureOf(request.path);
   const userId = request.user?.sub ?? null;
-  const body = request.body as Record<string, unknown> | undefined;
-  const messages = Array.isArray(body?.messages)
-    ? (body.messages as { role?: unknown; id?: unknown }[])
-    : [];
-  const id =
-    feature === 'MEAL_PLAN_CHAT'
-      ? body?.requestId
-      : feature === 'BLOG_CHAT'
-        ? messages.findLast((m) => m?.role === 'user')?.id
-        : undefined;
+  const body: unknown = request.body;
+  const fields = isRecord(body) ? body : {};
+  const id = clientTurnId(feature, fields);
   const executionId = randomUUID();
   const stableId =
     userId && typeof id === 'string' && id.length <= 200 ? id : executionId;
   const session =
-    feature === 'BLOG_CHAT' && typeof body?.id === 'string'
-      ? body.id.slice(0, 100)
+    feature === 'BLOG_CHAT' && typeof fields.id === 'string'
+      ? fields.id.slice(0, 100)
       : '';
   return {
     userId,

@@ -15,12 +15,12 @@ import {
 } from '@src/media/captions/transcription.service.js';
 
 describe('TranscriptionService', () => {
-  let fetchSpy: ReturnType<typeof vi.fn>;
+  let fetchSpy: ReturnType<typeof vi.fn<typeof fetch>>;
   let generateObject: ReturnType<typeof vi.fn>;
   let service: TranscriptionService;
 
   beforeEach(() => {
-    fetchSpy = vi.fn();
+    fetchSpy = vi.fn<typeof fetch>();
     generateObject = vi.fn();
     const config = new ConfigService({
       OPENROUTER_API_KEY: 'or-key',
@@ -34,10 +34,21 @@ describe('TranscriptionService', () => {
   });
 
   describe('transcribe', () => {
+    /** The reason of the exception a failing transcription throws. */
+    async function failureReason(): Promise<string | null> {
+      const error: unknown = await service
+        .transcribe({
+          audio: Buffer.from('mp3'),
+          speech: [{ start: 0, end: 2 }],
+        })
+        .catch((failure: unknown) => failure);
+      return error instanceof ExternalServiceException ? error.reason : null;
+    }
+
     it('builds cues from word timings, maps timestamps, filters noise/hallucinations, and splits long cues', async () => {
       fetchSpy.mockResolvedValue(
-        new Response(
-          JSON.stringify({
+        Response.json(
+          {
             text: 'ignored when words present',
             language: 'Vietnamese',
             words: [
@@ -59,7 +70,7 @@ describe('TranscriptionService', () => {
               { word: 'Chiên', start: 11.6, end: 12.5 },
               { word: 'vàng!', start: 12.6, end: 15.5 },
             ],
-          }),
+          },
           { status: 200 },
         ),
       );
@@ -72,18 +83,25 @@ describe('TranscriptionService', () => {
         ],
       });
 
-      expect(fetchSpy).toHaveBeenCalledWith(
+      expect(fetchSpy).toHaveBeenCalledOnce();
+      const [request] = fetchSpy.mock.calls[0];
+      expect(request).toBeInstanceOf(Request);
+      if (!(request instanceof Request)) return;
+      expect(request.url).toBe(
         'https://openrouter.ai/api/v1/audio/transcriptions',
-        expect.objectContaining({
-          method: 'POST',
-          headers: {
-            Authorization: 'Bearer or-key',
-            'Content-Type': 'application/json',
-            'HTTP-Referer': DEFAULT_OPENROUTER_APP_URL,
-            'X-OpenRouter-Title': DEFAULT_OPENROUTER_APP_TITLE,
-          },
-        }),
       );
+      expect(request.headers.get('Authorization')).toBe('Bearer or-key');
+      expect(request.headers.get('HTTP-Referer')).toBe(
+        DEFAULT_OPENROUTER_APP_URL,
+      );
+      expect(request.headers.get('X-OpenRouter-Title')).toBe(
+        DEFAULT_OPENROUTER_APP_TITLE,
+      );
+      expect(await request.json()).toMatchObject({
+        model: 'openai/whisper-large-v3',
+        response_format: 'verbose_json',
+        timestamp_granularities: ['word'],
+      });
       expect(transcript.language).toBe('vi');
       expect(transcript.cues).toHaveLength(3);
       expect(transcript.cues[0]).toEqual({
@@ -99,12 +117,13 @@ describe('TranscriptionService', () => {
 
     it('falls back to segments and filters high no_speech_prob and low avg_logprob', async () => {
       fetchSpy.mockResolvedValue(
-        new Response(
-          JSON.stringify({
+        Response.json(
+          {
             text: 'fallback',
             language: 'en-US',
             segments: [
               {
+                id: 0,
                 start: 0,
                 end: 2,
                 text: '  Stir   the   soup  ',
@@ -112,6 +131,7 @@ describe('TranscriptionService', () => {
                 avg_logprob: -0.3,
               },
               {
+                id: 1,
                 start: 2,
                 end: 4,
                 text: 'Silence noise',
@@ -119,6 +139,7 @@ describe('TranscriptionService', () => {
                 avg_logprob: -0.2,
               },
               {
+                id: 2,
                 start: 4,
                 end: 6,
                 text: 'Garbled audio',
@@ -126,6 +147,7 @@ describe('TranscriptionService', () => {
                 avg_logprob: -1.5,
               },
               {
+                id: 3,
                 start: 6,
                 end: 8,
                 text: 'Thanks for watching!',
@@ -133,7 +155,7 @@ describe('TranscriptionService', () => {
                 avg_logprob: -0.1,
               },
             ],
-          }),
+          },
           { status: 200 },
         ),
       );
@@ -151,10 +173,10 @@ describe('TranscriptionService', () => {
 
     it('falls back to full-length text cue when words and segments are absent', async () => {
       fetchSpy.mockResolvedValue(
-        new Response(
-          JSON.stringify({
+        Response.json(
+          {
             text: 'Add tofu and simmer',
-          }),
+          },
           { status: 200 },
         ),
       );
@@ -172,36 +194,18 @@ describe('TranscriptionService', () => {
 
     it('throws ExternalServiceException with error details on non-OK HTTP responses', async () => {
       fetchSpy.mockResolvedValue(
-        new Response(JSON.stringify({ error: { message: 'rate limited' } }), {
-          status: 429,
-        }),
+        Response.json({ error: { message: 'rate limited' } }, { status: 429 }),
       );
 
-      await expect(
-        service.transcribe({
-          audio: Buffer.from('mp3'),
-          speech: [{ start: 0, end: 2 }],
-        }),
-      ).rejects.toMatchObject({
-        constructor: ExternalServiceException,
-        reason: 'Transcription answered 429: rate limited',
-      });
+      expect(await failureReason()).toMatch(/^Transcription failed \(429\)/);
 
       fetchSpy.mockResolvedValue(new Response('not json', { status: 502 }));
-      await expect(
-        service.transcribe({
-          audio: Buffer.from('mp3'),
-          speech: [{ start: 0, end: 2 }],
-        }),
-      ).rejects.toMatchObject({
-        constructor: ExternalServiceException,
-        reason: 'Transcription answered 502',
-      });
+      expect(await failureReason()).toMatch(/^Transcription failed \(502\)/);
     });
 
     it('throws ExternalServiceException when OpenRouter returns an invalid payload shape', async () => {
       fetchSpy.mockResolvedValue(
-        new Response(JSON.stringify({ wrong: true }), { status: 200 }),
+        Response.json({ wrong: true }, { status: 200 }),
       );
 
       await expect(
