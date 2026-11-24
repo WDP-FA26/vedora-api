@@ -7,6 +7,7 @@ export const MODEL_NAMES = [
   'MessagingEvent',
   'User',
   'UserAccountAudit',
+  'SystemLog',
   'BodyMetricLog',
   'Follow',
   'Notification',

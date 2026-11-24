@@ -1,6 +1,7 @@
 export * from './enums.js';
 export * from './schemas/identified.js';
 export * from './schemas/user.schema.js';
+export * from './schemas/system-log.schema.js';
 export * from './schemas/follow.schema.js';
 export * from './schemas/notification.schema.js';
 export * from './schemas/profile-image.schema.js';

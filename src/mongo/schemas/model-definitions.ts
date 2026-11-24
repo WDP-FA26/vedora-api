@@ -1,5 +1,6 @@
 import type { Connection, Schema } from 'mongoose';
 import { DocumentLockSchema } from '../document-lock.js';
+import { SystemLogSchema } from './system-log.schema.js';
 import type { MongoModelName } from './model-names.js';
 import { AiUsageSchema } from './ai-usage.schema.js';
 import { AiRequestSchema } from './ai-request.schema.js';
@@ -86,6 +87,7 @@ export const MODEL_DEFINITIONS = [
   { name: 'MessagingEvent', schema: MessagingEventSchema },
   { name: 'User', schema: UserSchema },
   { name: 'UserAccountAudit', schema: UserAccountAuditSchema },
+  { name: 'SystemLog', schema: SystemLogSchema },
   { name: 'BodyMetricLog', schema: BodyMetricLogSchema },
   { name: 'Follow', schema: FollowSchema },
   { name: 'Notification', schema: NotificationSchema },
