@@ -8,6 +8,7 @@ import { PostSearchModule } from '../search/post-search.module.js';
 import { AdminPostsController } from './admin-posts.controller.js';
 import { AdminPostsService } from './admin-posts.service.js';
 import { AdminReportsController } from './admin-reports.controller.js';
+import { AdminCommentReportsController } from './admin-comment-reports.controller.js';
 
 @Module({
   imports: [
@@ -21,6 +22,7 @@ import { AdminReportsController } from './admin-reports.controller.js';
   controllers: [
     AdminPostsController,
     AdminReportsController,
+    AdminCommentReportsController,
   ],
   providers: [AdminPostsService],
   exports: [AdminPostsService],
