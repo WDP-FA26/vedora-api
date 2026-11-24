@@ -1,5 +1,11 @@
 /** Operational defaults, matched against the pre-refactor source. Units are part of each key. */
 export const numericDefaults = {
+  REPORT_MAX_EVIDENCE_IMAGES: 3,
+  REPORT_EVIDENCE_MAX_MB: 5,
+  REPORT_EVIDENCE_URL_TTL_SECONDS: 900,
+  REPORT_EVIDENCE_MAX_PENDING_UPLOADS: 12,
+  REPORT_EVIDENCE_CLEANUP_AGE_SECONDS: 86400,
+  REPORT_EVIDENCE_CLEANUP_BATCH_SIZE: 100,
   SYSTEM_LOG_QUERY_MAX_LENGTH: 100,
   SYSTEM_LOG_WRITE_TIMEOUT_MS: 2000,
   SYSTEM_LOG_QUERY_TIMEOUT_MS: 5000,
@@ -279,6 +285,7 @@ export const numericDefaults = {
 } as const;
 
 export const stringDefaults = {
+  REPORT_EVIDENCE_CLEANUP_CRON: '0 45 * * * *',
   FOLLOW_SUGGESTION_REBUILD_CRON: '0 0 * * * *',
   POST_SEARCH_INDEX_CRON: '0 * * * * *',
   POST_SUMMARY_CRON: '*/10 * * * * *',

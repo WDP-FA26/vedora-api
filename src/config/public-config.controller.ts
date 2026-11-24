@@ -34,6 +34,8 @@ export function publicRuntimeConfig() {
       searchQueryMaxLength: runtimeConfig.SEARCH_QUERY_MAX_LENGTH,
     },
     uploads: {
+      reportMaxEvidenceImages: runtimeConfig.REPORT_MAX_EVIDENCE_IMAGES,
+      reportEvidenceMaxMb: runtimeConfig.REPORT_EVIDENCE_MAX_MB,
       profileAvatarMaxMb: runtimeConfig.PROFILE_AVATAR_MAX_MB,
       profileCoverMaxMb: runtimeConfig.PROFILE_COVER_MAX_MB,
       blogImageMaxMb: runtimeConfig.BLOG_IMAGE_MAX_MB,
