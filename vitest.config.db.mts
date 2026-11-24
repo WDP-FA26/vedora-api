@@ -8,6 +8,7 @@ export default defineConfig({
   test: {
     include: ['test/db/**/*.db-spec.ts'],
     globals: true,
+    globalSetup: ['test/support/global-setup.ts'],
     hookTimeout: 60_000,
     testTimeout: 15_000,
   },

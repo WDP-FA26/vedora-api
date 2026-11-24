@@ -3,12 +3,10 @@ import { getConnectionToken } from '@nestjs/mongoose';
 import type { Connection } from 'mongoose';
 import { randomUUID } from 'node:crypto';
 import { MODEL_DEFINITIONS } from '@src/mongo/schemas/model-definitions.js';
-
-const LOCAL_TEST_URL =
-  'mongodb://vedora:vedora_local_password@localhost:27017/?authSource=admin&directConnection=true';
+import { testMongoServerUrl } from './test-mongo-url.js';
 
 export function createTestMongoUrl(prefix: string): string {
-  const url = new URL(process.env.TEST_DATABASE_URL ?? LOCAL_TEST_URL);
+  const url = new URL(testMongoServerUrl());
   url.pathname = `/${prefix}_${randomUUID().replaceAll('-', '')}`;
   return url.toString();
 }

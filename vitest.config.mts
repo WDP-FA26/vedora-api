@@ -10,6 +10,7 @@ export default defineConfig({
     globals: true,
     root: './',
     // Specs that touch data use a database of their own (test/mongo-test-db.ts).
+    globalSetup: ['test/support/global-setup.ts'],
     hookTimeout: 60_000,
     // Specs share one local MongoDB across workers; 5s is too tight under load.
     testTimeout: 15_000,

@@ -9,6 +9,7 @@ export default defineConfig({
     root: './',
     // Each spec creates its own database and indexes, which takes seconds; a
     // few at a time keeps MongoDB from starving.
+    globalSetup: ['test/support/global-setup.ts'],
     hookTimeout: 60_000,
     maxWorkers: 4,
     // Fixed config so e2e runs never depend on a developer's .env. The specs

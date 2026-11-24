@@ -422,6 +422,31 @@ services:
       retries: 20
       start_period: 10s
 
+  # Disposable MongoDB for the test suites (npm test, test:e2e, test:db). Its
+  # data lives in RAM (tmpfs): every spec creates and drops a database with
+  # all collections and indexes, which is several times slower on a disk
+  # volume (especially Docker Desktop / WSL2). No auth; loopback only.
+  # Restarting the container wipes it.
+  mongo-test:
+    image: mongo:8.0
+    restart: unless-stopped
+    command: ["mongod", "--replSet", "rs0", "--bind_ip_all"]
+    tmpfs:
+      - /data/db:rw,size=2g
+    ports:
+      - "127.0.0.1:27018:27017"
+    healthcheck:
+      # Initiates the single-node replica set (transactions need one).
+      test:
+        - CMD-SHELL
+        - >-
+          mongosh --quiet --eval "try { rs.status().ok } catch (e) { rs.initiate({ _id: 'rs0', members: [{ _id: 0, host: 'localhost:27017' }] }).ok }"
+          | tail -n 1 | grep -q 1
+      interval: 5s
+      timeout: 10s
+      retries: 20
+      start_period: 5s
+
   qdrant:
     image: qdrant/qdrant:v1.19.1
     restart: unless-stopped
