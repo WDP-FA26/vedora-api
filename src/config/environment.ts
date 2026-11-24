@@ -16,6 +16,7 @@ import {
   validateSync,
 } from 'class-validator';
 import {
+  DEFAULT_CHAT_PROVIDER_ORDER,
   DEFAULT_CONTENT_MODERATION_MODEL,
   DEFAULT_MODERATION_MODEL,
   DEFAULT_MODERATION_PROVIDER_ORDER,
@@ -208,6 +209,10 @@ export class EnvironmentVariables {
 
   @IsString()
   OPENROUTER_CONTENT_MODERATION_MODEL = DEFAULT_CONTENT_MODERATION_MODEL;
+
+  /** Comma-separated OpenRouter provider slugs for the chat models; empty lets OpenRouter route. */
+  @IsString()
+  OPENROUTER_PROVIDER_ORDER = DEFAULT_CHAT_PROVIDER_ORDER;
 
   /** Comma-separated OpenRouter provider slugs for both moderation models; empty lets OpenRouter route. */
   @IsString()

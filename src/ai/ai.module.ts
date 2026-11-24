@@ -5,6 +5,7 @@ import { MODERATION_MODEL } from './guardrails/guardrail.js';
 import {
   chatModel,
   DEFAULT_CHAT_MODEL,
+  DEFAULT_CHAT_PROVIDER_ORDER,
   DEFAULT_EMBEDDING_MODEL,
   DEFAULT_MODERATION_MODEL,
   DEFAULT_MODERATION_PROVIDER_ORDER,
@@ -36,6 +37,12 @@ import { runtimeConfig } from '../config/runtime-config.js';
           'OPENROUTER_REASONING_EFFORT',
           'low',
         );
+        const providerOrder = providerOrderFrom(
+          config.get<string>(
+            'OPENROUTER_PROVIDER_ORDER',
+            DEFAULT_CHAT_PROVIDER_ORDER,
+          ),
+        );
         const blogModelId =
           config.get<string>('BLOG_AI_MODEL') || defaultModelId;
         const knowledgeEmbeddingModelId = config.get<string>(
@@ -52,12 +59,14 @@ import { runtimeConfig } from '../config/runtime-config.js';
               apiKey,
               modelId: defaultModelId,
               reasoningEffort,
+              providerOrder,
               fetch: costs.forModel(defaultModelId),
             }),
             blog: chatModel({
               apiKey,
               modelId: blogModelId,
               reasoningEffort,
+              providerOrder,
               fetch: costs.forModel(blogModelId),
             }),
           },

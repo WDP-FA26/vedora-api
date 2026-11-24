@@ -46,6 +46,12 @@ const EMBEDDING_BATCH_SIZE = runtimeConfig.AI_EMBEDDING_BATCH_SIZE;
 export const DEFAULT_MODERATION_PROVIDER_ORDER =
   'anthropic,google-vertex/global,azure/global';
 
+/**
+ * The same providers for the chat models (Haiku by default): the structured
+ * outputs they rely on need them, and a prompt cache lives on one provider.
+ */
+export const DEFAULT_CHAT_PROVIDER_ORDER = DEFAULT_MODERATION_PROVIDER_ORDER;
+
 interface ProviderOptions {
   apiKey: string;
   modelId: string;
