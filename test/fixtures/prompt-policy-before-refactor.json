@@ -34,6 +34,6 @@
     "file": "config/policies/content.json",
     "source": "moderation/policies/content.ts",
     "sha256": "9d2479521d29c85658a46112b6ce3f450099ed0c218135df710faa79efe78fed",
-    "upstreamSha256": "39a133adf11d34c04256cf716f84a9a6fde595e988d52af723c428712b470a6c"
+    "upstreamSha256": "f925cd74d84f645aa23b632e570c361af9d84eb8b9bbca2649582993edd99a55"
   }
 ]
