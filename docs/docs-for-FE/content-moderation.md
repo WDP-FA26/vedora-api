@@ -16,7 +16,10 @@ Bài `PENDING_REVIEW` chỉ tác giả thấy; `moderationVerdict` vẫn là `nu
 ## Bình luận
 
 `POST` và `PATCH` bình luận kiểm duyệt đồng bộ:
-- Rủi ro cao (`riskLevel = 3`) hoặc model từ chối đọc: HTTP 422, `code: CONTENT_REJECTED`, `details.category`. Bình luận không được lưu.
+- Rủi ro cao (`riskLevel = 3`) hoặc model từ chối đọc: HTTP 422, `code: CONTENT_REJECTED`. Bình luận không được lưu. `details` gồm:
+  - `category`: nhóm vi phạm; khi model từ chối đọc thì là `provider_blocked`.
+  - `reasonText`: cụm từ hiển thị cho người viết (xem [moderation-settings.md](moderation-settings.md)), hoặc `null`.
+  - `findings`: các đoạn vi phạm, mỗi đoạn `{ quote, reason, reasonText }`. `quote` là đúng các chữ trong bình luận, `reason` là một câu tiếng Việt giải thích. Mảng rỗng khi model từ chối đọc.
 - Model lỗi hoặc quá thời gian: HTTP 503 `SERVICE_UNAVAILABLE`. Cho người dùng thử lại.
 
 ## Bài viết, video và blog
@@ -66,7 +69,18 @@ Với các loại này `actor` là `null` (từ Vedora, không phải thành vi�
 
 ## Hiển thị cho tác giả
 
-Bài đang `PROCESSING` hoặc `PENDING_REVIEW` chỉ tác giả thấy, FE nên hiện "đang được kiểm duyệt" / "đang chờ quản trị viên xem xét". `PROCESSING` tự chuyển trạng thái, nên poll `GET /posts/:id`. Bài `REJECTED` hiện lý do từ `moderationVerdict`.
+Bài đang `PROCESSING` hoặc `PENDING_REVIEW` chỉ tác giả thấy, FE nên hiện "đang được kiểm duyệt" / "đang chờ quản trị viên xem xét". `PROCESSING` tự chuyển trạng thái, nên poll `GET /posts/:id`. Bài `REJECTED` hiện lý do từ `moderationReason` (hoặc `moderationVerdict`) và các đoạn vi phạm từ `moderationFindings`.
+
+`moderationFindings` (luôn là mảng; rỗng nếu bài không `REJECTED` hoặc admin từ chối mà không có bằng chứng của model) gồm các phần tử:
+
+| Trường | Ý nghĩa |
+| --- | --- |
+| `field` | `body` (chữ của bài), `title` / `content` (blog), `transcript` (lời nói trong video), `frame` (khung hình video), `image` |
+| `quote` | Chữ vi phạm, đúng nguyên văn với phần chữ; với khung hình/ảnh là chữ model đọc được trong ảnh, có thể `null` |
+| `reason` | Một câu tiếng Việt: phần này sai ở đâu |
+| `reasonText` | Tên nhóm vi phạm cho tác giả, hoặc `null` |
+| `mediaId` | Video chứa transcript/khung hình, hoặc `null` |
+| `seconds` | Khung hình: giây thứ mấy trong video, hoặc `null` |
 
 ## Admin
 

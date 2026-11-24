@@ -25,6 +25,7 @@ interface PostBody {
   publishedAt: string | null;
   moderationVerdict: string | null;
   moderationReason: string | null;
+  moderationFindings: { field: string; quote: string | null; reason: string }[];
   media: { id: string; status: MediaStatus; failureReason: string | null }[];
 }
 
@@ -193,14 +194,22 @@ describe('Post moderation and media flows (e2e)', () => {
       expect(held.status).toBe(PostStatus.PENDING_REVIEW);
       expect(held.moderationVerdict).toBeNull();
       expect(held.moderationReason).toBeNull();
+      expect(held.moderationFindings).toEqual([]);
     });
 
-    it('tells the author the category and reason text of a rejection', async () => {
+    it('tells the author the category, reason text and offending words of a rejection', async () => {
       const rejected = await postWith(`Xấu ${VIOLATION_MARKER}`);
 
       expect(rejected.status).toBe(PostStatus.REJECTED);
       expect(rejected.moderationVerdict).toBe('violence');
       expect(typeof rejected.moderationReason).toBe('string');
+      expect(rejected.moderationFindings).toEqual([
+        expect.objectContaining({
+          field: 'body',
+          quote: VIOLATION_MARKER,
+          reason: 'Vi phạm.',
+        }),
+      ]);
     });
   });
 

@@ -1,10 +1,60 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { PostStatus, PostType } from '../../mongo/models.js';
+import {
+  EVIDENCE_FIELDS,
+  type EvidenceField,
+  PostStatus,
+  PostType,
+} from '../../mongo/models.js';
 import { CursorPaginatedResponseDto } from '../../common/pagination/index.js';
 import { MediaResponseDto } from '../../media/dto/media-response.dto.js';
 import { PostAuthorDto } from '../../common/dto/post-author.dto.js';
 import { PostAppealSummaryDto } from '../../support/dto/post-appeal-summary.dto.js';
 import { BlogSummaryDto } from './blog-summary.dto.js';
+
+/** One part of a rejected post that broke the policy, as the author sees it. */
+export class ModerationFindingDto {
+  @ApiProperty({
+    enum: EVIDENCE_FIELDS,
+    description:
+      'Where the part is: body (post text), title/content (blog), transcript (speech in a video), frame (a video frame) or image',
+  })
+  field!: EvidenceField;
+
+  @ApiProperty({
+    nullable: true,
+    type: String,
+    description:
+      'Text fields: the exact words. Frames and images: text read in the picture, or null',
+  })
+  quote!: string | null;
+
+  @ApiProperty({
+    description: 'Why this part breaks the policy, one sentence in Vietnamese',
+  })
+  reason!: string;
+
+  @ApiProperty({
+    nullable: true,
+    type: String,
+    description:
+      '`reasonText` of the category this part fits, from the current policy; null if the category no longer exists',
+  })
+  reasonText!: string | null;
+
+  @ApiProperty({
+    nullable: true,
+    type: String,
+    description: 'The video the transcript or frame belongs to',
+  })
+  mediaId!: string | null;
+
+  @ApiProperty({
+    nullable: true,
+    type: Number,
+    description: 'Frames: second of the video the frame is from',
+  })
+  seconds!: number | null;
+}
 
 export class PostResponseDto {
   @ApiProperty({ format: 'uuid' })
@@ -35,6 +85,13 @@ export class PostResponseDto {
       '`moderationVerdict` worded for the author, e.g. "bạo lực hoặc đe dọa". Null if the category no longer exists',
   })
   moderationReason!: string | null;
+
+  @ApiProperty({
+    type: [ModerationFindingDto],
+    description:
+      'The parts of a REJECTED post that broke the policy and why; empty otherwise (and for posts an admin rejected without model evidence)',
+  })
+  moderationFindings!: ModerationFindingDto[];
 
   @ApiPropertyOptional({
     nullable: true,

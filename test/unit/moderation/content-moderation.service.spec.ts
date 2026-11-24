@@ -15,7 +15,10 @@ const POLICY = {
   choices: withReservedChoices(DEFAULT_CONTENT_POLICY.choices),
 };
 
-class FakeSettings implements Pick<ModerationSettingsService, 'get'> {
+class FakeSettings implements Pick<
+  ModerationSettingsService,
+  'get' | 'reasonTexts'
+> {
   get() {
     return Promise.resolve({
       ...POLICY,
@@ -23,6 +26,12 @@ class FakeSettings implements Pick<ModerationSettingsService, 'get'> {
       updatedById: null,
       updatedAt: null,
     });
+  }
+
+  reasonTexts() {
+    return Promise.resolve(
+      new Map(POLICY.choices.map((choice) => [choice.key, choice.reasonText])),
+    );
   }
 }
 
@@ -49,7 +58,7 @@ function serviceAnswering(answer: Answer | Error | (() => Error)) {
   const settings = new FakeSettings();
   const service = new ContentModerationService(
     { id: 'anthropic/claude-haiku-5.5', model },
-    // The service only reads settings.get().
+    // The service only reads settings.get() and settings.reasonTexts().
     settings as ModerationSettingsService,
   );
   return { service, model };
@@ -218,15 +227,27 @@ describe('ContentModerationService', () => {
 });
 
 describe('ContentModerationService.requireAllowed', () => {
-  it('turns away a high-risk comment', async () => {
+  it('turns away a high-risk comment and tells the author which words and why', async () => {
     const { service } = serviceAnswering({
       riskLevel: 3,
-      category: 'spam',
+      category: 'violence',
+      evidence: [threat],
     });
-    await expect(service.requireAllowed('mua ngay')).rejects.toMatchObject({
+    const reasonText = POLICY.choices.find(
+      (choice) => choice.key === 'violence',
+    )?.reasonText;
+    await expect(
+      service.requireAllowed('Nói nữa tao sẽ đánh mày'),
+    ).rejects.toMatchObject({
       constructor: UnprocessableContentException,
       code: 'CONTENT_REJECTED',
-      details: { category: 'spam' },
+      details: {
+        category: 'violence',
+        reasonText,
+        findings: [
+          { quote: 'tao sẽ đánh mày', reason: 'Lời đe dọa.', reasonText },
+        ],
+      },
     });
   });
 

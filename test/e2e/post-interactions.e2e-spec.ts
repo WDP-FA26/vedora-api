@@ -120,7 +120,10 @@ describe('Post comments and likes (e2e)', () => {
       .expect(422);
     expect(response.body).toMatchObject({
       code: 'CONTENT_REJECTED',
-      details: { category: 'violence' },
+      details: {
+        category: 'violence',
+        findings: [{ quote: VIOLATION_MARKER, reason: 'Vi phạm.' }],
+      },
     });
     const listed = await request(server()).get(`${posts()}/comments`);
     expect(JSON.stringify(listed.body)).not.toContain(VIOLATION_MARKER);

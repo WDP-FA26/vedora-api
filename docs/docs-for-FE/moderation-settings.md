@@ -31,7 +31,7 @@ Tất cả endpoint cần quyền ADMIN.
 - `allow` có sẵn, không nằm trong `choices`; chỉ sửa được `allowDescription`.
 - `key` gồm 2-32 ký tự (chữ thường, số, `_`, bắt đầu bằng chữ), không trùng, không phải `allow`. Bài đã kiểm duyệt lưu `key`, nên đừng dùng lại một `key` cho ý nghĩa khác. Xoá hoặc đổi tên nhóm không làm mất kết quả đã lưu: chỉ nhãn hiển thị cho tác giả là `null`.
 - `manipulation` (chèo lái AI) có sẵn: luôn nằm trong `choices`, gửi thiếu thì API tự thêm lại bản mặc định. Sửa được `label`, `reasonText`, `description`; FE nên ẩn nút xoá của nhóm này.
-- `reasonText` là cụm từ hiển thị cho tác giả sau "vi phạm tiêu chuẩn cộng đồng: ". API trả nó ở `moderationReason` của bài (`REJECTED`) và `reasonText` của thông báo.
+- `reasonText` là cụm từ hiển thị cho tác giả sau "vi phạm tiêu chuẩn cộng đồng: ". API trả nó ở `moderationReason` và `moderationFindings[].reasonText` của bài (`REJECTED`), `details.reasonText` của lỗi bình luận `CONTENT_REJECTED`, và `reasonText` của thông báo.
 - Giới hạn: 1-16 nhóm, `instructions` 20-3000 ký tự, mô tả 10-800, `label` 1-40, `reasonText` 3-120.
 
 ## Lưu

@@ -483,6 +483,26 @@ describe('PostsQueryService', () => {
           reviewedById: null,
           reviewedAt: null,
           reviewNote: null,
+          evidence: {
+            status: 'READY',
+            summary: 'Quảng cáo.',
+            items: [
+              {
+                field: 'body',
+                category: 'spam',
+                reason: 'Mời mua hàng không liên quan.',
+                quote: 'mua ngay',
+                start: 0,
+                end: 8,
+                mediaId: null,
+                seconds: null,
+                imageUrl: null,
+              },
+            ],
+            dropped: 0,
+            model: 'anthropic/claude-haiku-5.5',
+            createdAt: new Date(),
+          },
         },
       });
       const pending = await createPost(db, {
@@ -520,11 +540,22 @@ describe('PostsQueryService', () => {
         id: rejected.id,
         moderationVerdict: 'spam',
         moderationReason: 'Nội dung spam',
+        moderationFindings: [
+          {
+            field: 'body',
+            quote: 'mua ngay',
+            reason: 'Mời mua hàng không liên quan.',
+            reasonText: 'Nội dung spam',
+            mediaId: null,
+            seconds: null,
+          },
+        ],
       });
       expect(dtos[1]).toMatchObject({
         id: pending.id,
         moderationVerdict: null,
         moderationReason: null,
+        moderationFindings: [],
       });
       expect(dtos[2]).toMatchObject({
         id: rejectedNoModeration.id,

@@ -40,7 +40,7 @@ Thay đổi so với body mặc định của NestJS trước đây: không còn
 | `UNKNOWN_REFERENCE` | Có ID nguyên liệu/nhóm/công thức không tồn tại | — |
 | `SAME_INGREDIENT` | Quy tắc xung đột với chính nguyên liệu đó | — |
 | `EMPTY_RECIPE_SOURCE` | Bài đăng không có chữ hay transcript nào để AI đọc công thức (xem [recipe-ai-draft.md](recipe-ai-draft.md)) | `untranscribedVideos: number` — số video còn chờ transcript |
-| `CONTENT_REJECTED` (HTTP 422) | Bình luận vi phạm quy tắc cộng đồng, chưa được lưu | `category`: `sexual`, `violence`, `hate`, `harassment`, `self_harm`, `illegal`, `spam` |
+| `CONTENT_REJECTED` (HTTP 422) | Bình luận vi phạm quy tắc cộng đồng, chưa được lưu | `category` (nhóm vi phạm, hoặc `provider_blocked`), `reasonText: string \| null`, `findings: { quote, reason, reasonText }[]` — xem [content-moderation.md](content-moderation.md#bình-luận) |
 
 ### 401
 

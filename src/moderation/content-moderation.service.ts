@@ -259,10 +259,20 @@ export class ContentModerationService {
     }
     const highRisk = (assessment.riskLevel ?? 0) >= HIGH_RISK;
     if (!highRisk && !isProviderBlocked(assessment)) return;
+    const reasonTexts = await this.settings.reasonTexts();
+    const findings = (assessment.evidence?.items ?? []).map((item) => ({
+      quote: item.quote,
+      reason: item.reason,
+      reasonText: reasonTexts.get(item.category) ?? null,
+    }));
     throw new UnprocessableContentException(
       'CONTENT_REJECTED',
       'This content breaks the community guidelines',
-      { category: assessment.category },
+      {
+        category: assessment.category,
+        reasonText: reasonTexts.get(assessment.category ?? '') ?? null,
+        findings,
+      },
     );
   }
 }

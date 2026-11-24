@@ -33,10 +33,31 @@ import {
 } from './search/post-search.service.js';
 import { FEED_CURSOR, FeedQueryDto } from './dto/feed-query.dto.js';
 import { ListPostsQueryDto } from './dto/list-posts-query.dto.js';
-import { PostPageDto, PostResponseDto } from './dto/post-response.dto.js';
+import {
+  type ModerationFindingDto,
+  PostPageDto,
+  PostResponseDto,
+} from './dto/post-response.dto.js';
 import { SearchPostsQueryDto } from './dto/search-posts-query.dto.js';
 import { PostRelationsService } from './post-relations.service.js';
 import { ResourceNotFoundException } from '../common/exceptions/resource-not-found.exception.js';
+
+/** What the author of a rejected post is shown: each part the model quoted and why. */
+function findingsOf(
+  post: Post,
+  reasonTexts: ReadonlyMap<string, string>,
+): ModerationFindingDto[] {
+  if (post.status !== PostStatus.REJECTED) return [];
+  const items = post.moderation?.evidence?.items ?? [];
+  return items.map((item) => ({
+    field: item.field,
+    quote: item.quote,
+    reason: item.reason,
+    reasonText: reasonTexts.get(item.category) ?? null,
+    mediaId: item.mediaId,
+    seconds: item.seconds,
+  }));
+}
 
 @Injectable()
 export class PostsQueryService {
@@ -366,6 +387,7 @@ export class PostsQueryService {
               ? (reasonTexts.get(post.moderation?.verdict ?? '') ??
                 null)
               : null,
+          moderationFindings: findingsOf(post, reasonTexts),
           removalReason: adminRemoved ? (post.removal?.reason ?? null) : null,
           appeal: isAuthor ? (appealsByPost.get(post.id) ?? null) : null,
           body: post.body,
