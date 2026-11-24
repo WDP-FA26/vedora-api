@@ -5,7 +5,8 @@ import { ConfigService } from '@nestjs/config';
 import { JwtModule, JwtService } from '@nestjs/jwt';
 import { Test } from '@nestjs/testing';
 import { Types } from 'mongoose';
-import { decide, evaluationModel } from '../../src/common/decision/decision.js';
+import { chatModel } from '../../src/ai/openrouter.js';
+import { decide } from '../../src/common/decision/decision.js';
 import request from 'supertest';
 import type { App } from 'supertest/types.js';
 import { AdminAiCostsModule } from '../../src/admin-ai-costs/admin-ai-costs.module.js';
@@ -205,7 +206,6 @@ describe('AI cost telemetry and Admin reports with MongoDB', () => {
   it.each([
     ['embeddings', 'EMBEDDING'],
     ['rerank', 'RERANK'],
-    ['decisions', 'MODERATION'],
     ['images', 'IMAGE'],
     ['audio/transcriptions', 'TRANSCRIPTION'],
   ])('observes %s attempts with reported cost', async (route, operation) => {
@@ -230,19 +230,38 @@ describe('AI cost telemetry and Admin reports with MongoDB', () => {
       meanKnownTurnUsd: '0',
     });
   });
-  it('observes the actual SDK Decisions alpha endpoint', async () => {
+  it('observes a guardrail decision on the chat completions endpoint', async () => {
     const underlying = vi.fn<typeof fetch>().mockResolvedValue(
       jsonResponse({
-        id: 'gen-alpha',
-        model: 'typesafe/jev-1.14',
-        answers: { verdict: { type: 'choice', choice: 'allow' } },
-        usage: { input_tokens: 100, output_tokens: 0, cost: 0.00001 },
+        id: 'gen-guardrail',
+        model: 'anthropic/claude-haiku-5.5',
+        choices: [
+          {
+            index: 0,
+            message: { role: 'assistant', content: '{"choice":"allow"}' },
+            finish_reason: 'stop',
+          },
+        ],
+        usage: {
+          prompt_tokens: 100,
+          completion_tokens: 5,
+          total_tokens: 105,
+          cost: 0.00001,
+        },
       }),
     );
-    const model = evaluationModel({
+    const model = chatModel({
       apiKey: 'fixture',
-      modelId: 'typesafe/jev-1.14',
-      fetch: (input, init) => transport.observe(input, init, underlying),
+      modelId: 'anthropic/claude-haiku-5.5',
+      fetch: (input, init) =>
+        transport.observe(
+          input,
+          init,
+          underlying,
+          'anthropic/claude-haiku-5.5',
+          'GUEST_CHAT',
+          'MODERATION',
+        ),
     });
     const result = await decide(
       model,
@@ -256,13 +275,20 @@ describe('AI cost telemetry and Admin reports with MongoDB', () => {
     );
     expect(result.choice).toBe('allow');
     expect(underlying.mock.calls[0][0]).toBe(
-      'https://openrouter.ai/api/alpha/decisions',
+      'https://openrouter.ai/api/v1/chat/completions',
     );
     const row = await db.connection
       .model<AiCostCall>(AiCostCall.name)
       .findOne()
       .exec();
-    expect(row?.operation).toBe('MODERATION');
+    expect(row).toMatchObject({
+      operation: 'MODERATION',
+      requestedModel: 'anthropic/claude-haiku-5.5',
+      resolvedModel: 'anthropic/claude-haiku-5.5',
+      generationId: 'gen-guardrail',
+      inputTokens: 100,
+      outputTokens: 5,
+    });
     expect(row?.costUsd?.toString()).toBe('0.00001');
   });
   it('reads the model and abort state from the Request the OpenRouter SDK passes', async () => {

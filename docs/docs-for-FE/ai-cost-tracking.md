@@ -7,7 +7,7 @@ Không đổi model, quota, giới hạn token, chính sách subscription hay th
 ## Ghi nhận tại provider transport
 
 - Collection `ai_cost_calls`: một bản ghi cho mỗi HTTP attempt đến OpenRouter qua các client đã tích hợp. Retry của SDK tạo attempt riêng; các bước/continuation được liên kết bằng `turnId`, mỗi HTTP request vào Vedora có `executionId` riêng.
-- Bao phủ client chat mặc định/blog, evaluation/moderation, embedding mặc định/post search, image generate/edit, REST knowledge embedding/OCR/rerank và transcription. SDK Decisions dùng `/api/alpha/decisions`, các API còn lại chủ yếu dùng `/api/v1/*`.
+- Bao phủ client chat mặc định/blog, evaluation/moderation, embedding mặc định/post search, image generate/edit, REST knowledge embedding/OCR/rerank và transcription. Kiểm duyệt chat (guardrail) và kiểm duyệt nội dung đều gọi Claude Haiku qua `/api/v1/chat/completions`; các API còn lại cũng dùng `/api/v1/*`.
 - Lưu model yêu cầu, model/provider thực sự được trả về nếu có, generation ID, thời gian, trạng thái, input/output/reasoning/cache, USD và nguồn chi phí. Không lưu prompt, output hội thoại, ảnh/base64, header Authorization hoặc API key.
 - `costUsd` lưu Decimal128. `null` nghĩa là chưa biết; `0` chỉ khi provider báo số 0. Không suy giá từ bảng niêm yết, không lấy `upstream_inference_cost` cộng vào `usage.cost` lần nữa. Reasoning/cache là chi tiết token, không cộng lặp vào output/input tổng.
 - Khi có generation ID và chi phí, unique `chargeKey` ngăn cộng trùng cùng generation. Attempt trùng vẫn giữ lại với `duplicateCharge:true`, chi phí rỗng; không coi là một khoản phí chưa biết. Turn chỉ gồm duplicate không được đưa vào mẫu mean/P95 như một lượt miễn phí.

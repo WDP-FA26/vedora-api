@@ -7,11 +7,9 @@ vi.hoisted(() => {
 });
 
 import { getModelToken } from '@nestjs/ai';
+import { FakeModel } from '@nestjs/ai/testing';
 import { simulateReadableStream } from 'ai';
-import {
-  Experimental_EvaluationMockModelV4,
-  MockLanguageModelV4,
-} from 'ai/test';
+import { MockLanguageModelV4 } from 'ai/test';
 import request from 'supertest';
 import { MODERATION_MODEL } from '../../src/ai/guardrails/guardrail.js';
 import { runtimeConfig } from '../../src/config/runtime-config.js';
@@ -74,18 +72,12 @@ const languageModel = new MockLanguageModelV4({
     }),
 });
 
-const moderator = new Experimental_EvaluationMockModelV4({
-  doEvaluate: ({ state }: { state: unknown }) =>
-    Promise.resolve({
-      answers: {
-        verdict: {
-          type: 'choice' as const,
-          choice: JSON.stringify(state).includes(FLAGGED) ? 'harmful' : 'allow',
-        },
-      },
-      warnings: [],
-    }),
-});
+/** Flags any conversation that contains FLAGGED; allows everything else. */
+const moderator = new FakeModel((call) => ({
+  object: {
+    choice: call.lastUserMessage?.includes(FLAGGED) ? 'harmful' : 'allow',
+  },
+}));
 
 const modelCalls = () => languageModel.doStreamCalls.length;
 

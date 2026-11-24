@@ -45,6 +45,22 @@ const MAX_TEXT_CHARS = runtimeConfig.MODERATION_MAX_TEXT_CHARS;
 /** Room for low-effort thinking plus the rating and its evidence. */
 const MAX_OUTPUT_TOKENS = 8000;
 const MAX_RISK = 3;
+/**
+ * The system prompt is the same for every review under one policy version, so
+ * it ends in a cache breakpoint. Reviews arrive minutes apart, so the entry
+ * lives an hour (written at 2x the input price, read at 0.1x).
+ */
+const CACHE_PROMPT = {
+  openrouter: { cacheControl: { type: 'ephemeral', ttl: '1h' } },
+} as const;
+/**
+ * OpenRouter keeps a session on one provider (Anthropic, Bedrock or Vertex,
+ * each with its own cache). Without a session id it keys on the first user
+ * message, which differs for every post, so reviews would scatter.
+ */
+const STICKY_SESSION = {
+  openrouter: { session_id: 'vedora-content-moderation' },
+};
 const PROHIBITED_CONTENT_CODE = 'prohibited_content';
 
 /** True when the model's provider refused the input itself (HTTP 400 `prohibited_content`). */
@@ -124,8 +140,13 @@ export class ContentModerationService {
         maxRetries: MAX_RETRIES,
         maxOutputTokens: MAX_OUTPUT_TOKENS,
         abortSignal: AbortSignal.timeout(TIMEOUT_MS),
-        system: reviewInstructions(policy),
+        instructions: {
+          role: 'system',
+          content: reviewInstructions(policy),
+          providerOptions: CACHE_PROMPT,
+        },
         messages: [{ role: 'user', content: reviewMessageParts(readable) }],
+        providerOptions: STICKY_SESSION,
         output: Output.object({
           schema: reviewOutput(categoryKeys(policy)),
           name: 'content_review',

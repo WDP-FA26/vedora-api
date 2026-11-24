@@ -1,6 +1,11 @@
+import { runtimeConfig } from '../../../src/config/runtime-config.js';
 import { FeatureUnavailableException } from '../../../src/common/exceptions/feature-unavailable.exception.js';
 import { ConfigModule } from '@nestjs/config';
-import { FakeEmbeddingModel, providerError } from '@nestjs/ai/testing';
+import {
+  FakeEmbeddingModel,
+  FakeModel,
+  providerError,
+} from '@nestjs/ai/testing';
 import { Test } from '@nestjs/testing';
 import { APICallError, simulateReadableStream, type UIMessageChunk } from 'ai';
 import { convertReadableStreamToArray, MockLanguageModelV4 } from 'ai/test';
@@ -69,32 +74,19 @@ const model = new MockLanguageModelV4({
     }),
 });
 
-const moderator = {
-  provider: 'test',
-  modelId: 'jev',
-  doEvaluate: vi.fn(() =>
-    rateLimitModeration
-      ? Promise.reject(providerError(429, { retryAfter: 0 }))
-      : Promise.resolve({
-          answers: {
-            verdict: { type: 'choice' as const, choice: verdict },
-          },
-          warnings: [],
-        }),
-  ),
-};
+const MODERATION_MODEL_ID = 'anthropic/claude-haiku-5.5';
 
-const evaluationModel = vi.fn<(modelId: string) => typeof moderator>(
-  () => moderator,
+const moderator = new FakeModel(() =>
+  rateLimitModeration
+    ? providerError(429, { retryAfter: 0 })
+    : { object: { choice: verdict } },
 );
+
 const languageModel = Object.assign(
   vi.fn<
     (modelId: string, settings: { reasoning: object }) => MockLanguageModelV4
-  >(() => model),
-  {
-    textEmbeddingModel: () => new FakeEmbeddingModel(),
-    evaluationModel,
-  },
+  >((modelId) => (modelId === MODERATION_MODEL_ID ? moderator : model)),
+  { textEmbeddingModel: () => new FakeEmbeddingModel() },
 );
 const createOpenRouter = vi.fn<
   (settings: { apiKey: string }) => typeof languageModel
@@ -157,9 +149,8 @@ describe('NutritionChatService', () => {
     knowledge = mockDeep<KnowledgeSearchService>();
     createOpenRouter.mockClear();
     languageModel.mockClear();
-    evaluationModel.mockClear();
     model.doStreamCalls.length = 0;
-    vi.mocked(moderator.doEvaluate).mockClear();
+    moderator.calls.length = 0;
     steps = [];
     verdict = 'allow';
     rateLimitModeration = false;
@@ -194,16 +185,22 @@ describe('NutritionChatService', () => {
   it('moderates the full conversation context across turns', async () => {
     await ask('Ăn chay lấy đạm từ đâu?', 'Từ các loại đậu.', 'Còn gì nữa?');
 
-    expect(evaluationModel).toHaveBeenCalledWith('openai/gpt-6-luna-decisions');
-    expect(moderator.doEvaluate).toHaveBeenCalledWith(
-      expect.objectContaining({
-        state: [
-          { role: 'user', text: 'Ăn chay lấy đạm từ đâu?' },
-          { role: 'assistant', text: 'Từ các loại đậu.' },
-          { role: 'user', text: 'Còn gì nữa?' },
-        ],
-        questions: { verdict: NUTRITION_POLICY },
-      }),
+    expect(languageModel).toHaveBeenCalledWith(MODERATION_MODEL_ID, {
+      reasoning: { effort: 'low', exclude: true },
+    });
+    expect(moderator.calls).toHaveLength(1);
+    expect(moderator.lastCall?.instructions).toContain(
+      NUTRITION_POLICY.instructions,
+    );
+    expect(moderator.lastCall?.lastUserMessage).toBe(
+      [
+        'Conversation, oldest turn first:',
+        '<conversation>',
+        '<turn role="user">Ăn chay lấy đạm từ đâu?</turn>',
+        '<turn role="assistant">Từ các loại đậu.</turn>',
+        '<turn role="user">Còn gì nữa?</turn>',
+        '</conversation>',
+      ].join('\n'),
     );
   });
 
@@ -283,8 +280,8 @@ describe('NutritionChatService', () => {
       await service.stream([], new AbortController().signal),
     );
 
-    expect(moderator.doEvaluate).toHaveBeenCalledWith(
-      expect.objectContaining({ state: '' }),
+    expect(moderator.lastCall?.lastUserMessage).toBe(
+      'Message:\n<message></message>',
     );
   });
 
@@ -313,11 +310,15 @@ describe('NutritionChatService', () => {
     });
   });
 
-  it('retries moderation with backoff before giving up', async () => {
+  it('retries a rate-limited moderation call before giving up', async () => {
     rateLimitModeration = true;
     const chunks = ask('Đậu phụ có bao nhiêu canxi?');
     await expect(chunks).rejects.toThrow(FeatureUnavailableException);
-    expect(moderator.doEvaluate).toHaveBeenCalledTimes(3);
+    // The first try plus the AI SDK's AI_DECISION_MAX_RETRIES retries.
+    expect(moderator.calls).toHaveLength(
+      runtimeConfig.AI_DECISION_MAX_RETRIES + 1,
+    );
+    expect(model.doStreamCalls).toHaveLength(0);
   });
 
   it('answers 503 without the agent when moderation fails', async () => {
