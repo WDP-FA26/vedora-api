@@ -70,10 +70,10 @@ Reasoning có thể phát sinh phí dù đặt `exclude:true`. Khi dùng usage c
 | Gemini 2.5 Flash                       | Input $0,30 / 1 triệu token; output $2,50 / 1 triệu token | [Model page](https://openrouter.ai/google/gemini-2.5-flash), [Models API](https://openrouter.ai/api/v1/models)                 |
 | Qwen Image 2.1 Turbo                   | **Từ** $0,0184 / ảnh                                      | [Model page](https://openrouter.ai/qwen/qwen-image-2.1-turbo)                                                                  |
 | Cohere Rerank v3.5                     | $0,001 / search                                           | [Model page](https://openrouter.ai/cohere/rerank-v3.5)                                                                         |
-| TypeSafe Jev 1.14, moderation mặc định | Input $0,042 / 1 triệu token; output $0                   | [Decisions Models API](https://openrouter.ai/api/v1/models?output_modalities=decisions)                                        |
+| Claude Haiku 5.5, moderation mặc định  | Input $0,10 / 1 triệu token; output $0,50 / 1 triệu token | [Models API](https://openrouter.ai/api/v1/models) (đối chiếu 24/11/2026)                                                       |
 | Gemini Embedding 2, text               | Input $0,20 / 1 triệu token                               | [Embedding Models API](https://openrouter.ai/api/v1/embeddings/models)                                                         |
 
-Models API trả giá trên **mỗi token**: Flash Lite `prompt=0.0000001`, `completion=0.0000004`; Flash `prompt=0.0000003`, `completion=0.0000025`; Jev `prompt=0.000000042`; embedding text `prompt=0.0000002`. Nhân 1.000.000 để ra đơn vị trong bảng. Chỉ gọi catalogue công khai để đối chiếu; không chạy inference trả phí cho báo cáo.
+Models API trả giá trên **mỗi token**: Flash Lite `prompt=0.0000001`, `completion=0.0000004`; Flash `prompt=0.0000003`, `completion=0.0000025`; Haiku 5.5 `prompt=0.0000001`, `completion=0.0000005`; embedding text `prompt=0.0000002`. Nhân 1.000.000 để ra đơn vị trong bảng. Chỉ gọi catalogue công khai để đối chiếu; không chạy inference trả phí cho báo cáo.
 
 Nguồn ảnh ghi giá khởi điểm, không chứng minh mọi độ phân giải, tỷ lệ khung hình hoặc tác vụ edit đều có cùng giá. Khi đổi model/provider phải tra và đo lại. Báo cáo không giả định cache hit để giảm giá vốn, và không bao gồm plugin web search hay công cụ trả phí mới.
 
@@ -135,16 +135,16 @@ VND_chat = 0,0016 * 26.000 * 1,055 = 43,888 VND
 
 ### 7.1. Một lượt text có một lần tra tài liệu
 
-Kịch bản minh họa dùng Flash Lite, 8.000 input / 2.000 output tổng cộng; một search dùng Cohere; tổng moderation 1.000 token; embedding truy vấn 200 token:
+Kịch bản minh họa dùng Flash Lite, 8.000 input / 2.000 output tổng cộng; một search dùng Cohere; tổng moderation (guardrail Claude Haiku) 1.000 input / 200 output token, gồm reasoning; embedding truy vấn 200 token:
 
 | Thành phần         | Phép tính                                | VND đã phân bổ phí nạp |
 | ------------------ | ---------------------------------------- | ---------------------: |
 | Model chat         | Theo mục 6                               |                 43,888 |
 | Một rerank search  | $0,001 × 27.430                          |                 27,430 |
-| Moderation Jev     | 1.000 × $0,042 / 1.000.000 × 27.430      |                  1,152 |
+| Moderation Haiku   | (1.000 × $0,10 + 200 × $0,50) / 1.000.000 × 27.430 |        5,486 |
 | Embedding truy vấn | 200 × $0,20 / 1.000.000 × 27.430         |                  1,097 |
-| Tổng minh họa      | Cộng bốn thành phần                      |             **73,567** |
-| Ngân sách làm tròn | Dành thêm khoảng 6,433đ cho sai lệch nhỏ |             **80,000** |
+| Tổng minh họa      | Cộng bốn thành phần                      |             **77,901** |
+| Ngân sách làm tròn | Dành thêm khoảng 2,099đ cho sai lệch nhỏ |             **80,000** |
 
 Các lượng token trên là giả định, không phải kết quả đếm prompt thật. Nhiều lần tra cứu, chính sách moderation dài, context lớn hoặc retry có thể vượt 80đ. Nếu reranker production là Qwen, cần thay đơn giá tương ứng; không gán giá Cohere cho Qwen.
 
@@ -187,7 +187,7 @@ Giữ ảnh 600đ, dùng hết quota đề xuất; chưa cộng dự phòng 20%:
 | 160đ                |                30.000đ |               60.000đ |
 | 240đ                |                42.000đ |               84.000đ |
 
-Ở kịch bản Flash thông thường có cùng một search/moderation/embedding như mục 7, một lượt khoảng `202,982 + 27,430 + 1,152 + 1,097 = 232,661đ`. Phương án Plus/Pro mới sẽ tốn khoảng **40.899đ / 81.798đ** trước dự phòng và hạ tầng. Vì vậy lựa chọn model là điều kiện của quyết định, không thể chỉ giảm quota rồi giữ router không kiểm soát.
+Ở kịch bản Flash thông thường có cùng một search/moderation/embedding như mục 7, một lượt khoảng `202,982 + 27,430 + 5,486 + 1,097 = 236,995đ`. Phương án Plus/Pro mới sẽ tốn khoảng **41.549đ / 83.099đ** trước dự phòng và hạ tầng. Vì vậy lựa chọn model là điều kiện của quyết định, không thể chỉ giảm quota rồi giữ router không kiểm soát.
 
 Nếu ảnh thực tế là 1.200đ thay vì 600đ, với text 80đ thì Plus/Pro đề xuất lần lượt thành **24.000đ / 48.000đ**, tăng 6.000đ / 12.000đ mỗi chu kỳ. Đây là kịch bản kiểm tra độ nhạy, không phải giá ảnh đã quan sát.
 
@@ -264,11 +264,11 @@ for label, t_in, t_out in [
 
 chat = text_vnd(8000, 2000, "0.10", "0.40")
 rerank = D("0.001") * k
-moderation = D(1000) * D("0.042") / D(1000000) * k
+moderation = (D(1000) * D("0.10") + D(200) * D("0.50")) / D(1000000) * k
 embedding = D(200) * D("0.20") / D(1000000) * k
 assert chat == D("43.888")
 assert rerank == D("27.430")
-assert chat + rerank + moderation + embedding == D("73.567260")
+assert chat + rerank + moderation + embedding == D("77.901200")
 assert D("0.0184") * k == D("504.7120")
 
 plans = [

@@ -81,7 +81,9 @@ describe('Moderation settings (e2e)', () => {
       'violence',
       'hate',
       'harassment',
+      'profanity',
       'illegal',
+      'political',
       'spam',
       'manipulation',
     ]);

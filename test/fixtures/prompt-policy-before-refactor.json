@@ -22,17 +22,18 @@
     "file": "config/policies/nutrition.json",
     "source": "ai/guardrails/policies/nutrition.ts",
     "sha256": "35b214ab2b6ac20a57a82a6efd667775e6a8e31d000668c6e120181dfcc04d87",
-    "upstreamSha256": "be9f6764eb2d2c64207fea93e1e10711f885e356d9a1078b434ba050a11123d1"
+    "upstreamSha256": "ad698c97dd2f80e46468adf72f55481c0d93091228fa9dab0882bc2fcccb4cec"
   },
   {
     "file": "config/policies/blog-assistant.json",
     "source": "ai/guardrails/policies/blog-assistant.ts",
-    "sha256": "dcbe2093ba9dd486d21e04fabe3f7461c0b6e4cd3e36f725d9efa5086cd2184d"
+    "sha256": "dcbe2093ba9dd486d21e04fabe3f7461c0b6e4cd3e36f725d9efa5086cd2184d",
+    "upstreamSha256": "78efba51fc2a3be97ed20b20cbe34972016141675e965e370a4b039a4ad6302c"
   },
   {
     "file": "config/policies/content.json",
     "source": "moderation/policies/content.ts",
     "sha256": "9d2479521d29c85658a46112b6ce3f450099ed0c218135df710faa79efe78fed",
-    "upstreamSha256": "874a9ceafbdffb69f03b39ff3e7bc8e2e744269eddc2b1e4061fcc2962ead374"
+    "upstreamSha256": "39a133adf11d34c04256cf716f84a9a6fde595e988d52af723c428712b470a6c"
   }
 ]

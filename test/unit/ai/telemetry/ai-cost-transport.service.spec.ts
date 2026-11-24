@@ -79,8 +79,6 @@ describe('AiCostTransportService', () => {
     const cases: [string, string][] = [
       ['https://openrouter.ai/api/v1/embeddings', 'EMBEDDING'],
       ['https://openrouter.ai/api/v1/rerank', 'RERANK'],
-      ['https://openrouter.ai/api/alpha/decisions', 'MODERATION'],
-      ['https://openrouter.ai/api/v1/evaluations', 'MODERATION'],
       ['https://openrouter.ai/api/v1/images/generations', 'IMAGE'],
       ['https://openrouter.ai/api/v1/audio/transcriptions', 'TRANSCRIPTION'],
       ['https://openrouter.ai/api/v1/chat/completions', 'CHAT'],
@@ -117,6 +115,38 @@ describe('AiCostTransportService', () => {
     );
     await res.text();
     expect((await onlyRow()).requestedModel).toBe('unknown');
+  });
+
+  it('records a moderation call through the chat API as MODERATION when told so', async () => {
+    const res = await transport.observe(
+      new URL('https://openrouter.ai/api/v1/chat/completions'),
+      { body: new Uint8Array([1, 2]) },
+      vi
+        .fn<typeof fetch>()
+        .mockResolvedValue(
+          Response.json({ id: 'gen-1', usage: { cost: 0.001 } }),
+        ),
+      'anthropic/claude-haiku-5.5',
+      'GUEST_CHAT',
+      'MODERATION',
+    );
+    await res.text();
+
+    expect(await onlyRow()).toMatchObject({ operation: 'MODERATION' });
+  });
+
+  it('does not record calls outside the OpenRouter API path', async () => {
+    const underlying = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(new Response('{}'));
+    await transport.observe(
+      new URL('https://openrouter.ai/api/alpha/decisions'),
+      {},
+      underlying,
+    );
+
+    expect(underlying).toHaveBeenCalledTimes(1);
+    expect(await callsModel.countDocuments()).toBe(0);
   });
 
   it('uses AsyncLocalStorage context when present and exposes forModel/fetch wrappers', async () => {

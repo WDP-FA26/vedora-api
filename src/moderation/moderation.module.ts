@@ -33,8 +33,10 @@ import { AiCostTransportService } from '../ai/telemetry/ai-cost-transport.servic
         const model = chatModel({
           apiKey: config.getOrThrow<string>('OPENROUTER_API_KEY'),
           modelId: id,
-          reasoningEffort: 'low',
-          fetch: costs.forModel(id, 'CONTENT_MODERATION'),
+          // Haiku 5.5's default: judging a policy with disguised words and
+          // quoting evidence gains from more thinking than the chat guardrail.
+          reasoningEffort: 'medium',
+          fetch: costs.forModel(id, 'CONTENT_MODERATION', 'MODERATION'),
         });
         return { id, model };
       },

@@ -1,7 +1,6 @@
 import { Global, Module } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { AiModule as NestAiModule } from '@nestjs/ai';
-import { evaluationModel } from '../common/decision/decision.js';
 import { MODERATION_MODEL } from './guardrails/guardrail.js';
 import {
   chatModel,
@@ -89,15 +88,19 @@ import { runtimeConfig } from '../config/runtime-config.js';
     {
       provide: MODERATION_MODEL,
       inject: [ConfigService, AiCostTransportService],
-      useFactory: (config: ConfigService, costs: AiCostTransportService) =>
-        evaluationModel({
+      useFactory: (config: ConfigService, costs: AiCostTransportService) => {
+        const modelId = config.get<string>(
+          'OPENROUTER_MODERATION_MODEL',
+          DEFAULT_MODERATION_MODEL,
+        );
+        // The request's cost context (chat or blog assistant) names the feature.
+        return chatModel({
           apiKey: config.getOrThrow<string>('OPENROUTER_API_KEY'),
-          modelId: config.get<string>(
-            'OPENROUTER_MODERATION_MODEL',
-            DEFAULT_MODERATION_MODEL,
-          ),
-          fetch: costs.forModel(DEFAULT_MODERATION_MODEL, 'CONTENT_MODERATION'),
-        }),
+          modelId,
+          reasoningEffort: 'low',
+          fetch: costs.forModel(modelId, 'SYSTEM', 'MODERATION'),
+        });
+      },
     },
   ],
   exports: [MODERATION_MODEL],

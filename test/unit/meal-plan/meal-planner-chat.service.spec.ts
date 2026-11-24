@@ -1,5 +1,9 @@
 import { runtimeConfig } from '../../../src/config/runtime-config.js';
-import { FakeEmbeddingModel, providerError } from '@nestjs/ai/testing';
+import {
+  FakeEmbeddingModel,
+  FakeModel,
+  providerError,
+} from '@nestjs/ai/testing';
 import { ConfigModule } from '@nestjs/config';
 import { Test } from '@nestjs/testing';
 import { APICallError, simulateReadableStream, type UIMessageChunk } from 'ai';
@@ -79,32 +83,19 @@ const model = new MockLanguageModelV4({
     }),
 });
 
-const moderator = {
-  provider: 'test',
-  modelId: 'jev',
-  doEvaluate: vi.fn(() =>
-    rateLimitModeration
-      ? Promise.reject(providerError(429, { retryAfter: 0 }))
-      : Promise.resolve({
-          answers: {
-            verdict: { type: 'choice' as const, choice: verdict },
-          },
-          warnings: [],
-        }),
-  ),
-};
+const MODERATION_MODEL_ID = 'anthropic/claude-haiku-5.5';
 
-const evaluationModel = vi.fn<(modelId: string) => typeof moderator>(
-  () => moderator,
+const moderator = new FakeModel(() =>
+  rateLimitModeration
+    ? providerError(429, { retryAfter: 0 })
+    : { object: { choice: verdict } },
 );
+
 const languageModel = Object.assign(
   vi.fn<
     (modelId: string, settings: { reasoning: object }) => MockLanguageModelV4
-  >(() => model),
-  {
-    textEmbeddingModel: () => new FakeEmbeddingModel(),
-    evaluationModel,
-  },
+  >((modelId) => (modelId === MODERATION_MODEL_ID ? moderator : model)),
+  { textEmbeddingModel: () => new FakeEmbeddingModel() },
 );
 const createOpenRouter = vi.fn<
   (settings: { apiKey: string }) => typeof languageModel
@@ -173,9 +164,8 @@ describe('MealPlannerChatService', () => {
 
     createOpenRouter.mockClear();
     languageModel.mockClear();
-    evaluationModel.mockClear();
     model.doStreamCalls.length = 0;
-    vi.mocked(moderator.doEvaluate).mockClear();
+    moderator.calls.length = 0;
     steps = [];
     verdict = 'allow';
     rateLimitModeration = false;
@@ -242,7 +232,7 @@ describe('MealPlannerChatService', () => {
         prompt: 'Lên thực đơn',
       },
     );
-    expect(moderator.doEvaluate).not.toHaveBeenCalled();
+    expect(moderator.calls).toHaveLength(0);
   });
 
   it('refunds the ticket and returns canned refusal when moderation flags the message', async () => {
@@ -307,11 +297,14 @@ describe('MealPlannerChatService', () => {
       ),
     );
 
-    expect(moderator.doEvaluate).toHaveBeenCalledWith(
-      expect.objectContaining({
-        state: 'Lên thực đơn ngày thứ Hai',
-        questions: { verdict: NUTRITION_POLICY },
-      }),
+    expect(languageModel).toHaveBeenCalledWith(MODERATION_MODEL_ID, {
+      reasoning: { effort: 'low', exclude: true },
+    });
+    expect(moderator.lastCall?.instructions).toContain(
+      NUTRITION_POLICY.instructions,
+    );
+    expect(moderator.lastCall?.lastUserMessage).toBe(
+      'Message:\n<message>Lên thực đơn ngày thứ Hai</message>',
     );
     expect(dietary.find).toHaveBeenCalledWith(USER_ID);
     expect(mealPlan.find).toHaveBeenCalledWith(USER_ID, WEEK);
@@ -525,14 +518,15 @@ describe('MealPlannerChatService', () => {
         WEEK,
       ),
     );
-    expect(moderator.doEvaluate).toHaveBeenCalledWith(
-      expect.objectContaining({
-        state: [
-          { role: 'user', text: 'Bữa sáng ăn gì?' },
-          { role: 'assistant', text: 'Cháo yến mạch.' },
-          { role: 'user', text: 'Còn bữa trưa?' },
-        ],
-      }),
+    expect(moderator.lastCall?.lastUserMessage).toBe(
+      [
+        'Conversation, oldest turn first:',
+        '<conversation>',
+        '<turn role="user">Bữa sáng ăn gì?</turn>',
+        '<turn role="assistant">Cháo yến mạch.</turn>',
+        '<turn role="user">Còn bữa trưa?</turn>',
+        '</conversation>',
+      ].join('\n'),
     );
   });
 

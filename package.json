@@ -23,7 +23,9 @@
     "seed": "tsx src/database/seed-cli.ts",
     "seed:prod": "node dist/database/seed-cli.js",
     "fix:blog-covers": "tsx src/database/fix-blog-covers.ts",
-    "fix:blog-covers:prod": "node dist/database/fix-blog-covers.js"
+    "fix:blog-covers:prod": "node dist/database/fix-blog-covers.js",
+    "clean:legacy-moderation": "tsx src/database/clean-legacy-moderation.ts",
+    "clean:legacy-moderation:prod": "node dist/database/clean-legacy-moderation.js"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1146.0",

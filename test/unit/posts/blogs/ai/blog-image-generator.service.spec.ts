@@ -1,3 +1,4 @@
+import { FakeModel } from '@nestjs/ai/testing';
 import { ConfigService } from '@nestjs/config';
 import { MockImageModelV4 } from 'ai/test';
 import { type DeepMockProxy, mockDeep } from 'vitest-mock-extended';
@@ -16,18 +17,7 @@ const PNG =
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==';
 
 let verdict = 'allow';
-const moderator = {
-  provider: 'test',
-  modelId: 'jev',
-  doEvaluate: vi.fn(() =>
-    Promise.resolve({
-      answers: {
-        verdict: { type: 'choice' as const, choice: verdict },
-      },
-      warnings: [],
-    }),
-  ),
-};
+const moderator = new FakeModel(() => ({ object: { choice: verdict } }));
 
 let failImage = false;
 const imageModel = new MockImageModelV4({
@@ -60,7 +50,7 @@ describe('BlogImageGeneratorService', () => {
     verdict = 'allow';
     failImage = false;
     vi.mocked(imageModel.doGenerate).mockClear();
-    vi.mocked(moderator.doEvaluate).mockClear();
+    moderator.calls.length = 0;
     storage = mockDeep<StorageService>();
     storage.publicObjectUrl.mockImplementation(
       (_target, key) => `${PUBLIC}/${key}`,
@@ -122,6 +112,9 @@ describe('BlogImageGeneratorService', () => {
     await expect(
       service.generate(USER_ID, 'a famous singer eating pho', '1:1'),
     ).resolves.toEqual({ error: 'IMAGE_PROMPT_REFUSED' });
+    expect(moderator.lastCall?.lastUserMessage).toBe(
+      'Message:\n<message>a famous singer eating pho</message>',
+    );
     expect(imageModel.doGenerate).not.toHaveBeenCalled();
     expect(aiUsage.refund).toHaveBeenCalledWith({
       id: 'ticket',

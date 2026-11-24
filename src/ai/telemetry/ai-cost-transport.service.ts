@@ -21,6 +21,25 @@ async function requestBodyText(
   return input.clone().text();
 }
 
+export type AiCostOperation =
+  'CHAT' | 'EMBEDDING' | 'RERANK' | 'MODERATION' | 'IMAGE' | 'TRANSCRIPTION';
+
+function urlOf(input: Parameters<typeof fetch>[0]): URL {
+  return new URL(
+    typeof input === 'string' || input instanceof URL ? input : input.url,
+  );
+}
+
+/** What a call is for, from the OpenRouter endpoint it goes to. */
+function operationOf(target: URL): AiCostOperation {
+  const path = target.pathname;
+  if (path.endsWith('/embeddings')) return 'EMBEDDING';
+  if (path.endsWith('/rerank')) return 'RERANK';
+  if (/\/images(?:\/|$)/.test(path)) return 'IMAGE';
+  if (path.endsWith('/transcriptions')) return 'TRANSCRIPTION';
+  return 'CHAT';
+}
+
 @Injectable()
 export class AiCostTransportService {
   private readonly logger = new Logger(AiCostTransportService.name);
@@ -28,8 +47,18 @@ export class AiCostTransportService {
     @InjectModel(AiCostCall.name) private readonly calls: Model<AiCostCall>,
   ) {}
 
-  forModel(model: string, feature = 'SYSTEM'): typeof fetch {
-    return (input, init) => this.observe(input, init, fetch, model, feature);
+  /**
+   * A fetch that records each call under `model`. `operation` names what the
+   * call is for when its URL cannot tell, such as a moderation call through the
+   * chat API.
+   */
+  forModel(
+    model: string,
+    feature = 'SYSTEM',
+    operation?: AiCostOperation,
+  ): typeof fetch {
+    return (input, init) =>
+      this.observe(input, init, fetch, model, feature, operation);
   }
   readonly fetch: typeof fetch = (input, init) =>
     this.observe(input, init, fetch);
@@ -41,32 +70,17 @@ export class AiCostTransportService {
     underlying: typeof fetch,
     model = 'unknown',
     feature = 'SYSTEM',
+    operation: AiCostOperation = operationOf(urlOf(input)),
   ): Promise<Response> {
-    const url = new URL(
-      typeof input === 'string' || input instanceof URL ? input : input.url,
-    );
+    const target = urlOf(input);
     const provider = new URL(runtimeConfig.OPENROUTER_API_BASE_URL);
     const apiPath = provider.pathname.replace(/\/$/, '');
-    const alphaPath = apiPath.replace(/\/v1$/, '');
     // A provider's fetch hook can serve other hosts; never record credentials or arbitrary URLs.
     if (
-      url.origin !== provider.origin ||
-      ![`${apiPath}/`, `${alphaPath}/alpha/`].some((prefix) =>
-        url.pathname.startsWith(prefix),
-      )
+      target.origin !== provider.origin ||
+      !target.pathname.startsWith(`${apiPath}/`)
     )
       return underlying(input, init);
-    const operation = /\/embeddings$/.test(url.pathname)
-      ? 'EMBEDDING'
-      : /\/rerank$/.test(url.pathname)
-        ? 'RERANK'
-        : /\/(?:decisions|evaluations)$/.test(url.pathname)
-          ? 'MODERATION'
-          : /\/images(?:\/|$)/.test(url.pathname)
-            ? 'IMAGE'
-            : /\/transcriptions$/.test(url.pathname)
-              ? 'TRANSCRIPTION'
-              : 'CHAT';
     const scope = aiCostContext.getStore();
     // The OpenRouter SDK passes a Request with no init; fetch callers pass both.
     const signal =
