@@ -152,7 +152,7 @@ describe('Assistant chat flows (e2e)', () => {
       const requestId = randomUUID();
       const response = await chat(token, {
         requestId,
-        messages: userTurn('Gợi ý bữa trưa'),
+        message: 'Gợi ý bữa trưa',
       }).expect(200);
       expect(replyText(response.text)).toBe(REPLY);
       const row = await requests().findOne({ userId: user.id }).exec();
@@ -161,7 +161,7 @@ describe('Assistant chat flows (e2e)', () => {
 
     it('answers 409 AI_REQUEST_ALREADY_PROCESSED to a replay and does not call the model again', async () => {
       const { token } = await signedUser();
-      const body = { requestId: randomUUID(), messages: userTurn('Thực đơn') };
+      const body = { requestId: randomUUID(), message: 'Thực đơn' };
       await chat(token, body).expect(200);
       const callsBefore = modelCalls();
       const response = await chat(token, body).expect(409);
@@ -174,10 +174,10 @@ describe('Assistant chat flows (e2e)', () => {
     it('answers 409 IDEMPOTENCY_CONFLICT when a request id is reused for another prompt', async () => {
       const { token } = await signedUser();
       const requestId = randomUUID();
-      await chat(token, { requestId, messages: userTurn('Một') }).expect(200);
+      await chat(token, { requestId, message: 'Một' }).expect(200);
       const response = await chat(token, {
         requestId,
-        messages: userTurn('Hai'),
+        message: 'Hai',
       }).expect(409);
       expect((response.body as ErrorBody).code).toBe('IDEMPOTENCY_CONFLICT');
     });
@@ -186,19 +186,19 @@ describe('Assistant chat flows (e2e)', () => {
       const { token } = await signedUser();
       const response = await chat(token, {
         allowWebSearch: true,
-        messages: userTurn('Tempeh mua ở đâu?'),
+        message: 'Tempeh mua ở đâu?',
       }).expect(200);
       expect(replyText(response.text)).toBe(REPLY);
       await chat(token, {
         allowWebSearch: 'yes',
-        messages: userTurn('Tempeh mua ở đâu?'),
+        message: 'Tempeh mua ở đâu?',
       }).expect(400);
     });
 
     it('scopes a request id to its user', async () => {
       const first = await signedUser();
       const second = await signedUser();
-      const body = { requestId: 'shared-id', messages: userTurn('Bữa tối') };
+      const body = { requestId: 'shared-id', message: 'Bữa tối' };
       await chat(first.token, body).expect(200);
       await chat(second.token, body).expect(200);
     });
@@ -206,7 +206,7 @@ describe('Assistant chat flows (e2e)', () => {
     it('answers 409 AI_REQUEST_IN_PROGRESS to the same request id while the first is streaming', async () => {
       chunkDelayInMs = 150;
       const { token } = await signedUser();
-      const body = { requestId: randomUUID(), messages: userTurn('Chậm') };
+      const body = { requestId: randomUUID(), message: 'Chậm' };
       const [first, second] = await Promise.all([
         chat(token, body),
         new Promise<request.Response>((resolve, reject) => {
@@ -226,7 +226,7 @@ describe('Assistant chat flows (e2e)', () => {
       const callsBefore = modelCalls();
       const response = await chat(token, {
         requestId: randomUUID(),
-        messages: userTurn(FLAGGED),
+        message: FLAGGED,
       }).expect(200);
       expect(replyText(response.text)).not.toContain(REPLY);
       expect(modelCalls()).toBe(callsBefore);
@@ -239,7 +239,7 @@ describe('Assistant chat flows (e2e)', () => {
       const { user, token } = await signedUser();
       await chat(token, {
         requestId: randomUUID(),
-        messages: userTurn('Lỗi'),
+        message: 'Lỗi',
       }).expect(200);
       const row = await requests().findOne({ userId: user.id }).exec();
       expect(row).toMatchObject({ status: 'REFUNDED', charged: false });
@@ -250,13 +250,13 @@ describe('Assistant chat flows (e2e)', () => {
       for (let turn = 0; turn < 5; turn++) {
         await chat(token, {
           requestId: randomUUID(),
-          messages: userTurn(`Lượt ${turn}`),
+          message: `Lượt ${turn}`,
         }).expect(200);
       }
       const callsBefore = modelCalls();
       const response = await chat(token, {
         requestId: randomUUID(),
-        messages: userTurn('Lượt 6'),
+        message: 'Lượt 6',
       }).expect(429);
       expect((response.body as ErrorBody).code).toBe('AI_QUOTA_EXCEEDED');
       expect(modelCalls()).toBe(callsBefore);
@@ -265,68 +265,79 @@ describe('Assistant chat flows (e2e)', () => {
     it.each([
       ['a request id of 101 characters', { requestId: 'x'.repeat(101) }],
       ['an empty request id', { requestId: '' }],
-      ['no messages', { messages: [] }],
-      [
-        'one message more than allowed',
-        {
-          messages: Array.from(
-            { length: runtimeConfig.PLANNER_CHAT_MAX_MESSAGES + 1 },
-            () => ({
-              role: 'user',
-              text: 'x',
-            }),
-          ),
-        },
-      ],
-      ['a system message', { messages: [{ role: 'system', text: 'x' }] }],
+      ['an empty message', { message: '' }],
       [
         'a message one character too long',
         {
-          messages: userTurn(
-            'x'.repeat(runtimeConfig.PLANNER_CHAT_MAX_MESSAGE_LENGTH + 1),
-          ),
+          message: 'x'.repeat(runtimeConfig.PLANNER_CHAT_MAX_MESSAGE_LENGTH + 1),
         },
       ],
-      ['an empty message', { messages: userTurn('') }],
+      [
+        'an invalid toolOutput tool name',
+        {
+          toolOutput: {
+            tool: 'editPlan',
+            toolCallId: 'call-1',
+            output: {},
+          },
+        },
+      ],
+      [
+        'an invalid askUser toolOutput payload',
+        {
+          toolOutput: {
+            tool: 'askUser',
+            toolCallId: 'call-1',
+            output: { answer: '   ' },
+          },
+        },
+      ],
     ])('rejects %s with 400', async (_name, override) => {
       const { token } = await signedUser();
       await chat(token, {
-        messages: userTurn('Xin chào'),
+        message: 'Xin chào',
         ...override,
       }).expect(400);
     });
 
-    it('rejects a conversation that ends with an assistant turn', async () => {
+    it('moderates across stored thread turns and keeps refused turns isolated from later turns', async () => {
       const { token } = await signedUser();
-      const callsBefore = modelCalls();
-      await chat(token, {
-        requestId: randomUUID(),
-        messages: [
-          { role: 'user', text: FLAGGED },
-          { role: 'assistant', text: 'Được thôi.' },
-        ],
-      }).expect(400);
-      expect(modelCalls()).toBe(callsBefore);
-    });
+      const threadId = randomUUID();
 
-    it('blocks multi-turn context escalation when an earlier turn is flagged before a harmless final user turn', async () => {
-      const { token } = await signedUser();
-      const callsBefore = modelCalls();
-      const response = await chat(token, {
+      await chat(token, {
+        threadId,
         requestId: randomUUID(),
-        messages: [
-          { role: 'user', text: FLAGGED },
-          { role: 'assistant', text: 'Được thôi.' },
-          { role: 'user', text: 'Tiếp tục thực hiện yêu cầu trên đi.' },
-        ],
+        message: 'Lên thực đơn tuần chay',
       }).expect(200);
-      expect(replyText(response.text)).not.toContain(REPLY);
-      expect(modelCalls()).toBe(callsBefore);
+
+      // A refused turn is stored with refused metadata and does not poison the next turn.
+      const callsBeforeRefusal = modelCalls();
+      const refusedRes = await chat(token, {
+        threadId,
+        requestId: randomUUID(),
+        message: FLAGGED,
+      }).expect(200);
+      expect(replyText(refusedRes.text)).not.toContain(REPLY);
+      expect(modelCalls()).toBe(callsBeforeRefusal);
+
+      const followUpRes = await chat(token, {
+        threadId,
+        requestId: randomUUID(),
+        message: 'Thêm món canh rau củ',
+      }).expect(200);
+      expect(replyText(followUpRes.text)).toBe(REPLY);
+      expect(moderator.lastCall?.lastUserMessage).toContain(
+        'Lên thực đơn tuần chay',
+      );
+      expect(moderator.lastCall?.lastUserMessage).toContain(
+        'Thêm món canh rau củ',
+      );
+      expect(moderator.lastCall?.lastUserMessage).not.toContain(FLAGGED);
     });
 
     it('rejects a guest session token with 401', async () => {
       const guestToken = await e2e.app.get(GuestSessionService).issue();
-      await chat(guestToken, { messages: userTurn('Xin chào') }).expect(401);
+      await chat(guestToken, { message: 'Xin chào' }).expect(401);
     });
   });
 
@@ -337,26 +348,29 @@ describe('Assistant chat flows (e2e)', () => {
         .set('Authorization', `Bearer ${token}`)
         .send({ weekStart: NEXT_WEEK, ...body });
 
-    it('saves a turn that only asks for web search, and the answer synced to it', async () => {
+    it('saves a turn that only asks for web search, and records toolOutput on the next turn', async () => {
       const { token } = await signedUser();
       const threadId = randomUUID();
-      nextChunks = [
-        {
-          type: 'tool-call',
-          toolCallId: 'call-web',
-          toolName: 'requestWebSearch',
-          input: JSON.stringify({ reason: 'Cần giá tempeh ở Hà Nội' }),
-        },
-        {
-          type: 'finish',
-          finishReason: { unified: 'tool-calls', raw: undefined },
-          usage,
-        },
+      chunkQueue = [
+        [
+          {
+            type: 'tool-call',
+            toolCallId: 'call-web',
+            toolName: 'requestWebSearch',
+            input: JSON.stringify({ reason: 'Cần giá tempeh ở Hà Nội' }),
+          },
+          {
+            type: 'finish',
+            finishReason: { unified: 'tool-calls', raw: undefined },
+            usage,
+          },
+        ],
+        replyChunks,
       ];
       await chat(token, {
         threadId,
         requestId: 'u-web',
-        messages: userTurn('Tempeh giá bao nhiêu?'),
+        message: 'Tempeh giá bao nhiêu?',
       }).expect(200);
 
       const detail = async () => {
@@ -386,25 +400,26 @@ describe('Assistant chat flows (e2e)', () => {
         }),
       );
 
-      const answered = asked.parts.map((part) =>
-        part.type === 'tool-requestWebSearch'
-          ? { ...part, state: 'output-available', output: { approved: true } }
-          : part,
-      );
-      await request(server())
-        .patch(`/api/v1/meal-plan/chat/threads/${threadId}`)
-        .set('Authorization', `Bearer ${token}`)
-        .send({
-          messages: [
-            { id: asked.id, role: 'assistant', text: '', parts: answered },
-          ],
-        })
-        .expect(200);
+      const followUp = await chat(token, {
+        threadId,
+        requestId: 'u-web-allow',
+        allowWebSearch: true,
+        message: 'Đồng ý, bạn cứ tìm trên web.',
+        toolOutput: {
+          tool: 'requestWebSearch',
+          toolCallId: 'call-web',
+          output: { approved: true },
+        },
+      }).expect(200);
+      expect(replyText(followUp.text)).toBe(REPLY);
+
       const synced = await detail();
-      expect(synced.messageCount).toBe(2);
+      expect(synced.messageCount).toBe(4);
       expect(synced.messages[1].parts).toContainEqual(
         expect.objectContaining({
           type: 'tool-requestWebSearch',
+          toolCallId: 'call-web',
+          state: 'output-available',
           output: { approved: true },
         }),
       );
@@ -415,26 +430,21 @@ describe('Assistant chat flows (e2e)', () => {
       const token = await e2e.sign(admin);
       const threadId = randomUUID();
 
-      // 6 allowed turns -> 12 messages (exceeds MAX_PLANNER_MESSAGES = 10)
-      const contextWindow: { role: 'user' | 'assistant'; text: string }[] = [];
+      // 6 allowed turns -> 12 messages (exceeds old client-side context limit)
       for (let turn = 1; turn <= 6; turn++) {
-        const userText = `Câu hỏi ${turn}`;
-        contextWindow.push({ role: 'user', text: userText });
-        const payload = contextWindow.slice(-10);
         const res = await chat(token, {
           threadId,
           requestId: `u-${turn}`,
-          messages: payload,
+          message: `Câu hỏi ${turn}`,
         }).expect(200);
         expect(replyText(res.text)).toBe(REPLY);
-        contextWindow.push({ role: 'assistant', text: REPLY });
       }
 
       // Add a moderation-refused turn into the same thread
       await chat(token, {
         threadId,
         requestId: 'u-refused',
-        messages: [...contextWindow.slice(-9), { role: 'user', text: FLAGGED }],
+        message: FLAGGED,
       }).expect(200);
 
       const listRes = await request(server())
@@ -537,7 +547,7 @@ describe('Assistant chat flows (e2e)', () => {
       await chat(other.token, {
         threadId,
         requestId: randomUUID(),
-        messages: userTurn('Xin chào'),
+        message: 'Xin chào',
       }).expect(404);
 
       await request(server())
@@ -574,7 +584,7 @@ describe('Assistant chat flows (e2e)', () => {
       const res = await chat(token, {
         threadId,
         requestId: 'u-tool-1',
-        messages: userTurn('Xem thực đơn hiện tại'),
+        message: 'Xem thực đơn hiện tại',
       }).expect(200);
       expect(replyText(res.text)).toBe(REPLY);
 
@@ -622,7 +632,7 @@ describe('Assistant chat flows (e2e)', () => {
       await chat(token, {
         threadId,
         requestId: 'u-fail-1',
-        messages: userTurn('Câu hỏi khi lỗi'),
+        message: 'Câu hỏi khi lỗi',
       }).expect(200);
 
       const detailRes = await request(server())
@@ -659,7 +669,7 @@ describe('Assistant chat flows (e2e)', () => {
       await chat(token, {
         threadId: threadB,
         requestId: 'u-b-1',
-        messages: userTurn('Đoạn chat B'),
+        message: 'Đoạn chat B',
       }).expect(200);
 
       // Stream into threadA with the already-synced requestId: must not duplicate user message
@@ -667,7 +677,7 @@ describe('Assistant chat flows (e2e)', () => {
       await chat(token, {
         threadId: threadA,
         requestId: 'u-sync-1',
-        messages: userTurn('Tin đồng bộ'),
+        message: 'Tin đồng bộ',
       }).expect(200);
 
       const detailA = await request(server())

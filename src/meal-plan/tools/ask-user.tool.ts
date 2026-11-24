@@ -30,5 +30,12 @@ export function askUserTool() {
         .optional()
         .describe('true when the user may pick more than one option'),
     }),
+    outputSchema: z.object({
+      answer: z.string(),
+    }),
+    toModelOutput: ({ output }) => ({
+      type: 'text',
+      value: output.answer,
+    }),
   });
 }

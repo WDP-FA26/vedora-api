@@ -146,28 +146,33 @@ describe('MealPlanController', () => {
 
     const responseEmitter = new EventEmitter();
     const response = responseEmitter as unknown as Response;
-    const messages = [{ role: 'user' as const, text: 'Lên thực đơn tuần' }];
+    const toolOutput = {
+      tool: 'requestWebSearch' as const,
+      toolCallId: 'call-web-1',
+      output: { approved: true },
+    };
 
     await controller.chat(
       req,
       {
         weekStart: '2026-11-16',
-        messages,
+        message: 'Lên thực đơn tuần',
         requestId: 'req-1',
         threadId: 'thread-1',
         allowWebSearch: true,
+        toolOutput,
       },
       response,
     );
 
     expect(chatService.stream).toHaveBeenCalledWith(
       userId,
-      messages,
+      'Lên thực đơn tuần',
       expect.any(AbortSignal),
       '2026-11-16',
       'req-1',
       'thread-1',
-      { allowWebSearch: true },
+      { allowWebSearch: true, toolOutput },
     );
     expect(pipeUIMessageStreamToResponse).toHaveBeenCalledWith({
       response,

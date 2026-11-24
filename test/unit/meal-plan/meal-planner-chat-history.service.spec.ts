@@ -144,17 +144,17 @@ describe('MealPlannerChatHistoryService', () => {
     const firstId = randomUUID();
     const secondId = randomUUID();
 
-    await service.recordUserTurn(
+    await service.recordUserMessage(
       USER_A,
       firstId,
-      [{ role: 'user', text: 'Gợi ý thực đơn chay thanh đạm cho thứ Hai' }],
+      'Gợi ý thực đơn chay thanh đạm cho thứ Hai',
       'msg-1',
     );
     await new Promise((resolve) => setTimeout(resolve, 15));
-    await service.recordUserTurn(
+    await service.recordUserMessage(
       USER_A,
       secondId,
-      [{ role: 'user', text: 'B'.repeat(100) }],
+      'B'.repeat(100),
       'msg-2',
     );
 
@@ -179,17 +179,19 @@ describe('MealPlannerChatHistoryService', () => {
     );
   });
 
-  it('saves multi-turn backfill, full assistant tool parts, refused turns, and >10 messages without loss', async () => {
+  it('saves user turns, full assistant tool parts, refused turns, and >10 messages without loss', async () => {
     const threadId = randomUUID();
 
-    await service.recordUserTurn(
+    await service.recordUserMessage(USER_A, threadId, 'Tin 1', 'prior-1');
+    await service.recordAssistantMessage(USER_A, threadId, {
+      id: 'prior-2',
+      role: 'assistant',
+      parts: [{ type: 'text', text: 'Đáp 1' }],
+    });
+    await service.recordUserMessage(
       USER_A,
       threadId,
-      [
-        { role: 'user', text: 'Tin 1' },
-        { role: 'assistant', text: 'Đáp 1' },
-        { role: 'user', text: 'Lên thực đơn thứ Hai' },
-      ],
+      'Lên thực đơn thứ Hai',
       'user-turn-2',
     );
 
@@ -228,10 +230,10 @@ describe('MealPlannerChatHistoryService', () => {
     });
 
     // Refused turn metadata is preserved
-    await service.recordUserTurn(
+    await service.recordUserMessage(
       USER_A,
       threadId,
-      [{ role: 'user', text: 'Viết code' }],
+      'Viết code',
       'user-refused',
     );
     await service.recordAssistantMessage(USER_A, threadId, {
@@ -243,10 +245,10 @@ describe('MealPlannerChatHistoryService', () => {
 
     // Add 10 more messages so total > 10
     for (let i = 1; i <= 10; i++) {
-      await service.recordUserTurn(
+      await service.recordUserMessage(
         USER_A,
         threadId,
-        [{ role: 'user', text: `Câu hỏi thêm ${i}` }],
+        `Câu hỏi thêm ${i}`,
         `extra-u-${i}`,
       );
     }
@@ -265,6 +267,92 @@ describe('MealPlannerChatHistoryService', () => {
     ]);
     expect(detail.messages[3].parts).toHaveLength(4);
     expect(detail.messages[5].metadata).toEqual({ refused: true });
+  });
+
+  it('persists client tool outputs and loads non-refused context messages within limit', async () => {
+    const threadId = randomUUID();
+
+    await service.recordUserMessage(USER_A, threadId, 'Gợi ý món sáng', 'u1');
+    await service.recordAssistantMessage(USER_A, threadId, {
+      id: 'a1',
+      role: 'assistant',
+      parts: [
+        { type: 'text', text: 'Bạn muốn ăn món nào?' },
+        {
+          type: 'tool-askUser',
+          toolCallId: 'call-ask-1',
+          state: 'input-available',
+          input: {
+            question: 'Chọn món sáng?',
+            options: ['Cháo nấm', 'Bún riêu chay'],
+          },
+        },
+        {
+          type: 'tool-requestWebSearch',
+          toolCallId: 'call-web-1',
+          state: 'input-available',
+          input: { reason: 'Cần giá tempeh' },
+        },
+      ],
+    });
+
+    await service.recordToolOutput(USER_A, threadId, {
+      tool: 'askUser',
+      toolCallId: 'call-ask-1',
+      output: { answer: 'Cháo nấm' },
+    });
+    await service.recordToolOutput(USER_A, threadId, {
+      tool: 'requestWebSearch',
+      toolCallId: 'call-web-1',
+      output: { approved: true },
+    });
+
+    await expect(
+      service.recordToolOutput(USER_A, threadId, {
+        tool: 'askUser',
+        toolCallId: 'call-ask-1',
+        output: { answer: '   ' },
+      }),
+    ).rejects.toBeInstanceOf(InvalidInputException);
+    await expect(
+      service.recordToolOutput(USER_A, threadId, {
+        tool: 'requestWebSearch',
+        toolCallId: 'call-web-1',
+        output: { approved: 'yes' },
+      }),
+    ).rejects.toBeInstanceOf(InvalidInputException);
+
+    // Refused turn must be stripped together with its preceding user message
+    await service.recordUserMessage(USER_A, threadId, 'Viết code JS', 'u-bad');
+    await service.recordAssistantMessage(USER_A, threadId, {
+      id: 'a-bad',
+      role: 'assistant',
+      parts: [{ type: 'text', text: 'Không hỗ trợ.' }],
+      metadata: { refused: true },
+    });
+    await service.recordUserMessage(USER_A, threadId, 'Thêm bữa trưa', 'u2');
+
+    const fullContext = await service.loadContextMessages(USER_A, threadId, 40);
+    expect(fullContext.map((m) => m.id)).toEqual(['u1', 'a1', 'u2']);
+    expect(fullContext[1].parts).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: 'tool-askUser',
+          toolCallId: 'call-ask-1',
+          state: 'output-available',
+          output: { answer: 'Cháo nấm' },
+        }),
+        expect.objectContaining({
+          type: 'tool-requestWebSearch',
+          toolCallId: 'call-web-1',
+          state: 'output-available',
+          output: { approved: true },
+        }),
+      ]),
+    );
+
+    const limited = await service.loadContextMessages(USER_A, threadId, 2);
+    expect(limited.map((m) => m.id)).toEqual(['a1', 'u2']);
   });
 
   it('updates proposalStatuses, title, and syncs messages idempotently without duplicates', async () => {
@@ -333,12 +421,7 @@ describe('MealPlannerChatHistoryService', () => {
 
   it('deletes a thread and cascades removal of all its messages', async () => {
     const threadId = randomUUID();
-    await service.recordUserTurn(
-      USER_A,
-      threadId,
-      [{ role: 'user', text: 'Xin chào' }],
-      'm-del-1',
-    );
+    await service.recordUserMessage(USER_A, threadId, 'Xin chào', 'm-del-1');
     await service.deleteThread(USER_A, threadId);
 
     await expect(service.getThread(USER_A, threadId)).rejects.toBeInstanceOf(
@@ -351,18 +434,8 @@ describe('MealPlannerChatHistoryService', () => {
   it('cascades deletion of chat threads and messages when a user is deleted', async () => {
     const threadA = randomUUID();
     const threadB = randomUUID();
-    await service.recordUserTurn(
-      USER_A,
-      threadA,
-      [{ role: 'user', text: 'Tin của A' }],
-      'msg-a',
-    );
-    await service.recordUserTurn(
-      USER_B,
-      threadB,
-      [{ role: 'user', text: 'Tin của B' }],
-      'msg-b',
-    );
+    await service.recordUserMessage(USER_A, threadA, 'Tin của A', 'msg-a');
+    await service.recordUserMessage(USER_B, threadB, 'Tin của B', 'msg-b');
 
     await mongo.connection.model('User').deleteOne({ _id: USER_A }).exec();
 

@@ -4,6 +4,7 @@ import { InjectModel } from '@nestjs/mongoose';
 import type { UIMessage } from 'ai';
 import type { Model } from 'mongoose';
 import { z } from 'zod';
+import { runtimeConfig } from '../config/runtime-config.js';
 import { InvalidInputException } from '../common/exceptions/invalid-input.exception.js';
 import { ResourceNotFoundException } from '../common/exceptions/resource-not-found.exception.js';
 import {
@@ -27,7 +28,7 @@ import type {
   MealPlanChatRewindWeekDto,
   MealPlanChatThreadDetailDto,
   MealPlanChatThreadSummaryDto,
-  PlannerMessageDto,
+  PlannerToolOutputDto,
   SaveMealDayDto,
   UpdateMealPlanChatThreadDto,
 } from './dto/meal-plan.dto.js';
@@ -36,6 +37,46 @@ import { MealPlanService } from './meal-plan.service.js';
 export const DEFAULT_CHAT_THREAD_TITLE = 'Cuộc trò chuyện mới';
 const MAX_AUTO_TITLE_LENGTH = 80;
 const MAX_PREVIEW_LENGTH = 160;
+
+/**
+ * A stored chat message as the model will see it. It is not validated here:
+ * the chat service validates the whole history against the current tools.
+ */
+export type StoredChatMessage = {
+  id: string;
+  role: 'user' | 'assistant';
+  parts: Record<string, unknown>[];
+  metadata?: { refused?: boolean };
+};
+
+const askUserOutputSchema = z.object({
+  answer: z
+    .string()
+    .trim()
+    .min(1)
+    .max(runtimeConfig.PLANNER_CHAT_MAX_MESSAGE_LENGTH),
+});
+const webSearchDecisionSchema = z.object({
+  approved: z.boolean(),
+});
+
+/** Validates a client-supplied answer for `askUser` or `requestWebSearch`. */
+export function validatePlannerToolOutput(
+  toolOutput: PlannerToolOutputDto,
+): { answer: string } | { approved: boolean } {
+  const schema =
+    toolOutput.tool === 'askUser'
+      ? askUserOutputSchema
+      : webSearchDecisionSchema;
+  const parsed = schema.safeParse(toolOutput.output);
+  if (!parsed.success) {
+    throw new InvalidInputException(
+      'BAD_REQUEST',
+      'Invalid planner tool output',
+    );
+  }
+  return parsed.data;
+}
 
 function isProposalStatus(value: unknown): value is MealPlanChatProposalStatus {
   return value === 'staged' || value === 'saved' || value === 'dismissed';
@@ -397,34 +438,112 @@ export class MealPlannerChatHistoryService {
     }
   }
 
-  async recordUserTurn(
+  /**
+   * Attaches a client-side tool output (`askUser` or `requestWebSearch`) to the
+   * stored assistant message part matching `toolCallId`.
+   */
+  async recordToolOutput(
     userId: string,
     threadId: string,
-    turns: readonly PlannerMessageDto[],
-    requestId?: string,
+    toolOutput: PlannerToolOutputDto,
   ): Promise<void> {
-    if (turns.length === 0) return;
-    const thread = await this.ensureThread(userId, threadId, turns[0]?.text);
+    const validated = validatePlannerToolOutput(toolOutput);
+    const existing = await this.messages
+      .findOne({
+        threadId,
+        userId,
+        role: 'assistant',
+        'parts.toolCallId': toolOutput.toolCallId,
+      })
+      .exec();
+    if (!existing) return;
 
-    if (thread.messageCount === 0 && turns.length > 1) {
-      for (let index = 0; index < turns.length - 1; index++) {
-        const turn = turns[index];
-        await this.upsertMessage(userId, threadId, {
-          id: `prior-${index + 1}`,
-          role: turn.role,
-          text: turn.text,
-          parts: [{ type: 'text', text: turn.text }],
+    const targetType = `tool-${toolOutput.tool}`;
+    let changed = false;
+    const updatedParts: Record<string, unknown>[] = [];
+    for (const part of existing.parts) {
+      if (
+        part.type === targetType &&
+        part.toolCallId === toolOutput.toolCallId
+      ) {
+        updatedParts.push({
+          ...part,
+          state: 'output-available',
+          output: validated,
         });
+        changed = true;
+      } else {
+        updatedParts.push(part);
       }
     }
+    if (!changed) return;
 
-    const latest = turns[turns.length - 1];
+    existing.parts = updatedParts;
+    existing.markModified('parts');
+    await existing.save();
+  }
+
+  /** Persists a single user message for the current turn. */
+  async recordUserMessage(
+    userId: string,
+    threadId: string,
+    text: string,
+    requestId?: string,
+  ): Promise<void> {
     await this.upsertMessage(userId, threadId, {
       id: requestId ?? randomUUID(),
       role: 'user',
-      text: latest.text,
-      parts: [{ type: 'text', text: latest.text }],
+      text,
+      parts: [{ type: 'text', text }],
     });
+  }
+
+  /**
+   * Loads recent non-refused turns for `threadId` in chronological order, as
+   * stored. Validate them with `validateUIMessages` before use.
+   */
+  async loadContextMessages(
+    userId: string,
+    threadId: string,
+    limit = runtimeConfig.PLANNER_CHAT_MAX_MESSAGES,
+  ): Promise<StoredChatMessage[]> {
+    const fetchLimit = Math.max(limit * 2, 80);
+    const recentDesc = await this.messages
+      .find({ threadId, userId })
+      .sort({ sequence: -1, _id: -1 })
+      .limit(fetchLimit)
+      .exec();
+    const chronological = recentDesc.reverse();
+
+    const nonRefused: MealPlanChatMessage[] = [];
+    for (let index = 0; index < chronological.length; index++) {
+      const current = chronological[index];
+      const next = chronological[index + 1];
+      if (current.metadata?.refused) continue;
+      if (
+        current.role === 'user' &&
+        next?.role === 'assistant' &&
+        next.metadata?.refused
+      ) {
+        continue;
+      }
+      nonRefused.push(current);
+    }
+
+    const window = nonRefused.slice(-limit);
+    const stored: StoredChatMessage[] = [];
+    for (const row of window) {
+      const message: StoredChatMessage = {
+        id: row.messageId,
+        role: row.role,
+        parts: normalizeMessageParts(row.text, row.parts),
+      };
+      if (row.metadata) {
+        message.metadata = row.metadata;
+      }
+      stored.push(message);
+    }
+    return stored;
   }
 
   async recordAssistantMessage(

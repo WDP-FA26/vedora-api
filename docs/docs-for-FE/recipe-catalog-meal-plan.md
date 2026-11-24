@@ -139,17 +139,9 @@ dạng thay đổi: `output.weekStart`, `output.days` (chỉ ngày đổi, đủ
 hai mã đó nằm trong `output.problems` để FE ghi "Không thêm: …". `applied: false` khi không có thay đổi, hoặc mọi món
 mới đều bị bỏ. FE hiển thị thẻ "Đã cập nhật thực đơn" và tải lại `GET /meal-plan`.
 
-Khi gửi `threadId` (UUID v4) lên `POST /meal-plan/chat`, backend tự động lưu tin
-nhắn người dùng, các lượt bị từ chối bởi moderation (`metadata: { refused: true }`)
-và câu trả lời stream xong của trợ lý (đầy đủ `parts`, gồm text, tool trace,
-knowledge sources và các thay đổi thực đơn) vào đoạn chat đó. FE gửi tối đa 40 tin nhắn gần nhất
-(`PLANNER_CHAT_MAX_MESSAGES`, mỗi tin ≤ 8000 ký tự) trong `messages` làm ngữ cảnh cho LLM. Vì `messages` chỉ là
-text, FE nối thêm ghi chú ngắn về kết quả công cụ của tin trợ lý (món đã tìm kèm id và kcal, công thức đã xem, tóm
-tắt của chuyên gia dinh dưỡng, món nhà hàng đã gợi ý, thay đổi đã lưu, câu hỏi đã hỏi), để lượt sau trợ lý vẫn đặt
-đúng món người dùng chọn; toàn bộ tin nhắn trước đó vẫn được
-giữ đầy đủ trong MongoDB và trả về qua `GET /meal-plan/chat/threads/:threadId`.
-`PATCH /meal-plan/chat/threads/:threadId` dùng để cập nhật `title` hoặc đồng bộ thêm tin nhắn theo `id`
-(idempotent). `proposalStatuses` chỉ còn cho đoạn chat cũ từ thời có thẻ đề xuất; FE mới không ghi nữa.
+Khi gửi `POST /meal-plan/chat` với `{ weekStart, message, threadId?, requestId?, allowWebSearch?, toolOutput? }`, backend tự động lưu tin nhắn người dùng, các lượt bị từ chối bởi moderation (`metadata: { refused: true }`) và câu trả lời stream xong của trợ lý (đầy đủ `parts`, gồm text, tool trace, knowledge sources và các thay đổi thực đơn) vào đoạn chat `threadId` đó. Nếu gửi kèm `toolOutput` (`askUser` hoặc `requestWebSearch`), backend gắn luôn kết quả vào part tương ứng của tin nhắn trợ lý trước đó mà không cần FE đồng bộ lại bằng `PATCH`.
+
+Ngữ cảnh hội thoại được nạp hoàn toàn ở phía server: backend lấy tối đa `PLANNER_CHAT_MAX_MESSAGES` (mặc định 40) tin nhắn hợp lệ gần nhất từ MongoDB (loại bỏ các lượt đã bị moderation từ chối), kiểm tra lại lịch sử bằng `validateUIMessages` với bộ công cụ hiện tại (nếu lịch sử không còn khớp schema, lượt đó bắt đầu lại chỉ với tin nhắn mới nhất), chuyển đổi lịch sử `UIMessage` sang `ModelMessage` qua `convertToModelMessages` (`toModelOutput` gọn của từng công cụ) và cắt tỉa kết quả tra cứu cũ bằng `pruneMessages`, nên FE không cần nén ghi chú công cụ hay gửi lại toàn bộ mảng `messages` mỗi lượt. Toàn bộ tin nhắn đầy đủ vẫn được giữ trong MongoDB và trả về qua `GET /meal-plan/chat/threads/:threadId`. `PATCH /meal-plan/chat/threads/:threadId` dùng để cập nhật `title` (hoặc đồng bộ bổ sung theo `id`, idempotent). `proposalStatuses` chỉ còn cho đoạn chat cũ từ thời có thẻ đề xuất; FE mới không ghi nữa.
  `imageUrl` là link HTTPS có
 thể bằng `null`. `post` chỉ có `{ id, author: { username, fullName } }` khi bài
 nguồn đã `PUBLISHED`; nếu bài đang xử lý, thất bại hoặc đã bị xóa thì `post=null`.
@@ -287,8 +279,10 @@ Khi yêu cầu còn mở (đổi món nhưng chưa nói đổi sang gì, chưa r
 trước đó hoặc với mục Sở thích, hoặc có điểm cần lưu ý (dị ứng, ngày đã qua, Kcal lệch xa), trợ lý gọi `askUser` với input
 `{ question: string; options: string[] (2–6, mỗi cái ≤ 80 ký tự); multiple?: boolean }`. Công cụ **không có output**
 trên server: luồng dừng ở part `tool-askUser` với `state: 'input-available'`. FE hiện `options` thành nút; khi người
-dùng chọn, FE `addToolOutput({ tool: 'askUser', toolCallId, output: { answer } })` rồi gửi `answer` như tin nhắn
-người dùng tiếp theo. Người dùng cũng có thể gõ câu trả lời khác.
+dùng chọn, FE `addToolOutput({ tool: 'askUser', toolCallId, output: { answer } })` rồi gửi `message: answer` kèm
+`toolOutput: { tool: 'askUser', toolCallId, output: { answer } }` trên `POST /meal-plan/chat` để server cập nhật part
+và tiếp tục lượt mới. Nếu người dùng gõ câu trả lời khác thay vì bấm nút, FE vẫn gửi câu đó làm `toolOutput` của câu hỏi đang mở.
+Tool call phía client (`askUser`, `requestWebSearch`) không bao giờ nhận được output sẽ bị bỏ khỏi ngữ cảnh của model (`ignoreIncompleteToolCalls`).
 
 #### Quay lại: `POST /meal-plan/chat/threads/:threadId/rewind`
 
@@ -327,10 +321,10 @@ không theo prompt:
   `state: 'input-available'`. FE hiện thẻ xin phép gồm `reason` và cảnh báo rằng thông tin trên web có thể sai
   hoặc không thống nhất, Vedora không kiểm chứng.
   - **Cho phép**: FE gắn output `{ approved: true }` vào part đó (`addToolOutput`), rồi gửi một lượt người dùng
-    ngắn với `allowWebSearch: true`. Các lượt sau trong đoạn chat đó tiếp tục gửi `allowWebSearch: true`.
-  - **Không**: gắn `{ approved: false }` rồi gửi một lượt "không"; trợ lý không hỏi lại trong đoạn chat đó trừ khi
+    ngắn với `allowWebSearch: true` và `toolOutput: { tool: 'requestWebSearch', toolCallId, output: { approved: true } }`. Các lượt sau trong đoạn chat đó tiếp tục gửi `allowWebSearch: true`.
+  - **Không**: gắn `{ approved: false }` rồi gửi một lượt "không" kèm `toolOutput: { tool: 'requestWebSearch', toolCallId, output: { approved: false } }`; trợ lý không hỏi lại trong đoạn chat đó trừ khi
     người dùng tự yêu cầu.
-  - Quyết định được lưu cùng `parts` của tin nhắn (đồng bộ qua `PATCH /meal-plan/chat/threads/:threadId`), nên FE
+  - Quyết định được server lưu trực tiếp vào `parts` của tin nhắn trợ lý khi nhận `toolOutput`, nên FE
     dựng lại trạng thái đồng ý từ quyết định mới nhất khi mở lại đoạn chat. Đoạn chat mới luôn bắt đầu chưa cho phép.
 - **Đã cho phép** (`true`, mặc định trên FE từ đầu hội thoại; có thể tắt nếu người dùng từ chối): trợ lý có công cụ server `openrouter:web_search` của OpenRouter (engine Parallel chế độ `fast`, context `medium`, tối đa `PLANNER_WEB_SEARCH_MAX_USES` = 4 lần, 5 kết quả/lần) và có thể ủy quyền tra cứu sâu cho `consultNutritionSubagent`. Nguồn web đến dưới dạng part `source-url` (`{ sourceId, url, title }`) để FE hiển thị riêng.
 - Món trong thực đơn vẫn chỉ lấy từ kho món của Vedora. Phí tìm web nằm trong cùng một lượt AI (một ticket quota).

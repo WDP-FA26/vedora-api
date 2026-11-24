@@ -178,7 +178,7 @@ export class MealPlanController {
   @ApiOperation({
     summary: 'Talk to the assistant: meal planning and nutrition questions',
     description:
-      'Streams the reply as an AI SDK UI message stream (SSE) for `useChat`. `weekStart` is the week on screen and only the default: the assistant may propose for any week from this one to `maxWeekStart`. Its `fillSlots`, `editPlan`, `autoBalancePlan` and `verifyMealPlanAllergies` tools save to the plan at once; each output is the change (`weekStart`, `days` with `previous` and `recipes`, `problems`, `applied`), which `POST /meal-plan/chat/threads/:threadId/rewind` undoes. `askUser` has no output: show its `options` as buttons and send the pick as the next message. Web search runs only with `allowWebSearch: true`; without it the assistant may call `requestWebSearch` (no output) to ask the user first, and web results arrive as `source-url` parts.',
+      'Streams the reply as an AI SDK UI message stream (SSE) for `useChat`. Send the latest user `message`, `weekStart` (the week on screen, used as default), and optional `threadId` so the server loads conversation history from MongoDB and persists the turn. Optional `toolOutput` records the user answer for a pending `askUser` or `requestWebSearch` tool call. Its `fillSlots`, `editPlan`, `autoBalancePlan` and `verifyMealPlanAllergies` tools save to the plan at once; each output is the change (`weekStart`, `days` with `previous` and `recipes`, `problems`, `applied`), which `POST /meal-plan/chat/threads/:threadId/rewind` undoes. `askUser` has no output: show its `options` as buttons and send the pick as the next message. Web search runs only with `allowWebSearch: true`; without it the assistant may call `requestWebSearch` (no output) to ask the user first, and web results arrive as `source-url` parts.',
   })
   @ApiTooManyRequestsResponse({
     type: ErrorBodyDto,
@@ -200,12 +200,15 @@ export class MealPlanController {
       response,
       stream: await this.chatService.stream(
         request.user.sub,
-        dto.messages,
+        dto.message,
         abort.signal,
         dto.weekStart,
         dto.requestId,
         dto.threadId,
-        { allowWebSearch: dto.allowWebSearch === true },
+        {
+          allowWebSearch: dto.allowWebSearch === true,
+          toolOutput: dto.toolOutput,
+        },
       ),
     });
   }

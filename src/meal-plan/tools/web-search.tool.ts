@@ -23,5 +23,14 @@ export function requestWebSearchTool() {
           'Một câu ngắn bằng tiếng Việt: cần tìm gì trên web và vì sao',
         ),
     }),
+    outputSchema: z.object({
+      approved: z.boolean(),
+    }),
+    toModelOutput: ({ output }) => ({
+      type: 'text',
+      value: output.approved
+        ? 'Người dùng đã cho phép tìm trên web.'
+        : 'Người dùng không cho phép tìm trên web.',
+    }),
   });
 }

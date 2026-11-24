@@ -3,19 +3,25 @@ import { Inject, Injectable, Logger, Optional } from '@nestjs/common';
 import { runtimeConfig } from '../config/runtime-config.js';
 import { InjectModel } from '@nestjs/ai';
 import {
+  convertToModelMessages,
   isStepCount,
+  isTextUIPart,
   type LanguageModel,
+  pruneMessages,
   ToolLoopAgent,
   type ToolSet,
   toUIMessageStream,
+  TypeValidationError,
+  type UIMessage,
+  validateUIMessages,
 } from 'ai';
 import { OpenRouterCacheControl } from '../ai/openrouter.js';
 import { cannedReply } from '../ai/chat/canned-reply.js';
 import { chatErrorCode } from '../ai/chat/errors.js';
 import { replyFilter } from '../ai/chat/reply-filter.js';
 import {
-  assertLastMessageFromUser,
   conversationModerationState,
+  type ModerationTurn,
 } from '../ai/guardrails/conversation-state.js';
 import { MODERATION_MODEL } from '../ai/guardrails/guardrail.js';
 import { decide, type DecisionModel } from '../common/decision/decision.js';
@@ -23,10 +29,14 @@ import { NUTRITION_POLICY } from '../ai/guardrails/policies/nutrition.js';
 import { searchKnowledgeTool } from '../knowledge/tools/search-knowledge.tool.js';
 import { KnowledgeSearchService } from '../knowledge/retrieval/knowledge-search.service.js';
 import { DietaryService } from '../recipes/dietary.service.js';
-import type { PlannerMessageDto } from './dto/meal-plan.dto.js';
+import type { PlannerToolOutputDto } from './dto/meal-plan.dto.js';
 import { MealLogService } from './meal-log/meal-log.service.js';
 import { MealPlanService } from './meal-plan.service.js';
-import { MealPlannerChatHistoryService } from './meal-planner-chat-history.service.js';
+import {
+  MealPlannerChatHistoryService,
+  type StoredChatMessage,
+  validatePlannerToolOutput,
+} from './meal-planner-chat-history.service.js';
 import {
   plannerDynamicContext,
   plannerStaticInstructions,
@@ -52,6 +62,7 @@ import {
   webSearchTool,
 } from './tools/web-search.tool.js';
 import { FeatureUnavailableException } from '../common/exceptions/feature-unavailable.exception.js';
+import { InvalidInputException } from '../common/exceptions/invalid-input.exception.js';
 import { AiFeature } from '../mongo/models.js';
 import { AiUsageService } from '../subscriptions/ai-usage.service.js';
 import { quotaStream } from '../subscriptions/quota-stream.js';
@@ -69,6 +80,8 @@ const LAST_STEP_NOTE = `
 export interface PlannerChatOptions {
   /** The user allowed web search in this chat. */
   allowWebSearch?: boolean;
+  /** Answer for a pending client-side `askUser` or `requestWebSearch` tool call. */
+  toolOutput?: PlannerToolOutputDto;
 }
 
 function stripPlannerTags(text: string): string {
@@ -82,6 +95,82 @@ function stripPlannerTags(text: string): string {
 function webTools(allowWebSearch: boolean): ToolSet {
   if (allowWebSearch) return { webSearch: webSearchTool() };
   return { requestWebSearch: requestWebSearchTool() };
+}
+
+function extractMessageText(message: StoredChatMessage): string {
+  const chunks: string[] = [];
+  for (const part of message.parts) {
+    if (part.type === 'text' && typeof part.text === 'string' && part.text) {
+      chunks.push(part.text);
+    }
+  }
+  return chunks.join('\n');
+}
+
+function toModerationTurns(
+  messages: readonly StoredChatMessage[],
+): ModerationTurn[] {
+  const turns: ModerationTurn[] = [];
+  for (const message of messages) {
+    if (message.role !== 'user' && message.role !== 'assistant') continue;
+    const rawText = extractMessageText(message);
+    const text = message.role === 'user' ? stripPlannerTags(rawText) : rawText;
+    if (text.trim().length > 0) {
+      turns.push({ role: message.role, text });
+    }
+  }
+  return turns;
+}
+
+/** Strips planner tags the user typed, so they can't pose as server context. */
+function stripUserPlannerTags(messages: readonly UIMessage[]): UIMessage[] {
+  const prepared: UIMessage[] = [];
+  for (const message of messages) {
+    if (message.role !== 'user') {
+      prepared.push(message);
+      continue;
+    }
+    const sanitizedParts: UIMessage['parts'] = [];
+    for (const part of message.parts) {
+      if (isTextUIPart(part)) {
+        sanitizedParts.push({ ...part, text: stripPlannerTags(part.text) });
+      } else {
+        sanitizedParts.push(part);
+      }
+    }
+    prepared.push({ ...message, parts: sanitizedParts });
+  }
+  return prepared;
+}
+
+function safeConversionTools(tools: ToolSet): ToolSet {
+  const wrapped: ToolSet = {};
+  for (const [name, definition] of Object.entries(tools)) {
+    const toModelOutput = definition.toModelOutput;
+    if (!toModelOutput) {
+      wrapped[name] = definition;
+      continue;
+    }
+    wrapped[name] = {
+      ...definition,
+      toModelOutput: async (args: {
+        toolCallId: string;
+        input: unknown;
+        output: unknown;
+      }) => {
+        try {
+          return await toModelOutput(args);
+        } catch {
+          const fallback: { type: 'text'; value: string } = {
+            type: 'text',
+            value: JSON.stringify(args.output ?? null),
+          };
+          return fallback;
+        }
+      },
+    };
+  }
+  return wrapped;
 }
 
 @Injectable()
@@ -101,16 +190,46 @@ export class MealPlannerChatService {
     @Optional() private readonly mealLog?: MealLogService,
   ) {}
 
+  /**
+   * Validates the stored history against the current tools, as the AI SDK
+   * persistence guide does. When it no longer matches (a removed tool, a
+   * changed schema), the turn starts over from the user's latest message.
+   */
+  private async validateHistory(
+    messages: readonly StoredChatMessage[],
+    currentMessage: StoredChatMessage,
+    tools: ToolSet,
+  ): Promise<UIMessage[]> {
+    try {
+      return await validateUIMessages({ messages, tools });
+    } catch (error) {
+      if (!TypeValidationError.isInstance(error)) throw error;
+      this.logger.warn(
+        `Stored planner history no longer matches the tools; starting from the latest message: ${error.message}`,
+      );
+      return validateUIMessages({ messages: [currentMessage] });
+    }
+  }
+
   async stream(
     userId: string,
-    messages: PlannerMessageDto[],
+    message: string,
     abortSignal: AbortSignal,
     weekStart: string,
     requestId?: string,
     threadId?: string,
-    { allowWebSearch = false }: PlannerChatOptions = {},
+    { allowWebSearch = false, toolOutput }: PlannerChatOptions = {},
   ) {
-    assertLastMessageFromUser(messages);
+    const cleanUserText = stripPlannerTags(message);
+    if (cleanUserText.trim().length === 0) {
+      throw new InvalidInputException(
+        'BAD_REQUEST',
+        'Message must not be empty',
+      );
+    }
+    if (toolOutput) {
+      validatePlannerToolOutput(toolOutput);
+    }
     if (threadId) {
       await this.history?.assertThreadAccess(userId, threadId);
     }
@@ -121,8 +240,12 @@ export class MealPlannerChatService {
     ]);
     const ticket = await this.usage.consume(userId, AiFeature.MEAL_PLAN_CHAT, {
       requestId,
-      input: messages,
-      prompt: messages.at(-1)?.text,
+      input: {
+        threadId: threadId ?? null,
+        message,
+        ...(toolOutput ? { toolOutput } : {}),
+      },
+      prompt: message,
     });
     if (!ticket)
       throw new QuotaReachedException(
@@ -130,15 +253,39 @@ export class MealPlannerChatService {
         'Your shared AI text allowance is exhausted',
       );
     try {
-      await this.history?.recordUserTurn(
+      const userMessageId = requestId ?? randomUUID();
+      if (toolOutput) {
+        await this.history?.recordToolOutput(
+          userId,
+          activeThreadId,
+          toolOutput,
+        );
+      }
+      await this.history?.recordUserMessage(
         userId,
         activeThreadId,
-        messages,
-        requestId,
+        message,
+        userMessageId,
       );
+      const loaded =
+        (await this.history?.loadContextMessages(
+          userId,
+          activeThreadId,
+          runtimeConfig.PLANNER_CHAT_MAX_MESSAGES,
+        )) ?? [];
+      const currentMessage: StoredChatMessage = {
+        id: userMessageId,
+        role: 'user',
+        parts: [{ type: 'text', text: cleanUserText }],
+      };
+      const storedMessages: StoredChatMessage[] = [...loaded];
+      if (!storedMessages.some((item) => item.id === userMessageId)) {
+        storedMessages.push(currentMessage);
+      }
+
       const { choice: verdict } = await decide(
         this.moderator,
-        conversationModerationState(messages),
+        conversationModerationState(toModerationTurns(storedMessages)),
         abortSignal,
         NUTRITION_POLICY,
       ).catch((error: unknown) => {
@@ -194,6 +341,51 @@ export class MealPlannerChatService {
         plan,
         nutrition,
       );
+      const agentTools: ToolSet = {
+        searchKnowledge: searchKnowledgeTool(this.knowledge),
+        searchRecipes: searchRecipesTool(this.mealPlan, userId),
+        getRecipe: getRecipeTool(this.mealPlan, userId),
+        getPlan: getPlanTool(this.mealPlan, userId, toolWeek),
+        fillSlots: fillSlotsTool(this.mealPlan, userId, toolWeek),
+        autoBalancePlan: autoBalancePlanTool(this.mealPlan, userId, toolWeek),
+        editPlan: editPlanTool(this.mealPlan, userId, toolWeek),
+        askUser: askUserTool(),
+        updatePreferences: updatePreferencesTool(this.dietary, userId),
+        updateAllergyNote: updateAllergyNoteTool(
+          this.dietary,
+          userId,
+          onAllergyNoteSaved,
+        ),
+        consultNutritionSubagent: consultNutritionSubagentTool(
+          this.model,
+          this.mealPlan,
+          this.knowledge,
+          userId,
+          nutrition,
+          avoidedTerms,
+        ),
+        verifyMealPlanAllergies: verifyMealPlanAllergiesTool(
+          this.model,
+          this.mealPlan,
+          userId,
+          toolWeek,
+          restrictions,
+        ),
+        ...(this.restaurantMenu
+          ? {
+              searchRestaurantDishes: searchRestaurantDishesTool(
+                this.restaurantMenu,
+                avoidedTerms,
+              ),
+            }
+          : {}),
+        ...(this.mealLog
+          ? {
+              getEatingLog: getEatingLogTool(this.mealLog, userId, toolWeek),
+            }
+          : {}),
+        ...webTools(allowWebSearch),
+      };
       const agent = new ToolLoopAgent({
         model: this.model,
         ...OpenRouterCacheControl.agent({
@@ -209,51 +401,7 @@ export class MealPlannerChatService {
           systemTtl: '5m',
         }),
         maxOutputTokens: runtimeConfig.PLANNER_CHAT_MAX_OUTPUT_TOKENS,
-        tools: {
-          searchKnowledge: searchKnowledgeTool(this.knowledge),
-          searchRecipes: searchRecipesTool(this.mealPlan, userId),
-          getRecipe: getRecipeTool(this.mealPlan, userId),
-          getPlan: getPlanTool(this.mealPlan, userId, toolWeek),
-          fillSlots: fillSlotsTool(this.mealPlan, userId, toolWeek),
-          autoBalancePlan: autoBalancePlanTool(this.mealPlan, userId, toolWeek),
-          editPlan: editPlanTool(this.mealPlan, userId, toolWeek),
-          askUser: askUserTool(),
-          updatePreferences: updatePreferencesTool(this.dietary, userId),
-          updateAllergyNote: updateAllergyNoteTool(
-            this.dietary,
-            userId,
-            onAllergyNoteSaved,
-          ),
-          consultNutritionSubagent: consultNutritionSubagentTool(
-            this.model,
-            this.mealPlan,
-            this.knowledge,
-            userId,
-            nutrition,
-            avoidedTerms,
-          ),
-          verifyMealPlanAllergies: verifyMealPlanAllergiesTool(
-            this.model,
-            this.mealPlan,
-            userId,
-            toolWeek,
-            restrictions,
-          ),
-          ...(this.restaurantMenu
-            ? {
-                searchRestaurantDishes: searchRestaurantDishesTool(
-                  this.restaurantMenu,
-                  avoidedTerms,
-                ),
-              }
-            : {}),
-          ...(this.mealLog
-            ? {
-                getEatingLog: getEatingLogTool(this.mealLog, userId, toolWeek),
-              }
-            : {}),
-          ...webTools(allowWebSearch),
-        },
+        tools: agentTools,
         stopWhen: isStepCount(MAX_STEPS),
         prepareStep: OpenRouterCacheControl.finalStepGuard(
           MAX_STEPS,
@@ -261,12 +409,43 @@ export class MealPlannerChatService {
         ),
       });
 
+      const conversionTools = safeConversionTools({
+        ...agentTools,
+        requestWebSearch: requestWebSearchTool(),
+        webSearch: webSearchTool(),
+      });
+      const validatedMessages = await this.validateHistory(
+        storedMessages,
+        currentMessage,
+        conversionTools,
+      );
+      // A client-side tool call the user never answered (`askUser`,
+      // `requestWebSearch`) has no output; `ignoreIncompleteToolCalls` drops it.
+      const rawModelMessages = await convertToModelMessages(
+        stripUserPlannerTags(validatedMessages),
+        {
+          tools: conversionTools,
+          ignoreIncompleteToolCalls: true,
+        },
+      );
+      const prunedMessages = pruneMessages({
+        messages: rawModelMessages,
+        reasoning: 'all',
+        toolCalls: [
+          {
+            type: 'before-last-message',
+            tools: ['searchKnowledge', 'getPlan', 'getEatingLog'],
+          },
+          {
+            type: 'before-last-12-messages',
+          },
+        ],
+        emptyMessages: 'remove',
+      });
+
       const result = await agent.stream({
         messages: OpenRouterCacheControl.withUserContext(
-          messages.map(({ role, text }) => ({
-            role,
-            content: stripPlannerTags(text),
-          })),
+          prunedMessages,
           `<planner_context>\n${dynamicContext}\n</planner_context>`,
         ),
         abortSignal,

@@ -28,7 +28,6 @@ import {
   MinLength,
   ValidateNested,
 } from 'class-validator';
-import { LastMessageFromUser } from '../../ai/guardrails/conversation-state.js';
 import { WeekStart } from './week-start.js';
 
 export const WEEKDAYS = Object.values(Weekday);
@@ -456,20 +455,26 @@ export class GenerateMealResultDto extends MealPlanDraftDto {
   filled!: number;
 }
 
-const MAX_PLANNER_MESSAGES = runtimeConfig.PLANNER_CHAT_MAX_MESSAGES;
 const MAX_PLANNER_MESSAGE_LENGTH =
   runtimeConfig.PLANNER_CHAT_MAX_MESSAGE_LENGTH;
 
-export class PlannerMessageDto {
-  @ApiProperty({ enum: ['user', 'assistant'] })
-  @IsIn(['user', 'assistant'])
-  role!: 'user' | 'assistant';
+export const PLANNER_CLIENT_TOOLS = ['askUser', 'requestWebSearch'] as const;
+export type PlannerClientTool = (typeof PLANNER_CLIENT_TOOLS)[number];
 
-  @ApiProperty({ maxLength: MAX_PLANNER_MESSAGE_LENGTH })
+export class PlannerToolOutputDto {
+  @ApiProperty({ enum: PLANNER_CLIENT_TOOLS })
+  @IsIn(PLANNER_CLIENT_TOOLS)
+  tool!: PlannerClientTool;
+
+  @ApiProperty({ maxLength: 100 })
   @IsString()
   @MinLength(1)
-  @MaxLength(MAX_PLANNER_MESSAGE_LENGTH)
-  text!: string;
+  @MaxLength(100)
+  toolCallId!: string;
+
+  @ApiProperty({ type: Object })
+  @IsObject()
+  output!: Record<string, unknown>;
 }
 
 export class MealPlannerChatDto {
@@ -503,18 +508,24 @@ export class MealPlannerChatDto {
   @IsBoolean()
   allowWebSearch?: boolean;
 
-  @ApiProperty({
-    type: [PlannerMessageDto],
-    maxItems: MAX_PLANNER_MESSAGES,
-    description: 'The latest turns, oldest first, ending with the user',
+  @ApiPropertyOptional({
+    type: PlannerToolOutputDto,
+    description:
+      'Optional client-side answer for a pending `askUser` or `requestWebSearch` tool call from the previous turn',
   })
-  @IsArray()
-  @ArrayMinSize(1)
-  @ArrayMaxSize(MAX_PLANNER_MESSAGES)
-  @LastMessageFromUser()
-  @ValidateNested({ each: true })
-  @Type(() => PlannerMessageDto)
-  messages!: PlannerMessageDto[];
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => PlannerToolOutputDto)
+  toolOutput?: PlannerToolOutputDto;
+
+  @ApiProperty({
+    maxLength: MAX_PLANNER_MESSAGE_LENGTH,
+    description: 'The user message for this turn',
+  })
+  @IsString()
+  @MinLength(1)
+  @MaxLength(MAX_PLANNER_MESSAGE_LENGTH)
+  message!: string;
 }
 
 export const MAX_CHAT_THREAD_TITLE_LENGTH = 120;

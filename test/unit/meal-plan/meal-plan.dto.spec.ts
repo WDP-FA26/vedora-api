@@ -160,45 +160,48 @@ describe('MealPlan & ShoppingList DTOs', () => {
   });
 
   describe('MealPlannerChatDto', () => {
-    it('accepts valid chat messages ending with user and optional requestId and threadId', async () => {
+    it('accepts valid message with optional requestId, threadId, and toolOutput', async () => {
       const dto = plainToInstance(MealPlannerChatDto, {
         weekStart: '2026-11-16',
         threadId: uuid1,
         requestId: 'req-123',
-        messages: [
-          { role: 'user', text: 'Gợi ý thực đơn' },
-          { role: 'assistant', text: 'Đây là gợi ý' },
-          { role: 'user', text: 'Đổi bữa tối nhé' },
-        ],
+        message: 'Đổi bữa tối nhé',
+        toolOutput: {
+          tool: 'askUser',
+          toolCallId: 'call-ask-1',
+          output: { answer: 'Đổi bữa tối nhé' },
+        },
       });
       expect(await validate(dto)).toHaveLength(0);
+
+      const webDecision = plainToInstance(MealPlannerChatDto, {
+        weekStart: '2026-11-16',
+        threadId: uuid1,
+        allowWebSearch: true,
+        message: 'Đồng ý, bạn cứ tìm trên web.',
+        toolOutput: {
+          tool: 'requestWebSearch',
+          toolCallId: 'call-web-1',
+          output: { approved: true },
+        },
+      });
+      expect(await validate(webDecision)).toHaveLength(0);
 
       const invalidThread = plainToInstance(MealPlannerChatDto, {
         weekStart: '2026-11-16',
         threadId: 'not-a-uuid',
-        messages: [{ role: 'user', text: 'hi' }],
+        message: 'hi',
       });
       expect(await validate(invalidThread)).not.toHaveLength(0);
     });
 
-    it('rejects a conversation ending with an assistant turn', async () => {
-      const dto = plainToInstance(MealPlannerChatDto, {
-        weekStart: '2026-11-16',
-        messages: [
-          { role: 'user', text: 'Gợi ý thực đơn' },
-          { role: 'assistant', text: 'Đây là gợi ý' },
-        ],
-      });
-      expect(await validate(dto)).not.toHaveLength(0);
-    });
-
-    it('rejects invalid requestId, empty messages, too many messages, or invalid message fields', async () => {
+    it('rejects invalid requestId, empty or overlong message, or invalid toolOutput', async () => {
       expect(
         await validate(
           plainToInstance(MealPlannerChatDto, {
             weekStart: '2026-11-16',
             requestId: '',
-            messages: [{ role: 'user', text: 'hi' }],
+            message: 'hi',
           }),
         ),
       ).not.toHaveLength(0);
@@ -208,7 +211,7 @@ describe('MealPlan & ShoppingList DTOs', () => {
           plainToInstance(MealPlannerChatDto, {
             weekStart: '2026-11-16',
             requestId: 'r'.repeat(101),
-            messages: [{ role: 'user', text: 'hi' }],
+            message: 'hi',
           }),
         ),
       ).not.toHaveLength(0);
@@ -217,7 +220,7 @@ describe('MealPlan & ShoppingList DTOs', () => {
         await validate(
           plainToInstance(MealPlannerChatDto, {
             weekStart: '2026-11-16',
-            messages: [],
+            message: '',
           }),
         ),
       ).not.toHaveLength(0);
@@ -226,12 +229,8 @@ describe('MealPlan & ShoppingList DTOs', () => {
         await validate(
           plainToInstance(MealPlannerChatDto, {
             weekStart: '2026-11-16',
-            messages: Array.from(
-              { length: runtimeConfig.PLANNER_CHAT_MAX_MESSAGES + 1 },
-              () => ({
-                role: 'user',
-                text: 'hi',
-              }),
+            message: 'a'.repeat(
+              runtimeConfig.PLANNER_CHAT_MAX_MESSAGE_LENGTH + 1,
             ),
           }),
         ),
@@ -241,7 +240,12 @@ describe('MealPlan & ShoppingList DTOs', () => {
         await validate(
           plainToInstance(MealPlannerChatDto, {
             weekStart: '2026-11-16',
-            messages: [{ role: 'system', text: 'hi' }],
+            message: 'hi',
+            toolOutput: {
+              tool: 'editPlan',
+              toolCallId: 'call-1',
+              output: {},
+            },
           }),
         ),
       ).not.toHaveLength(0);
@@ -250,14 +254,26 @@ describe('MealPlan & ShoppingList DTOs', () => {
         await validate(
           plainToInstance(MealPlannerChatDto, {
             weekStart: '2026-11-16',
-            messages: [
-              {
-                role: 'user',
-                text: 'a'.repeat(
-                  runtimeConfig.PLANNER_CHAT_MAX_MESSAGE_LENGTH + 1,
-                ),
-              },
-            ],
+            message: 'hi',
+            toolOutput: {
+              tool: 'askUser',
+              toolCallId: '',
+              output: { answer: 'ok' },
+            },
+          }),
+        ),
+      ).not.toHaveLength(0);
+
+      expect(
+        await validate(
+          plainToInstance(MealPlannerChatDto, {
+            weekStart: '2026-11-16',
+            message: 'hi',
+            toolOutput: {
+              tool: 'askUser',
+              toolCallId: 'call-1',
+              output: 'not-an-object',
+            },
           }),
         ),
       ).not.toHaveLength(0);
@@ -354,7 +370,6 @@ describe('MealPlan & ShoppingList DTOs', () => {
     });
 
     it('requires it when saving, generating and chatting', async () => {
-      const messages = [{ role: 'user', text: 'Xin chào' }];
       expect(
         await validate(plainToInstance(SaveMealDaysDto, { days: [dayUpdate] })),
       ).not.toHaveLength(0);
@@ -368,7 +383,9 @@ describe('MealPlan & ShoppingList DTOs', () => {
         ),
       ).not.toHaveLength(0);
       expect(
-        await validate(plainToInstance(MealPlannerChatDto, { messages })),
+        await validate(
+          plainToInstance(MealPlannerChatDto, { message: 'Xin chào' }),
+        ),
       ).not.toHaveLength(0);
     });
 

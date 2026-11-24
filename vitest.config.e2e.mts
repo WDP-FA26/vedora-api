@@ -11,6 +11,10 @@ export default defineConfig({
     // few at a time keeps MongoDB from starving.
     globalSetup: ['test/support/global-setup.ts'],
     hookTimeout: 60_000,
+    // Vitest's 5s default is too tight: under 4 workers a request-heavy test
+    // (concurrency races, background indexing that waits up to 10s) sometimes
+    // takes 5-10s and then fails intermittently. Same budget as unit/db.
+    testTimeout: 15_000,
     maxWorkers: 4,
     // Fixed config so e2e runs never depend on a developer's .env. The specs
     // use databases of their own (see test/mongo-test-db.ts).
