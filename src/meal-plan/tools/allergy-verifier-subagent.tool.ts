@@ -1,7 +1,7 @@
 import { Logger } from '@nestjs/common';
 import { generateText, type LanguageModel, Output, tool } from 'ai';
 import { z } from 'zod';
-import { OpenRouterCacheControl } from '../../ai/openrouter.js';
+import { PromptCache } from '../../ai/prompt-cache.js';
 import { MealSection, Weekday } from '../../mongo/models.js';
 import type { DietaryRestrictionsDto } from '../../recipes/dto/dietary.dto.js';
 import { extractAllergyKeywords } from '../../recipes/nutrition.js';
@@ -120,7 +120,7 @@ async function runSemanticAllergyAudit(
   const { output } = await generateText({
     model,
     output: Output.object({ schema: allergyAuditSchema }),
-    ...OpenRouterCacheControl.singleTurn({
+    ...PromptCache.singleTurn({
       session: 'vedora-allergy-verifier',
       instructions: ALLERGY_AUDIT_INSTRUCTIONS,
       // A missed allergen is a safety failure; this call is rare and short.

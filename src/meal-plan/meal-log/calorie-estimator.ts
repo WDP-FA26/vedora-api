@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/ai';
 import { generateText, type LanguageModel } from 'ai';
 import { z } from 'zod';
-import { OpenRouterCacheControl } from '../../ai/openrouter.js';
+import { PromptCache } from '../../ai/prompt-cache.js';
 import { extractJsonObject } from '../../ai/json-text.js';
 import { webSearchTool } from '../../ai/tools/web-search.tool.js';
 import { runtimeConfig } from '../../config/runtime-config.js';
@@ -59,7 +59,7 @@ export class CalorieEstimator {
 
     const result = await generateText({
       model: this.model,
-      ...OpenRouterCacheControl.singleTurn({
+      ...PromptCache.singleTurn({
         session: 'vedora-calorie-estimator',
         instructions: CALORIE_ESTIMATE_INSTRUCTIONS,
         // At low effort it more often estimates without searching.

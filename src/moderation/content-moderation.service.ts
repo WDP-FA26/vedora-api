@@ -10,7 +10,7 @@ import {
 } from 'ai';
 import { FeatureUnavailableException } from '../common/exceptions/feature-unavailable.exception.js';
 import { UnprocessableContentException } from '../common/exceptions/unprocessable-content.exception.js';
-import { OpenRouterCacheControl } from '../ai/openrouter.js';
+import { PromptCache } from '../ai/prompt-cache.js';
 import type { ModerationEvidence } from '../mongo/models.js';
 import {
   type EvidenceSources,
@@ -191,7 +191,7 @@ export class ContentModerationService {
         maxRetries: MAX_RETRIES,
         maxOutputTokens: MAX_OUTPUT_TOKENS,
         abortSignal: AbortSignal.timeout(TIMEOUT_MS),
-        ...OpenRouterCacheControl.singleTurn({
+        ...PromptCache.singleTurn({
           session: SESSION_ID,
           instructions: reviewInstructions(policy),
           enabled: draftPolicy === undefined,

@@ -15,7 +15,7 @@ import {
   type UIMessage,
   validateUIMessages,
 } from 'ai';
-import { OpenRouterCacheControl } from '../ai/openrouter.js';
+import { PromptCache } from '../ai/prompt-cache.js';
 import { cannedReply } from '../ai/chat/canned-reply.js';
 import { chatErrorCode } from '../ai/chat/errors.js';
 import { replyFilter } from '../ai/chat/reply-filter.js';
@@ -429,7 +429,7 @@ export class MealPlannerChatService {
       }
       const agent = new ToolLoopAgent({
         model: this.model,
-        ...OpenRouterCacheControl.agent({
+        ...PromptCache.agent({
           session: 'vedora-planner',
           scope: [userId, activeThreadId],
           instructions: voice
@@ -446,10 +446,7 @@ export class MealPlannerChatService {
         maxOutputTokens: runtimeConfig.PLANNER_CHAT_MAX_OUTPUT_TOKENS,
         tools: agentTools,
         stopWhen: isStepCount(MAX_STEPS),
-        prepareStep: OpenRouterCacheControl.finalStepGuard(
-          MAX_STEPS,
-          LAST_STEP_NOTE,
-        ),
+        prepareStep: PromptCache.finalStepGuard(MAX_STEPS, LAST_STEP_NOTE),
       });
 
       const conversionTools = safeConversionTools({
@@ -489,7 +486,7 @@ export class MealPlannerChatService {
       });
 
       const result = await agent.stream({
-        messages: OpenRouterCacheControl.withUserContext(
+        messages: PromptCache.withUserContext(
           prunedMessages,
           `<planner_context>\n${dynamicContext}\n</planner_context>`,
         ),

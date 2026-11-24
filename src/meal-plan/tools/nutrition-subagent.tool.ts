@@ -1,7 +1,7 @@
 import { Logger } from '@nestjs/common';
 import { isStepCount, type LanguageModel, tool, ToolLoopAgent } from 'ai';
 import { z } from 'zod';
-import { OpenRouterCacheControl } from '../../ai/openrouter.js';
+import { PromptCache } from '../../ai/prompt-cache.js';
 import { runtimeConfig } from '../../config/runtime-config.js';
 import type { KnowledgeSearchService } from '../../knowledge/retrieval/knowledge-search.service.js';
 import { searchKnowledgeTool } from '../../knowledge/tools/search-knowledge.tool.js';
@@ -78,7 +78,7 @@ export function consultNutritionSubagentTool(
       try {
         const subagent = new ToolLoopAgent({
           model,
-          ...OpenRouterCacheControl.agent({
+          ...PromptCache.agent({
             session: 'vedora-nutrition-subagent',
             instructions: SUBAGENT_STATIC_INSTRUCTIONS,
             // At low effort it more often answers from memory instead of searching.
@@ -93,8 +93,7 @@ export function consultNutritionSubagentTool(
             searchKnowledge: searchKnowledgeTool(knowledge),
           },
           stopWhen: isStepCount(SUBAGENT_MAX_STEPS),
-          prepareStep:
-            OpenRouterCacheControl.finalStepGuard(SUBAGENT_MAX_STEPS),
+          prepareStep: PromptCache.finalStepGuard(SUBAGENT_MAX_STEPS),
         });
 
         const contextParts = [

@@ -5,7 +5,7 @@ import { ConfigService } from '@nestjs/config';
 import { JwtModule, JwtService } from '@nestjs/jwt';
 import { Test } from '@nestjs/testing';
 import { Types } from 'mongoose';
-import { chatModel } from '@src/ai/openrouter.js';
+import { openRouterModels } from '@src/ai/openrouter.js';
 import { decide } from '@src/common/decision/decision.js';
 import request from 'supertest';
 import type { App } from 'supertest/types.js';
@@ -250,19 +250,20 @@ describe('AI cost telemetry and Admin reports with MongoDB', () => {
         },
       }),
     );
-    const model = chatModel({
-      apiKey: 'fixture',
-      modelId: 'anthropic/claude-haiku-5.5',
-      fetch: (input, init) =>
-        transport.observe(
-          input,
-          init,
-          underlying,
-          'anthropic/claude-haiku-5.5',
-          'GUEST_CHAT',
-          'MODERATION',
-        ),
-    });
+    const model = openRouterModels('fixture').chat(
+      'anthropic/claude-haiku-5.5',
+      {
+        fetch: (input, init) =>
+          transport.observe(
+            input,
+            init,
+            underlying,
+            'anthropic/claude-haiku-5.5',
+            'GUEST_CHAT',
+            'MODERATION',
+          ),
+      },
+    );
     const result = await decide(
       model,
       'fixture',

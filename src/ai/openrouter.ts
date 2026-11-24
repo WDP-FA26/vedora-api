@@ -3,13 +3,15 @@ import {
   createOpenRouter,
   type OpenRouterProvider,
 } from '@openrouter/ai-sdk-provider';
-import {
-  type EmbeddingModel,
-  type ImageModel,
-  type LanguageModel,
-  wrapEmbeddingModel,
-} from 'ai';
-import { type ReasoningEffort, reasoningSetting } from './reasoning.js';
+import { wrapEmbeddingModel } from 'ai';
+import type {
+  AiModelFactory,
+  CacheTtl,
+  ChatModel,
+  ChatModelOptions,
+  ProviderDialect,
+} from './provider.js';
+import { reasoningSetting } from './reasoning.js';
 import { openRouterAttribution } from './openrouter-attribution.js';
 
 export {
@@ -20,13 +22,6 @@ export {
   type OpenRouterAttribution,
   type OpenRouterAttributionHeaders,
 } from './openrouter-attribution.js';
-export {
-  OpenRouterCacheControl,
-  type AutoCachedProviderOptions,
-  type CacheTtl,
-  type EphemeralCacheSpec,
-  type StickyProviderOptions,
-} from './openrouter-cache.js';
 
 export const DEFAULT_CHAT_MODEL = 'anthropic/claude-haiku-5.5';
 export const DEFAULT_MODERATION_MODEL = 'anthropic/claude-haiku-5.5';
@@ -51,13 +46,6 @@ export const DEFAULT_MODERATION_PROVIDER_ORDER =
  * outputs they rely on need them, and a prompt cache lives on one provider.
  */
 export const DEFAULT_CHAT_PROVIDER_ORDER = DEFAULT_MODERATION_PROVIDER_ORDER;
-
-interface ProviderOptions {
-  apiKey: string;
-  modelId: string;
-  /** The cost transport's fetch, so each call is recorded. */
-  fetch?: typeof fetch;
-}
 
 /** Provider slugs from a comma-separated list; empty leaves routing to OpenRouter. */
 export function providerOrderFrom(value: string): string[] {
@@ -84,47 +72,71 @@ function openRouter(
   });
 }
 
-export function chatModel({
-  apiKey,
-  modelId,
-  reasoningEffort = 'low',
-  providerOrder = [],
-  fetch: customFetch,
-}: ProviderOptions & {
-  reasoningEffort?: ReasoningEffort;
-  /** OpenRouter provider slugs to try in this order, falling back to the rest. */
-  providerOrder?: readonly string[];
-}): Exclude<LanguageModel, string> {
-  const routing =
-    providerOrder.length > 0
-      ? { provider: { order: [...providerOrder], allow_fallbacks: true } }
-      : {};
-  return openRouter(apiKey, customFetch)(modelId, {
-    reasoning: reasoningSetting(reasoningEffort),
-    ...routing,
-  });
+/** Anthropic's cache breakpoint as OpenRouter passes it on; 5 minutes is the default. */
+export type EphemeralCacheSpec = {
+  type: 'ephemeral';
+  ttl?: '1h';
+};
+
+export function ephemeralCache(ttl: CacheTtl = '1h'): EphemeralCacheSpec {
+  if (ttl === '1h') return { type: 'ephemeral', ttl: '1h' };
+  return { type: 'ephemeral' };
 }
 
-export function embeddingModel({
-  apiKey,
-  modelId,
-  dimensions,
-  fetch: customFetch,
-}: ProviderOptions & { dimensions: number }): EmbeddingModel {
-  // The provider has no `dimensions` setting, so it goes in the request body.
-  const model = openRouter(apiKey, customFetch).textEmbeddingModel(modelId, {
-    extraBody: { dimensions, encoding_format: 'float' },
-  });
-  return wrapEmbeddingModel({
-    model,
-    middleware: { overrideMaxEmbeddingsPerCall: () => EMBEDDING_BATCH_SIZE },
-  });
-}
+/**
+ * OpenRouter's spelling: `cacheControl` for Anthropic breakpoints (also as the
+ * request-level advancing breakpoint), `session_id` for sticky routing, and
+ * `reasoning` for the effort.
+ */
+export const openRouterDialect: ProviderDialect = {
+  cacheBreakpoint: (ttl) => ({
+    openrouter: { cacheControl: ephemeralCache(ttl) },
+  }),
+  callOptions: ({ sessionId, cacheTtl, effort }) => ({
+    openrouter: {
+      session_id: sessionId,
+      ...(cacheTtl ? { cacheControl: ephemeralCache(cacheTtl) } : {}),
+      ...(effort ? { reasoning: reasoningSetting(effort) } : {}),
+    },
+  }),
+};
 
-export function imageModel({
-  apiKey,
-  modelId,
-  fetch: customFetch,
-}: ProviderOptions): ImageModel {
-  return openRouter(apiKey, customFetch).imageModel(modelId);
+/** The app's models served by OpenRouter. */
+export function openRouterModels(apiKey: string): AiModelFactory {
+  return {
+    chat: (
+      modelId: string,
+      {
+        effort = 'low',
+        providerOrder = [],
+        fetch: customFetch,
+      }: ChatModelOptions = {},
+    ): ChatModel => {
+      const routing =
+        providerOrder.length > 0
+          ? { provider: { order: [...providerOrder], allow_fallbacks: true } }
+          : {};
+      return openRouter(apiKey, customFetch)(modelId, {
+        reasoning: reasoningSetting(effort),
+        ...routing,
+      });
+    },
+    embedding: (modelId, { dimensions, fetch: customFetch }) => {
+      // The provider has no `dimensions` setting, so it goes in the request body.
+      const model = openRouter(apiKey, customFetch).textEmbeddingModel(
+        modelId,
+        {
+          extraBody: { dimensions, encoding_format: 'float' },
+        },
+      );
+      return wrapEmbeddingModel({
+        model,
+        middleware: {
+          overrideMaxEmbeddingsPerCall: () => EMBEDDING_BATCH_SIZE,
+        },
+      });
+    },
+    image: (modelId, { fetch: customFetch } = {}) =>
+      openRouter(apiKey, customFetch).imageModel(modelId),
+  };
 }

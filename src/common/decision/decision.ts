@@ -1,4 +1,4 @@
-import { OpenRouterCacheControl } from '../../ai/openrouter.js';
+import { PromptCache } from '../../ai/prompt-cache.js';
 import { runtimeConfig } from '../../config/runtime-config.js';
 import { generateText, type LanguageModel, Output } from 'ai';
 import { z } from 'zod';
@@ -115,7 +115,7 @@ export async function decide<V extends string>(
     maxRetries: MAX_RETRIES,
     maxOutputTokens: MAX_OUTPUT_TOKENS,
     abortSignal: signal,
-    ...OpenRouterCacheControl.singleTurn({
+    ...PromptCache.singleTurn({
       session: 'vedora-guardrail',
       scope: [instructions],
       instructions,

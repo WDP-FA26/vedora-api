@@ -1,11 +1,11 @@
 import { Global, Module } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import {
-  chatModel,
   DEFAULT_CONTENT_MODERATION_MODEL,
   DEFAULT_MODERATION_PROVIDER_ORDER,
   providerOrderFrom,
 } from '../ai/openrouter.js';
+import { aiModels } from '../ai/provider.js';
 import { AdminModerationController } from './admin-moderation.controller.js';
 import {
   CONTENT_MODERATION_MODEL,
@@ -32,12 +32,10 @@ import { AiCostTransportService } from '../ai/telemetry/ai-cost-transport.servic
           'OPENROUTER_CONTENT_MODERATION_MODEL',
           DEFAULT_CONTENT_MODERATION_MODEL,
         );
-        const model = chatModel({
-          apiKey: config.getOrThrow<string>('OPENROUTER_API_KEY'),
-          modelId: id,
+        const model = aiModels(config).chat(id, {
           // Haiku 5.5's default: judging a policy with disguised words and
           // quoting evidence gains from more thinking than the chat guardrail.
-          reasoningEffort: 'medium',
+          effort: 'medium',
           providerOrder: providerOrderFrom(
             config.get<string>(
               'OPENROUTER_MODERATION_PROVIDER_ORDER',

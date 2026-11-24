@@ -4,8 +4,9 @@ import {
   DEFAULT_OPENROUTER_APP_URL,
   openRouterAttribution,
   openRouterAttributionHeaders,
-  OpenRouterCacheControl,
+  ephemeralCache,
 } from '@src/ai/openrouter.js';
+import { PromptCache } from '@src/ai/prompt-cache.js';
 import {
   createOpenRouterClient,
   openRouterFailure,
@@ -35,7 +36,8 @@ describe('openrouter-client', () => {
     expect(customFetch).toHaveBeenCalledOnce();
     const [request] = customFetch.mock.calls[0];
     expect(request).toBeInstanceOf(Request);
-    const headers = request instanceof Request ? request.headers : new Headers();
+    const headers =
+      request instanceof Request ? request.headers : new Headers();
     expect(headers.get('HTTP-Referer')).toBe(DEFAULT_OPENROUTER_APP_URL);
     expect(headers.get('X-OpenRouter-Title')).toBe(
       DEFAULT_OPENROUTER_APP_TITLE,
@@ -113,67 +115,67 @@ describe('openrouter-client', () => {
   });
 });
 
-describe('OpenRouterCacheControl', () => {
+describe('PromptCache with the OpenRouter dialect', () => {
   it('builds ephemeral specs, system messages, text parts, and prefix messages', () => {
-    expect(OpenRouterCacheControl.ephemeral()).toEqual({
+    expect(ephemeralCache()).toEqual({
       type: 'ephemeral',
       ttl: '1h',
     });
-    expect(OpenRouterCacheControl.ephemeral('5m')).toEqual({
+    expect(ephemeralCache('5m')).toEqual({
       type: 'ephemeral',
     });
-    expect(OpenRouterCacheControl.system('SYSTEM')).toEqual({
+    expect(PromptCache.system('SYSTEM')).toEqual({
       role: 'system',
       content: 'SYSTEM',
       providerOptions: {
         openrouter: { cacheControl: { type: 'ephemeral', ttl: '1h' } },
       },
     });
-    expect(OpenRouterCacheControl.system('SYSTEM', '5m')).toEqual({
+    expect(PromptCache.system('SYSTEM', '5m')).toEqual({
       role: 'system',
       content: 'SYSTEM',
       providerOptions: {
         openrouter: { cacheControl: { type: 'ephemeral' } },
       },
     });
-    expect(OpenRouterCacheControl.textPart('<catalog/>')).toEqual({
+    expect(PromptCache.textPart('<catalog/>')).toEqual({
       type: 'text',
       text: '<catalog/>',
       providerOptions: {
         openrouter: { cacheControl: { type: 'ephemeral', ttl: '1h' } },
       },
     });
-    expect(
-      OpenRouterCacheControl.prefixMessages('<catalog/>', '<source/>', '5m'),
-    ).toEqual([
-      {
-        role: 'user',
-        content: [
-          {
-            type: 'text',
-            text: '<catalog/>',
-            providerOptions: {
-              openrouter: { cacheControl: { type: 'ephemeral' } },
+    expect(PromptCache.prefixMessages('<catalog/>', '<source/>', '5m')).toEqual(
+      [
+        {
+          role: 'user',
+          content: [
+            {
+              type: 'text',
+              text: '<catalog/>',
+              providerOptions: {
+                openrouter: { cacheControl: { type: 'ephemeral' } },
+              },
             },
-          },
-          { type: 'text', text: '<source/>' },
-        ],
-      },
-    ]);
+            { type: 'text', text: '<source/>' },
+          ],
+        },
+      ],
+    );
   });
 
   it('hashes scope into opaque 256-char-bounded session IDs and composes singleTurn / agent options', () => {
-    const first = OpenRouterCacheControl.sessionId(
+    const first = PromptCache.sessionId(
       'vedora-planner',
       'user-123',
       'thread-456',
     );
-    const second = OpenRouterCacheControl.sessionId(
+    const second = PromptCache.sessionId(
       'vedora-planner',
       'user-123',
       'thread-456',
     );
-    const different = OpenRouterCacheControl.sessionId(
+    const different = PromptCache.sessionId(
       'vedora-planner',
       'user-123',
       'thread-789',
@@ -184,17 +186,15 @@ describe('OpenRouterCacheControl', () => {
     expect(first).toMatch(/^vedora-planner-[a-f0-9]{24}$/);
     expect(first).not.toContain('user-123');
     expect(first).not.toContain('thread-456');
-    expect(
-      OpenRouterCacheControl.sessionId('vedora-static', undefined, ''),
-    ).toBe('vedora-static');
+    expect(PromptCache.sessionId('vedora-static', undefined, '')).toBe(
+      'vedora-static',
+    );
 
     const longId = 'a'.repeat(300);
-    expect(
-      OpenRouterCacheControl.sticky(longId).openrouter.session_id,
-    ).toHaveLength(256);
+    expect(PromptCache.sticky(longId).openrouter.session_id).toHaveLength(256);
 
     expect(
-      OpenRouterCacheControl.singleTurn({
+      PromptCache.singleTurn({
         session: 'vedora-mod',
         instructions: 'POLICY',
       }),
@@ -210,7 +210,7 @@ describe('OpenRouterCacheControl', () => {
     });
 
     expect(
-      OpenRouterCacheControl.singleTurn({
+      PromptCache.singleTurn({
         session: 'vedora-mod',
         instructions: 'DRAFT',
         enabled: false,
@@ -220,7 +220,7 @@ describe('OpenRouterCacheControl', () => {
       providerOptions: { openrouter: { session_id: 'vedora-mod' } },
     });
 
-    const agentOpts = OpenRouterCacheControl.agent({
+    const agentOpts = PromptCache.agent({
       session: 'vedora-blog',
       scope: ['u1', 'b1'],
       instructions: 'RULES',
@@ -242,7 +242,7 @@ describe('OpenRouterCacheControl', () => {
 
   it('injects dynamic context into the last user message and guards final steps', () => {
     expect(
-      OpenRouterCacheControl.withUserContext(
+      PromptCache.withUserContext(
         [
           { role: 'user', content: 'first' },
           { role: 'assistant', content: 'reply' },
@@ -285,10 +285,7 @@ describe('OpenRouterCacheControl', () => {
     ]);
 
     expect(
-      OpenRouterCacheControl.withUserContext(
-        [{ role: 'user', content: 'hi' }],
-        '<ctx/>',
-      ),
+      PromptCache.withUserContext([{ role: 'user', content: 'hi' }], '<ctx/>'),
     ).toEqual([
       {
         role: 'user',
@@ -300,13 +297,13 @@ describe('OpenRouterCacheControl', () => {
     ]);
 
     expect(
-      OpenRouterCacheControl.withUserContext(
+      PromptCache.withUserContext(
         [{ role: 'assistant', content: 'hello' }],
         '<ctx/>',
       ),
     ).toEqual([{ role: 'assistant', content: 'hello' }]);
 
-    const withReminder = OpenRouterCacheControl.finalStepGuard(3, ' Wrap up ');
+    const withReminder = PromptCache.finalStepGuard(3, ' Wrap up ');
     expect(withReminder({ stepNumber: 1, messages: [] })).toEqual({});
     expect(
       withReminder({
@@ -321,7 +318,7 @@ describe('OpenRouterCacheControl', () => {
       ],
     });
 
-    const plainGuard = OpenRouterCacheControl.finalStepGuard(3);
+    const plainGuard = PromptCache.finalStepGuard(3);
     expect(plainGuard({ stepNumber: 2, messages: [] })).toEqual({
       toolChoice: 'none',
     });

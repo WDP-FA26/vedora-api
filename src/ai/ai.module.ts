@@ -3,15 +3,14 @@ import { ConfigService } from '@nestjs/config';
 import { AiModule as NestAiModule } from '@nestjs/ai';
 import { MODERATION_MODEL } from './guardrails/guardrail.js';
 import {
-  chatModel,
   DEFAULT_CHAT_MODEL,
   DEFAULT_CHAT_PROVIDER_ORDER,
   DEFAULT_EMBEDDING_MODEL,
   DEFAULT_MODERATION_MODEL,
   DEFAULT_MODERATION_PROVIDER_ORDER,
-  embeddingModel,
   providerOrderFrom,
 } from './openrouter.js';
+import { aiModels } from './provider.js';
 import type { ReasoningEffort } from './reasoning.js';
 import { AiTelemetryModule } from './telemetry/ai-telemetry.module.js';
 import { AiCostTransportService } from './telemetry/ai-cost-transport.service.js';
@@ -28,7 +27,7 @@ import { runtimeConfig } from '../config/runtime-config.js';
       imports: [AiTelemetryModule],
       inject: [ConfigService, AiCostTransportService],
       useFactory: (config: ConfigService, costs: AiCostTransportService) => {
-        const apiKey = config.getOrThrow<string>('OPENROUTER_API_KEY');
+        const models = aiModels(config);
         const defaultModelId = config.get<string>(
           'OPENROUTER_MODEL',
           DEFAULT_CHAT_MODEL,
@@ -55,25 +54,19 @@ import { runtimeConfig } from '../config/runtime-config.js';
         );
         return {
           models: {
-            default: chatModel({
-              apiKey,
-              modelId: defaultModelId,
-              reasoningEffort,
+            default: models.chat(defaultModelId, {
+              effort: reasoningEffort,
               providerOrder,
               fetch: costs.forModel(defaultModelId),
             }),
-            blog: chatModel({
-              apiKey,
-              modelId: blogModelId,
-              reasoningEffort,
+            blog: models.chat(blogModelId, {
+              effort: reasoningEffort,
               providerOrder,
               fetch: costs.forModel(blogModelId),
             }),
           },
           embeddingModels: {
-            default: embeddingModel({
-              apiKey,
-              modelId: knowledgeEmbeddingModelId,
+            default: models.embedding(knowledgeEmbeddingModelId, {
               dimensions: config.get<number>(
                 'KNOWLEDGE_EMBEDDING_DIMENSIONS',
                 1536,
@@ -81,9 +74,7 @@ import { runtimeConfig } from '../config/runtime-config.js';
               fetch: costs.forModel(knowledgeEmbeddingModelId, 'KNOWLEDGE'),
             }),
             posts: {
-              model: embeddingModel({
-                apiKey,
-                modelId: postsEmbeddingModelId,
+              model: models.embedding(postsEmbeddingModelId, {
                 dimensions: config.get<number>(
                   'POST_SEARCH_EMBEDDING_DIMENSIONS',
                   768,
@@ -107,10 +98,8 @@ import { runtimeConfig } from '../config/runtime-config.js';
           DEFAULT_MODERATION_MODEL,
         );
         // The request's cost context (chat or blog assistant) names the feature.
-        return chatModel({
-          apiKey: config.getOrThrow<string>('OPENROUTER_API_KEY'),
-          modelId,
-          reasoningEffort: 'low',
+        return aiModels(config).chat(modelId, {
+          effort: 'low',
           providerOrder: providerOrderFrom(
             config.get<string>(
               'OPENROUTER_MODERATION_PROVIDER_ORDER',

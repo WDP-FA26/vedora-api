@@ -4,10 +4,8 @@ import { ConfigService } from '@nestjs/config';
 import { InjectModel } from '@nestjs/ai';
 import { generateText, type LanguageModel, Output } from 'ai';
 import { z } from 'zod';
-import {
-  DEFAULT_CHAT_MODEL,
-  OpenRouterCacheControl,
-} from '../../ai/openrouter.js';
+import { DEFAULT_CHAT_MODEL } from '../../ai/openrouter.js';
+import { PromptCache } from '../../ai/prompt-cache.js';
 import { RecipeTag } from '../../mongo/models.js';
 import type { PostSourcePart } from './post-source.js';
 import { POST_SUMMARY_INSTRUCTIONS } from './post-summary.prompt.js';
@@ -64,7 +62,7 @@ export class PostSummaryGenerator {
     const prompt = `<post>\n${sections.join('\n\n')}\n</post>`;
     const result = await generateText({
       model: this.model,
-      ...OpenRouterCacheControl.singleTurn({
+      ...PromptCache.singleTurn({
         session: 'vedora-post-summary',
         instructions: POST_SUMMARY_INSTRUCTIONS,
       }),

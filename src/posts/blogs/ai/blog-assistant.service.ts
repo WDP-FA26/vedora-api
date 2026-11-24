@@ -14,7 +14,7 @@ import {
   toUIMessageStream,
   type UIMessage,
 } from 'ai';
-import { OpenRouterCacheControl } from '@src/ai/openrouter.js';
+import { PromptCache } from '@src/ai/prompt-cache.js';
 import { cannedReply } from '@src/ai/chat/canned-reply.js';
 import { chatErrorCode } from '@src/ai/chat/errors.js';
 import { replyFilter } from '@src/ai/chat/reply-filter.js';
@@ -148,7 +148,7 @@ export class BlogAssistantService {
 
       const agent = new ToolLoopAgent({
         model: this.model,
-        ...OpenRouterCacheControl.agent({
+        ...PromptCache.agent({
           session: 'vedora-blog',
           scope: [userId, dto.id ?? dto.blogId ?? 'default'],
           instructions: BLOG_ASSISTANT_STATIC_INSTRUCTIONS,
@@ -158,14 +158,14 @@ export class BlogAssistantService {
         maxOutputTokens: MAX_OUTPUT_TOKENS,
         tools,
         stopWhen: isStepCount(MAX_STEPS),
-        prepareStep: OpenRouterCacheControl.finalStepGuard(MAX_STEPS),
+        prepareStep: PromptCache.finalStepGuard(MAX_STEPS),
       });
       const modelMessages = await convertToModelMessages(messages, {
         tools,
         ignoreIncompleteToolCalls: true,
       });
       const result = await agent.stream({
-        messages: OpenRouterCacheControl.withUserContext(
+        messages: PromptCache.withUserContext(
           modelMessages,
           blogEditorContext(dto.editor, recipes),
         ),

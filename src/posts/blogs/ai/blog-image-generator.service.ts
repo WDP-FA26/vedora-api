@@ -6,7 +6,8 @@ import { generateImage, type ImageModel } from 'ai';
 import { randomUUID } from 'node:crypto';
 import { MODERATION_MODEL } from '@src/ai/guardrails/guardrail.js';
 import { decide, type DecisionModel } from '@src/common/decision/decision.js';
-import { DEFAULT_IMAGE_MODEL, imageModel } from '@src/ai/openrouter.js';
+import { DEFAULT_IMAGE_MODEL } from '@src/ai/openrouter.js';
+import { aiModels } from '@src/ai/provider.js';
 import { AiUsageService } from '@src/subscriptions/ai-usage.service.js';
 import { AiCostTransportService } from '@src/ai/telemetry/ai-cost-transport.service.js';
 import { StorageService, StorageTarget } from '@src/storage/storage.service.js';
@@ -58,9 +59,7 @@ export class BlogImageGeneratorService {
       'OPENROUTER_IMAGE_MODEL',
       DEFAULT_IMAGE_MODEL,
     );
-    this.imageModel = imageModel({
-      apiKey: configService.getOrThrow<string>('OPENROUTER_API_KEY'),
-      modelId,
+    this.imageModel = aiModels(configService).image(modelId, {
       fetch: costs.forModel(modelId),
     });
   }

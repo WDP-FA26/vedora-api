@@ -1,10 +1,10 @@
 import { generateText } from 'ai';
 import { describe, expect, it } from 'vitest';
 import {
-  chatModel,
   DEFAULT_MODERATION_PROVIDER_ORDER,
   DEFAULT_OPENROUTER_APP_TITLE,
   DEFAULT_OPENROUTER_APP_URL,
+  openRouterModels,
   providerOrderFrom,
 } from '@src/ai/openrouter.js';
 
@@ -39,9 +39,7 @@ async function captureRequest(
       }),
     );
   };
-  const model = chatModel({
-    apiKey: 'test',
-    modelId: 'anthropic/claude-haiku-5.5',
+  const model = openRouterModels('test').chat('anthropic/claude-haiku-5.5', {
     providerOrder,
     fetch: fakeFetch,
   });
@@ -54,11 +52,9 @@ async function captureRequest(
 
 describe('providerOrderFrom', () => {
   it('reads comma-separated slugs and skips blanks', () => {
-    expect(providerOrderFrom(' anthropic, google-vertex/global,,azure/global ')).toEqual([
-      'anthropic',
-      'google-vertex/global',
-      'azure/global',
-    ]);
+    expect(
+      providerOrderFrom(' anthropic, google-vertex/global,,azure/global '),
+    ).toEqual(['anthropic', 'google-vertex/global', 'azure/global']);
     expect(providerOrderFrom(DEFAULT_MODERATION_PROVIDER_ORDER)).toEqual([
       'anthropic',
       'google-vertex/global',
@@ -68,9 +64,12 @@ describe('providerOrderFrom', () => {
   });
 });
 
-describe('chatModel provider order and attribution', () => {
+describe('OpenRouter chat model provider order and attribution', () => {
   it('asks OpenRouter for the providers in order without sort, keeping fallbacks', async () => {
-    const { body } = await captureRequest(['anthropic', 'google-vertex/global']);
+    const { body } = await captureRequest([
+      'anthropic',
+      'google-vertex/global',
+    ]);
     expect(body.provider).toEqual({
       order: ['anthropic', 'google-vertex/global'],
       allow_fallbacks: true,
@@ -86,6 +85,8 @@ describe('chatModel provider order and attribution', () => {
   it('sends Vedora Platform attribution headers on requests', async () => {
     const { headers } = await captureRequest();
     expect(headers.get('HTTP-Referer')).toBe(DEFAULT_OPENROUTER_APP_URL);
-    expect(headers.get('X-OpenRouter-Title')).toBe(DEFAULT_OPENROUTER_APP_TITLE);
+    expect(headers.get('X-OpenRouter-Title')).toBe(
+      DEFAULT_OPENROUTER_APP_TITLE,
+    );
   });
 });

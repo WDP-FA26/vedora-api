@@ -4,10 +4,8 @@ import { ConfigService } from '@nestjs/config';
 import { AiService, InjectModel } from '@nestjs/ai';
 import { generateText, type LanguageModel } from 'ai';
 import { z } from 'zod';
-import {
-  DEFAULT_CHAT_MODEL,
-  OpenRouterCacheControl,
-} from '../../ai/openrouter.js';
+import { DEFAULT_CHAT_MODEL } from '../../ai/openrouter.js';
+import { PromptCache } from '../../ai/prompt-cache.js';
 import { extractJsonObject } from '../../ai/json-text.js';
 import { webSearchTool } from '../../ai/tools/web-search.tool.js';
 import type { PostSourcePart } from '../../posts/summaries/post-source.js';
@@ -69,11 +67,11 @@ export class RecipeDraftGenerator {
     const { object } = await this.ai.generateObject({
       label: 'draft-recipe',
       instructions: RECIPE_DRAFT_INSTRUCTIONS,
-      messages: OpenRouterCacheControl.prefixMessages(
+      messages: PromptCache.prefixMessages(
         `<catalog>\n${describeCatalog(catalog)}\n</catalog>`,
         `<source>\n${sections.join('\n\n')}\n</source>`,
       ),
-      providerOptions: OpenRouterCacheControl.sticky('vedora-recipe-draft'),
+      providerOptions: PromptCache.sticky('vedora-recipe-draft'),
       schema: draftOutput,
       schemaName: 'recipe_draft',
       timeout: TIMEOUT_MS,
@@ -125,7 +123,7 @@ export class RecipeDraftGenerator {
         maxOutputTokens: WEB_RESEARCH_MAX_OUTPUT_TOKENS,
         tools: { webSearch: webSearchTool() },
         abortSignal: AbortSignal.timeout(WEB_RESEARCH_TIMEOUT_MS),
-        ...OpenRouterCacheControl.singleTurn({
+        ...PromptCache.singleTurn({
           session: 'vedora-recipe-calorie-research',
           instructions: CALORIE_RESEARCH_INSTRUCTIONS,
           // At low effort it more often estimates without searching.

@@ -1,44 +1,22 @@
 import { createHash } from 'node:crypto';
 import type { ModelMessage, SystemModelMessage } from 'ai';
 import {
-  type ReasoningEffort,
-  type ReasoningSetting,
-  reasoningSetting,
-} from './reasoning.js';
-
-export type CacheTtl = '5m' | '1h';
-
-export type EphemeralCacheSpec = {
-  type: 'ephemeral';
-  ttl?: '1h';
-};
-
-export type StickyProviderOptions = {
-  openrouter: { session_id: string; reasoning?: ReasoningSetting };
-};
-
-export type AutoCachedProviderOptions = {
-  openrouter: {
-    session_id: string;
-    cacheControl: EphemeralCacheSpec;
-    reasoning?: ReasoningSetting;
-  };
-};
+  type CacheTtl,
+  type ProviderOptions,
+  providerDialect,
+} from './provider.js';
+import type { ReasoningEffort } from './reasoning.js';
 
 const MAX_SESSION_ID_LENGTH = 256;
 
 /**
- * Centralizes OpenRouter + Anthropic prompt caching and sticky-session routing:
- * explicit 1h breakpoints for shared static prefixes, optional 5m advancing
- * cache breakpoints for multi-turn agent loops, hashed `session_id` stickiness,
- * user-turn context injection, and cache-safe final-step reminders.
+ * Prompt caching and sticky-session routing, whatever the provider: explicit 1h
+ * breakpoints for shared static prefixes, optional 5m advancing breakpoints for
+ * multi-turn agent loops, hashed session ids for stickiness, user-turn context
+ * injection, and cache-safe final-step reminders. The provider's spelling of
+ * each option comes from its `ProviderDialect`.
  */
-export class OpenRouterCacheControl {
-  static ephemeral(ttl: CacheTtl = '1h'): EphemeralCacheSpec {
-    if (ttl === '1h') return { type: 'ephemeral', ttl: '1h' };
-    return { type: 'ephemeral' };
-  }
-
+export class PromptCache {
   static sessionId(
     prefix: string,
     ...scope: readonly (string | null | undefined)[]
@@ -58,38 +36,28 @@ export class OpenRouterCacheControl {
   static sticky(
     prefix: string,
     ...scope: readonly (string | null | undefined)[]
-  ): StickyProviderOptions {
-    return {
-      openrouter: {
-        session_id: OpenRouterCacheControl.sessionId(prefix, ...scope),
-      },
-    };
+  ): ProviderOptions {
+    return providerDialect.callOptions({
+      sessionId: PromptCache.sessionId(prefix, ...scope),
+    });
   }
 
   static system(content: string, ttl: CacheTtl = '1h'): SystemModelMessage {
     return {
       role: 'system',
       content,
-      providerOptions: {
-        openrouter: { cacheControl: OpenRouterCacheControl.ephemeral(ttl) },
-      },
+      providerOptions: providerDialect.cacheBreakpoint(ttl),
     };
   }
 
   static textPart(
     text: string,
     ttl: CacheTtl = '1h',
-  ): {
-    type: 'text';
-    text: string;
-    providerOptions: { openrouter: { cacheControl: EphemeralCacheSpec } };
-  } {
+  ): { type: 'text'; text: string; providerOptions: ProviderOptions } {
     return {
       type: 'text',
       text,
-      providerOptions: {
-        openrouter: { cacheControl: OpenRouterCacheControl.ephemeral(ttl) },
-      },
+      providerOptions: providerDialect.cacheBreakpoint(ttl),
     };
   }
 
@@ -102,7 +70,7 @@ export class OpenRouterCacheControl {
       {
         role: 'user',
         content: [
-          OpenRouterCacheControl.textPart(cachedPrefix, ttl),
+          PromptCache.textPart(cachedPrefix, ttl),
           { type: 'text', text: suffix },
         ],
       },
@@ -126,17 +94,16 @@ export class OpenRouterCacheControl {
     effort?: ReasoningEffort;
   }): {
     instructions: string | SystemModelMessage;
-    providerOptions: StickyProviderOptions;
+    providerOptions: ProviderOptions;
   } {
-    const providerOptions = OpenRouterCacheControl.sticky(session, ...scope);
-    if (effort) {
-      providerOptions.openrouter.reasoning = reasoningSetting(effort);
-    }
     return {
       instructions: enabled
-        ? OpenRouterCacheControl.system(instructions, ttl)
+        ? PromptCache.system(instructions, ttl)
         : instructions,
-      providerOptions,
+      providerOptions: providerDialect.callOptions({
+        sessionId: PromptCache.sessionId(session, ...scope),
+        effort,
+      }),
     };
   }
 
@@ -160,20 +127,15 @@ export class OpenRouterCacheControl {
     effort?: ReasoningEffort;
   }): {
     instructions: SystemModelMessage;
-    providerOptions: AutoCachedProviderOptions;
+    providerOptions: ProviderOptions;
   } {
-    const providerOptions: AutoCachedProviderOptions = {
-      openrouter: {
-        session_id: OpenRouterCacheControl.sessionId(session, ...scope),
-        cacheControl: OpenRouterCacheControl.ephemeral(historyTtl),
-      },
-    };
-    if (effort) {
-      providerOptions.openrouter.reasoning = reasoningSetting(effort);
-    }
     return {
-      instructions: OpenRouterCacheControl.system(instructions, systemTtl),
-      providerOptions,
+      instructions: PromptCache.system(instructions, systemTtl),
+      providerOptions: providerDialect.callOptions({
+        sessionId: PromptCache.sessionId(session, ...scope),
+        cacheTtl: historyTtl,
+        effort,
+      }),
     };
   }
 

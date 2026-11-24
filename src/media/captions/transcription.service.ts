@@ -4,7 +4,7 @@ import { ConfigService } from '@nestjs/config';
 import { AiService } from '@nestjs/ai';
 import type { OpenRouter } from '@openrouter/sdk';
 import type { STTWord } from '@openrouter/sdk/models';
-import { OpenRouterCacheControl } from '../../ai/openrouter.js';
+import { PromptCache } from '../../ai/prompt-cache.js';
 import {
   createOpenRouterClient,
   openRouterFailure,
@@ -137,11 +137,7 @@ export class TranscriptionService {
       label: 'translate-captions',
       instructions: `You translate video captions about plant-based cooking from ${languageName(from, 'en')} to ${languageName(to, 'en')}. Return exactly one translated line per input line, in the same order, as {"lines": [...]}. Keep these words unchanged: ${NEVER_TRANSLATE.join(', ')}. Never merge, split or skip lines.`,
       prompt: JSON.stringify(cues.map((cue) => cue.text)),
-      providerOptions: OpenRouterCacheControl.sticky(
-        'vedora-caption-translate',
-        from,
-        to,
-      ),
+      providerOptions: PromptCache.sticky('vedora-caption-translate', from, to),
       schema: translationOutput,
       timeout: '2m',
     });
