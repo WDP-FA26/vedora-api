@@ -25,6 +25,8 @@ const INSTRUCTIONS = loadTextConfig(runtimeConfig.RECIPE_DRAFT_PROMPT_FILE);
 const TIMEOUT_MS = runtimeConfig.RECIPE_DRAFT_TIMEOUT_MS;
 const WEB_RESEARCH_TIMEOUT_MS =
   runtimeConfig.RECIPE_DRAFT_WEB_RESEARCH_TIMEOUT_MS;
+/** Room for low-effort reasoning plus the JSON answer: 700 cut the JSON off. */
+const WEB_RESEARCH_MAX_OUTPUT_TOKENS = 5000;
 
 const CALORIE_RESEARCH_INSTRUCTIONS = `Bạn là Trợ lý AI hỗ trợ Admin món ăn của Vedora. Hãy dùng \`webSearch\` tra cứu giá trị dinh dưỡng / calo thực tế (USDA, Viện Dinh dưỡng, hoặc nguồn uy tín) cho món ăn chay và từng nguyên liệu chính bên dưới, tính tổng kcal và chia cho số khẩu phần đã nêu của món để ước tính kcal/1 suất. Nếu Admin có yêu cầu/câu hỏi riêng trong ngữ cảnh, hãy trả lời ngắn gọn, rõ ràng trong \`calorieNote\`.
 Quy tắc trình bày và dữ liệu:
@@ -132,7 +134,7 @@ export class RecipeDraftGenerator {
     try {
       const result = await generateText({
         model: this.model,
-        maxOutputTokens: 700,
+        maxOutputTokens: WEB_RESEARCH_MAX_OUTPUT_TOKENS,
         tools: { webSearch: webSearchTool() },
         abortSignal: AbortSignal.timeout(WEB_RESEARCH_TIMEOUT_MS),
         ...OpenRouterCacheControl.singleTurn({

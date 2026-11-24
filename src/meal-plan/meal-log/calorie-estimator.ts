@@ -15,7 +15,8 @@ import {
 } from '../dto/meal-log.dto.js';
 
 const TIMEOUT_MS = runtimeConfig.MEAL_LOG_CALORIE_ESTIMATE_TIMEOUT_MS;
-const MAX_OUTPUT_TOKENS = 700;
+/** Room for low-effort reasoning plus the JSON answer: 700 cut the JSON off. */
+const MAX_OUTPUT_TOKENS = 5000;
 
 const INSTRUCTIONS = `Bạn là chuyên gia tra cứu năng lượng (kcal) cho các món ăn chay hoặc thuần thực vật mà người dùng Vedora đã ghi vào nhật ký ăn uống.
 Quy trình tra cứu và ước tính:
