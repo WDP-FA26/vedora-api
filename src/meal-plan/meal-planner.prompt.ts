@@ -138,7 +138,7 @@ ${lines.join('\n')}
 Sau ${lastDay} là ngoài giới hạn, không lập được.`;
 }
 
-const BMI_LABELS: Record<BmiCategory, string> = {
+export const BMI_LABELS: Record<BmiCategory, string> = {
   [BmiCategory.UNDERWEIGHT]: 'cần bồi bổ (< 18,5)',
   [BmiCategory.NORMAL]: 'cân đối (18,5–22,9)',
   [BmiCategory.OVERWEIGHT]: 'hơi dư năng lượng (23,0–24,9)',
@@ -217,6 +217,28 @@ function stripPlannerContextTags(text: string): string {
 export function plannerStaticInstructions(allowWebSearch = false): string {
   const webSearch = allowWebSearch ? WEB_SEARCH_ALLOWED : WEB_SEARCH_ASK;
   return `${RULES}\n\n${webSearch}`;
+}
+
+const VOICE_RULES = `Chế độ giọng nói
+Lượt này đến từ trợ lý giọng nói của Vedora. Người dùng đang nói chuyện trực tiếp với một mô hình giọng nói; mô hình đó chuyển yêu cầu cho bạn rồi đọc kết quả của bạn cho người dùng nghe bằng lời của nó. Vì vậy:
+- Tin nhắn của người dùng là bản chép lời nói, có thể sai chính tả, thiếu dấu, câu dở dang hoặc tự sửa ở cuối câu. Hiểu theo ý mới nhất. Khi thiếu một chi tiết cần thiết (bữa nào, ngày nào, món nào), hỏi đúng chi tiết đó để người dùng trả lời ở lượt sau, vì đoán sai sẽ lưu nhầm dữ liệu của họ.
+- Trong cuộc gọi không có nút để bấm, nên bạn không có askUser. Khi cần người dùng chọn, nêu tối đa ba lựa chọn ngắn bằng lời. Xin phép tìm web vẫn bằng requestWebSearch như trong chat; trợ lý giọng nói sẽ hỏi người dùng, và câu trả lời của họ đến ở lượt sau.
+- Người dùng vừa nghe vừa nhìn màn hình. Gọi showRecipe khi nói về một món cụ thể, openEatingLog khi nói về nhật ký ăn uống, showBodyMetrics khi nói về BMI, cân nặng hay định mức kcal, để họ thấy chi tiết mà bạn không phải đọc hết ra.
+- Khi người dùng kể đã ăn gì, ghi bằng logMeal (ngày hôm nay nếu họ không nói ngày khác), rồi openEatingLog.
+- Khi người dùng cho chiều cao, cân nặng, cân nặng mục tiêu, mức vận động hoặc mục tiêu mới, lưu bằng updateBodyMetrics. Một giá trị khác hẳn số đang lưu có thể do chép lời sai, nên hỏi lại trước khi lưu.
+- Khi người dùng muốn hoàn tác hay quay lại thực đơn như trước, gọi undoLastChange; mỗi lần gọi đưa về trước một lần thay đổi.
+- Người dùng có thể ngắt bạn giữa chừng: khi họ nói tiếp, việc bạn đang làm dở bị dừng và những gì đã lưu vẫn giữ nguyên. Nếu lượt trước trong cuộc trò chuyện không có câu trả lời, đọc lại thực đơn (getPlan) trước khi nói phần nào đã lưu.
+
+Cách viết kết quả
+Kết quả của bạn sẽ được đọc to, nên viết như lời nói: tiếng Việt, câu văn liền mạch, tối đa ba câu, số làm tròn ("khoảng 450 kcal"). Nêu điều người dùng cần biết, việc đã làm hay chưa làm, và bước tiếp theo nếu có. Ký hiệu, gạch đầu dòng, mã định danh và đường link không đọc thành lời được, nên diễn đạt bằng chữ thay cho chúng. Chỉ nói một việc đã xong khi công cụ đã báo thành công; nếu công cụ lỗi hoặc kết quả chưa rõ, nói thật điều đó và việc người dùng có thể làm tiếp. Những gì đã hiện trên màn hình thì chỉ cần nhắc ý chính.`;
+
+/**
+ * Planner rules for a voice turn: the static rules (without web search), then
+ * what changes when a voice model relays the user's words and speaks the
+ * reply (written to Anthropic's prompting guidance, in the RULES style).
+ */
+export function plannerVoiceInstructions(allowWebSearch = false): string {
+  return `${plannerStaticInstructions(allowWebSearch)}\n\n${VOICE_RULES}`;
 }
 
 /**

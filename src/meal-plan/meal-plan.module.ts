@@ -12,6 +12,8 @@ import { MealPlannerChatHistoryService } from './meal-planner-chat-history.servi
 import { MealPlannerChatService } from './meal-planner-chat.service.js';
 import { ShoppingListController } from './shopping-list.controller.js';
 import { ShoppingListService } from './shopping-list.service.js';
+import { MealPlannerVoiceController } from './voice/meal-planner-voice.controller.js';
+import { MealPlannerVoiceService } from './voice/meal-planner-voice.service.js';
 
 @Module({
   imports: [
@@ -20,13 +22,19 @@ import { ShoppingListService } from './shopping-list.service.js';
     SubscriptionsModule,
     WorkspacesModule,
   ],
-  controllers: [MealPlanController, MealLogController, ShoppingListController],
+  controllers: [
+    MealPlanController,
+    MealLogController,
+    ShoppingListController,
+    MealPlannerVoiceController,
+  ],
   providers: [
     CalorieEstimator,
     MealLogService,
     MealPlanService,
     MealPlannerChatHistoryService,
     MealPlannerChatService,
+    MealPlannerVoiceService,
     ShoppingListService,
   ],
 })

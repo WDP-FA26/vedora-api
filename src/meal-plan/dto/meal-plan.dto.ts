@@ -455,7 +455,7 @@ export class GenerateMealResultDto extends MealPlanDraftDto {
   filled!: number;
 }
 
-const MAX_PLANNER_MESSAGE_LENGTH =
+export const MAX_PLANNER_MESSAGE_LENGTH =
   runtimeConfig.PLANNER_CHAT_MAX_MESSAGE_LENGTH;
 
 export const PLANNER_CLIENT_TOOLS = ['askUser', 'requestWebSearch'] as const;

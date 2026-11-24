@@ -40,6 +40,7 @@ import {
 import {
   plannerDynamicContext,
   plannerStaticInstructions,
+  plannerVoiceInstructions,
 } from './meal-planner.prompt.js';
 import { PLANNER_REFUSALS } from './meal-planner.refusals.js';
 import { editPlanTool } from './tools/edit-plan.tool.js';
@@ -54,9 +55,17 @@ import { fillSlotsTool } from './tools/fill-slots.tool.js';
 import { getEatingLogTool } from './tools/get-eating-log.tool.js';
 import { getPlanTool } from './tools/get-plan.tool.js';
 import { getRecipeTool } from './tools/get-recipe.tool.js';
+import { logMealTool } from './tools/log-meal.tool.js';
 import { consultNutritionSubagentTool } from './tools/nutrition-subagent.tool.js';
 import { searchRecipesTool } from './tools/search-recipes.tool.js';
 import { searchRestaurantDishesTool } from './tools/search-restaurant-dishes.tool.js';
+import { undoLastChangeTool } from './tools/undo-last-change.tool.js';
+import { updateBodyMetricsTool } from './tools/update-body-metrics.tool.js';
+import {
+  openEatingLogTool,
+  showBodyMetricsTool,
+  showRecipeTool,
+} from './tools/voice-screen.tools.js';
 import {
   requestWebSearchTool,
   webSearchTool,
@@ -82,6 +91,12 @@ export interface PlannerChatOptions {
   allowWebSearch?: boolean;
   /** Answer for a pending client-side `askUser` or `requestWebSearch` tool call. */
   toolOutput?: PlannerToolOutputDto;
+  /**
+   * The turn comes from the voice agent: short spoken replies, no `askUser`,
+   * plus the screen tools, the diary/body-metrics writers and undo. Web search
+   * consent works as in the text chat, through `requestWebSearch`.
+   */
+  voice?: boolean;
 }
 
 function stripPlannerTags(text: string): string {
@@ -191,6 +206,23 @@ export class MealPlannerChatService {
   ) {}
 
   /**
+   * Tools only voice turns get. Text turns still know their definitions, so a
+   * thread that mixed voice and text validates against either.
+   */
+  private voiceTools(userId: string, threadId: string): ToolSet {
+    return {
+      showRecipe: showRecipeTool(this.mealPlan, userId),
+      openEatingLog: openEatingLogTool(),
+      showBodyMetrics: showBodyMetricsTool(this.dietary, userId),
+      updateBodyMetrics: updateBodyMetricsTool(this.dietary, userId),
+      ...(this.mealLog ? { logMeal: logMealTool(this.mealLog, userId) } : {}),
+      ...(this.history
+        ? { undoLastChange: undoLastChangeTool(this.history, userId, threadId) }
+        : {}),
+    };
+  }
+
+  /**
    * Validates the stored history against the current tools, as the AI SDK
    * persistence guide does. When it no longer matches (a removed tool, a
    * changed schema), the turn starts over from the user's latest message.
@@ -218,7 +250,11 @@ export class MealPlannerChatService {
     weekStart: string,
     requestId?: string,
     threadId?: string,
-    { allowWebSearch = false, toolOutput }: PlannerChatOptions = {},
+    {
+      allowWebSearch = false,
+      toolOutput,
+      voice = false,
+    }: PlannerChatOptions = {},
   ) {
     const cleanUserText = stripPlannerTags(message);
     if (cleanUserText.trim().length === 0) {
@@ -386,12 +422,19 @@ export class MealPlannerChatService {
           : {}),
         ...webTools(allowWebSearch),
       };
+      if (voice) {
+        // Nobody can tap an option mid-call, so choices are asked out loud.
+        delete agentTools.askUser;
+        Object.assign(agentTools, this.voiceTools(userId, activeThreadId));
+      }
       const agent = new ToolLoopAgent({
         model: this.model,
         ...OpenRouterCacheControl.agent({
           session: 'vedora-planner',
           scope: [userId, activeThreadId],
-          instructions: plannerStaticInstructions(allowWebSearch),
+          instructions: voice
+            ? plannerVoiceInstructions(allowWebSearch)
+            : plannerStaticInstructions(allowWebSearch),
           // Long prompt, many tools, up to 20 steps: at low effort Haiku 5.5
           // is more likely to skip a lookup or a check.
           effort: 'medium',
@@ -410,7 +453,9 @@ export class MealPlannerChatService {
       });
 
       const conversionTools = safeConversionTools({
+        ...this.voiceTools(userId, activeThreadId),
         ...agentTools,
+        askUser: askUserTool(),
         requestWebSearch: requestWebSearchTool(),
         webSearch: webSearchTool(),
       });

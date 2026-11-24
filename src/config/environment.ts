@@ -147,6 +147,14 @@ export class EnvironmentVariables {
   @IsIn(REASONING_EFFORTS)
   OPENROUTER_REASONING_EFFORT = 'low';
 
+  /** Vercel AI Gateway key for the meal planner voice agent; blank turns voice off. */
+  @IsString()
+  AI_GATEWAY_API_KEY = '';
+
+  /** Realtime voice model on AI Gateway, e.g. openai/gpt-live-1.1 or spacexai/grok-voice-3.0. */
+  @IsString()
+  VOICE_REALTIME_MODEL = 'openai/gpt-live-1.1';
+
   @ValidateIf((env: EnvironmentVariables) => env.STORAGE_ENDPOINT !== '')
   @IsUrl({ require_tld: false })
   STORAGE_ENDPOINT = '';

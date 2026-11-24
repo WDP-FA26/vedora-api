@@ -151,12 +151,7 @@ describe('MealPlannerChatHistoryService', () => {
       'msg-1',
     );
     await new Promise((resolve) => setTimeout(resolve, 15));
-    await service.recordUserMessage(
-      USER_A,
-      secondId,
-      'B'.repeat(100),
-      'msg-2',
-    );
+    await service.recordUserMessage(USER_A, secondId, 'B'.repeat(100), 'msg-2');
 
     const page1 = await service.listThreads(USER_A, { page: 1, limit: 1 });
     expect(page1.meta).toMatchObject({
@@ -475,6 +470,58 @@ describe('MealPlannerChatHistoryService', () => {
 
     afterEach(() => {
       vi.useRealTimers();
+    });
+
+    it('undoes the newest change not undone yet, keeping the messages', async () => {
+      const voiceThread = randomUUID();
+      const sayIn = (
+        id: string,
+        role: 'user' | 'assistant',
+        parts: Record<string, unknown>[],
+      ) => service.upsertMessage(USER_A, voiceThread, { id, role, parts });
+      await mealPlan.apply(USER_A, WEEK, [
+        lunchOnly(Weekday.WED, [SPINACH_RECIPE]),
+        lunchOnly(Weekday.THU, [RICE_RECIPE]),
+      ]);
+      await sayIn('v1', 'user', [text('Thêm cơm trưa thứ Năm')]);
+      await sayIn('va1', 'assistant', [
+        toolPart(
+          'tool-fillSlots',
+          lunchChange(WEEK, Weekday.THU, [], [RICE_RECIPE]),
+        ),
+      ]);
+      await sayIn('v2', 'user', [text('Đổi trưa thứ Tư')]);
+      await sayIn('va2', 'assistant', [
+        toolPart(
+          'tool-editPlan',
+          lunchChange(WEEK, Weekday.WED, [TOFU_RECIPE], [SPINACH_RECIPE]),
+        ),
+      ]);
+
+      const first = await service.undoLatestChange(USER_A, voiceThread);
+      expect(first).toEqual({
+        messageId: 'va2',
+        weeks: [
+          {
+            weekStart: WEEK,
+            restored: [Weekday.WED],
+            skipped: [],
+            droppedDishes: 0,
+          },
+        ],
+      });
+      expect(await lunchOf(WEEK, Weekday.WED)).toEqual([TOFU_RECIPE]);
+      expect(await lunchOf(WEEK, Weekday.THU)).toEqual([RICE_RECIPE]);
+
+      // The undo is saved on the next reply, so the next undo goes one change further back.
+      await sayIn('v3', 'user', [text('Hoàn tác tiếp')]);
+      await sayIn('va3', 'assistant', [toolPart('tool-undoLastChange', first)]);
+      const second = await service.undoLatestChange(USER_A, voiceThread);
+      expect(second.messageId).toBe('va1');
+      expect(await lunchOf(WEEK, Weekday.THU)).toEqual([]);
+
+      const detail = await service.getThread(USER_A, voiceThread);
+      expect(detail.messages).toHaveLength(6);
     });
 
     it('restores the earliest previous of each day, from the target message on, and drops those messages', async () => {

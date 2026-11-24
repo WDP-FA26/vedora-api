@@ -407,6 +407,41 @@ describe('MealPlannerChatService', () => {
     );
   });
 
+  it('swaps the button tools for the screen tools in a voice turn', async () => {
+    const service = await createService();
+
+    await convertReadableStreamToArray(
+      await service.stream(
+        USER_ID,
+        'Cho mình xem chỉ số BMI',
+        new AbortController().signal,
+        WEEK,
+        undefined,
+        undefined,
+        { voice: true },
+      ),
+    );
+    const names = (model.doStreamCalls[0].tools ?? []).map((t) => t.name);
+    expect(names).not.toContain('askUser');
+    // Web search consent is asked out loud, through the same tool as the text chat.
+    expect(names).toContain('requestWebSearch');
+    expect(names).toEqual(
+      expect.arrayContaining([
+        'searchRecipes',
+        'fillSlots',
+        'showRecipe',
+        'openEatingLog',
+        'showBodyMetrics',
+        'updateBodyMetrics',
+        'undoLastChange',
+      ]),
+    );
+    const [system] = model.doStreamCalls[0].prompt;
+    expect(system.role === 'system' && system.content).toContain(
+      'Chế độ giọng nói',
+    );
+  });
+
   it('forwards web citations to the client as source parts', async () => {
     steps = [
       [

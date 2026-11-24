@@ -116,6 +116,9 @@ const savedChangeSchema = z.object({
  * change, by week. A later change to the same day is ignored: the first
  * change's `previous` already holds the day before the turn.
  */
+/** How far back the voice agent's undo looks for a reply that changed the plan. */
+const UNDO_LOOKBACK_MESSAGES = 50;
+
 function daysBeforeChanges(
   messages: readonly MealPlanChatMessage[],
 ): Map<string, SaveMealDayDto[]> {
@@ -735,6 +738,46 @@ export class MealPlannerChatHistoryService {
       )
       .exec();
     return { text: target.text, weeks: restored };
+  }
+
+  /**
+   * Puts back the dishes changed by the newest assistant message of the thread
+   * that changed the plan and was not undone yet, keeping every message: the
+   * voice agent's "undo". The undo itself is recorded as an `undoLastChange`
+   * tool output on the current reply, which is how the next undo skips it.
+   */
+  async undoLatestChange(
+    userId: string,
+    threadId: string,
+  ): Promise<{ messageId: string | null; weeks: MealPlanChatRewindWeekDto[] }> {
+    const replies = await this.messages
+      .find({ threadId, userId, role: 'assistant' })
+      .sort({ sequence: -1, _id: -1 })
+      .limit(UNDO_LOOKBACK_MESSAGES)
+      .exec();
+    const undone = new Set<string>();
+    for (const reply of replies) {
+      for (const part of reply.parts) {
+        if (part.type !== 'tool-undoLastChange') continue;
+        if (part.state !== 'output-available') continue;
+        const output = part.output;
+        if (isPlainRecord(output) && typeof output.messageId === 'string') {
+          undone.add(output.messageId);
+        }
+      }
+    }
+    const target = replies.find(
+      (reply) =>
+        !undone.has(reply.messageId) && daysBeforeChanges([reply]).size > 0,
+    );
+    if (!target) return { messageId: null, weeks: [] };
+
+    const weeks: MealPlanChatRewindWeekDto[] = [];
+    for (const [weekStart, days] of daysBeforeChanges([target])) {
+      const result = await this.mealPlan.restoreDays(userId, weekStart, days);
+      weeks.push({ weekStart, ...result });
+    }
+    return { messageId: target.messageId, weeks };
   }
 
   async deleteThread(userId: string, threadId: string): Promise<void> {
