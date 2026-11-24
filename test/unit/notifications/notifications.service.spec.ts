@@ -79,6 +79,81 @@ describe('NotificationsService', () => {
     expect(others).toHaveLength(0);
   });
 
+  it('stores transaction notices without emitting until explicitly published after commit', async () => {
+    const events: unknown[] = [];
+    const subscription = service
+      .stream(recipient.id)
+      .subscribe((event) => events.push(event));
+    try {
+      const rows = await db.withTransaction(async (session) => {
+        const rows = await service.storeSystemNotifications(
+          [
+            {
+              recipientId: recipient.id,
+              type: NotificationType.COMMENT_REMOVED,
+              note: 'Evidence',
+            },
+          ],
+          session,
+        );
+        expect(events).toHaveLength(0);
+        return rows;
+      });
+      expect(events).toHaveLength(0);
+      expect(await stored()).toHaveLength(1);
+      await service.publishStored(rows);
+      expect(events).toHaveLength(1);
+      expect(events[0]).toMatchObject({
+        type: 'COMMENT_REMOVED',
+        actor: null,
+        commentId: null,
+        note: 'Evidence',
+      });
+    } finally {
+      subscription.unsubscribe();
+    }
+  });
+
+  it('rolls back staged system notices and skips missing recipients', async () => {
+    const events: unknown[] = [];
+    const subscription = service
+      .stream(recipient.id)
+      .subscribe((event) => events.push(event));
+    try {
+      await expect(
+        db.withTransaction(async (session) => {
+          await service.storeSystemNotifications(
+            [
+              {
+                recipientId: recipient.id,
+                type: NotificationType.COMMENT_REMOVED,
+              },
+            ],
+            session,
+          );
+          throw new Error('Rollback after notification insert');
+        }),
+      ).rejects.toThrow('Rollback after notification insert');
+      expect(await stored()).toHaveLength(0);
+      expect(events).toHaveLength(0);
+      const rows = await db.withTransaction((session) =>
+        service.storeSystemNotifications(
+          [
+            {
+              recipientId: 'missing-user',
+              type: NotificationType.COMMENT_REMOVED,
+            },
+          ],
+          session,
+        ),
+      );
+      expect(rows).toHaveLength(0);
+      expect(await stored()).toHaveLength(0);
+    } finally {
+      subscription.unsubscribe();
+    }
+  });
+
   it('ignores self-notifications and repeated likes', async () => {
     await service.notify({
       recipientId: recipient.id,
