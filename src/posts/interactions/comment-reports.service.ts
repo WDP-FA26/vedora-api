@@ -12,6 +12,7 @@ import {
 } from '../../common/pagination/index.js';
 import {
   CommentReport,
+  NotificationType,
   Post,
   PostComment,
   PostReportStatus,
@@ -21,6 +22,11 @@ import {
 } from '../../mongo/models.js';
 import { MongoService } from '../../mongo/mongo.service.js';
 import { withUserLocks } from '../../mongo/with-user-locks.js';
+import { NotificationsService } from '../../notifications/notifications.service.js';
+import {
+  commentRemovalNotifications,
+  commentReportNotifications,
+} from './comment-notifications.js';
 import {
   AdminCommentReportDto,
   CommentReportDto,
@@ -59,6 +65,7 @@ export class CommentReportsService {
     @InjectModel(Post.name) private readonly posts: Model<Post>,
     @InjectModel(User.name) private readonly users: Model<User>,
     private readonly mongo: MongoService,
+    private readonly notifications: NotificationsService,
   ) {}
 
   async create(
@@ -150,87 +157,144 @@ export class CommentReportsService {
     adminId: string,
     dto: ReviewCommentReportDto,
   ): Promise<AdminCommentReportDto> {
-    const row = await withUserLocks(this.mongo, [adminId], async (session) => {
-      await this.requireActor(adminId, session, true);
-      const report = await this.reports.findById(id).session(session).exec();
-      if (!report)
-        throw new ResourceNotFoundException('NOT_FOUND', 'Report not found');
-      if (report.status !== PostReportStatus.PENDING)
-        throw new StateConflictException(
-          'CONFLICT',
-          'The report was already reviewed',
-        );
-      const now = new Date();
-      if (dto.action === 'DISMISS') {
-        return (await this.reports
+    const outcome = await withUserLocks(
+      this.mongo,
+      [adminId],
+      async (session) => {
+        await this.requireActor(adminId, session, true);
+        const report = await this.reports.findById(id).session(session).exec();
+        if (!report)
+          throw new ResourceNotFoundException('NOT_FOUND', 'Report not found');
+        if (report.status !== PostReportStatus.PENDING)
+          throw new StateConflictException(
+            'CONFLICT',
+            'The report was already reviewed',
+          );
+        const now = new Date();
+        if (dto.action === 'DISMISS') {
+          const decided = await this.reports
+            .findOneAndUpdate(
+              { _id: id, status: PostReportStatus.PENDING },
+              {
+                $set: {
+                  status: PostReportStatus.DISMISSED,
+                  action: 'DISMISSED',
+                  reviewedById: adminId,
+                  reviewedAt: now,
+                },
+              },
+              { returnDocument: 'after', session },
+            )
+            .exec();
+          const post = await this.posts
+            .findById(report.postId)
+            .select('status')
+            .session(session)
+            .exec();
+          const postId =
+            post?.status === PostStatus.PUBLISHED ? post.id : undefined;
+          const notifications =
+            await this.notifications.storeSystemNotifications(
+              commentReportNotifications(
+                [report],
+                adminId,
+                NotificationType.COMMENT_REPORT_DISMISSED,
+                postId,
+              ),
+              session,
+            );
+          return { row: decided!, notifications };
+        }
+        // Shares the same post write fence as reply/edit/delete, so no new child can escape a root removal.
+        const post = await this.posts
           .findOneAndUpdate(
-            { _id: id, status: PostReportStatus.PENDING },
+            { _id: report.postId },
+            { $inc: { commentRevision: 1 } },
+            { session, timestamps: false, returnDocument: 'after' },
+          )
+          .exec();
+        const postId =
+          post?.status === PostStatus.PUBLISHED ? post.id : undefined;
+        const comment = await this.comments
+          .findOne({ _id: report.commentId, postId: report.postId })
+          .session(session)
+          .exec();
+        const affected = comment
+          ? await this.comments
+              .find(
+                comment.parentId
+                  ? { _id: comment.id, postId: report.postId }
+                  : {
+                      postId: report.postId,
+                      $or: [{ _id: comment.id }, { parentId: comment.id }],
+                    },
+              )
+              .session(session)
+              .exec()
+          : [];
+        const ids = [
+          ...new Set([report.commentId, ...affected.map((item) => item.id)]),
+        ];
+        const pending = await this.reports
+          .find({
+            postId: report.postId,
+            commentId: { $in: ids },
+            status: PostReportStatus.PENDING,
+          })
+          .sort({ createdAt: 1, _id: 1 })
+          .session(session)
+          .exec();
+        if (comment) {
+          // Existing schema middleware cascades replies, notifications and reply-to references.
+          await this.comments
+            .deleteOne({ _id: comment.id, postId: report.postId }, { session })
+            .exec();
+        }
+        await this.reports
+          .updateMany(
+            {
+              postId: report.postId,
+              commentId: { $in: ids },
+              status: PostReportStatus.PENDING,
+            },
             {
               $set: {
-                status: PostReportStatus.DISMISSED,
-                action: 'DISMISSED',
+                status: PostReportStatus.RESOLVED,
+                action: comment ? 'REMOVED' : 'ALREADY_REMOVED',
                 reviewedById: adminId,
                 reviewedAt: now,
               },
             },
-            { returnDocument: 'after', session },
+            { session },
           )
-          .exec())!;
-      }
-      // Shares the same post write fence as reply/edit/delete, so no new child can escape a root removal.
-      await this.posts.updateOne(
-        { _id: report.postId },
-        { $inc: { commentRevision: 1 } },
-        { session, timestamps: false },
-      );
-      const comment = await this.comments
-        .findOne({ _id: report.commentId, postId: report.postId })
-        .session(session)
-        .exec();
-      const affected = comment
-        ? await this.comments
-            .find(
-              comment.parentId
-                ? { _id: comment.id, postId: report.postId }
-                : {
-                    postId: report.postId,
-                    $or: [{ _id: comment.id }, { parentId: comment.id }],
-                  },
-            )
-            .select('_id')
-            .session(session)
-            .exec()
-        : [];
-      const ids = [
-        ...new Set([report.commentId, ...affected.map((item) => item.id)]),
-      ];
-      if (comment) {
-        // Existing schema middleware cascades replies, notifications and reply-to references.
-        await this.comments
-          .deleteOne({ _id: comment.id, postId: report.postId }, { session })
           .exec();
-      }
-      await this.reports
-        .updateMany(
-          {
-            postId: report.postId,
-            commentId: { $in: ids },
-            status: PostReportStatus.PENDING,
-          },
-          {
-            $set: {
-              status: PostReportStatus.RESOLVED,
-              action: comment ? 'REMOVED' : 'ALREADY_REMOVED',
-              reviewedById: adminId,
-              reviewedAt: now,
-            },
-          },
-          { session },
-        )
-        .exec();
-      return (await this.reports.findById(id).session(session).exec())!;
-    });
-    const [result] = await this.toAdminDtos([row]);
+        const notifications = await this.notifications.storeSystemNotifications(
+          [
+            ...commentRemovalNotifications(
+              affected,
+              report.commentId,
+              adminId,
+              'ADMIN',
+              postId,
+              report.reason,
+            ),
+            ...commentReportNotifications(
+              pending,
+              adminId,
+              NotificationType.COMMENT_REPORT_RESOLVED,
+              postId,
+            ),
+          ],
+          session,
+        );
+        return {
+          row: (await this.reports.findById(id).session(session).exec())!,
+          notifications,
+        };
+      },
+    );
+    await this.notifications.publishStored(outcome.notifications);
+    const [result] = await this.toAdminDtos([outcome.row]);
     return result;
   }
 

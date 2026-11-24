@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import type { Model, QueryFilter } from 'mongoose';
+import type { ClientSession, Model, QueryFilter } from 'mongoose';
 import { isUniqueViolation } from '../mongo/errors.js';
 import { filter, Observable, Subject } from 'rxjs';
 import { ModerationSettingsService } from '../moderation/moderation-settings.service.js';
@@ -39,6 +39,8 @@ export interface NotifyInput {
   reason?: string;
   note?: string;
 }
+
+export type SystemNotifyInput = Omit<NotifyInput, 'actorId'>;
 
 const TOGGLED_TYPES: readonly NotificationType[] = [
   NotificationType.LIKE,
@@ -132,6 +134,54 @@ export class NotificationsService {
     } catch (error: unknown) {
       this.logger.warn(
         `Could not create ${input.type} notification: ${String(error)}`,
+      );
+    }
+  }
+
+  /** Persist system notices atomically with the caller's write; never emit before commit. */
+  async storeSystemNotifications(
+    inputs: SystemNotifyInput[],
+    session: ClientSession,
+  ): Promise<Notification[]> {
+    if (!inputs.length) return [];
+    const recipients = await this.users
+      .find({
+        _id: { $in: [...new Set(inputs.map((input) => input.recipientId))] },
+      })
+      .select('_id')
+      .session(session)
+      .exec();
+    const ids = new Set(recipients.map((user) => user.id));
+    const fields = inputs
+      .filter((input) => ids.has(input.recipientId))
+      .map((input) => ({ ...input, actorId: null }));
+    if (!fields.length) return [];
+    return this.notifications.create(fields, { session, ordered: true });
+  }
+
+  /** Realtime is best effort; the committed rows remain readable if a stream is unavailable. */
+  async publishStored(notifications: Notification[]): Promise<void> {
+    if (!notifications.length) return;
+    try {
+      const types = await this.postTypeById(
+        notifications.map((row) => row.postId),
+      );
+      const texts = await this.moderationSettings.reasonTexts();
+      for (const notification of notifications) {
+        this.events.next({
+          notification,
+          actor: null,
+          postType: notification.postId
+            ? (types.get(notification.postId) ?? null)
+            : null,
+          reasonText: notification.reason
+            ? (texts.get(notification.reason) ?? null)
+            : null,
+        });
+      }
+    } catch (error: unknown) {
+      this.logger.warn(
+        `Could not publish committed notifications: ${String(error)}`,
       );
     }
   }
