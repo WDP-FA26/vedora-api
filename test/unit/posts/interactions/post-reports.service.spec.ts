@@ -22,6 +22,7 @@ import { MongoModule } from '@src/mongo/mongo.module.js';
 import { MongoService } from '@src/mongo/mongo.service.js';
 import { PostReportsService } from '@src/posts/interactions/post-reports.service.js';
 import { NotificationsService } from '@src/notifications/notifications.service.js';
+import { PostReportEvidenceService } from '@src/posts/interactions/post-report-evidence.service.js';
 import { type DeepMockProxy, mockDeep } from 'vitest-mock-extended';
 
 describe('PostReportsService', () => {
@@ -39,6 +40,10 @@ describe('PostReportsService', () => {
       imports: [MongoModule.forTest(createTestMongoUrl('reports'))],
       providers: [
         PostReportsService,
+        {
+          provide: PostReportEvidenceService,
+          useValue: { forReports: () => Promise.resolve(new Map()) },
+        },
         { provide: NotificationsService, useValue: notifications },
       ],
     }).compile();

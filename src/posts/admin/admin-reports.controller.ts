@@ -31,11 +31,11 @@ import {
 } from '../../common/pagination/index.js';
 import {
   AdminPostReportDto,
-  PostReportsQueryDto,
   ReviewPostReportDto,
 } from '../dto/post-interaction.dto.js';
 import { PostReportsService } from '../interactions/post-reports.service.js';
 import { ErrorBodyDto } from '../../common/exceptions/error-body.dto.js';
+import { AdminPostReportsQueryDto } from '../dto/admin-post-reports-query.dto.js';
 
 @ApiTags('admin')
 @ApiBearerAuth()
@@ -57,7 +57,7 @@ export class AdminReportsController {
   @ApiOperation({ summary: 'List post reports, newest first' })
   @ApiPaginatedResponse(AdminPostReportDto)
   findAll(
-    @Query() query: PostReportsQueryDto,
+    @Query() query: AdminPostReportsQueryDto,
   ): Promise<PaginatedResponseDto<AdminPostReportDto>> {
     return this.reports.findAll(query);
   }
@@ -67,7 +67,7 @@ export class AdminReportsController {
   @ApiOperation({
     summary: 'Close a pending report',
     description:
-      'Deleting the reported post (DELETE /admin/posts/:id) removes its reports instead.',
+      'Removing the reported post (DELETE /admin/posts/:id) resolves all its pending reports and retains them for review.',
   })
   @ApiOkResponse({ type: AdminPostReportDto })
   @ApiConflictResponse({

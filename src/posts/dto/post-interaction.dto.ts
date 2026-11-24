@@ -5,6 +5,7 @@ import { Transform } from 'class-transformer';
 import {
   ArrayMaxSize,
   ArrayMinSize,
+  ArrayUnique,
   IsArray,
   IsEnum,
   IsIn,
@@ -75,6 +76,28 @@ export class PostReportDto {
   @ApiProperty() createdAt!: Date;
 }
 
+/** Post-only extension: comment reporting keeps its existing input contract. */
+export class CreatePostWithEvidenceReportDto extends CreatePostReportDto {
+  @ApiPropertyOptional({
+    type: [String],
+    format: 'uuid',
+    maxItems: runtimeConfig.REPORT_MAX_EVIDENCE_IMAGES,
+  })
+  @IsOptional()
+  @IsArray()
+  @ArrayUnique()
+  @ArrayMaxSize(runtimeConfig.REPORT_MAX_EVIDENCE_IMAGES)
+  @IsUUID('4', { each: true })
+  evidenceIds?: string[];
+}
+
+export class PostReportEvidenceDto {
+  @ApiProperty({ format: 'uuid' }) id!: string;
+  @ApiProperty() url!: string;
+  @ApiProperty() contentType!: string;
+  @ApiProperty() sizeBytes!: number;
+}
+
 export class ReportedPostDto {
   @ApiProperty({ format: 'uuid' }) id!: string;
   @ApiProperty({ nullable: true, type: String }) body!: string | null;
@@ -82,6 +105,14 @@ export class ReportedPostDto {
 }
 
 export class AdminPostReportDto extends PostReportDto {
+  @ApiProperty({ type: [PostReportEvidenceDto] })
+  evidence!: PostReportEvidenceDto[];
+  @ApiProperty({
+    minimum: 1,
+    description: 'All reports for this post, across statuses; one per reporter',
+  })
+  reportCount!: number;
+  @ApiProperty({ minimum: 0 }) pendingReportCount!: number;
   @ApiProperty({ nullable: true, type: Date }) reviewedAt!: Date | null;
   @ApiProperty({ type: PostAuthorDto }) reporter!: PostAuthorDto;
   @ApiProperty({ type: ReportedPostDto }) post!: ReportedPostDto;

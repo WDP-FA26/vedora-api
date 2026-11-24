@@ -1,6 +1,7 @@
 import type { Connection, Schema } from 'mongoose';
 import { DocumentLockSchema } from '../document-lock.js';
 import { SystemLogSchema } from './system-log.schema.js';
+import { PostReportEvidenceSchema } from './post-report-evidence.schema.js';
 import type { MongoModelName } from './model-names.js';
 import { AiUsageSchema } from './ai-usage.schema.js';
 import { AiRequestSchema } from './ai-request.schema.js';
@@ -81,6 +82,7 @@ import {
 } from './messaging.schema.js';
 
 export const MODEL_DEFINITIONS = [
+  { name: 'PostReportEvidence', schema: PostReportEvidenceSchema },
   { name: 'DocumentLock', schema: DocumentLockSchema },
   { name: 'Conversation', schema: ConversationSchema },
   { name: 'DirectMessage', schema: DirectMessageSchema },

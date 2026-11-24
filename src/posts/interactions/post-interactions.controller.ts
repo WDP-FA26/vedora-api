@@ -32,7 +32,7 @@ import {
   CommentResponseDto,
 } from '../dto/comment.dto.js';
 import {
-  CreatePostReportDto,
+  CreatePostWithEvidenceReportDto,
   PostBookmarkResponseDto,
   PostReportDto,
   PostRepostResponseDto,
@@ -237,7 +237,7 @@ export class PostInteractionsController {
   report(
     @Param('postId', ParseUUIDPipe) postId: string,
     @Req() request: AuthenticatedRequest,
-    @Body() dto: CreatePostReportDto,
+    @Body() dto: CreatePostWithEvidenceReportDto,
   ): Promise<PostReportDto> {
     return this.reports.create(postId, request.user.sub, dto);
   }

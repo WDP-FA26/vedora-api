@@ -19,14 +19,17 @@ import {
 import { NotificationsService } from '../../notifications/notifications.service.js';
 import {
   AdminPostReportDto,
-  CreatePostReportDto,
   PostReportDto,
-  PostReportsQueryDto,
   ReportDecision,
 } from '../dto/post-interaction.dto.js';
 import { InvalidInputException } from '../../common/exceptions/invalid-input.exception.js';
 import { ResourceNotFoundException } from '../../common/exceptions/resource-not-found.exception.js';
 import { StateConflictException } from '../../common/exceptions/state-conflict.exception.js';
+import type { CreatePostWithEvidenceReportDto } from '../dto/post-interaction.dto.js';
+import type { AdminPostReportsQueryDto } from '../dto/admin-post-reports-query.dto.js';
+import { PostReportEvidenceService } from './post-report-evidence.service.js';
+import { MongoService } from '../../mongo/mongo.service.js';
+import { lockDocument } from '../../mongo/document-lock.js';
 
 const toAuthor = (user: User) => ({
   id: user.id,
@@ -90,33 +93,40 @@ export class PostReportsService {
     private readonly reports: Model<PostReport>,
     @InjectModel(User.name) private readonly users: Model<User>,
     private readonly notifications: NotificationsService,
+    private readonly evidence: PostReportEvidenceService,
+    private readonly mongo: MongoService,
   ) {}
 
   async create(
     postId: string,
     reporterId: string,
-    dto: CreatePostReportDto,
+    dto: CreatePostWithEvidenceReportDto,
   ): Promise<PostReportDto> {
-    const post = await this.posts
-      .findOne({ _id: postId, status: PostStatus.PUBLISHED })
-      .select('authorId')
-      .exec();
-    if (!post)
-      throw new ResourceNotFoundException('NOT_FOUND', 'Post not found');
-    if (post.authorId === reporterId) {
-      throw new InvalidInputException(
-        'OWN_POST',
-        'You cannot report your own post',
-      );
-    }
+    await this.assertReportable(postId, reporterId);
     try {
-      const report = await this.reports.create({
+      const fields = {
         postId,
         reporterId,
         reason: dto.reason,
         details: dto.details || null,
         status: PostReportStatus.PENDING,
-      });
+      };
+      const ids = dto.evidenceIds ?? [];
+      const report = ids.length
+        ? await this.mongo.withTransaction(async (session) => {
+            await lockDocument(this.mongo, session, 'post', postId);
+            await this.assertReportable(postId, reporterId, session);
+            const [created] = await this.reports.create([fields], { session });
+            await this.evidence.attach(
+              session,
+              reporterId,
+              postId,
+              created.id,
+              ids,
+            );
+            return created;
+          })
+        : await this.reports.create(fields);
       return toReportDto(report);
     } catch (error: unknown) {
       if (!isUniqueViolation(error)) throw error;
@@ -127,11 +137,34 @@ export class PostReportsService {
     }
   }
 
+  async assertReportable(
+    postId: string,
+    reporterId: string,
+    session?: ClientSession,
+  ) {
+    const post = await this.posts
+      .findOne({ _id: postId, status: PostStatus.PUBLISHED })
+      .select('authorId')
+      .session(session ?? null)
+      .exec();
+    if (!post)
+      throw new ResourceNotFoundException('NOT_FOUND', 'Post not found');
+    if (post.authorId === reporterId) {
+      throw new InvalidInputException(
+        'OWN_POST',
+        'You cannot report your own post',
+      );
+    }
+  }
+
   async findAll(
-    query: PostReportsQueryDto,
+    query: AdminPostReportsQueryDto,
   ): Promise<PaginatedResponseDto<AdminPostReportDto>> {
     const { skip, take } = getPaginationArgs(query);
-    const filter = query.status ? { status: query.status } : {};
+    const filter = {
+      ...(query.status ? { status: query.status } : {}),
+      ...(query.postId ? { postId: query.postId } : {}),
+    };
     const [rows, totalItems] = await Promise.all([
       this.reports
         .find(filter)
@@ -262,6 +295,32 @@ export class PostReportsService {
   private async toAdminDtos(
     reports: PostReport[],
   ): Promise<AdminPostReportDto[]> {
+    const counts = await this.reports
+      .aggregate<{ _id: string; total: number; pending: number }>([
+        {
+          $match: {
+            postId: {
+              $in: [...new Set(reports.map((report) => report.postId))],
+            },
+          },
+        },
+        {
+          $group: {
+            _id: '$postId',
+            total: { $sum: 1 },
+            pending: {
+              $sum: {
+                $cond: [{ $eq: ['$status', PostReportStatus.PENDING] }, 1, 0],
+              },
+            },
+          },
+        },
+      ])
+      .exec();
+    const countsByPost = new Map(counts.map((row) => [row._id, row]));
+    const evidenceByReport = await this.evidence.forReports(
+      reports.map((report) => report.id),
+    );
     const [posts, reporters] = await Promise.all([
       this.posts
         .find({
@@ -292,6 +351,9 @@ export class PostReportsService {
       return [
         {
           ...toReportDto(report),
+          evidence: evidenceByReport.get(report.id) ?? [],
+          reportCount: countsByPost.get(report.postId)?.total ?? 0,
+          pendingReportCount: countsByPost.get(report.postId)?.pending ?? 0,
           reviewedAt: report.reviewedAt,
           reporter: toAuthor(reporter),
           post: { id: post.id, body: post.body, author: toAuthor(author) },
