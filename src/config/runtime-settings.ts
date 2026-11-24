@@ -132,6 +132,15 @@ export function parseRuntimeSettings(
     );
   if (number('KNOWLEDGE_JPEG_QUALITY') > 100)
     errors.push('KNOWLEDGE_JPEG_QUALITY must not exceed 100');
+  for (const [key, minimum, maximum] of [
+    ['ADMIN_WORK_PREVIEW_LIMIT', 1, 50],
+    ['ADMIN_WORK_REFRESH_SECONDS', 5, 3600],
+    ['ADMIN_WORK_QUERY_TIMEOUT_MS', 100, 30000],
+    ['ADMIN_WORK_TITLE_MAX_LENGTH', 10, 500],
+  ] as const) {
+    if (number(key) < minimum || number(key) > maximum)
+      errors.push(`${key} must be between ${minimum} and ${maximum}`);
+  }
   if (
     !(values.AI_IMAGE_ALLOWED_ASPECT_RATIOS as string | undefined)
       ?.split(',')
