@@ -3,10 +3,20 @@ import { CalorieEstimator } from '@src/meal-plan/meal-log/calorie-estimator.js';
 
 type Content = ConstructorParameters<typeof MockLanguageModelV4>[0];
 
+/** A model that searched (the sources) and then submitted `input`, the submitEstimate arguments as JSON text; null replies with text instead. */
 function modelReplying(
-  text: string,
+  input: string | null,
   sources: { url: string; title?: string }[] = [],
 ): MockLanguageModelV4 {
+  const answer =
+    input === null
+      ? { type: 'text' as const, text: 'Không tìm thấy.' }
+      : {
+          type: 'tool-call' as const,
+          toolCallId: 'call-1',
+          toolName: 'submitEstimate',
+          input,
+        };
   const options: Content = {
     doGenerate: () =>
       Promise.resolve({
@@ -18,9 +28,12 @@ function modelReplying(
             url: source.url,
             title: source.title,
           })),
-          { type: 'text' as const, text },
+          answer,
         ],
-        finishReason: { unified: 'stop' as const, raw: undefined },
+        finishReason: {
+          unified: input === null ? ('stop' as const) : ('tool-calls' as const),
+          raw: undefined,
+        },
         usage: {
           inputTokens: {
             total: 10,
@@ -37,9 +50,9 @@ function modelReplying(
 }
 
 describe('CalorieEstimator', () => {
-  it('reads the fenced JSON and merges web citations with listed references', async () => {
+  it('reads the submitted estimate and merges web citations with listed references', async () => {
     const model = modelReplying(
-      'Đây là kết quả:\n```json\n{"caloriesPerServing": 452.6, "note": " Tô vừa ~500 g ", "references": [{"title": "Viện Dinh dưỡng", "url": "https://viendinhduong.vn/a"}, {"title": "trùng", "url": "https://fdc.nal.usda.gov/x"}]}\n```',
+      '{"caloriesPerServing": 452.6, "note": " Tô vừa ~500 g ", "references": [{"title": "Viện Dinh dưỡng", "url": "https://viendinhduong.vn/a"}, {"title": "trùng", "url": "https://fdc.nal.usda.gov/x"}]}',
       [{ url: 'https://fdc.nal.usda.gov/x', title: 'USDA' }],
     );
     const estimate = await new CalorieEstimator(model).estimate({
@@ -57,35 +70,48 @@ describe('CalorieEstimator', () => {
     const prompt = JSON.stringify(model.doGenerateCalls[0].prompt);
     expect(prompt).toContain('Bún riêu chay');
     expect(prompt).toContain('tô vừa');
+    const toolNames = model.doGenerateCalls[0].tools?.map((item) => item.name);
+    expect(toolNames).toContain('submitEstimate');
   });
 
   it.each([0, -5, 5001, Number.NaN])(
     'drops an unusable calorie value %s',
     async (value) => {
       const estimate = await new CalorieEstimator(
-        modelReplying(`{"caloriesPerServing": ${String(value)}, "note": "x"}`),
+        modelReplying(
+          `{"caloriesPerServing": ${String(value)}, "note": "x", "references": []}`,
+        ),
       ).estimate({ name: 'Món' });
       expect(estimate.caloriesPerServing).toBeNull();
     },
   );
 
-  it('returns no estimate but keeps citations when the reply is not JSON', async () => {
-    const estimate = await new CalorieEstimator(
-      modelReplying('Không tìm thấy.', [{ url: 'https://example.com/a' }]),
-    ).estimate({ name: 'Món lạ' });
-    expect(estimate).toEqual({
-      caloriesPerServing: null,
-      note: null,
-      references: [{ title: 'example.com', url: 'https://example.com/a' }],
-    });
-  });
+  it.each([
+    ['replies with text', null],
+    ['submits arguments outside the schema', '{"caloriesPerServing": "nhiều"}'],
+  ])(
+    'returns no estimate but keeps citations when the model %s',
+    async (_case, input) => {
+      const estimate = await new CalorieEstimator(
+        modelReplying(input, [{ url: 'https://example.com/a' }]),
+      ).estimate({ name: 'Món lạ' });
+      expect(estimate).toEqual({
+        caloriesPerServing: null,
+        note: null,
+        references: [{ title: 'example.com', url: 'https://example.com/a' }],
+      });
+    },
+  );
 
   it('keeps as many references as a log entry accepts', async () => {
     const sources = Array.from({ length: 8 }, (_, index) => ({
       url: `https://example.com/${index}`,
     }));
     const estimate = await new CalorieEstimator(
-      modelReplying('{"caloriesPerServing": 300}', sources),
+      modelReplying(
+        '{"caloriesPerServing": 300, "note": null, "references": []}',
+        sources,
+      ),
     ).estimate({ name: 'Món' });
     expect(estimate.references).toHaveLength(5);
   });
@@ -93,7 +119,7 @@ describe('CalorieEstimator', () => {
   it('drops non-http references', async () => {
     const estimate = await new CalorieEstimator(
       modelReplying(
-        '{"caloriesPerServing": 300, "references": [{"title": "x", "url": "javascript:alert(1)"}]}',
+        '{"caloriesPerServing": 300, "note": null, "references": [{"title": "x", "url": "javascript:alert(1)"}]}',
       ),
     ).estimate({ name: 'Món' });
     expect(estimate.references).toEqual([]);

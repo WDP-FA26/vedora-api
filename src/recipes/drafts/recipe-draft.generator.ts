@@ -2,11 +2,10 @@ import { runtimeConfig } from '../../config/runtime-config.js';
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { AiService, InjectModel } from '@nestjs/ai';
-import { generateText, type LanguageModel } from 'ai';
+import { generateText, type LanguageModel, tool } from 'ai';
 import { z } from 'zod';
 import { DEFAULT_CHAT_MODEL } from '../../ai/openrouter.js';
 import { PromptCache } from '../../ai/prompt-cache.js';
-import { extractJsonObject } from '../../ai/json-text.js';
 import { webSearchTool } from '../../ai/tools/web-search.tool.js';
 import type { PostSourcePart } from '../../posts/summaries/post-source.js';
 import {
@@ -30,16 +29,32 @@ const WEB_RESEARCH_MAX_OUTPUT_TOKENS =
   runtimeConfig.RECIPE_DRAFT_WEB_RESEARCH_MAX_OUTPUT_TOKENS;
 
 const calorieResearchSchema = z.object({
-  caloriesPerServing: z.number().min(10).max(3000).nullable().optional(),
-  calorieNote: z.string().nullable().optional(),
+  caloriesPerServing: z
+    .number()
+    .min(10)
+    .max(3000)
+    .nullable()
+    .describe('Số kcal cho một suất, hoặc null khi không tính được.'),
+  calorieNote: z
+    .string()
+    .nullable()
+    .describe(
+      '1–3 câu tiếng Việt: cách tính từ nguyên liệu và khẩu phần, và câu trả lời cho Admin nếu có.',
+    ),
   sources: z
-    .array(
-      z.object({
-        title: z.string(),
-        url: z.string(),
-      }),
-    )
-    .optional(),
+    .array(z.object({ title: z.string(), url: z.string() }))
+    .describe('Các nguồn đã dùng, với URL lấy từ kết quả tìm kiếm.'),
+});
+
+/**
+ * The model answers by calling this tool: its input is checked against the
+ * schema, which `Output.object` cannot do here because OpenRouter ignores
+ * `response_format` on calls with the web search server tool.
+ */
+const submitCalories = tool({
+  description:
+    'Nộp kết quả kiểm tra kcal. Gọi đúng một lần, sau khi đã tìm kiếm xong.',
+  inputSchema: calorieResearchSchema,
 });
 
 /** Asks the chat model for a recipe draft of a source, matched to the catalog, then verifies calories on the web. */
@@ -121,7 +136,7 @@ export class RecipeDraftGenerator {
       const result = await generateText({
         model: this.model,
         maxOutputTokens: WEB_RESEARCH_MAX_OUTPUT_TOKENS,
-        tools: { webSearch: webSearchTool() },
+        tools: { webSearch: webSearchTool(), submitCalories },
         abortSignal: AbortSignal.timeout(WEB_RESEARCH_TIMEOUT_MS),
         ...PromptCache.singleTurn({
           session: 'vedora-recipe-calorie-research',
@@ -156,25 +171,19 @@ export class RecipeDraftGenerator {
         });
       }
 
-      const parsed = calorieResearchSchema.safeParse(
-        extractJsonObject(result.text),
-      );
-      const parsedSources = parsed.success ? (parsed.data.sources ?? []) : [];
+      const answer = result.staticToolCalls.find(
+        (call) => call.toolName === 'submitCalories',
+      )?.input;
       const calorieSources = normalizeSources([
         ...webCitationSources,
-        ...parsedSources,
+        ...(answer?.sources ?? []),
       ]);
 
-      const caloriesPerServing =
-        parsed.success &&
-        typeof parsed.data.caloriesPerServing === 'number' &&
-        Number.isFinite(parsed.data.caloriesPerServing)
-          ? Math.round(parsed.data.caloriesPerServing)
-          : undefined;
-      const calorieNote =
-        parsed.success && parsed.data.calorieNote?.trim()
-          ? parsed.data.calorieNote.trim()
-          : undefined;
+      let caloriesPerServing: number | undefined;
+      if (typeof answer?.caloriesPerServing === 'number') {
+        caloriesPerServing = Math.round(answer.caloriesPerServing);
+      }
+      const calorieNote = answer?.calorieNote?.trim() || undefined;
 
       if (
         caloriesPerServing === undefined &&

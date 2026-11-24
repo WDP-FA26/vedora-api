@@ -1,9 +1,8 @@
 import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/ai';
-import { generateText, type LanguageModel } from 'ai';
+import { generateText, type LanguageModel, tool } from 'ai';
 import { z } from 'zod';
 import { PromptCache } from '../../ai/prompt-cache.js';
-import { extractJsonObject } from '../../ai/json-text.js';
 import { webSearchTool } from '../../ai/tools/web-search.tool.js';
 import { runtimeConfig } from '../../config/runtime-config.js';
 import { normalizeSources } from '../../recipes/drafts/recipe-draft.js';
@@ -21,11 +20,30 @@ const MAX_OUTPUT_TOKENS =
   runtimeConfig.MEAL_LOG_CALORIE_ESTIMATE_MAX_OUTPUT_TOKENS;
 
 const estimateOutput = z.object({
-  caloriesPerServing: z.number().nullable().optional(),
-  note: z.string().nullable().optional(),
+  caloriesPerServing: z
+    .number()
+    .nullable()
+    .describe(
+      'Số kcal cho một khẩu phần, hoặc null khi không có số liệu đủ tin cậy.',
+    ),
+  note: z
+    .string()
+    .nullable()
+    .describe('1–2 câu tiếng Việt: khẩu phần đã giả định và cách ước tính.'),
   references: z
     .array(z.object({ title: z.string(), url: z.string() }))
-    .optional(),
+    .describe('Các nguồn đã dùng, với URL lấy từ kết quả tìm kiếm.'),
+});
+
+/**
+ * The model answers by calling this tool: its input is checked against the
+ * schema, which `Output.object` cannot do here because OpenRouter ignores
+ * `response_format` on calls with the web search server tool.
+ */
+const submitEstimate = tool({
+  description:
+    'Nộp kết quả tra cứu kcal. Gọi đúng một lần, sau khi đã tìm kiếm xong.',
+  inputSchema: estimateOutput,
 });
 
 export interface CalorieQuestion {
@@ -71,7 +89,7 @@ export class CalorieEstimator {
       }),
       prompt: `Hôm nay là ${new Date().toISOString().slice(0, 10)}.\n<dish>\n${lines.join('\n')}\n</dish>`,
       maxOutputTokens: MAX_OUTPUT_TOKENS,
-      tools: { webSearch: webSearchTool() },
+      tools: { webSearch: webSearchTool(), submitEstimate },
       abortSignal: AbortSignal.timeout(TIMEOUT_MS),
     });
 
@@ -80,22 +98,22 @@ export class CalorieEstimator {
       if (source.sourceType !== 'url') continue;
       citations.push({ title: source.title ?? '', url: source.url });
     }
-    const parsed = estimateOutput.safeParse(extractJsonObject(result.text));
-    if (!parsed.success) {
+    const answer = result.staticToolCalls.find(
+      (call) => call.toolName === 'submitEstimate',
+    );
+    if (!answer) {
       return {
         caloriesPerServing: null,
         note: null,
         references: usableReferences(citations),
       };
     }
-    const note = parsed.data.note?.trim().slice(0, MEAL_LOG_MAX_NOTE_LENGTH);
+    const { caloriesPerServing, note, references } = answer.input;
+    const trimmedNote = note?.trim().slice(0, MEAL_LOG_MAX_NOTE_LENGTH);
     return {
-      caloriesPerServing: usableCalories(parsed.data.caloriesPerServing),
-      note: note || null,
-      references: usableReferences([
-        ...citations,
-        ...(parsed.data.references ?? []),
-      ]),
+      caloriesPerServing: usableCalories(caloriesPerServing),
+      note: trimmedNote || null,
+      references: usableReferences([...citations, ...references]),
     };
   }
 }
