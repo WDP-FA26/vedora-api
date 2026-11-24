@@ -151,9 +151,28 @@ describe('reviewInstructions', () => {
         { key: 'spam', label: 'Spam', reasonText: 'spam', description: 'Ads.' },
       ],
     });
-    expect(text).toContain('- spam: Ads.');
+    expect(text).toContain('<categories>\nspam: Ads.\n</categories>');
     expect(text).toContain('<allowed>Recipes.</allowed>');
     expect(text).toContain('2 - Medium risk');
     expect(text).toContain('Vietnamese');
+  });
+
+  it('gives only the examples whose category the policy has', () => {
+    const text = reviewInstructions({
+      instructions: 'Judge safety.',
+      allowDescription: 'Recipes.',
+      choices: [
+        {
+          key: 'harassment',
+          label: 'Quấy rối',
+          reasonText: 'quấy rối',
+          description: 'Insults.',
+        },
+      ],
+    });
+    expect(text).toContain('<examples>');
+    expect(text).toContain('Category: harassment');
+    expect(text).toContain('Category: null');
+    expect(text).not.toContain('Category: self_harm');
   });
 });

@@ -35,7 +35,9 @@ const CHOICE_MARKER = /CHOICE:([a-z_0-9]+)/;
 
 /** The member content of a review call: the user message, as the model reads it. */
 function reviewedContent(call: FakeModelCall): string {
-  return JSON.stringify(call.options.prompt.filter(({ role }) => role === 'user'));
+  return JSON.stringify(
+    call.options.prompt.filter(({ role }) => role === 'user'),
+  );
 }
 
 /**
@@ -56,7 +58,7 @@ function answerReview(call: FakeModelCall) {
     });
   }
   const marked = CHOICE_MARKER.exec(content);
-  if (marked && call.instructions?.includes(`- ${marked[1]}:`)) {
+  if (marked && call.instructions?.includes(`\n${marked[1]}: `)) {
     return highRisk(marked[1], marked[0]);
   }
   if (content.includes(VIOLATION_MARKER)) {

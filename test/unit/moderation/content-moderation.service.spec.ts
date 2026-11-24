@@ -94,6 +94,7 @@ describe('ContentModerationService', () => {
     expect(call?.instructions).toContain(POLICY.instructions);
     expect(call?.instructions).toContain('3 - High risk');
     expect(JSON.stringify(call?.options.prompt)).toContain('<content>');
+    expect(JSON.stringify(call?.options.prompt)).toContain('</content>');
     expect(JSON.stringify(call?.options.prompt)).toContain('cơm chay ngon');
   });
 
@@ -156,7 +157,10 @@ describe('ContentModerationService', () => {
   });
 
   it('holds content the model refuses to rate for an admin', async () => {
-    const model = new FakeModel(() => ({ text: '', finishReason: 'content-filter' }));
+    const model = new FakeModel(() => ({
+      text: '',
+      finishReason: 'content-filter',
+    }));
     const service = new ContentModerationService(
       { id: 'anthropic/claude-haiku-5.5', model },
       new FakeSettings() as ModerationSettingsService,
@@ -211,7 +215,7 @@ describe('ContentModerationService', () => {
     };
     const assessment = await service.review(text('x'), draft);
     expect(assessment.category).toBe('manipulation');
-    expect(model.lastCall?.instructions).toContain('- spam: Unrelated ads.');
+    expect(model.lastCall?.instructions).toContain('\nspam: Unrelated ads.');
   });
 });
 
