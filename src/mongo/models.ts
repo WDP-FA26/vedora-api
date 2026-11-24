@@ -6,6 +6,7 @@ export * from './schemas/notification.schema.js';
 export * from './schemas/profile-image.schema.js';
 export * from './schemas/credential.schema.js';
 export * from './schemas/post.schema.js';
+export * from './schemas/comment-report.schema.js';
 export * from './schemas/post-summary.schema.js';
 export * from './schemas/support.schema.js';
 export * from './schemas/media.schema.js';
