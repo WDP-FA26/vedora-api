@@ -23,3 +23,4 @@ export * from './schemas/ai-usage.schema.js';
 export * from './schemas/ai-request.schema.js';
 export * from './schemas/ai-cost-call.schema.js';
 export * from './schemas/messaging.schema.js';
+export * from './schemas/post-report-evidence.schema.js';
