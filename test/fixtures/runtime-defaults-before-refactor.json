@@ -703,7 +703,8 @@
     "env": "NUTRITION_CHAT_MAX_OUTPUT_TOKENS",
     "original": 1000,
     "default": 1000,
-    "multiplier": 1
+    "multiplier": 1,
+    "upstreamOriginal": 3000
   },
   {
     "file": "nutrition-chat/nutrition-chat.service.ts",

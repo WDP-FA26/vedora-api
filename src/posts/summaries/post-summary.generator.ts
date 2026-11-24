@@ -4,15 +4,14 @@ import { ConfigService } from '@nestjs/config';
 import { InjectModel } from '@nestjs/ai';
 import { generateText, type LanguageModel, Output } from 'ai';
 import { z } from 'zod';
-import { loadTextConfig } from '../../config/config-files.js';
 import {
   DEFAULT_CHAT_MODEL,
   OpenRouterCacheControl,
 } from '../../ai/openrouter.js';
 import { RecipeTag } from '../../mongo/models.js';
 import type { PostSourcePart } from './post-source.js';
+import { POST_SUMMARY_INSTRUCTIONS } from './post-summary.prompt.js';
 
-const INSTRUCTIONS = loadTextConfig(runtimeConfig.POST_SUMMARY_PROMPT_FILE);
 const TIMEOUT_MS = runtimeConfig.POST_SUMMARY_TIMEOUT_MS;
 
 const ingredientOutput = z.object({
@@ -67,7 +66,7 @@ export class PostSummaryGenerator {
       model: this.model,
       ...OpenRouterCacheControl.singleTurn({
         session: 'vedora-post-summary',
-        instructions: INSTRUCTIONS,
+        instructions: POST_SUMMARY_INSTRUCTIONS,
       }),
       prompt,
       output: Output.object({ schema: summaryOutput, name: 'post_summary' }),

@@ -1,24 +1,5 @@
 [
   {
-    "file": "config/prompts/nutrition.md",
-    "source": "nutrition-chat/nutrition-chat.prompt.ts",
-    "sha256": "90d347731be1e892a6ab280f49d7820c9837818307781c37e35eff003d8c8968"
-  },
-  {
-    "file": "config/prompts/meal-planner.md",
-    "source": "meal-plan/meal-planner.prompt.ts",
-    "sha256": "0fde39af970877b1115317ef8d7e6ad2dcb09637de5bf752b17a09a14d5d9309",
-    "upstreamSha256": "82a65cfb1b6fe5aff3a63d282a04ebbfb59f79397d602f5da7c5b886a05ad0a5",
-    "upstreamCommit": "e94efb56885155b31f62d099b3e293c38703f10f"
-  },
-  {
-    "file": "config/prompts/blog-assistant.md",
-    "source": "posts/blogs/ai/blog-assistant.prompt.ts",
-    "sha256": "7abc208947b0830d52c5b5241605ca9d8b51797483efce5756e6b775525b3ec1",
-    "upstreamSha256": "47b30960f4722d295d1d2f28cc7d542aff073c666e93fe76fc1f4f032343af77",
-    "upstreamCommit": "a8f4953212cd6a150f88f6fc214a686ecc94059e"
-  },
-  {
     "file": "config/policies/nutrition.json",
     "source": "ai/guardrails/policies/nutrition.ts",
     "sha256": "35b214ab2b6ac20a57a82a6efd667775e6a8e31d000668c6e120181dfcc04d87",

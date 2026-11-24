@@ -10,7 +10,7 @@ import {
 } from '@src/config/config-files.js';
 
 describe('external prompt and policy files', () => {
-  it('preserves the three prompt texts and three policy objects extracted from the original source', () => {
+  it('preserves the three policy objects extracted from the original source', () => {
     const entries = JSON.parse(
       readFileSync(
         new URL(
@@ -20,7 +20,7 @@ describe('external prompt and policy files', () => {
         'utf8',
       ),
     ) as { file: string; sha256: string; upstreamSha256?: string }[];
-    expect(entries).toHaveLength(6);
+    expect(entries).toHaveLength(3);
     for (const entry of entries) {
       const source = readFileSync(entry.file, 'utf8');
       const value = entry.file.endsWith('.json')

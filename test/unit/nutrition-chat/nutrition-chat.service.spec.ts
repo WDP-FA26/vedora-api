@@ -12,6 +12,7 @@ import { convertReadableStreamToArray, MockLanguageModelV4 } from 'ai/test';
 import { type DeepMockProxy, mockDeep } from 'vitest-mock-extended';
 import { AiModule } from '@src/ai/ai.module.js';
 import {
+  DEFAULT_CHAT_PROVIDER_ORDER,
   DEFAULT_MODERATION_PROVIDER_ORDER,
   DEFAULT_OPENROUTER_APP_TITLE,
   DEFAULT_OPENROUTER_APP_URL,
@@ -179,6 +180,10 @@ describe('NutritionChatService', () => {
     });
     expect(languageModel).toHaveBeenCalledWith('test/model', {
       reasoning: { effort: 'low', exclude: true },
+      provider: {
+        order: providerOrderFrom(DEFAULT_CHAT_PROVIDER_ORDER),
+        allow_fallbacks: true,
+      },
     });
     expect(replyText(chunks)).toBe('Ăn đậu phụ');
     const { prompt, providerOptions } = model.doStreamCalls[0];

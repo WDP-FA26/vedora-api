@@ -31,7 +31,7 @@ The planner prompt file now contains the latest upstream draft-editing instructi
 
 Additional defaults were checked at their call sites: AI-cost pagination remains 50 (ordinary Admin payments pagination remains 25), guest quota resets in UTC, reporting/subscription dates use Asia/Bangkok, and moderation receives at most 24000 history characters by default. No default budget, token count, model or timeout was silently increased.
 
-Prompts/policies were extracted to `config/prompts/*.md` and `config/policies/*.json` from their original literal values. Corresponding env variables select a file. Prompts keep dynamic user/editor/recipe context in their existing builders. Invalid/missing/empty config files stop startup. Files are copied into both the build and runtime Docker stages; custom files can be mounted into the API container.
+Policies were extracted to `config/policies/*.json` from their original literal values, and an env variable selects each file. System prompts live in TypeScript next to their feature (`*.prompt.ts`). Prompts keep dynamic user/editor/recipe context in their existing builders. Invalid/missing/empty config files stop startup. Files are copied into both the build and runtime Docker stages; custom files can be mounted into the API container.
 
 ## Historical data and invariants
 

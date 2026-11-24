@@ -145,7 +145,7 @@ Values below are defaults matched to the original source. All values are read at
 | `NOTIFICATION_SSE_HEARTBEAT_MS` | `25000` |
 | `NUTRITION_CHAT_MAX_MESSAGES` | `5` |
 | `NUTRITION_CHAT_MAX_MESSAGE_LENGTH` | `2000` |
-| `NUTRITION_CHAT_MAX_OUTPUT_TOKENS` | `1000` |
+| `NUTRITION_CHAT_MAX_OUTPUT_TOKENS` | `3000` |
 | `NUTRITION_CHAT_MAX_STEPS` | `3` |
 | `PAGINATION_DEFAULT_LIMIT` | `20` |
 | `PAGINATION_MAX_LIMIT` | `50` |
@@ -237,7 +237,6 @@ Values below are defaults matched to the original source. All values are read at
 | `AI_IMAGE_ALLOWED_ASPECT_RATIOS` | `1:1,4:3,3:4,16:9` |
 | `APP_TIMEZONE` | `Asia/Bangkok` |
 | `BLOG_GUARDRAIL_POLICY_FILE` | `config/policies/blog-assistant.json` |
-| `BLOG_SYSTEM_PROMPT_FILE` | `config/prompts/blog-assistant.md` |
 | `CLOUDINARY_STREAM_TRANSFORMATION` | `sp_auto/m3u8` |
 | `GUEST_QUOTA_TIMEZONE` | `UTC` |
 | `KNOWLEDGE_MAINTENANCE_CRON` | `0 */10 * * * *` |
@@ -251,10 +250,8 @@ Values below are defaults matched to the original source. All values are read at
 | `MEDIA_TRANSCRIPT_BACKFILL_CRON` | `0 */10 * * * *` |
 | `MODERATION_DEFAULT_POLICY_FILE` | `config/policies/content.json` |
 | `NUTRITION_GUARDRAIL_POLICY_FILE` | `config/policies/nutrition.json` |
-| `NUTRITION_SYSTEM_PROMPT_FILE` | `config/prompts/nutrition.md` |
 | `OPENROUTER_API_BASE_URL` | `https://openrouter.ai/api/v1` |
 | `PAYMENT_EXPIRATION_CRON` | `*/10 * * * * *` |
-| `PLANNER_SYSTEM_PROMPT_FILE` | `config/prompts/meal-planner.md` |
 | `PLANNER_WEB_SEARCH_CONTEXT_SIZE` | `low` |
 | `PLANNER_WEB_SEARCH_ENGINE` | `parallel` |
 | `PLANNER_WEB_SEARCH_MODE` | `fast` |
@@ -287,6 +284,4 @@ Values below are defaults matched to the original source. All values are read at
 | `FOLLOW_SUGGESTION_REBUILD_CRON` | `0 0 * * * *` |
 | `POST_SEARCH_INDEX_CRON` | `0 * * * * *` |
 | `POST_SUMMARY_CRON` | `*/10 * * * * *` |
-| `POST_SUMMARY_PROMPT_FILE` | `config/prompts/post-summary.md` |
-| `RECIPE_DRAFT_PROMPT_FILE` | `config/prompts/recipe-draft.md` |
 | `AI_IMAGE_DEFAULT_ASPECT_RATIO` | `4:3` |
