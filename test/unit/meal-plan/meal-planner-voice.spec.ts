@@ -1,6 +1,6 @@
 import { ConfigService } from '@nestjs/config';
 import { FakeModel, providerError } from '@nestjs/ai/testing';
-import { simulateReadableStream, type UIMessageChunk } from 'ai';
+import { asSchema, simulateReadableStream, type UIMessageChunk } from 'ai';
 import { type DeepMockProxy, mockDeep } from 'vitest-mock-extended';
 import { FeatureUnavailableException } from '@src/common/exceptions/feature-unavailable.exception.js';
 import type { MealLogService } from '@src/meal-plan/meal-log/meal-log.service.js';
@@ -16,7 +16,12 @@ import {
 } from '@src/meal-plan/tools/voice-screen.tools.js';
 import { MealPlannerVoiceService } from '@src/meal-plan/voice/meal-planner-voice.service.js';
 import type { DietaryService } from '@src/recipes/dietary.service.js';
-import { MealSection, Weekday } from '@src/mongo/models.js';
+import {
+  CalorieSource,
+  MealLogSource,
+  MealSection,
+  Weekday,
+} from '@src/mongo/models.js';
 
 const USER_ID = '4a1e32e4-e18e-4dd7-8b4a-246ef2113ff2';
 const THREAD_ID = '8f0c1f2e-5b7a-4d3c-9e1f-2a3b4c5d6e7f';
@@ -174,17 +179,17 @@ describe('voice tools', () => {
       id: 'e1',
       date: WEEK,
       section: MealSection.LUNCH,
-      source: 'RECIPE',
+      source: MealLogSource.RECIPE,
       recipeId: RECIPE_ID,
       name: 'Đậu hũ sốt cà',
       servings: 1,
       caloriesPerServing: 320,
       calories: 320,
-      calorieSource: 'RECIPE',
+      calorieSource: CalorieSource.RECIPE,
       calorieNote: null,
       calorieReferences: [],
-      createdAt: new Date(),
-    } as Awaited<ReturnType<MealLogService['create']>>);
+      createdAt: new Date().toISOString(),
+    });
     const toolDef = logMealTool(mealLog, USER_ID);
 
     await toolDef.execute?.(
@@ -202,26 +207,25 @@ describe('voice tools', () => {
     });
   });
 
-  it('logMeal accepts exactly one of recipeId and name', () => {
+  it('logMeal accepts exactly one of recipeId and name', async () => {
     const toolDef = logMealTool(mockDeep<MealLogService>(), USER_ID);
-    const schema = toolDef.inputSchema as {
-      safeParse: (value: unknown) => { success: boolean };
+    const schema = asSchema(toolDef.inputSchema);
+    const accepts = async (value: unknown): Promise<boolean> => {
+      const result = await schema.validate?.(value);
+      return result?.success === true;
     };
 
     expect(
-      schema.safeParse({
+      await accepts({
         date: WEEK,
         section: 'LUNCH',
         recipeId: RECIPE_ID,
         name: 'Phở',
-      }).success,
+      }),
     ).toBe(false);
-    expect(schema.safeParse({ date: WEEK, section: 'LUNCH' }).success).toBe(
-      false,
-    );
+    expect(await accepts({ date: WEEK, section: 'LUNCH' })).toBe(false);
     expect(
-      schema.safeParse({ date: WEEK, section: 'LUNCH', name: 'Phở chay' })
-        .success,
+      await accepts({ date: WEEK, section: 'LUNCH', name: 'Phở chay' }),
     ).toBe(true);
   });
 
