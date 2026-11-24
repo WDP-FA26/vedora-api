@@ -334,11 +334,10 @@ describe('MealPlannerChatService', () => {
       'requestWebSearch',
     ]);
     const [system, userMsg] = model.doStreamCalls[0].prompt;
-    expect(system).toMatchObject({
-      role: 'system',
-      providerOptions: {
-        openrouter: { cacheControl: { type: 'ephemeral', ttl: '1h' } },
-      },
+    expect(system).toMatchObject({ role: 'system' });
+    // The planner is session-scoped: its system prefix uses the 5m cache, not 1h.
+    expect(system.providerOptions?.openrouter?.cacheControl).toEqual({
+      type: 'ephemeral',
     });
     expect(JSON.stringify(system.content)).not.toContain('Hôm nay là');
     expect(JSON.stringify(userMsg)).toContain('<planner_context>');

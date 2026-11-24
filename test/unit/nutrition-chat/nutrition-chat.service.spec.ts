@@ -187,11 +187,10 @@ describe('NutritionChatService', () => {
     });
     expect(replyText(chunks)).toBe('Ăn đậu phụ');
     const { prompt, providerOptions } = model.doStreamCalls[0];
-    expect(prompt[0]).toMatchObject({
-      role: 'system',
-      providerOptions: {
-        openrouter: { cacheControl: { type: 'ephemeral', ttl: '1h' } },
-      },
+    expect(prompt[0]).toMatchObject({ role: 'system' });
+    // Session-scoped chat: its system prefix uses the 5m cache, not 1h.
+    expect(prompt[0].providerOptions?.openrouter?.cacheControl).toEqual({
+      type: 'ephemeral',
     });
     expect(providerOptions?.openrouter).toEqual({
       session_id: 'vedora-nutrition-chat',

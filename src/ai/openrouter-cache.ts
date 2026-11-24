@@ -1,5 +1,10 @@
 import { createHash } from 'node:crypto';
 import type { ModelMessage, SystemModelMessage } from 'ai';
+import {
+  type ReasoningEffort,
+  type ReasoningSetting,
+  reasoningSetting,
+} from './reasoning.js';
 
 export type CacheTtl = '5m' | '1h';
 
@@ -9,11 +14,15 @@ export type EphemeralCacheSpec = {
 };
 
 export type StickyProviderOptions = {
-  openrouter: { session_id: string };
+  openrouter: { session_id: string; reasoning?: ReasoningSetting };
 };
 
 export type AutoCachedProviderOptions = {
-  openrouter: { session_id: string; cacheControl: EphemeralCacheSpec };
+  openrouter: {
+    session_id: string;
+    cacheControl: EphemeralCacheSpec;
+    reasoning?: ReasoningSetting;
+  };
 };
 
 const MAX_SESSION_ID_LENGTH = 256;
@@ -106,21 +115,28 @@ export class OpenRouterCacheControl {
     instructions,
     ttl = '1h',
     enabled = true,
+    effort,
   }: {
     session: string;
     scope?: readonly (string | null | undefined)[];
     instructions: string;
     ttl?: CacheTtl;
     enabled?: boolean;
+    /** Overrides the model's effort for this task; omit to keep the model's. */
+    effort?: ReasoningEffort;
   }): {
     instructions: string | SystemModelMessage;
     providerOptions: StickyProviderOptions;
   } {
+    const providerOptions = OpenRouterCacheControl.sticky(session, ...scope);
+    if (effort) {
+      providerOptions.openrouter.reasoning = reasoningSetting(effort);
+    }
     return {
       instructions: enabled
         ? OpenRouterCacheControl.system(instructions, ttl)
         : instructions,
-      providerOptions: OpenRouterCacheControl.sticky(session, ...scope),
+      providerOptions,
     };
   }
 
@@ -130,24 +146,34 @@ export class OpenRouterCacheControl {
     instructions,
     systemTtl = '1h',
     historyTtl = '5m',
+    effort,
   }: {
     session: string;
     scope?: readonly (string | null | undefined)[];
     instructions: string;
     systemTtl?: CacheTtl;
     historyTtl?: CacheTtl;
+    /**
+     * Overrides the model's effort for every step of this agent; omit to keep
+     * the model's. Keep it fixed per agent: changing it restarts the cache.
+     */
+    effort?: ReasoningEffort;
   }): {
     instructions: SystemModelMessage;
     providerOptions: AutoCachedProviderOptions;
   } {
+    const providerOptions: AutoCachedProviderOptions = {
+      openrouter: {
+        session_id: OpenRouterCacheControl.sessionId(session, ...scope),
+        cacheControl: OpenRouterCacheControl.ephemeral(historyTtl),
+      },
+    };
+    if (effort) {
+      providerOptions.openrouter.reasoning = reasoningSetting(effort);
+    }
     return {
       instructions: OpenRouterCacheControl.system(instructions, systemTtl),
-      providerOptions: {
-        openrouter: {
-          session_id: OpenRouterCacheControl.sessionId(session, ...scope),
-          cacheControl: OpenRouterCacheControl.ephemeral(historyTtl),
-        },
-      },
+      providerOptions,
     };
   }
 

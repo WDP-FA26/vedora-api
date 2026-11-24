@@ -152,6 +152,8 @@ export class BlogAssistantService {
           session: 'vedora-blog',
           scope: [userId, dto.id ?? dto.blogId ?? 'default'],
           instructions: BLOG_ASSISTANT_STATIC_INSTRUCTIONS,
+          // Session-scoped chat: 5m, like the meal planner.
+          systemTtl: '5m',
         }),
         maxOutputTokens: MAX_OUTPUT_TOKENS,
         tools,

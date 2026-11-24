@@ -12,8 +12,8 @@ import { SUBAGENT_STATIC_INSTRUCTIONS } from './nutrition-subagent.prompt.js';
 
 const logger = new Logger('NutritionSubagentTool');
 const SUBAGENT_MAX_STEPS = 6;
-/** Room for low-effort thinking plus the answer: thinking counts toward it. */
-const SUBAGENT_MAX_OUTPUT_TOKENS = 4000;
+/** Room for medium-effort thinking plus the answer: thinking counts toward it. */
+const SUBAGENT_MAX_OUTPUT_TOKENS = 8000;
 
 function userNutritionContext(
   nutrition: NutritionProfileDto | null | undefined,
@@ -79,6 +79,10 @@ export function consultNutritionSubagentTool(
           ...OpenRouterCacheControl.agent({
             session: 'vedora-nutrition-subagent',
             instructions: SUBAGENT_STATIC_INSTRUCTIONS,
+            // At low effort it more often answers from memory instead of searching.
+            effort: 'medium',
+            // Runs inside a meal planner session: 5m, like the planner.
+            systemTtl: '5m',
           }),
           maxOutputTokens: SUBAGENT_MAX_OUTPUT_TOKENS,
           tools: {

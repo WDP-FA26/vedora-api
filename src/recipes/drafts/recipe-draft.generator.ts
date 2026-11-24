@@ -27,8 +27,8 @@ import {
 const TIMEOUT_MS = runtimeConfig.RECIPE_DRAFT_TIMEOUT_MS;
 const WEB_RESEARCH_TIMEOUT_MS =
   runtimeConfig.RECIPE_DRAFT_WEB_RESEARCH_TIMEOUT_MS;
-/** Room for low-effort reasoning plus the JSON answer: 700 cut the JSON off. */
-const WEB_RESEARCH_MAX_OUTPUT_TOKENS = 5000;
+/** Room for medium-effort reasoning plus the JSON answer: 700 cut the JSON off. */
+const WEB_RESEARCH_MAX_OUTPUT_TOKENS = 8000;
 
 const calorieResearchSchema = z.object({
   caloriesPerServing: z.number().min(10).max(3000).nullable().optional(),
@@ -127,6 +127,12 @@ export class RecipeDraftGenerator {
         ...OpenRouterCacheControl.singleTurn({
           session: 'vedora-recipe-calorie-research',
           instructions: CALORIE_RESEARCH_INSTRUCTIONS,
+          // At low effort it more often estimates without searching.
+          effort: 'medium',
+          // 5m, not 1h: with web search the loop's own cache writes (~20K
+          // tokens of results, never read again) take this TTL, and 1h bills
+          // them at 2x input instead of 1.25x (~30% more per call, measured).
+          ttl: '5m',
         }),
         prompt: [
           `Hôm nay là ${new Date().toISOString().slice(0, 10)}.`,

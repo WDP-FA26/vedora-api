@@ -9,7 +9,7 @@ import {
   type LanguageModel,
   wrapEmbeddingModel,
 } from 'ai';
-import type { ReasoningEffort } from './reasoning.js';
+import { type ReasoningEffort, reasoningSetting } from './reasoning.js';
 import { openRouterAttribution } from './openrouter-attribution.js';
 
 export {
@@ -100,7 +100,7 @@ export function chatModel({
       ? { provider: { order: [...providerOrder], allow_fallbacks: true } }
       : {};
   return openRouter(apiKey, customFetch)(modelId, {
-    reasoning: { effort: reasoningEffort, exclude: true },
+    reasoning: reasoningSetting(reasoningEffort),
     ...routing,
   });
 }

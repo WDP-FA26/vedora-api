@@ -16,8 +16,8 @@ import {
 import { CALORIE_ESTIMATE_INSTRUCTIONS } from './calorie-estimator.prompt.js';
 
 const TIMEOUT_MS = runtimeConfig.MEAL_LOG_CALORIE_ESTIMATE_TIMEOUT_MS;
-/** Room for low-effort reasoning plus the JSON answer: 700 cut the JSON off. */
-const MAX_OUTPUT_TOKENS = 5000;
+/** Room for medium-effort reasoning plus the JSON answer: 700 cut the JSON off. */
+const MAX_OUTPUT_TOKENS = 8000;
 
 const estimateOutput = z.object({
   caloriesPerServing: z.number().nullable().optional(),
@@ -61,6 +61,12 @@ export class CalorieEstimator {
       ...OpenRouterCacheControl.singleTurn({
         session: 'vedora-calorie-estimator',
         instructions: CALORIE_ESTIMATE_INSTRUCTIONS,
+        // At low effort it more often estimates without searching.
+        effort: 'medium',
+        // 5m, not 1h: with web search the loop's own cache writes (~20K
+        // tokens of results, never read again) take this TTL, and 1h bills
+        // them at 2x input instead of 1.25x (~30% more per call, measured).
+        ttl: '5m',
       }),
       prompt: `Hôm nay là ${new Date().toISOString().slice(0, 10)}.\n<dish>\n${lines.join('\n')}\n</dish>`,
       maxOutputTokens: MAX_OUTPUT_TOKENS,

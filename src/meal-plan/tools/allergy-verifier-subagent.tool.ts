@@ -123,6 +123,10 @@ async function runSemanticAllergyAudit(
     ...OpenRouterCacheControl.singleTurn({
       session: 'vedora-allergy-verifier',
       instructions: ALLERGY_AUDIT_INSTRUCTIONS,
+      // A missed allergen is a safety failure; this call is rare and short.
+      effort: 'high',
+      // Runs inside a meal planner session: 5m, like the planner.
+      ttl: '5m',
     }),
     prompt: [
       `<allergy_profile>`,

@@ -186,11 +186,10 @@ describe('BlogAssistantService', () => {
 
     expect(replyText(chunks)).toBe('Mình đã đề xuất bản sửa.');
     const { prompt, tools, providerOptions } = model.doStreamCalls[0];
-    expect(prompt[0]).toMatchObject({
-      role: 'system',
-      providerOptions: {
-        openrouter: { cacheControl: { type: 'ephemeral', ttl: '1h' } },
-      },
+    expect(prompt[0]).toMatchObject({ role: 'system' });
+    // Session-scoped chat: its system prefix uses the 5m cache, not 1h.
+    expect(prompt[0].providerOptions?.openrouter?.cacheControl).toEqual({
+      type: 'ephemeral',
     });
     expect(JSON.stringify(prompt[0].content)).not.toContain('<draft>\\n');
     const userPromptText = JSON.stringify(

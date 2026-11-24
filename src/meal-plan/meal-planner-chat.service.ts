@@ -200,6 +200,13 @@ export class MealPlannerChatService {
           session: 'vedora-planner',
           scope: [userId, activeThreadId],
           instructions: plannerStaticInstructions(allowWebSearch),
+          // Long prompt, many tools, up to 20 steps: at low effort Haiku 5.5
+          // is more likely to skip a lookup or a check.
+          effort: 'medium',
+          // Session-scoped feature: a user's turns come minutes apart, so the
+          // 5m write (1.25x input) beats 1h (2x). 1h is for always-busy
+          // prefixes such as moderation.
+          systemTtl: '5m',
         }),
         maxOutputTokens: runtimeConfig.PLANNER_CHAT_MAX_OUTPUT_TOKENS,
         tools: {
