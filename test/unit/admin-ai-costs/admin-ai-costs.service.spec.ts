@@ -144,6 +144,7 @@ describe('AdminAiCostsService', () => {
         outputTokens: 0,
         reasoningTokens: 0,
         cachedTokens: 0,
+        cacheWriteTokens: 0,
         unknownTokenCalls: 0,
         turns: 0,
         fullyPricedTurns: 0,
@@ -165,6 +166,7 @@ describe('AdminAiCostsService', () => {
           outputTokens: 5,
           reasoningTokens: 2,
           cachedTokens: 1,
+          cacheWriteTokens: 3,
         });
       }
       // Incomplete / duplicate / pending / failed calls excluded from fully-priced mean/P95.
@@ -208,6 +210,7 @@ describe('AdminAiCostsService', () => {
         outputTokens: 100,
         reasoningTokens: 40,
         cachedTokens: 20,
+        cacheWriteTokens: 60,
         unknownTokenCalls: 3,
         turns: 23,
         fullyPricedTurns: 20,
@@ -380,6 +383,7 @@ describe('AdminAiCostsService', () => {
       const row = await seed(null, {
         generationId: 'gen-reconcile-ok',
         status: 'ABORTED',
+        cacheWriteTokens: 25,
       });
       vi.stubGlobal(
         'fetch',
@@ -411,6 +415,7 @@ describe('AdminAiCostsService', () => {
         outputTokens: 30,
         reasoningTokens: 5,
         cachedTokens: 10,
+        cacheWriteTokens: 25,
       });
       expect(updated.reconciledAt).not.toBeNull();
     });

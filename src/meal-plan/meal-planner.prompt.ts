@@ -162,10 +162,26 @@ function nutritionSummary(
   return lines.join('\n');
 }
 
-export function plannerInstructions(
+function stripPlannerContextTags(text: string): string {
+  return text.replace(/<\/?(?:planner_context|system-reminder)\b[^>]*>?/gi, '');
+}
+
+/**
+ * Static planner rules and web-search capability note, safe to cache across
+ * users and turns.
+ */
+export function plannerStaticInstructions(allowWebSearch = false): string {
+  const webSearch = allowWebSearch ? WEB_SEARCH_ALLOWED : WEB_SEARCH_ASK;
+  return `${RULES}\n\n${webSearch}`;
+}
+
+/**
+ * Per-user and per-week dynamic context placed in the latest user turn so
+ * the static system prefix remains cacheable.
+ */
+export function plannerDynamicContext(
   restrictions: DietaryRestrictionsDto,
   plan: MealPlanDto,
-  allowWebSearch = false,
   nutrition?: NutritionProfileDto | null,
 ): string {
   const avoided = [
@@ -201,29 +217,36 @@ export function plannerInstructions(
       : '';
     return `- ${DAY_NAMES[day]}: ${filled.length > 0 ? filled.join('; ') : '(trống)'}${nutritionNote}`;
   });
-  const webSearch = allowWebSearch ? WEB_SEARCH_ALLOWED : WEB_SEARCH_ASK;
-  return `${RULES}
+  const allergyNote = restrictions.allergyNote?.trim()
+    ? stripPlannerContextTags(restrictions.allergyNote.trim())
+    : 'chưa mô tả thêm';
+  const preferenceNote = restrictions.preferenceNote?.trim()
+    ? stripPlannerContextTags(restrictions.preferenceNote.trim())
+    : 'chưa có';
 
-${webSearch}
-
-${plannerCalendar(plan)}
+  return `${plannerCalendar(plan)}
 
 ${nutritionSummary(nutrition)}
 
 Thực phẩm người dùng không ăn (searchRecipes và getRecipe vẫn trả món chứa chúng, đánh dấu AVOIDED): ${
     avoided.length > 0 ? avoided.join(', ') : 'chưa khai báo gì'
   }.
-Mô tả dị ứng & lưu ý ăn uống của người dùng (mục Dị ứng trong Hồ sơ ăn uống, bạn bổ sung bằng updateAllergyNote): ${
-    restrictions.allergyNote?.trim()
-      ? restrictions.allergyNote.trim()
-      : 'chưa mô tả thêm'
-  }.
-Sở thích và thói quen người dùng (mục "Sở thích" trong Hồ sơ ăn uống, bạn cập nhật bằng updatePreferences; tôn trọng khi lên món): ${
-    restrictions.preferenceNote?.trim()
-      ? restrictions.preferenceNote.trim()
-      : 'chưa có'
-  }.
+Mô tả dị ứng & lưu ý ăn uống của người dùng (mục Dị ứng trong Hồ sơ ăn uống, bạn bổ sung bằng updateAllergyNote): ${allergyNote}.
+Sở thích và thói quen người dùng (mục "Sở thích" trong Hồ sơ ăn uống, bạn cập nhật bằng updatePreferences; tôn trọng khi lên món): ${preferenceNote}.
 
 Thực đơn hiện tại của tuần người dùng đang xem (weekStart ${plan.weekStart}, gọi getPlan để xem tuần khác):
 ${days.join('\n')}`;
+}
+
+export function plannerInstructions(
+  restrictions: DietaryRestrictionsDto,
+  plan: MealPlanDto,
+  allowWebSearch = false,
+  nutrition?: NutritionProfileDto | null,
+): string {
+  return `${plannerStaticInstructions(allowWebSearch)}\n\n${plannerDynamicContext(
+    restrictions,
+    plan,
+    nutrition,
+  )}`;
 }

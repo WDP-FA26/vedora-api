@@ -189,6 +189,7 @@ export class AiCostTransportService {
       outputTokens,
       reasoningTokens,
       cachedTokens,
+      cacheWriteTokens,
     } = observation;
     // chargeKey is assigned only with a reported cost; a later attempt can supply missing cost.
     const chargeKey =
@@ -203,6 +204,7 @@ export class AiCostTransportService {
       outputTokens,
       reasoningTokens,
       cachedTokens,
+      cacheWriteTokens,
       costUsd:
         observation.costUsd === null
           ? null

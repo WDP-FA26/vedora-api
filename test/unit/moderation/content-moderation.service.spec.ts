@@ -223,6 +223,26 @@ describe('ContentModerationService', () => {
     const assessment = await service.review(text('x'), draft);
     expect(assessment.category).toBe('manipulation');
     expect(model.lastCall?.instructions).toContain('\nspam: Unrelated ads.');
+    expect(model.lastCall?.options.prompt[0]).not.toHaveProperty(
+      'providerOptions.openrouter.cacheControl',
+    );
+  });
+
+  it('caches live policy instructions with 1h TTL and sticky session_id', async () => {
+    const { service, model } = serviceAnswering({
+      riskLevel: 0,
+      category: null,
+    });
+    await service.review(text('cơm chay thanh đạm'));
+    expect(model.lastCall?.options.prompt[0]).toMatchObject({
+      role: 'system',
+      providerOptions: {
+        openrouter: { cacheControl: { type: 'ephemeral', ttl: '1h' } },
+      },
+    });
+    expect(model.lastCall?.options.providerOptions?.openrouter).toEqual({
+      session_id: 'vedora-content-moderation',
+    });
   });
 });
 

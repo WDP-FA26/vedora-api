@@ -26,6 +26,7 @@ export class AiCostCall extends Identified {
   @Prop({ type: Number, default: null }) outputTokens!: number | null;
   @Prop({ type: Number, default: null }) reasoningTokens!: number | null;
   @Prop({ type: Number, default: null }) cachedTokens!: number | null;
+  @Prop({ type: Number, default: null }) cacheWriteTokens!: number | null;
   @Prop({
     type: String,
     enum: ['PENDING', 'SUCCEEDED', 'FAILED', 'ABORTED'],

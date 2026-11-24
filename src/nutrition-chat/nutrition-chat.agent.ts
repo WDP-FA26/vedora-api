@@ -1,5 +1,6 @@
 import { runtimeConfig } from '../config/runtime-config.js';
 import { isStepCount, type LanguageModel, ToolLoopAgent } from 'ai';
+import { OpenRouterCacheControl } from '../ai/openrouter.js';
 import { searchKnowledgeTool } from '../knowledge/tools/search-knowledge.tool.js';
 import type { KnowledgeSearchService } from '../knowledge/retrieval/knowledge-search.service.js';
 import { INSTRUCTIONS } from './nutrition-chat.prompt.js';
@@ -20,12 +21,14 @@ export class NutritionAgent extends ToolLoopAgent<never, NutritionTools> {
   constructor({ model, knowledge }: NutritionAgentOptions) {
     super({
       model,
-      instructions: INSTRUCTIONS,
+      ...OpenRouterCacheControl.agent({
+        session: 'vedora-nutrition-chat',
+        instructions: INSTRUCTIONS,
+      }),
       maxOutputTokens: MAX_OUTPUT_TOKENS,
       tools: { searchKnowledge: searchKnowledgeTool(knowledge) },
       stopWhen: isStepCount(MAX_STEPS),
-      prepareStep: ({ stepNumber }) =>
-        stepNumber === MAX_STEPS - 1 ? { toolChoice: 'none' } : {},
+      prepareStep: OpenRouterCacheControl.finalStepGuard(MAX_STEPS),
     });
   }
 }

@@ -27,7 +27,7 @@ describe('provider billing metadata', () => {
           input_tokens: 100,
           output_tokens: 50,
           output_tokens_details: { reasoning_tokens: 20 },
-          input_tokens_details: { cached_tokens: 70 },
+          input_tokens_details: { cached_tokens: 70, cache_write_tokens: 15 },
         },
       },
     });
@@ -38,6 +38,7 @@ describe('provider billing metadata', () => {
       outputTokens: 50,
       reasoningTokens: 20,
       cachedTokens: 70,
+      cacheWriteTokens: 15,
     });
   });
   it('handles arbitrary UTF8 and SSE chunk boundaries and terminal usage', () => {

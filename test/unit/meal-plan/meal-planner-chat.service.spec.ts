@@ -10,6 +10,10 @@ import { APICallError, simulateReadableStream, type UIMessageChunk } from 'ai';
 import { convertReadableStreamToArray, MockLanguageModelV4 } from 'ai/test';
 import { type DeepMockProxy, mockDeep } from 'vitest-mock-extended';
 import { AiModule } from '../../../src/ai/ai.module.js';
+import {
+  DEFAULT_MODERATION_PROVIDER_ORDER,
+  providerOrderFrom,
+} from '../../../src/ai/openrouter.js';
 import { NUTRITION_POLICY } from '../../../src/ai/guardrails/policies/nutrition.js';
 import { AiCostTransportService } from '../../../src/ai/telemetry/ai-cost-transport.service.js';
 import { FeatureUnavailableException } from '../../../src/common/exceptions/feature-unavailable.exception.js';
@@ -299,6 +303,10 @@ describe('MealPlannerChatService', () => {
 
     expect(languageModel).toHaveBeenCalledWith(MODERATION_MODEL_ID, {
       reasoning: { effort: 'low', exclude: true },
+      provider: {
+        order: providerOrderFrom(DEFAULT_MODERATION_PROVIDER_ORDER),
+        allow_fallbacks: true,
+      },
     });
     expect(moderator.lastCall?.instructions).toContain(
       NUTRITION_POLICY.instructions,
@@ -325,6 +333,23 @@ describe('MealPlannerChatService', () => {
       'searchRestaurantDishes',
       'requestWebSearch',
     ]);
+    const [system, userMsg] = model.doStreamCalls[0].prompt;
+    expect(system).toMatchObject({
+      role: 'system',
+      providerOptions: {
+        openrouter: { cacheControl: { type: 'ephemeral', ttl: '1h' } },
+      },
+    });
+    expect(JSON.stringify(system.content)).not.toContain('Hôm nay là');
+    expect(JSON.stringify(userMsg)).toContain('<planner_context>');
+    expect(model.doStreamCalls[0].providerOptions?.openrouter).toMatchObject({
+      cacheControl: { type: 'ephemeral' },
+    });
+    const plannerOr = JSON.stringify(
+      model.doStreamCalls[0].providerOptions?.openrouter,
+    );
+    expect(plannerOr).toMatch(/"session_id":"vedora-planner-[a-f0-9]{24}"/);
+    expect(plannerOr).not.toContain(USER_ID);
     expect(aiUsage.complete).toHaveBeenCalledWith(TICKET);
     expect(aiUsage.refund).not.toHaveBeenCalled();
   });
@@ -455,6 +480,7 @@ describe('MealPlannerChatService', () => {
     expect(model.doStreamCalls).toHaveLength(maxSteps);
     const lastCall = model.doStreamCalls[maxSteps - 1];
     expect(lastCall.toolChoice).toEqual({ type: 'none' });
+    expect(lastCall.prompt[0]).toEqual(model.doStreamCalls[0].prompt[0]);
     expect(JSON.stringify(lastCall.prompt)).toContain('bước cuối của lượt này');
     expect(JSON.stringify(model.doStreamCalls[0].prompt)).not.toContain(
       'bước cuối của lượt này',

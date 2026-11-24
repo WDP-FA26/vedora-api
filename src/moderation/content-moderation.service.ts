@@ -10,7 +10,7 @@ import {
 } from 'ai';
 import { FeatureUnavailableException } from '../common/exceptions/feature-unavailable.exception.js';
 import { UnprocessableContentException } from '../common/exceptions/unprocessable-content.exception.js';
-import { cachedInstructions, stickySession } from '../ai/openrouter.js';
+import { OpenRouterCacheControl } from '../ai/openrouter.js';
 import type { ModerationEvidence } from '../mongo/models.js';
 import {
   type EvidenceSources,
@@ -191,9 +191,12 @@ export class ContentModerationService {
         maxRetries: MAX_RETRIES,
         maxOutputTokens: MAX_OUTPUT_TOKENS,
         abortSignal: AbortSignal.timeout(TIMEOUT_MS),
-        instructions: cachedInstructions(reviewInstructions(policy)),
+        ...OpenRouterCacheControl.singleTurn({
+          session: SESSION_ID,
+          instructions: reviewInstructions(policy),
+          enabled: draftPolicy === undefined,
+        }),
         messages: [{ role: 'user', content: reviewMessageParts(readable) }],
-        providerOptions: stickySession(SESSION_ID),
         output: Output.object({
           schema: reviewOutput(categoryKeys(policy)),
           name: 'content_review',

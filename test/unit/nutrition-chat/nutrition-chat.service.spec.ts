@@ -11,6 +11,10 @@ import { APICallError, simulateReadableStream, type UIMessageChunk } from 'ai';
 import { convertReadableStreamToArray, MockLanguageModelV4 } from 'ai/test';
 import { type DeepMockProxy, mockDeep } from 'vitest-mock-extended';
 import { AiModule } from '../../../src/ai/ai.module.js';
+import {
+  DEFAULT_MODERATION_PROVIDER_ORDER,
+  providerOrderFrom,
+} from '../../../src/ai/openrouter.js';
 import { AiCostTransportService } from '../../../src/ai/telemetry/ai-cost-transport.service.js';
 import { ModerationSettingsService } from '../../../src/moderation/moderation-settings.service.js';
 import { NUTRITION_POLICY } from '../../../src/ai/guardrails/policies/nutrition.js';
@@ -173,8 +177,17 @@ describe('NutritionChatService', () => {
       reasoning: { effort: 'low', exclude: true },
     });
     expect(replyText(chunks)).toBe('Ăn đậu phụ');
-    const { prompt } = model.doStreamCalls[0];
-    expect(prompt[0].role).toBe('system');
+    const { prompt, providerOptions } = model.doStreamCalls[0];
+    expect(prompt[0]).toMatchObject({
+      role: 'system',
+      providerOptions: {
+        openrouter: { cacheControl: { type: 'ephemeral', ttl: '1h' } },
+      },
+    });
+    expect(providerOptions?.openrouter).toEqual({
+      session_id: 'vedora-nutrition-chat',
+      cacheControl: { type: 'ephemeral' },
+    });
     expect(prompt.slice(1).map((message) => message.role)).toEqual([
       'user',
       'assistant',
@@ -187,6 +200,10 @@ describe('NutritionChatService', () => {
 
     expect(languageModel).toHaveBeenCalledWith(MODERATION_MODEL_ID, {
       reasoning: { effort: 'low', exclude: true },
+      provider: {
+        order: providerOrderFrom(DEFAULT_MODERATION_PROVIDER_ORDER),
+        allow_fallbacks: true,
+      },
     });
     expect(moderator.calls).toHaveLength(1);
     expect(moderator.lastCall?.instructions).toContain(

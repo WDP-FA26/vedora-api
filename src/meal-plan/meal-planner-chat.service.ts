@@ -9,6 +9,7 @@ import {
   type ToolSet,
   toUIMessageStream,
 } from 'ai';
+import { OpenRouterCacheControl } from '../ai/openrouter.js';
 import { cannedReply } from '../ai/chat/canned-reply.js';
 import { chatErrorCode } from '../ai/chat/errors.js';
 import { replyFilter } from '../ai/chat/reply-filter.js';
@@ -26,7 +27,10 @@ import type { PlannerMessageDto } from './dto/meal-plan.dto.js';
 import { MealLogService } from './meal-log/meal-log.service.js';
 import { MealPlanService } from './meal-plan.service.js';
 import { MealPlannerChatHistoryService } from './meal-planner-chat-history.service.js';
-import { plannerInstructions } from './meal-planner.prompt.js';
+import {
+  plannerDynamicContext,
+  plannerStaticInstructions,
+} from './meal-planner.prompt.js';
 import { PLANNER_REFUSALS } from './meal-planner.refusals.js';
 import { editPlanTool } from './tools/edit-plan.tool.js';
 import { verifyMealPlanAllergiesTool } from './tools/allergy-verifier-subagent.tool.js';
@@ -65,6 +69,10 @@ const LAST_STEP_NOTE = `
 export interface PlannerChatOptions {
   /** The user allowed web search in this chat. */
   allowWebSearch?: boolean;
+}
+
+function stripPlannerTags(text: string): string {
+  return text.replace(/<\/?(?:planner_context|system-reminder)\b[^>]*>?/gi, '');
 }
 
 /**
@@ -181,15 +189,18 @@ export class MealPlannerChatService {
         if (index >= 0) avoidedTerms.splice(index, 1);
         if (note) avoidedTerms.push(note);
       };
-      const instructions = plannerInstructions(
+      const dynamicContext = plannerDynamicContext(
         restrictions,
         plan,
-        allowWebSearch,
         nutrition,
       );
       const agent = new ToolLoopAgent({
         model: this.model,
-        instructions,
+        ...OpenRouterCacheControl.agent({
+          session: 'vedora-planner',
+          scope: [userId, activeThreadId],
+          instructions: plannerStaticInstructions(allowWebSearch),
+        }),
         maxOutputTokens: runtimeConfig.PLANNER_CHAT_MAX_OUTPUT_TOKENS,
         tools: {
           searchKnowledge: searchKnowledgeTool(this.knowledge),
@@ -237,17 +248,20 @@ export class MealPlannerChatService {
           ...webTools(allowWebSearch),
         },
         stopWhen: isStepCount(MAX_STEPS),
-        prepareStep: ({ stepNumber }) => {
-          if (stepNumber < MAX_STEPS - 1) return {};
-          return {
-            toolChoice: 'none',
-            instructions: `${instructions}${LAST_STEP_NOTE}`,
-          };
-        },
+        prepareStep: OpenRouterCacheControl.finalStepGuard(
+          MAX_STEPS,
+          LAST_STEP_NOTE,
+        ),
       });
 
       const result = await agent.stream({
-        messages: messages.map(({ role, text }) => ({ role, content: text })),
+        messages: OpenRouterCacheControl.withUserContext(
+          messages.map(({ role, text }) => ({
+            role,
+            content: stripPlannerTags(text),
+          })),
+          `<planner_context>\n${dynamicContext}\n</planner_context>`,
+        ),
         abortSignal,
         timeout: {
           tools: {

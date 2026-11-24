@@ -14,6 +14,7 @@ import {
   toUIMessageStream,
   type UIMessage,
 } from 'ai';
+import { OpenRouterCacheControl } from '../../../ai/openrouter.js';
 import { cannedReply } from '../../../ai/chat/canned-reply.js';
 import { chatErrorCode } from '../../../ai/chat/errors.js';
 import { replyFilter } from '../../../ai/chat/reply-filter.js';
@@ -50,7 +51,8 @@ import {
   blogRefusal,
 } from './blog-assistant.moderation.js';
 import {
-  blogAssistantInstructions,
+  BLOG_ASSISTANT_STATIC_INSTRUCTIONS,
+  blogEditorContext,
   type LinkedRecipe,
 } from './blog-assistant.prompt.js';
 import {
@@ -149,18 +151,25 @@ export class BlogAssistantService {
 
       const agent = new ToolLoopAgent({
         model: this.model,
-        instructions: blogAssistantInstructions(dto.editor, recipes),
+        ...OpenRouterCacheControl.agent({
+          session: 'vedora-blog',
+          scope: [userId, dto.id ?? dto.blogId ?? 'default'],
+          instructions: BLOG_ASSISTANT_STATIC_INSTRUCTIONS,
+        }),
         maxOutputTokens: MAX_OUTPUT_TOKENS,
         tools,
         stopWhen: isStepCount(MAX_STEPS),
-        prepareStep: ({ stepNumber }) =>
-          stepNumber === MAX_STEPS - 1 ? { toolChoice: 'none' } : {},
+        prepareStep: OpenRouterCacheControl.finalStepGuard(MAX_STEPS),
+      });
+      const modelMessages = await convertToModelMessages(messages, {
+        tools,
+        ignoreIncompleteToolCalls: true,
       });
       const result = await agent.stream({
-        messages: await convertToModelMessages(messages, {
-          tools,
-          ignoreIncompleteToolCalls: true,
-        }),
+        messages: OpenRouterCacheControl.withUserContext(
+          modelMessages,
+          blogEditorContext(dto.editor, recipes),
+        ),
         abortSignal,
         timeout: { tools: { searchKnowledgeMs: SEARCH_TIMEOUT_MS } },
         experimental_transform: replyFilter(),

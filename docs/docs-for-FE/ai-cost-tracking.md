@@ -8,7 +8,7 @@ Không đổi model, quota, giới hạn token, chính sách subscription hay th
 
 - Collection `ai_cost_calls`: một bản ghi cho mỗi HTTP attempt đến OpenRouter qua các client đã tích hợp. Retry của SDK tạo attempt riêng; các bước/continuation được liên kết bằng `turnId`, mỗi HTTP request vào Vedora có `executionId` riêng.
 - Bao phủ client chat mặc định/blog, evaluation/moderation, embedding mặc định/post search, image generate/edit, REST knowledge embedding/OCR/rerank và transcription. Kiểm duyệt chat (guardrail) và kiểm duyệt nội dung đều gọi Claude Haiku qua `/api/v1/chat/completions`; các API còn lại cũng dùng `/api/v1/*`.
-- Lưu model yêu cầu, model/provider thực sự được trả về nếu có, generation ID, thời gian, trạng thái, input/output/reasoning/cache, USD và nguồn chi phí. Không lưu prompt, output hội thoại, ảnh/base64, header Authorization hoặc API key.
+- Lưu model yêu cầu, model/provider thực sự được trả về nếu có, generation ID, thời gian, trạng thái, input/output/reasoning/cache (`cachedTokens`, `cacheWriteTokens`), USD và nguồn chi phí. Không lưu prompt, output hội thoại, ảnh/base64, header Authorization hoặc API key.
 - `costUsd` lưu Decimal128. `null` nghĩa là chưa biết; `0` chỉ khi provider báo số 0. Không suy giá từ bảng niêm yết, không lấy `upstream_inference_cost` cộng vào `usage.cost` lần nữa. Reasoning/cache là chi tiết token, không cộng lặp vào output/input tổng.
 - Khi có generation ID và chi phí, unique `chargeKey` ngăn cộng trùng cùng generation. Attempt trùng vẫn giữ lại với `duplicateCharge:true`, chi phí rỗng; không coi là một khoản phí chưa biết. Turn chỉ gồm duplicate không được đưa vào mẫu mean/P95 như một lượt miễn phí.
 - `PENDING`: đã ghi trước khi gửi provider. `SUCCEEDED`, `FAILED`, `ABORTED`: trạng thái đọc HTTP response/stream, không phải trạng thái lưu bài/ảnh hay quota. Một call provider thành công vẫn bị tính tiền nếu upload sau đó lỗi hoặc quota được refund.
@@ -34,7 +34,7 @@ Mặc định 30 ngày gần nhất theo Asia/Bangkok (UTC+7). Lọc theo thời
 Response gồm:
 
 - `currency:"USD"`, `scope:"MATCHED_CALLS"`, `generatedAt`, `range`.
-- `summary`: tổng attempt, known/unknown/duplicate/pending/failed, `knownSpendUsd`, các token tổng và `unknownTokenCalls`; số turn, turn đủ dữ liệu, mean và P95 của turn đủ dữ liệu.
+- `summary`: tổng attempt, known/unknown/duplicate/pending/failed, `knownSpendUsd`, các token tổng (`inputTokens`, `outputTokens`, `reasoningTokens`, `cachedTokens`, `cacheWriteTokens`) và `unknownTokenCalls`; số turn, turn đủ dữ liệu, mean và P95 của turn đủ dữ liệu.
 - `daily`: tổng theo ngày UTC+7; không tạo cột cho ngày chưa có attempt.
 - `groups`: tối đa 100 nhóm model/feature/operation có chi phí đã biết cao nhất; `groupsLimit:100`.
 - `expensiveTurns`: tối đa 20 turn có tổng chi phí đã biết cao nhất, kèm số call thiếu chi phí và pending.

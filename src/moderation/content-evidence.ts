@@ -228,7 +228,7 @@ export function reviewMessageParts(
   });
   parts.push({
     type: 'text',
-    text: '</content>',
+    text: '</content>\nRate the member content above against the unsafe categories and answer with the JSON object.',
   });
   return parts;
 }

@@ -40,6 +40,7 @@ export class CostObservation {
   outputTokens: number | null = null;
   reasoningTokens: number | null = null;
   cachedTokens: number | null = null;
+  cacheWriteTokens: number | null = null;
   failed = false;
   accept(value: unknown): void {
     const root = object(value),
@@ -60,11 +61,12 @@ export class CostObservation {
         object(usage.completion_tokens_details ?? usage.output_tokens_details)
           .reasoning_tokens,
       ) ?? this.reasoningTokens;
-    this.cachedTokens =
-      count(
-        object(usage.prompt_tokens_details ?? usage.input_tokens_details)
-          .cached_tokens,
-      ) ?? this.cachedTokens;
+    const promptDetails = object(
+      usage.prompt_tokens_details ?? usage.input_tokens_details,
+    );
+    this.cachedTokens = count(promptDetails.cached_tokens) ?? this.cachedTokens;
+    this.cacheWriteTokens =
+      count(promptDetails.cache_write_tokens) ?? this.cacheWriteTokens;
     if (
       root.error ||
       data.error ||

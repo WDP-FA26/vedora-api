@@ -37,6 +37,7 @@ const metrics = {
   outputTokens: { $sum: { $ifNull: ['$outputTokens', 0] } },
   reasoningTokens: { $sum: { $ifNull: ['$reasoningTokens', 0] } },
   cachedTokens: { $sum: { $ifNull: ['$cachedTokens', 0] } },
+  cacheWriteTokens: { $sum: { $ifNull: ['$cacheWriteTokens', 0] } },
   unknownTokenCalls: sumIf({
     $or: [{ $eq: ['$inputTokens', null] }, { $eq: ['$outputTokens', null] }],
   }),
@@ -53,6 +54,7 @@ interface Metrics {
   outputTokens: number;
   reasoningTokens: number;
   cachedTokens: number;
+  cacheWriteTokens: number;
   unknownTokenCalls: number;
 }
 const empty: Metrics = {
@@ -67,6 +69,7 @@ const empty: Metrics = {
   outputTokens: 0,
   reasoningTokens: 0,
   cachedTokens: 0,
+  cacheWriteTokens: 0,
   unknownTokenCalls: 0,
 };
 const publicMetrics = (m: Metrics) => ({
@@ -303,6 +306,7 @@ export class AdminAiCostsService {
       outputTokens: row.outputTokens,
       reasoningTokens: row.reasoningTokens,
       cachedTokens: row.cachedTokens,
+      cacheWriteTokens: row.cacheWriteTokens,
       startedAt: row.startedAt.toISOString(),
       finishedAt: row.finishedAt?.toISOString() ?? null,
       reconciledAt: row.reconciledAt?.toISOString() ?? null,
@@ -357,6 +361,7 @@ export class AdminAiCostsService {
       'outputTokens',
       'reasoningTokens',
       'cachedTokens',
+      'cacheWriteTokens',
       'startedAt',
       'finishedAt',
       'reconciledAt',
@@ -429,7 +434,10 @@ export class AdminAiCostsService {
         completion_tokens_details: {
           reasoning_tokens: data.nativeTokensReasoning,
         },
-        prompt_tokens_details: { cached_tokens: data.nativeTokensCached },
+        prompt_tokens_details: {
+          cached_tokens: data.nativeTokensCached ?? row.cachedTokens,
+          cache_write_tokens: row.cacheWriteTokens,
+        },
       },
     });
     if (observation.costUsd === null)

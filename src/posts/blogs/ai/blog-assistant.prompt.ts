@@ -16,12 +16,17 @@ export interface LinkedRecipe {
 
 const RULES = loadTextConfig(runtimeConfig.BLOG_SYSTEM_PROMPT_FILE);
 
-export function blogAssistantInstructions(
+export const BLOG_ASSISTANT_STATIC_INSTRUCTIONS = RULES;
+
+/**
+ * Per-request editor state and linked recipe facts placed in the latest user
+ * turn so the static system prefix remains cacheable across edits and users.
+ */
+export function blogEditorContext(
   editor: EditorSnapshot,
   recipes: LinkedRecipe[],
 ): string {
   const parts = [
-    RULES,
     `<title>${escape(editor.title)}</title>`,
     `<draft>\n${escape(editor.content) || '(bản nháp đang trống)'}\n</draft>`,
   ];
@@ -32,6 +37,13 @@ export function blogAssistantInstructions(
       `<recipes>\n${recipes.map(describeRecipe).join('\n')}\n</recipes>`,
     );
   return parts.join('\n\n');
+}
+
+export function blogAssistantInstructions(
+  editor: EditorSnapshot,
+  recipes: LinkedRecipe[],
+): string {
+  return `${BLOG_ASSISTANT_STATIC_INSTRUCTIONS}\n\n${blogEditorContext(editor, recipes)}`;
 }
 
 function describeRecipe(recipe: LinkedRecipe): string {

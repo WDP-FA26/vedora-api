@@ -936,12 +936,17 @@ describe('Meal planner AI tools', () => {
         avoidedIngredients: ['Hành'],
       });
 
+      const spyModel = new MockLanguageModelV4();
       const toolDef = verifyMealPlanAllergiesTool(
-        new MockLanguageModelV4(),
+        spyModel,
         mealPlan,
         userId,
         WEEK,
-        { ingredients: [{ id: 'ing-1', name: 'Hành' }], groups: [] },
+        {
+          ingredients: [{ id: 'ing-1', name: 'Hành' }],
+          groups: [],
+          allergyNote: 'Dị ứng đậu phộng',
+        },
       );
       const output = await toolDef.execute?.(
         { replaceFlagged: false },
@@ -952,6 +957,7 @@ describe('Meal planner AI tools', () => {
       }
 
       expect(output.safe).toBe(false);
+      expect(spyModel.doGenerateCalls).toHaveLength(0);
       expect(output.flaggedDishes).toEqual([
         {
           day: Weekday.MON,

@@ -1,10 +1,14 @@
 import { runtimeConfig } from '../../config/runtime-config.js';
-import { Injectable } from '@nestjs/common';
+import { Injectable, Optional } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { AiService } from '@nestjs/ai';
+import { AiService, InjectModel } from '@nestjs/ai';
+import { generateText, type LanguageModel, Output } from 'ai';
 import { z } from 'zod';
 import { loadTextConfig } from '../../config/config-files.js';
-import { DEFAULT_CHAT_MODEL } from '../../ai/openrouter.js';
+import {
+  DEFAULT_CHAT_MODEL,
+  OpenRouterCacheControl,
+} from '../../ai/openrouter.js';
 import { RecipeTag } from '../../mongo/models.js';
 import type { PostSourcePart } from './post-source.js';
 
@@ -49,6 +53,7 @@ export class PostSummaryGenerator {
   constructor(
     private readonly ai: AiService,
     config: ConfigService,
+    @Optional() @InjectModel() private readonly model?: LanguageModel,
   ) {
     this.modelId = config.get<string>('OPENROUTER_MODEL', DEFAULT_CHAT_MODEL);
   }
@@ -58,10 +63,26 @@ export class PostSummaryGenerator {
     for (const part of parts) {
       sections.push(`## ${part.label}\n${part.text}`);
     }
+    const prompt = `<post>\n${sections.join('\n\n')}\n</post>`;
+    if (this.model) {
+      const result = await generateText({
+        model: this.model,
+        ...OpenRouterCacheControl.singleTurn({
+          session: 'vedora-post-summary',
+          instructions: INSTRUCTIONS,
+        }),
+        prompt,
+        output: Output.object({ schema: summaryOutput, name: 'post_summary' }),
+        maxRetries: runtimeConfig.AI_DECISION_MAX_RETRIES,
+        abortSignal: AbortSignal.timeout(TIMEOUT_MS),
+      });
+      return result.output;
+    }
     const { object } = await this.ai.generateObject({
       label: 'summarize-post',
       instructions: INSTRUCTIONS,
-      prompt: `<post>\n${sections.join('\n\n')}\n</post>`,
+      prompt,
+      providerOptions: OpenRouterCacheControl.sticky('vedora-post-summary'),
       schema: summaryOutput,
       schemaName: 'post_summary',
       timeout: TIMEOUT_MS,

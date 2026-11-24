@@ -2,6 +2,7 @@ import { runtimeConfig } from '../../config/runtime-config.js';
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { AiService } from '@nestjs/ai';
+import { OpenRouterCacheControl } from '../../ai/openrouter.js';
 import { AiCostTransportService } from '../../ai/telemetry/ai-cost-transport.service.js';
 import { z } from 'zod';
 import { parsePayload, validatePayload } from '../../common/validation.js';
@@ -146,6 +147,11 @@ export class TranscriptionService {
       label: 'translate-captions',
       instructions: `You translate video captions about plant-based cooking from ${languageName(from, 'en')} to ${languageName(to, 'en')}. Return exactly one translated line per input line, in the same order, as {"lines": [...]}. Keep these words unchanged: ${NEVER_TRANSLATE.join(', ')}. Never merge, split or skip lines.`,
       prompt: JSON.stringify(cues.map((cue) => cue.text)),
+      providerOptions: OpenRouterCacheControl.sticky(
+        'vedora-caption-translate',
+        from,
+        to,
+      ),
       schema: translationOutput,
       timeout: '2m',
     });

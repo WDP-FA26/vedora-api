@@ -181,18 +181,33 @@ describe('BlogAssistantService', () => {
     );
   });
 
-  it('gives the agent the draft, the selection and every tool', async () => {
+  it('gives the agent static cached instructions, the draft/selection in the user turn, and every tool', async () => {
     const chunks = await send({});
 
     expect(replyText(chunks)).toBe('Mình đã đề xuất bản sửa.');
-    const { prompt, tools } = model.doStreamCalls[0];
-    expect(prompt[0].role).toBe('system');
-    expect(prompt[0].content).toContain(
-      '<draft>\n# Phở chay\n\nPhở chay ngon.\n</draft>',
+    const { prompt, tools, providerOptions } = model.doStreamCalls[0];
+    expect(prompt[0]).toMatchObject({
+      role: 'system',
+      providerOptions: {
+        openrouter: { cacheControl: { type: 'ephemeral', ttl: '1h' } },
+      },
+    });
+    expect(JSON.stringify(prompt[0].content)).not.toContain('<draft>\\n');
+    const userPromptText = JSON.stringify(
+      prompt.find((message) => message.role === 'user'),
     );
-    expect(prompt[0].content).toContain(
-      '<selection>\nPhở chay ngon.\n</selection>',
+    expect(userPromptText).toContain(
+      '<draft>\\n# Phở chay\\n\\nPhở chay ngon.\\n</draft>',
     );
+    expect(userPromptText).toContain(
+      '<selection>\\nPhở chay ngon.\\n</selection>',
+    );
+    expect(providerOptions?.openrouter).toMatchObject({
+      cacheControl: { type: 'ephemeral' },
+    });
+    const blogOr = JSON.stringify(providerOptions?.openrouter);
+    expect(blogOr).toMatch(/"session_id":"vedora-blog-[a-f0-9]{24}"/);
+    expect(blogOr).not.toContain(USER_ID);
     expect(tools?.map(({ name }) => name).sort()).toEqual([
       'editImage',
       'generateImage',
@@ -334,7 +349,10 @@ describe('BlogAssistantService', () => {
 
     await send({ blogId: blog.id });
 
-    expect(model.doStreamCalls[0].prompt[0].content).toContain(
+    const userMsg = model.doStreamCalls[0].prompt.find(
+      (message) => message.role === 'user',
+    );
+    expect(JSON.stringify(userMsg)).toContain(
       '- Phở nấm (2 người ăn, sơ chế 15 phút): 200 g nấm đùi gà',
     );
   });
@@ -484,14 +502,18 @@ describe('BlogAssistantService', () => {
     });
 
     await send({ blogId: blogWithMissing.id });
-    expect(model.doStreamCalls[0].prompt[0].content).toContain(
-      '- Canh nấm (2 người ăn, nấu 20 phút): hành lá',
-    );
+    expect(
+      JSON.stringify(
+        model.doStreamCalls[0].prompt.find((message) => message.role === 'user'),
+      ),
+    ).toContain('- Canh nấm (2 người ăn, nấu 20 phút): hành lá');
 
     await send({ blogId: emptyRecipeBlog.id });
-    expect(model.doStreamCalls[1].prompt[0].content).not.toContain(
-      '<recipes>\n',
-    );
+    expect(
+      JSON.stringify(
+        model.doStreamCalls[1].prompt.find((message) => message.role === 'user'),
+      ),
+    ).not.toContain('<recipes>\\n');
   });
 
   it('accepts assistant continuation ending with output-error and rejects invalid shapes', async () => {
