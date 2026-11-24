@@ -3,6 +3,8 @@ import { ConfigService } from '@nestjs/config';
 import {
   chatModel,
   DEFAULT_CONTENT_MODERATION_MODEL,
+  DEFAULT_MODERATION_PROVIDER_ORDER,
+  providerOrderFrom,
 } from '../ai/openrouter.js';
 import { AdminModerationController } from './admin-moderation.controller.js';
 import {
@@ -36,6 +38,12 @@ import { AiCostTransportService } from '../ai/telemetry/ai-cost-transport.servic
           // Haiku 5.5's default: judging a policy with disguised words and
           // quoting evidence gains from more thinking than the chat guardrail.
           reasoningEffort: 'medium',
+          providerOrder: providerOrderFrom(
+            config.get<string>(
+              'OPENROUTER_MODERATION_PROVIDER_ORDER',
+              DEFAULT_MODERATION_PROVIDER_ORDER,
+            ),
+          ),
           fetch: costs.forModel(id, 'CONTENT_MODERATION', 'MODERATION'),
         });
         return { id, model };

@@ -7,7 +7,9 @@ import {
   DEFAULT_CHAT_MODEL,
   DEFAULT_EMBEDDING_MODEL,
   DEFAULT_MODERATION_MODEL,
+  DEFAULT_MODERATION_PROVIDER_ORDER,
   embeddingModel,
+  providerOrderFrom,
 } from './openrouter.js';
 import type { ReasoningEffort } from './reasoning.js';
 import { AiTelemetryModule } from './telemetry/ai-telemetry.module.js';
@@ -98,6 +100,12 @@ import { runtimeConfig } from '../config/runtime-config.js';
           apiKey: config.getOrThrow<string>('OPENROUTER_API_KEY'),
           modelId,
           reasoningEffort: 'low',
+          providerOrder: providerOrderFrom(
+            config.get<string>(
+              'OPENROUTER_MODERATION_PROVIDER_ORDER',
+              DEFAULT_MODERATION_PROVIDER_ORDER,
+            ),
+          ),
           fetch: costs.forModel(modelId, 'SYSTEM', 'MODERATION'),
         });
       },

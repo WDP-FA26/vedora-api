@@ -44,23 +44,49 @@ export function stickySession(sessionId: string): {
   return { openrouter: { session_id: sessionId } };
 }
 
+/**
+ * Providers tried first for the Haiku moderation calls, by OpenRouter slug.
+ * One provider first keeps the prompt cache on one provider; the others are
+ * fallbacks when it is down.
+ */
+export const DEFAULT_MODERATION_PROVIDER_ORDER =
+  'claude-on-aws,anthropic,amazon-bedrock,google-vertex,azure';
+
+/** Provider slugs from a comma-separated list; empty leaves routing to OpenRouter. */
+export function providerOrderFrom(value: string): string[] {
+  const order: string[] = [];
+  for (const slug of value.split(',')) {
+    const trimmed = slug.trim();
+    if (trimmed) order.push(trimmed);
+  }
+  return order;
+}
+
 export function chatModel({
   apiKey,
   modelId,
   reasoningEffort = 'low',
+  providerOrder = [],
   fetch: customFetch,
 }: {
   apiKey: string;
   modelId: string;
   reasoningEffort?: ReasoningEffort;
+  /** OpenRouter provider slugs to try in this order, falling back to the rest. */
+  providerOrder?: readonly string[];
   fetch?: typeof fetch;
 }): Exclude<LanguageModel, string> {
+  const routing =
+    providerOrder.length > 0
+      ? { provider: { order: [...providerOrder], allow_fallbacks: true } }
+      : {};
   return createOpenRouter({
     apiKey,
     fetch: customFetch,
     baseURL: runtimeConfig.OPENROUTER_API_BASE_URL,
   })(modelId, {
     reasoning: { effort: reasoningEffort, exclude: true },
+    ...routing,
   });
 }
 

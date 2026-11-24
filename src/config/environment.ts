@@ -18,6 +18,7 @@ import {
 import {
   DEFAULT_CONTENT_MODERATION_MODEL,
   DEFAULT_MODERATION_MODEL,
+  DEFAULT_MODERATION_PROVIDER_ORDER,
 } from '../ai/openrouter.js';
 import { REASONING_EFFORTS } from '../ai/reasoning.js';
 import {
@@ -205,6 +206,10 @@ export class EnvironmentVariables {
 
   @IsString()
   OPENROUTER_CONTENT_MODERATION_MODEL = DEFAULT_CONTENT_MODERATION_MODEL;
+
+  /** Comma-separated OpenRouter provider slugs for both moderation models; empty lets OpenRouter route. */
+  @IsString()
+  OPENROUTER_MODERATION_PROVIDER_ORDER = DEFAULT_MODERATION_PROVIDER_ORDER;
 
   @ValidateIf((env: EnvironmentVariables) => env.NODE_ENV === 'production')
   @IsString()
