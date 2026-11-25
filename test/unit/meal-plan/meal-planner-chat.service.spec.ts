@@ -454,6 +454,47 @@ describe('MealPlannerChatService', () => {
     expect(model.doStreamCalls).toHaveLength(1);
   });
 
+  it('loads voice context concurrently with history recording', async () => {
+    let releaseRecord!: () => void;
+    history.recordUserMessage.mockImplementationOnce(
+      () =>
+        new Promise<void>((resolve) => {
+          releaseRecord = resolve;
+        }),
+    );
+    mealPlan.recipeInstructions.mockResolvedValue(null);
+
+    const service = await createService();
+    const pendingStream = service.stream(
+      USER_ID,
+      'Mở bước tiếp theo của món này',
+      new AbortController().signal,
+      WEEK,
+      undefined,
+      undefined,
+      {
+        voice: true,
+        screen: { weekStart: WEEK, panel: 'recipe', recipeId: 'recipe-1' },
+      },
+    );
+
+    await new Promise<void>((resolve) => setTimeout(resolve, 0));
+    expect(history.loadContextMessages).toHaveBeenCalledWith(
+      USER_ID,
+      expect.any(String),
+      expect.any(Number),
+    );
+    expect(dietary.find).toHaveBeenCalledWith(USER_ID);
+    expect(mealPlan.find).toHaveBeenCalledWith(USER_ID, WEEK);
+    expect(mealPlan.recipeInstructions).toHaveBeenCalledWith(
+      USER_ID,
+      'recipe-1',
+    );
+
+    releaseRecord();
+    await convertReadableStreamToArray(await pendingStream);
+  });
+
   it('forwards web citations to the client as source parts', async () => {
     steps = [
       [

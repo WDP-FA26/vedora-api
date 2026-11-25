@@ -347,38 +347,60 @@ export class MealPlannerChatService {
       );
     try {
       const userMessageId = requestId ?? randomUUID();
-      if (toolOutput) {
-        await this.history?.recordToolOutput(
-          userId,
-          activeThreadId,
-          toolOutput,
-        );
-      }
-      await this.history?.recordUserMessage(
-        userId,
-        activeThreadId,
-        message,
-        userMessageId,
-      );
-      const loaded =
-        (await this.history?.loadContextMessages(
-          userId,
-          activeThreadId,
-          runtimeConfig.PLANNER_CHAT_MAX_MESSAGES,
-        )) ?? [];
       const currentMessage: StoredChatMessage = {
         id: userMessageId,
         role: 'user',
         parts: [{ type: 'text', text: cleanUserText }],
       };
-      const storedMessages: StoredChatMessage[] = [...loaded];
-      if (!storedMessages.some((item) => item.id === userMessageId)) {
-        storedMessages.push(currentMessage);
-      }
+      const loadHistory = async () => {
+        if (toolOutput) {
+          await this.history?.recordToolOutput(
+            userId,
+            activeThreadId,
+            toolOutput,
+          );
+        }
+        const [, loaded] = await Promise.all([
+          this.history?.recordUserMessage(
+            userId,
+            activeThreadId,
+            message,
+            userMessageId,
+          ),
+          this.history?.loadContextMessages(
+            userId,
+            activeThreadId,
+            runtimeConfig.PLANNER_CHAT_MAX_MESSAGES,
+          ),
+        ]);
+        const existing = loaded ?? [];
+        return existing.some((item) => item.id === userMessageId)
+          ? [...existing]
+          : [...existing, currentMessage];
+      };
+      const loadContext = () =>
+        Promise.all([
+          this.dietary.find(userId),
+          this.mealPlan.find(userId, weekStart),
+          Promise.resolve(this.dietary.findNutrition(userId)).then(
+            (value) => value ?? null,
+          ),
+          voice && screen
+            ? this.screenContext(userId, screen)
+            : Promise.resolve(null),
+        ]);
 
-      // Voice turns run behind GPT-Live and the planner model's built-in safety,
-      // so skip the extra moderation round-trip to keep spoken latency low.
-      if (!voice) {
+      let storedMessages: StoredChatMessage[];
+      let context: Awaited<ReturnType<typeof loadContext>>;
+      if (voice) {
+        // Voice turns skip the extra moderation round-trip, so context queries
+        // can run alongside thread persistence without adding latency.
+        [storedMessages, context] = await Promise.all([
+          loadHistory(),
+          loadContext(),
+        ]);
+      } else {
+        storedMessages = await loadHistory();
         const { choice: verdict } = await decide(
           this.moderator,
           conversationModerationState(toModerationTurns(storedMessages)),
@@ -404,15 +426,10 @@ export class MealPlannerChatService {
           await this.usage.refund(ticket);
           return cannedReply(PLANNER_REFUSALS[verdict], assistantMessageId);
         }
+        context = await loadContext();
       }
 
-      const [memory, plan, nutrition] = await Promise.all([
-        this.dietary.find(userId),
-        this.mealPlan.find(userId, weekStart),
-        Promise.resolve(this.dietary.findNutrition(userId)).then(
-          (value) => value ?? null,
-        ),
-      ]);
+      const [memory, plan, nutrition, screenText] = context;
 
       // A week that has fully passed is read-only, so tools default to this week.
       const toolWeek =
@@ -437,10 +454,9 @@ export class MealPlannerChatService {
         );
       };
       const plannerContext = plannerDynamicContext(memory, plan, nutrition);
-      const dynamicContext =
-        voice && screen
-          ? `${plannerContext}\n\n${await this.screenContext(userId, screen)}`
-          : plannerContext;
+      const dynamicContext = screenText
+        ? `${plannerContext}\n\n${screenText}`
+        : plannerContext;
       const agentTools: ToolSet = {
         searchKnowledge: searchKnowledgeTool(this.knowledge),
         searchRecipes: searchRecipesTool(this.mealPlan, userId),
