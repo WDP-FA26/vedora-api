@@ -10,7 +10,6 @@ import type {
 import type { ShoppingListDto } from '@src/meal-plan/dto/shopping-list.dto.js';
 import {
   type Ingredient,
-  type IngredientGroup,
   type MealPlanEntry,
   MealSection,
   type Recipe,
@@ -300,14 +299,8 @@ describe('Meal plan and shopping list flows (e2e)', () => {
       expect(plan.problems).toEqual([]);
     });
 
-    it('refuses a dish with an ingredient avoided through a group', async () => {
-      const group = await model<IngredientGroup>('IngredientGroup').create({
-        _id: randomUUID(),
-        name: `Nhóm ${randomUUID().slice(0, 6)}`,
-        dietary: true,
-        ingredientIds: [tofu.id],
-      });
-      const { token } = await signedUser({ avoidedGroupIds: [group.id] });
+    it('refuses a dish with an ingredient the user is allergic to', async () => {
+      const { token } = await signedUser({ allergies: ['Dị ứng đậu nành'] });
       const response = await putDays(token, [
         dayBody('MON', { lunch: [tofuDish.id] }),
       ]).expect(409);
@@ -348,7 +341,7 @@ describe('Meal plan and shopping list flows (e2e)', () => {
       ).toBe(0);
     });
 
-    it('reports a saved dish on GET once the user starts avoiding its ingredient', async () => {
+    it('reports a saved dish on GET once the user adds an allergy to its ingredient', async () => {
       const { token } = await signedUser();
       await putDays(token, [dayBody('TUE', { dinner: [tofuDish.id] })]).expect(
         200,
@@ -356,10 +349,7 @@ describe('Meal plan and shopping list flows (e2e)', () => {
       await request(server())
         .put('/api/v1/dietary/me')
         .set('Authorization', `Bearer ${token}`)
-        .send({
-          ingredientIds: [tofu.id],
-          groupIds: [],
-        })
+        .send({ allergies: ['Dị ứng đậu nành'] })
         .expect(200);
       const plan = await getPlan(token);
       expect(plan.problems).toEqual([
@@ -799,10 +789,8 @@ describe('Meal plan and shopping list flows (e2e)', () => {
       );
     });
 
-    it('never picks a dish with an ingredient the user avoids', async () => {
-      const { token } = await signedUser({
-        avoidedIngredientIds: [tofu.id],
-      });
+    it('never picks a dish with an ingredient the user is allergic to', async () => {
+      const { token } = await signedUser({ allergies: ['Dị ứng đậu nành'] });
       const response = await generate(token, {
         days: allDays,
         sections: meals,

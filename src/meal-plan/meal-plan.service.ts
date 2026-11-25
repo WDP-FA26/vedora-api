@@ -22,7 +22,6 @@ import { allExist } from '../mongo/references.js';
 import { DietaryService } from '../recipes/dietary.service.js';
 import { IncompatibilityRulesService } from '../recipes/incompatibility-rules.service.js';
 import {
-  extractAllergyKeywords,
   inferNutritionPillars,
   resolveCaloriesPerServing,
 } from '../recipes/nutrition.js';
@@ -387,9 +386,8 @@ export class MealPlanService {
     nutritionGoal: NutritionGoal | null;
     dailyCalorieTarget: number | null;
   }> {
-    const [avoided, restrictions, nutrition, rows] = await Promise.all([
-      this.dietary.avoidedIngredientIds(userId),
-      this.dietary.find(userId),
+    const [allergyKeywords, nutrition, rows] = await Promise.all([
+      this.dietary.allergyKeywords(userId),
       Promise.resolve(this.dietary.findNutrition(userId)).then(
         (value) => value ?? null,
       ),
@@ -401,7 +399,6 @@ export class MealPlanService {
       ingredientsById.set(recipe.id, ingredientIds(recipe));
       caloriesById.set(recipe.id, recipeNutrition(recipe).caloriesPerServing);
     }
-    const allergyKeywords = extractAllergyKeywords(restrictions.allergyNote);
     const text = dto.query?.trim().toLowerCase() ?? '';
     const excluded = (dto.exclude ?? [])
       .map((word) => word.trim().toLowerCase())
@@ -412,10 +409,6 @@ export class MealPlanService {
 
     const eligible: RecipeRow[] = [];
     for (const recipe of rows) {
-      const hasAvoided = recipe.ingredients.some(({ ingredientId }) =>
-        avoided.has(ingredientId),
-      );
-      if (hasAvoided) continue;
       if (allergyKeywords.some((word) => matchesText(recipe, word, true))) {
         continue;
       }
@@ -968,7 +961,7 @@ export class MealPlanService {
     query: string | undefined,
     filters: SuggestionFilters = {},
   ): Promise<RecipeSuggestion[]> {
-    const avoided = await this.dietary.avoidedIngredientIds(userId);
+    const avoided = await this.dietary.allergyKeywords(userId);
     const text = query?.trim().toLowerCase() ?? '';
     const excluded = (filters.exclude ?? [])
       .map((word) => word.trim().toLowerCase())
@@ -1048,7 +1041,7 @@ export class MealPlanService {
     const row = await this.recipes.findOne({ _id: recipeId }).exec();
     if (!row) return null;
     const [recipe] = await this.recipeRows([row]);
-    const avoided = await this.dietary.avoidedIngredientIds(userId);
+    const avoided = await this.dietary.allergyKeywords(userId);
     const hasTime = recipe.prepMinutes !== null || recipe.cookMinutes !== null;
     const nutritionMeta = recipeNutrition(recipe);
     return {
@@ -1154,19 +1147,17 @@ export class MealPlanService {
       return recipes.length > 0 ? [{ day, recipes }] : [];
     });
     if (avoidedDays.length > 0) {
-      const avoided = await this.dietary.avoidedIngredientIds(userId);
+      const avoided = await this.dietary.allergyKeywords(userId);
       for (const { day, recipes } of avoidedDays) {
         for (const recipe of recipes) {
-          const hits = recipe.ingredients.filter(({ ingredientId }) =>
-            avoided.has(ingredientId),
-          );
+          const hits = avoidedNames(recipe, avoided);
           if (hits.length > 0) {
             problems.push({
               code: 'AVOIDED_INGREDIENT',
               day,
               recipes: [recipe.title],
               recipeIds: [recipe.id],
-              ingredients: hits.map(({ ingredient }) => ingredient.name),
+              ingredients: hits,
               reason: null,
             });
           }
@@ -1297,13 +1288,21 @@ function toRecipeDto(recipe: RecipeRow): MealRecipeDto {
 }
 
 /** Names of the recipe's ingredients that the user avoids, in recipe order. */
+/** Ingredients whose name or alias contains one of the user's allergen keywords. */
 function avoidedNames(
   recipe: RecipeRow,
-  avoided: ReadonlySet<string>,
+  allergyKeywords: readonly string[],
 ): string[] {
+  if (allergyKeywords.length === 0) return [];
   const names: string[] = [];
-  for (const { ingredientId, ingredient } of recipe.ingredients) {
-    if (avoided.has(ingredientId)) names.push(ingredient.name);
+  for (const { ingredient } of recipe.ingredients) {
+    const labels = [ingredient.name, ...ingredient.aliases].map((label) =>
+      label.normalize('NFC').toLowerCase(),
+    );
+    const matches = allergyKeywords.some((keyword) =>
+      labels.some((label) => label.includes(keyword)),
+    );
+    if (matches) names.push(ingredient.name);
   }
   return names;
 }

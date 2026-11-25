@@ -1,6 +1,7 @@
-import { Controller, Get, Header } from '@nestjs/common';
-import { ApiOperation, ApiTags } from '@nestjs/swagger';
+import { Controller, Get, Header, UseGuards } from '@nestjs/common';
+import { ApiExcludeController, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { createHash } from 'node:crypto';
+import { DisabledEndpointGuard } from '../common/guards/disabled-endpoint.guard.js';
 import { runtimeConfig } from './runtime-config.js';
 
 /** Deliberate allowlist. Never serialize ConfigService or process.env. */
@@ -74,7 +75,9 @@ export function publicRuntimeConfig() {
   return { version, ...config };
 }
 
+@ApiExcludeController()
 @ApiTags('config')
+@UseGuards(DisabledEndpointGuard)
 @Controller('public-config')
 export class PublicConfigController {
   @Get()

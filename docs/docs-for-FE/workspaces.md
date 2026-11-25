@@ -7,7 +7,8 @@ Một **page** là account của nhà hàng (`accountType: "PAGE"`), có profile
 follower, bài đăng, thông báo và tin nhắn riêng. Nhiều người có thể quản lý
 một page. Họ không đăng nhập vào page bằng mật khẩu, mà **chuyển phiên** từ
 account cá nhân sang page. Page không có mật khẩu, không có Google, và có email
-nội bộ không nhận được thư.
+nội bộ không nhận được thư (khi hiển thị danh sách `/admin/users`, FE ẩn email của
+account `PAGE` bằng ký hiệu `—` và không hiện thao tác sao chép email).
 
 ## Vòng đời
 
@@ -90,7 +91,7 @@ Bảo mật:
   (`actor: null`) thay vì đăng xuất.
 
 Trong phiên page, các thao tác cấp tài khoản trả `403 PAGE_SESSION_NOT_ALLOWED`:
-`PATCH/DELETE /users/:id`, toàn bộ `/billing/*`, `/payments/*`,
+`PATCH /users/:id` (cùng `DELETE /users/:id` — hiện đang tạm khóa cho phiên cá nhân/admin), toàn bộ `/billing/*`, `/payments/*`,
 `/payment-intents/*`, `/dietary/*` (hồ sơ ăn uống & BMI), gửi yêu cầu huy hiệu
 đầu bếp, tạo page mới, upload minh chứng và gửi lại đơn. Muốn làm những việc
 này, chuyển về account cá nhân.

@@ -269,7 +269,9 @@ describe('Assistant chat flows (e2e)', () => {
       [
         'a message one character too long',
         {
-          message: 'x'.repeat(runtimeConfig.PLANNER_CHAT_MAX_MESSAGE_LENGTH + 1),
+          message: 'x'.repeat(
+            runtimeConfig.PLANNER_CHAT_MAX_MESSAGE_LENGTH + 1,
+          ),
         },
       ],
       [

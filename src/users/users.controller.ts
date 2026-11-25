@@ -16,6 +16,7 @@ import {
 import {
   ApiBearerAuth,
   ApiConflictResponse,
+  ApiExcludeEndpoint,
   ApiForbiddenResponse,
   ApiOperation,
   ApiTags,
@@ -41,6 +42,10 @@ import { AccountsService } from './accounts.service.js';
 import { type PublicUser } from './public-user.js';
 import { UsersService } from './users.service.js';
 import { ErrorBodyDto } from '../common/exceptions/error-body.dto.js';
+import {
+  DisabledEndpoint,
+  DisabledEndpointGuard,
+} from '../common/guards/disabled-endpoint.guard.js';
 
 @ApiTags('users')
 @ApiBearerAuth()
@@ -61,6 +66,7 @@ export class UsersController {
   ) {}
 
   @Post()
+  @DisabledEndpoint()
   @Roles(UserRole.ADMIN)
   @ApiOperation({ summary: 'Create a user (admin only)' })
   create(@Body() dto: CreateUserDto): Promise<PublicUser> {
@@ -130,7 +136,8 @@ export class UsersController {
   }
 
   @Delete(':id')
-  @UseGuards(PersonalSessionGuard)
+  @ApiExcludeEndpoint()
+  @UseGuards(PersonalSessionGuard, DisabledEndpointGuard)
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ summary: 'Delete your account, or any account as an admin' })
   @ApiConflictResponse({

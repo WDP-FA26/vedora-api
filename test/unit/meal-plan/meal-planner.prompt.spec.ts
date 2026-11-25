@@ -13,7 +13,7 @@ import {
   Weekday,
 } from '@src/mongo/models.js';
 import type {
-  DietaryRestrictionsDto,
+  DietaryMemoryDto,
   NutritionProfileDto,
 } from '@src/recipes/dto/dietary.dto.js';
 
@@ -39,10 +39,7 @@ const emptyPlan = (): MealPlanDto => ({
 
 describe('meal-planner prompt & refusals', () => {
   it('renders fallback text when dietary profile and meal plan are empty', () => {
-    const restrictions: DietaryRestrictionsDto = {
-      ingredients: [],
-      groups: [],
-    };
+    const restrictions: DietaryMemoryDto = { allergies: [], preferences: [] };
 
     const output = plannerInstructions(restrictions, emptyPlan());
 
@@ -50,32 +47,26 @@ describe('meal-planner prompt & refusals', () => {
     expect(output).toContain('chưa khai báo gì');
     expect(output).toContain('- Thứ Hai: (trống)');
     expect(output).toContain('- Chủ nhật: (trống)');
-    expect(output).toContain('Sở thích và thói quen người dùng');
-    expect(output).toContain(
-      'Hồ sơ ăn uống, bạn cập nhật bằng updatePreferences',
-    );
+    expect(output).toContain('Sở thích (tôn trọng khi lên món):\n- (chưa có)');
+    expect(output).toContain('bạn thêm/bớt bằng updateMemory');
   });
 
   it('includes the saved taste and habit note', () => {
     const output = plannerInstructions(
       {
-        ingredients: [],
-        groups: [],
-        preferenceNote: '  Không thích nấm\nChỉ nấu bữa tối  ',
+        allergies: [],
+        preferences: ['  Không thích nấm  ', 'Chỉ nấu bữa tối'],
       },
       emptyPlan(),
     );
 
     expect(output).toContain(
-      'tôn trọng khi lên món): Không thích nấm\nChỉ nấu bữa tối.',
+      'Sở thích (tôn trọng khi lên món):\n- Không thích nấm\n- Chỉ nấu bữa tối\n',
     );
   });
 
   it('lays out every plannable week with real dates and the passed days', () => {
-    const restrictions: DietaryRestrictionsDto = {
-      ingredients: [],
-      groups: [],
-    };
+    const restrictions: DietaryMemoryDto = { allergies: [], preferences: [] };
 
     const output = plannerInstructions(restrictions, emptyPlan());
 
@@ -92,10 +83,7 @@ describe('meal-planner prompt & refusals', () => {
   });
 
   it('marks the week on screen when it is a later week', () => {
-    const restrictions: DietaryRestrictionsDto = {
-      ingredients: [],
-      groups: [],
-    };
+    const restrictions: DietaryMemoryDto = { allergies: [], preferences: [] };
     const output = plannerInstructions(restrictions, {
       ...emptyPlan(),
       weekStart: '2026-11-23',
@@ -110,10 +98,7 @@ describe('meal-planner prompt & refusals', () => {
   });
 
   it('lists a past week on screen as read-only, before the plannable weeks', () => {
-    const restrictions: DietaryRestrictionsDto = {
-      ingredients: [],
-      groups: [],
-    };
+    const restrictions: DietaryMemoryDto = { allergies: [], preferences: [] };
     const plan = { ...emptyPlan(), weekStart: '2026-11-09', editable: false };
 
     const output = plannerInstructions(restrictions, plan);
@@ -124,10 +109,7 @@ describe('meal-planner prompt & refusals', () => {
   });
 
   it('says nothing has passed on a Monday', () => {
-    const restrictions: DietaryRestrictionsDto = {
-      ingredients: [],
-      groups: [],
-    };
+    const restrictions: DietaryMemoryDto = { allergies: [], preferences: [] };
     const output = plannerInstructions(restrictions, {
       ...emptyPlan(),
       today: '2026-11-16',
@@ -139,10 +121,10 @@ describe('meal-planner prompt & refusals', () => {
     );
   });
 
-  it('formats avoided groups, avoided ingredients, and scheduled dishes', () => {
-    const restrictions: DietaryRestrictionsDto = {
-      ingredients: [{ id: 'ing-1', name: 'Hành' }],
-      groups: [{ id: 'grp-1', name: 'Ngũ vị tân' }],
+  it('formats allergy lines and scheduled dishes', () => {
+    const restrictions: DietaryMemoryDto = {
+      allergies: ['Ăn chay ngũ vị tân', 'Dị ứng đậu phộng'],
+      preferences: [],
     };
     const plan = emptyPlan();
     plan.days[0].sections[1].recipes.push({
@@ -170,7 +152,9 @@ describe('meal-planner prompt & refusals', () => {
 
     const output = plannerInstructions(restrictions, plan);
 
-    expect(output).toContain('nhóm Ngũ vị tân, Hành');
+    expect(output).toContain(
+      'Dị ứng (tuyệt đối tránh; searchRecipes và getRecipe đánh dấu AVOIDED món có thành phần khớp):\n- Ăn chay ngũ vị tân\n- Dị ứng đậu phộng\nSở thích',
+    );
     expect(output).toContain(
       `- ${DAY_NAMES.MON}: ${SECTION_NAMES.LUNCH}: Đậu hũ sốt cà (id rec-1); ${SECTION_NAMES.OTHER}: Sữa đậu nành (id rec-2)`,
     );
@@ -190,10 +174,7 @@ describe('meal-planner prompt & refusals', () => {
   });
 
   it('includes Asian BMI profile, daily calorie range, and recent weight trend when provided', () => {
-    const restrictions: DietaryRestrictionsDto = {
-      ingredients: [],
-      groups: [],
-    };
+    const restrictions: DietaryMemoryDto = { allergies: [], preferences: [] };
     const nutrition: NutritionProfileDto = {
       heightCm: 160,
       weightKg: 62,

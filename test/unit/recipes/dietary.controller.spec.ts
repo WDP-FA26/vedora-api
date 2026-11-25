@@ -26,20 +26,16 @@ describe('DietaryController', () => {
     expect(guards).toEqual([JwtAuthGuard, PersonalSessionGuard]);
   });
 
-  it('delegates options, find, and replace to DietaryService', async () => {
-    const opts = { ingredients: [], groups: [] };
-    const restrictions = { ingredients: [], groups: [], terms: [] };
-    const dto = { ingredientIds: [], groupIds: [] };
+  it('delegates find and replace to DietaryService', async () => {
+    const memory = { allergies: ['Dị ứng đậu phộng'], preferences: [] };
+    const dto = { allergies: ['Dị ứng đậu phộng'] };
 
-    dietary.options.mockResolvedValue(opts);
-    dietary.find.mockResolvedValue(restrictions);
-    dietary.replace.mockResolvedValue(restrictions);
+    dietary.find.mockResolvedValue(memory);
+    dietary.replace.mockResolvedValue(memory);
 
-    await expect(controller.options()).resolves.toBe(opts);
-    await expect(controller.find(req)).resolves.toBe(restrictions);
-    await expect(controller.replace(req, dto)).resolves.toBe(restrictions);
+    await expect(controller.find(req)).resolves.toBe(memory);
+    await expect(controller.replace(req, dto)).resolves.toBe(memory);
 
-    expect(dietary.options).toHaveBeenCalledOnce();
     expect(dietary.find).toHaveBeenCalledWith(userId);
     expect(dietary.replace).toHaveBeenCalledWith(userId, dto);
   });

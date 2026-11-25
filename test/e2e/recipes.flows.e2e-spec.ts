@@ -336,7 +336,7 @@ describe('Recipe catalog and admin flows (e2e)', () => {
       ).expect(404);
     });
 
-    it('removes a deleted ingredient from groups and from every user preference', async () => {
+    it('removes a deleted ingredient from groups', async () => {
       const doomed = await createIngredient(e2e.mongo);
       const kept = await createIngredient(e2e.mongo);
       const group = await model<IngredientGroup>('IngredientGroup').create({
@@ -345,16 +345,6 @@ describe('Recipe catalog and admin flows (e2e)', () => {
         dietary: true,
         ingredientIds: [doomed.id, kept.id],
       });
-      const { user, token } = await signedUser();
-      await request(server())
-        .put('/api/v1/dietary/me')
-        .set('Authorization', `Bearer ${token}`)
-        .send({
-          ingredientIds: [doomed.id],
-          groupIds: [],
-        })
-        .expect(200);
-
       await asAdmin(
         request(server()).delete(`/api/v1/admin/ingredients/${doomed.id}`),
       ).expect(204);
@@ -363,10 +353,6 @@ describe('Recipe catalog and admin flows (e2e)', () => {
         .findOne({ _id: group.id })
         .exec();
       expect(storedGroup?.ingredientIds).toEqual([kept.id]);
-      const storedUser = await model<User>('User')
-        .findOne({ _id: user.id })
-        .exec();
-      expect(storedUser?.avoidedIngredientIds).toEqual([]);
     });
 
     it('counts the recipes that use an ingredient in the admin list', async () => {
@@ -491,17 +477,13 @@ describe('Recipe catalog and admin flows (e2e)', () => {
       expect((response.body as ErrorBody).code).toBe('ACCOUNT_SUSPENDED');
     });
 
-    it('excludes a recipe from suitableForMe when it contains an ingredient of an avoided group', async () => {
-      const grouped = await createIngredient(e2e.mongo);
-      const group = await model<IngredientGroup>('IngredientGroup').create({
-        _id: randomUUID(),
-        name: `Avoided ${randomUUID().slice(0, 6)}`,
-        dietary: true,
-        ingredientIds: [grouped.id],
+    it('excludes a recipe from suitableForMe when it contains an ingredient the user is allergic to', async () => {
+      const peanut = await createIngredient(e2e.mongo, {
+        name: `Đậu phộng ${randomUUID().slice(0, 6)}`,
       });
-      const title = `Grouped ${randomUUID().slice(0, 8)}`;
-      await createRecipe(e2e.mongo, { title }, [grouped.id]);
-      const { token } = await signedUser({ avoidedGroupIds: [group.id] });
+      const title = `Peanut ${randomUUID().slice(0, 8)}`;
+      await createRecipe(e2e.mongo, { title }, [peanut.id]);
+      const { token } = await signedUser({ allergies: ['Dị ứng đậu phộng'] });
       const response = await request(server())
         .get('/api/v1/recipes')
         .query({ q: title, suitableForMe: 'true' })

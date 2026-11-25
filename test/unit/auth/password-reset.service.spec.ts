@@ -73,8 +73,6 @@ describe('PasswordResetService', () => {
       accountVersion: 0,
       isProfessional: false,
       emailVerifiedAt: user.emailVerifiedAt,
-      avoidedIngredientIds: [],
-      avoidedGroupIds: [],
       ...fields,
     });
 

@@ -69,8 +69,6 @@ Values below are defaults matched to the original source. All values are read at
 | `CLOUDINARY_UPLOAD_CHUNK_MB` | `20` |
 | `CLOUDINARY_UPLOAD_SIGNATURE_TTL_SECONDS` | `3600` |
 | `COMMENT_MAX_LENGTH` | `1000` |
-| `DIETARY_MAX_AVOIDED_GROUPS` | `50` |
-| `DIETARY_MAX_AVOIDED_INGREDIENTS` | `200` |
 | `FEED_EXPLORE_EVERY` | `5` |
 | `FEED_FRESHNESS_WEIGHT` | `0.05` |
 | `FEED_FRESH_WINDOW_SECONDS` | `604800` |

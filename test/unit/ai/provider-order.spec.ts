@@ -57,11 +57,9 @@ describe('providerOrderFrom', () => {
     expect(
       providerOrderFrom(' anthropic, google-vertex/global,,azure/global '),
     ).toEqual(['anthropic', 'google-vertex/global', 'azure/global']);
-    expect(providerOrderFrom(DEFAULT_OPENROUTER_MODERATION_PROVIDER_ORDER)).toEqual([
-      'anthropic',
-      'google-vertex/global',
-      'azure/global',
-    ]);
+    expect(
+      providerOrderFrom(DEFAULT_OPENROUTER_MODERATION_PROVIDER_ORDER),
+    ).toEqual(['anthropic', 'google-vertex/global', 'azure/global']);
     expect(providerOrderFrom('')).toEqual([]);
   });
 });

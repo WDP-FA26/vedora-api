@@ -29,7 +29,6 @@ cascadeOnDelete(IngredientSchema, [
   { model: 'IngredientGroup', field: 'ingredientIds', action: 'pull' },
   { model: 'IncompatibilityRule', field: 'aIngredientId', action: 'delete' },
   { model: 'IncompatibilityRule', field: 'bIngredientId', action: 'delete' },
-  { model: 'User', field: 'avoidedIngredientIds', action: 'pull' },
 ]);
 
 @Schema(collectionSchema('ingredient_groups'))
@@ -64,7 +63,6 @@ IngredientGroupSchema.index({ ingredientIds: 1 });
 cascadeOnDelete(IngredientGroupSchema, [
   { model: 'IncompatibilityRule', field: 'aGroupId', action: 'delete' },
   { model: 'IncompatibilityRule', field: 'bGroupId', action: 'delete' },
-  { model: 'User', field: 'avoidedGroupIds', action: 'pull' },
 ]);
 
 @Schema(collectionSchema('incompatibility_rules'))

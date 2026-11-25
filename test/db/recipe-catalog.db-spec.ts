@@ -207,10 +207,7 @@ describe('Recipe catalog with MongoDB', () => {
 
   beforeEach(async () => {
     const { collections } = mongo.connection;
-    await collections.users.updateMany(
-      {},
-      { $set: { avoidedIngredientIds: [], avoidedGroupIds: [] } },
-    );
+    await collections.users.updateMany({}, { $set: { allergies: [] } });
     await collections.incompatibility_rules.deleteMany({});
     await collections.meal_plan_week_entries.deleteMany({});
     await collections.recipes.updateMany(
@@ -302,17 +299,15 @@ describe('Recipe catalog with MongoDB', () => {
     expect((await catalog.findOne(partialRecipeId)).totalMinutes).toBe(10);
   });
 
-  it('filters avoided ingredients and whole groups only for the requesting user', async () => {
+  it('filters ingredients matching allergies only for the requesting user', async () => {
     await usersModel().updateOne(
       { _id: userId },
-      {
-        $set: {
-          avoidedIngredientIds: [riceId],
-          avoidedGroupIds: [soyGroupId],
-        },
-      },
+      { $set: { allergies: ['Dị ứng đậu nành', 'Kiêng rau bina'] } },
     );
-    expect(await suitableIds()).toEqual([spinachRecipeId]);
+    const ids = await suitableIds();
+    expect(ids).not.toContain(tofuRecipeId);
+    expect(ids).not.toContain(spinachRecipeId);
+    expect(ids).toContain(riceRecipeId);
     expect((await catalog.list(query())).meta.totalItems).toBe(7);
     const other = await createUser(mongo, {
       username: 'other.user',
@@ -361,7 +356,7 @@ describe('Recipe catalog with MongoDB', () => {
   it('combines search, time and suitability in the count and rows', async () => {
     await usersModel().updateOne(
       { _id: userId },
-      { $set: { avoidedIngredientIds: [spinachId] } },
+      { $set: { allergies: ['Kiêng rau bina'] } },
     );
     const page = await catalog.list(
       query({ q: 'đậu phụ', maxMinutes: 15, suitableForMe: true, limit: 1 }),
@@ -501,7 +496,7 @@ describe('Recipe catalog with MongoDB', () => {
     await plan.apply(userId, WEEK, [dayInput(Weekday.MON, [riceRecipeId])]);
     await usersModel().updateOne(
       { _id: userId },
-      { $set: { avoidedIngredientIds: [tofuId] } },
+      { $set: { allergies: ['Dị ứng đậu nành'] } },
     );
     const responses = await Promise.all([
       saveHttp([
@@ -527,7 +522,7 @@ describe('Recipe catalog with MongoDB', () => {
     ]);
     await usersModel().updateOne(
       { _id: userId },
-      { $set: { avoidedIngredientIds: [tofuId] } },
+      { $set: { allergies: ['Dị ứng đậu nành'] } },
     );
     const rejected = await saveHttp([
       dayInput(Weekday.MON, [tofuRecipeId, riceRecipeId, spinachRecipeId]),

@@ -165,24 +165,23 @@ describe('Administrative system history (real MongoDB HTTP)', () => {
   });
 
   it('keeps credentials, free text, headers and query parameters out of storage and the API', async () => {
-    const username = 'created.' + randomUUID().slice(0, 8);
+    const target = await createUser(e2e.mongo);
     const forged = randomUUID();
     const response = await request(server())
-      .post('/api/v1/users?token=secret-query-value')
+      .patch(`/api/v1/users/${target.id}/status?token=secret-query-value`)
       .auth(adminToken, { type: 'bearer' })
       .set('X-Request-ID', forged)
       .set('X-Secret', 'secret-header-value')
       .send({
-        username,
-        password: 'SecretPassword123!',
-        email: username + '@example.test',
-        fullName: 'Private Full Name',
+        status: 'SUSPENDED',
+        expectedVersion: 0,
+        reason: 'Private Full Name',
       })
-      .expect(201);
+      .expect(200);
     const requestId = response.headers['x-request-id'];
     expect(requestId).not.toBe(forged);
     const row = await rowFor(requestId);
-    expect(row.targetId).toBe((response.body as { id: string }).id);
+    expect(row.targetId).toBe(target.id);
     const detail = await request(server())
       .get('/api/v1/admin/system-logs/' + row.id)
       .auth(adminToken, { type: 'bearer' })
@@ -192,8 +191,6 @@ describe('Administrative system history (real MongoDB HTTP)', () => {
       exposed: detail.body as unknown,
     });
     for (const secret of [
-      'SecretPassword123!',
-      username,
       'Private Full Name',
       'secret-query-value',
       'secret-header-value',
@@ -230,10 +227,7 @@ describe('Administrative system history (real MongoDB HTTP)', () => {
     await e2e.connection
       .model(User.name)
       .updateOne({ _id: actor.id }, { $set: { username: 'renamed.admin' } });
-    await request(server())
-      .delete('/api/v1/users/' + actor.id)
-      .auth(adminToken, { type: 'bearer' })
-      .expect(204);
+    await e2e.connection.model(User.name).deleteOne({ _id: actor.id });
     expect(await logs().findById(row.id).orFail()).toMatchObject({
       actorUsername: actor.username,
       actorId: actor.id,

@@ -103,7 +103,6 @@ describe('Account permissions (e2e)', () => {
   it.each([
     ['get', undefined],
     ['patch', profile],
-    ['delete', undefined],
   ] as const)(
     'prevents users from calling %s on someone else',
     async (method, body) => {
@@ -118,10 +117,25 @@ describe('Account permissions (e2e)', () => {
     },
   );
 
+  it('disables DELETE /users/:id for self and admins without deleting accounts', async () => {
+    await request(server())
+      .delete(`/api/v1/users/${other.id}`)
+      .auth(userToken, { type: 'bearer' })
+      .expect(404);
+    await request(server())
+      .delete(`/api/v1/users/${user.id}`)
+      .auth(userToken, { type: 'bearer' })
+      .expect(404);
+    await request(server())
+      .delete(`/api/v1/users/${other.id}`)
+      .auth(adminToken, { type: 'bearer' })
+      .expect(404);
+    expect(await countUsers()).toBe(3);
+  });
+
   it.each([
     ['get', 200, undefined],
     ['patch', 200, profile],
-    ['delete', 204, undefined],
   ] as const)(
     'allows users to %s their own account',
     async (method, status, body) => {
@@ -131,18 +145,16 @@ describe('Account permissions (e2e)', () => {
       if (body) operation.send(body);
       const response = await operation.expect(status);
       const stored = await users().findOne({ _id: user.id });
-      expect({ stored: stored?._id, body: responseId(response.body) }).toEqual(
-        method === 'delete'
-          ? { stored: undefined, body: undefined }
-          : { stored: user.id, body: user.id },
-      );
+      expect({ stored: stored?._id, body: responseId(response.body) }).toEqual({
+        stored: user.id,
+        body: user.id,
+      });
     },
   );
 
   it.each([
     ['get', 200, undefined],
     ['patch', 200, profile],
-    ['delete', 204, undefined],
   ] as const)(
     'allows admins to %s another account',
     async (method, status, body) => {
@@ -152,11 +164,10 @@ describe('Account permissions (e2e)', () => {
       if (body) operation.send(body);
       const response = await operation.expect(status);
       const stored = await users().findOne({ _id: other.id });
-      expect({ stored: stored?._id, body: responseId(response.body) }).toEqual(
-        method === 'delete'
-          ? { stored: undefined, body: undefined }
-          : { stored: other.id, body: other.id },
-      );
+      expect({ stored: stored?._id, body: responseId(response.body) }).toEqual({
+        stored: other.id,
+        body: other.id,
+      });
     },
   );
 
@@ -168,13 +179,13 @@ describe('Account permissions (e2e)', () => {
     expect(response.body).toMatchObject({ meta: { totalItems: 3 } });
   });
 
-  it('allows admins to create ordinary accounts', async () => {
-    const response = await request(server())
+  it('disables admin account creation via POST /users', async () => {
+    await request(server())
       .post('/api/v1/users')
       .auth(adminToken, { type: 'bearer' })
       .send(signup)
-      .expect(201);
-    expect(response.body).toMatchObject({ username: 'new.user', role: 'USER' });
+      .expect(404);
+    expect(await countUsers()).toBe(3);
   });
 
   it('includes the current role in /auth/me', async () => {
@@ -228,12 +239,12 @@ describe('Account permissions (e2e)', () => {
     expect(await countUsers()).toBe(3);
   });
 
-  it('rejects injecting a role through admin account creation', async () => {
+  it('keeps disabled admin account creation from creating users even with role payload', async () => {
     await request(server())
       .post('/api/v1/users')
       .auth(adminToken, { type: 'bearer' })
       .send({ ...signup, role: UserRole.ADMIN })
-      .expect(400);
+      .expect(404);
     expect(await countUsers()).toBe(3);
   });
 
@@ -351,22 +362,16 @@ describe('Account permissions (e2e)', () => {
     expect((await storedUser(user.id)).status).toBe('ACTIVE');
   });
 
-  it.each(['status', 'role', 'delete'])(
+  it.each(['status', 'role'])(
     'protects the final ACTIVE admin via the %s endpoint',
     async (endpoint) => {
-      const operation =
-        endpoint === 'delete'
-          ? request(server()).delete(`/api/v1/users/${admin.id}`)
-          : request(server())
-              .patch(`/api/v1/users/${admin.id}/${endpoint}`)
-              .send({
-                ...(endpoint === 'role'
-                  ? { role: 'USER' }
-                  : { status: 'SUSPENDED' }),
-                expectedVersion: 0,
-                reason: 'Review',
-              });
-      const response = await operation
+      const response = await request(server())
+        .patch(`/api/v1/users/${admin.id}/${endpoint}`)
+        .send({
+          ...(endpoint === 'role' ? { role: 'USER' } : { status: 'SUSPENDED' }),
+          expectedVersion: 0,
+          reason: 'Review',
+        })
         .auth(adminToken, { type: 'bearer' })
         .expect(409);
       expect(response.body).toMatchObject({ code: 'LAST_ACTIVE_ADMIN' });

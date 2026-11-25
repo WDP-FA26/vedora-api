@@ -406,13 +406,9 @@ describe('Restaurant page flows (e2e)', () => {
             .patch(`/api/v1/users/${pageUserId}`)
             .send({ fullName: 'x' }),
         () => request(server()).get('/api/v1/billing/me'),
-        () => request(server()).get('/api/v1/dietary/options'),
         () => request(server()).get('/api/v1/dietary/me'),
         () =>
-          request(server()).put('/api/v1/dietary/me').send({
-            groupIds: [],
-            ingredientIds: [],
-          }),
+          request(server()).put('/api/v1/dietary/me').send({ allergies: [] }),
         () => request(server()).get('/api/v1/dietary/nutrition'),
         () =>
           request(server())

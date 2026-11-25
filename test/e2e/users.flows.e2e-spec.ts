@@ -234,7 +234,7 @@ describe('Account management flows (e2e)', () => {
     });
   });
 
-  describe('POST /users (admin)', () => {
+  describe('POST /users (admin, disabled)', () => {
     const newAccount = {
       username: 'created.user',
       fullName: 'Created User',
@@ -242,83 +242,43 @@ describe('Account management flows (e2e)', () => {
       password: 'StrongPassword123!',
     };
 
-    it('creates a pending USER account that cannot be used before email verification', async () => {
-      const response = await request(server())
-        .post('/api/v1/users')
-        .auth(adminToken, { type: 'bearer' })
-        .send(newAccount)
-        .expect(201);
-
-      expect(userSchema.parse(response.body)).toMatchObject({
-        role: UserRole.USER,
-        status: AccountStatus.PENDING_EMAIL,
-      });
-    });
-
-    it('rejects a duplicate username with 409', async () => {
+    it('returns 404 when disabled and does not create an account', async () => {
       await request(server())
         .post('/api/v1/users')
         .auth(adminToken, { type: 'bearer' })
-        .send({ ...newAccount, username: user.username })
-        .expect(409);
+        .send(newAccount)
+        .expect(404);
+
+      expect(
+        await e2e.mongo.connection
+          .model(User.name)
+          .exists({ username: newAccount.username }),
+      ).toBeNull();
     });
   });
 
-  describe('DELETE /users/:id', () => {
-    it('ends the deleted account sessions: access and refresh tokens stop working', async () => {
+  describe('DELETE /users/:id (disabled)', () => {
+    it('returns 404 for self and admin without revoking tokens or deleting the user', async () => {
       const refreshTokens = e2e.app.get(RefreshTokensService);
       const issued = await refreshTokens.issue(user.id);
 
       await request(server())
         .delete(`/api/v1/users/${user.id}`)
         .auth(userToken, { type: 'bearer' })
-        .expect(204);
-
-      await request(server())
-        .get('/api/v1/auth/me')
-        .auth(userToken, { type: 'bearer' })
-        .expect(401);
-      await request(server())
-        .post('/api/v1/auth/refresh')
-        .send({ refreshToken: issued.token })
-        .expect(401);
-      expect(await tokens().countDocuments({ userId: user.id })).toBe(0);
-    });
-
-    it('lets an admin delete another account once; the second delete is 404', async () => {
-      await request(server())
-        .delete(`/api/v1/users/${user.id}`)
-        .auth(adminToken, { type: 'bearer' })
-        .expect(204);
+        .expect(404);
 
       await request(server())
         .delete(`/api/v1/users/${user.id}`)
         .auth(adminToken, { type: 'bearer' })
         .expect(404);
-    });
 
-    it('refuses to delete the last ACTIVE admin, even by themselves', async () => {
-      const response = await request(server())
-        .delete(`/api/v1/users/${admin.id}`)
-        .auth(adminToken, { type: 'bearer' })
-        .expect(409);
-
-      expect(errorSchema.parse(response.body).code).toBe('LAST_ACTIVE_ADMIN');
-    });
-
-    it('writes a deletion audit with the system reason', async () => {
       await request(server())
-        .delete(`/api/v1/users/${user.id}`)
-        .auth(adminToken, { type: 'bearer' })
-        .expect(204);
-
-      expect(
-        await audits().findOne({ userId: user.id }).lean().exec(),
-      ).toMatchObject({
-        actorId: admin.id,
-        reason: 'Account deletion requested',
-        status: AccountStatus.DELETED,
-      });
+        .get('/api/v1/auth/me')
+        .auth(userToken, { type: 'bearer' })
+        .expect(200);
+      expect(await tokens().countDocuments({ userId: user.id })).toBe(1);
+      expect(issued.token).toBeTruthy();
+      expect(await audits().countDocuments({ userId: user.id })).toBe(0);
     });
   });
 

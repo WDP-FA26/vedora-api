@@ -602,22 +602,6 @@
     "multiplier": 1
   },
   {
-    "file": "recipes/dto/dietary.dto.ts",
-    "constant": "MAX_AVOIDED_INGREDIENTS",
-    "env": "DIETARY_MAX_AVOIDED_INGREDIENTS",
-    "original": 200,
-    "default": 200,
-    "multiplier": 1
-  },
-  {
-    "file": "recipes/dto/dietary.dto.ts",
-    "constant": "MAX_AVOIDED_GROUPS",
-    "env": "DIETARY_MAX_AVOIDED_GROUPS",
-    "original": 50,
-    "default": 50,
-    "multiplier": 1
-  },
-  {
     "file": "meal-plan/dto/meal-plan.dto.ts",
     "constant": "MAX_DISHES_PER_SECTION",
     "env": "MEAL_PLAN_MAX_DISHES_PER_SECTION",

@@ -28,6 +28,7 @@ export const INVALID_INPUT_CODES = [
   'UNSAFE_TARGET_WEIGHT',
   'HEIGHT_REQUIRED',
   'INVALID_DATE',
+  'DIETARY_MEMORY_FULL',
 ] as const;
 
 export type InvalidInputCode = (typeof INVALID_INPUT_CODES)[number];

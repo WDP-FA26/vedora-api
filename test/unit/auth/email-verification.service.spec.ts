@@ -69,8 +69,6 @@ describe('EmailVerificationService', () => {
       accountVersion: 0,
       isProfessional: false,
       emailVerifiedAt: null,
-      avoidedIngredientIds: [],
-      avoidedGroupIds: [],
       ...fields,
     });
 

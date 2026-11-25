@@ -79,8 +79,7 @@ describe('RecipeCatalogService', () => {
     await createUser(mongo, {
       id: USER_ID,
       username: 'reader',
-      avoidedIngredientIds: [SPINACH_ID],
-      avoidedGroupIds: [GROUP_ALLIUM],
+      allergies: ['Kiêng rau bina', 'Ăn chay ngũ vị tân'],
     });
     await createIngredient(mongo, {
       id: TOFU_ID,

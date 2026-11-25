@@ -15,10 +15,7 @@ import {
   mergeChanges,
 } from '@src/meal-plan/tools/proposal-text.js';
 import { searchRecipesTool } from '@src/meal-plan/tools/search-recipes.tool.js';
-import {
-  updateAllergyNoteTool,
-  updatePreferencesTool,
-} from '@src/meal-plan/tools/dietary-notes.tool.js';
+import { updateMemoryTool } from '@src/meal-plan/tools/dietary-memory.tool.js';
 import type { DietaryService } from '@src/recipes/dietary.service.js';
 import { MealSection, RecipeTag, Weekday } from '@src/mongo/models.js';
 
@@ -849,11 +846,7 @@ describe('Meal planner AI tools', () => {
         mealPlan,
         userId,
         WEEK,
-        {
-          ingredients: [],
-          groups: [],
-          allergyNote: 'Dị ứng đậu phộng nặng',
-        },
+        { allergies: ['Dị ứng đậu phộng nặng'], preferences: [] },
       );
 
       const output = await toolDef.execute?.({}, execOptions);
@@ -942,11 +935,7 @@ describe('Meal planner AI tools', () => {
         mealPlan,
         userId,
         WEEK,
-        {
-          ingredients: [{ id: 'ing-1', name: 'Hành' }],
-          groups: [],
-          allergyNote: 'Dị ứng đậu phộng',
-        },
+        { allergies: ['Dị ứng đậu phộng', 'Kiêng hành'], preferences: [] },
       );
       const output = await toolDef.execute?.(
         { replaceFlagged: false },
@@ -1009,50 +998,56 @@ describe('Meal planner AI tools', () => {
     });
   });
 
-  describe('updatePreferencesTool', () => {
-    it('replaces the note and shows the model the new text', async () => {
+  describe('updateMemoryTool', () => {
+    it('adds and removes preference lines and shows the model the new list', async () => {
       const dietary = mockDeep<DietaryService>();
-      dietary.savePreferenceNote.mockResolvedValue('Không thích nấm');
-      const toolDef = updatePreferencesTool(dietary, userId);
+      dietary.updateMemory.mockResolvedValue(['Chỉ nấu bữa tối']);
+      const onAllergiesSaved = vi.fn();
+      const toolDef = updateMemoryTool(dietary, userId, onAllergiesSaved);
 
       const output = await toolDef.execute?.(
-        { note: 'Không thích nấm' },
+        {
+          section: 'preferences',
+          add: ['Chỉ nấu bữa tối'],
+          remove: ['Không thích nấm'],
+        },
         execOptions,
       );
-      expect(dietary.savePreferenceNote).toHaveBeenCalledWith(
-        userId,
-        'Không thích nấm',
-      );
-      expect(output).toEqual({ preferenceNote: 'Không thích nấm' });
+      expect(dietary.updateMemory).toHaveBeenCalledWith(userId, 'preferences', {
+        add: ['Chỉ nấu bữa tối'],
+        remove: ['Không thích nấm'],
+      });
+      expect(output).toEqual({
+        section: 'preferences',
+        lines: ['Chỉ nấu bữa tối'],
+      });
+      expect(onAllergiesSaved).not.toHaveBeenCalled();
+
       const modelOut = await toolDef.toModelOutput?.({
-        input: { note: '' },
+        input: { section: 'preferences' },
         toolCallId: 'call-1',
-        output: { preferenceNote: null },
+        output: { section: 'preferences', lines: [] },
       });
       expect(modelOut).toEqual({
         type: 'text',
-        value: 'Saved. The note is now empty.',
+        value: 'Saved. preferences is now empty.',
       });
     });
-  });
 
-  describe('updateAllergyNoteTool', () => {
-    it('saves the note and hands it to the rest of the turn', async () => {
+    it('hands saved allergies to the rest of the turn', async () => {
       const dietary = mockDeep<DietaryService>();
-      dietary.saveAllergyNote.mockResolvedValue('Dị ứng đậu phộng, mè');
-      const onSaved = vi.fn();
-      const toolDef = updateAllergyNoteTool(dietary, userId, onSaved);
+      dietary.updateMemory.mockResolvedValue(['Dị ứng đậu phộng', 'Dị ứng mè']);
+      const onAllergiesSaved = vi.fn();
+      const toolDef = updateMemoryTool(dietary, userId, onAllergiesSaved);
 
-      const output = await toolDef.execute?.(
-        { note: 'Dị ứng đậu phộng, mè' },
+      await toolDef.execute?.(
+        { section: 'allergies', add: ['Dị ứng mè'] },
         execOptions,
       );
-      expect(dietary.saveAllergyNote).toHaveBeenCalledWith(
-        userId,
-        'Dị ứng đậu phộng, mè',
-      );
-      expect(onSaved).toHaveBeenCalledWith('Dị ứng đậu phộng, mè');
-      expect(output).toEqual({ allergyNote: 'Dị ứng đậu phộng, mè' });
+      expect(onAllergiesSaved).toHaveBeenCalledWith([
+        'Dị ứng đậu phộng',
+        'Dị ứng mè',
+      ]);
     });
   });
 

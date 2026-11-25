@@ -44,7 +44,7 @@ REPORT_EVIDENCE_CLEANUP_BATCH_SIZE=100
 REPORT_EVIDENCE_CLEANUP_CRON="0 45 * * * *"
 ```
 
-Docker Compose đã chuyển tiếp các biến này. Cấu hình giới hạn ảnh được công bố qua `GET /public-config` tại `uploads.reportMaxEvidenceImages` và `uploads.reportEvidenceMaxMb`; giao diện hiện dùng mặc định tương ứng 3/5. Nếu tùy chỉnh giới hạn, cần đồng bộ props của bộ chọn ảnh FE.
+Docker Compose đã chuyển tiếp các biến này. Cấu hình giới hạn ảnh được định nghĩa cho `GET /public-config` (hiện endpoint này đang tạm khóa `404` do FE chưa tiêu thụ) tại `uploads.reportMaxEvidenceImages` và `uploads.reportEvidenceMaxMb`; giao diện hiện dùng mặc định tương ứng 3/5. Nếu tùy chỉnh giới hạn, cần đồng bộ props của bộ chọn ảnh FE.
 
 Không cần bucket/credentials mới nếu storage hỗ trợ đang hoạt động. Khi chưa cấu hình storage, vẫn gửi báo cáo không ảnh được; tải ảnh nhận 503. Deploy BE trước FE. Model/index `PostReportEvidence` tự đăng ký, không cần migration dữ liệu cũ. File chưa được gắn sau 24 giờ hết hiệu lực, cron phút 45 mỗi giờ dọn tối đa 100 file/lượt. File đã gắn không bị lịch dọn nháp này xóa.
 

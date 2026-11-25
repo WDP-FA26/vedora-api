@@ -7,8 +7,8 @@ Swagger mô tả đầy đủ request/response tại `/docs`. Thực đơn lưu 
 
 | Method | Endpoint             | Đăng nhập                                | Kết quả                                       |
 | ------ | -------------------- | ---------------------------------------- | --------------------------------------------- |
-| `GET`  | `/dietary/me`         | Có                                       | Nguyên liệu/nhóm tránh, mô tả dị ứng tự nhiên (`allergyNote`) và sở thích tự nhiên (`preferenceNote`) |
-| `PUT`  | `/dietary/me`         | Có                                       | Cập nhật thực phẩm tránh, `allergyNote` và `preferenceNote` (bỏ trường thì giữ giá trị cũ, `null`/chuỗi rỗng thì xoá) |
+| `GET`  | `/dietary/me`         | Có                                       | Ghi nhớ của trợ lý: `{ allergies: string[], preferences: string[] }` (xem [Ghi nhớ](#ghi-nhớ-dị-ứng--sở-thích-dietaryme)) |
+| `PUT`  | `/dietary/me`         | Có                                       | Thay `allergies` và/hoặc `preferences` (bỏ trường thì giữ nguyên) |
 | `GET`  | `/dietary/nutrition`  | Có                                       | Hồ sơ BMI chuẩn Châu Á, mục tiêu năng lượng (TDEE ±15%) và lịch sử check-in cân nặng |
 | `PUT`  | `/dietary/nutrition`  | Có                                       | Cập nhật chiều cao, cân nặng, mục tiêu BMI, năm sinh, giới tính, mức vận động |
 | `POST` | `/dietary/nutrition/check-in` | Có                               | Ghi nhận cân nặng & cảm giác cơ thể theo ngày (`YYYY-MM-DD`, tối đa 1 bản ghi/ngày) |
@@ -57,8 +57,8 @@ Nếu chỉ biết một thời gian, tổng dùng thời gian đó; nếu cả 
 theo `updatedAt DESC`, rồi `id DESC`. Bộ lọc được áp dụng **trước phân trang và
 đếm**; trang vượt tổng số trang trả danh sách rỗng với tổng thực tế.
 
-`suitableForMe=true` loại các món có nguyên liệu người dùng tránh, trực tiếp hoặc
-qua nhóm, và món có cặp nguyên liệu vi phạm quy tắc kỵ nhau trong database. Đây
+`suitableForMe=true` loại các món có nguyên liệu khớp từ khoá dị ứng suy ra từ
+`allergies` (ví dụ "dị ứng đậu nành" → đậu hũ, nước tương…), và món có cặp nguyên liệu vi phạm quy tắc kỵ nhau trong database. Đây
 chỉ là kiểm tra từng công thức: một món có thể xung đột với món khác đã chọn trong
 cùng bữa. Luôn xem trước và kiểm tra lại khi lưu. Kết quả cá nhân có `Cache-Control: private, no-store`;
 FE cần cache theo tài khoản và xóa cache khi đổi tài khoản/hồ sơ ăn uống.
@@ -135,7 +135,7 @@ chỉnh từng ô bằng `editPlan` (`set`, `add`, `remove`, `clear`, `move`) v�
 Output của `fillSlots`, `editPlan`, `autoBalancePlan` và `verifyMealPlanAllergies` (khi nó đổi món) có cùng
 dạng thay đổi: `output.weekStart`, `output.days` (chỉ ngày đổi, đủ bốn phần, `previous` là món trước lần gọi,
 `recipes` là món sau), `output.problems` và `output.applied` (`false` khi không lưu gì). Món không tồn tại
-(`UNKNOWN_RECIPE`) hoặc có thành phần người dùng tránh (`AVOIDED_INGREDIENT`) bị **bỏ ra**, phần còn lại vẫn được lưu;
+(`UNKNOWN_RECIPE`) hoặc có nguyên liệu khớp dị ứng của người dùng (`AVOIDED_INGREDIENT`) bị **bỏ ra**, phần còn lại vẫn được lưu;
 hai mã đó nằm trong `output.problems` để FE ghi "Không thêm: …". `applied: false` khi không có thay đổi, hoặc mọi món
 mới đều bị bỏ. FE hiển thị thẻ "Đã cập nhật thực đơn" và tải lại `GET /meal-plan`.
 
@@ -153,6 +153,20 @@ Kho công thức vẫn hiển thị món có xung đột để người dùng xe
 suất cả nồi dùng cho danh sách đi chợ) và `nutritionPillars` (`PLANT_PROTEIN`, `FIBER_VEG`,
 `HEALTHY_FAT`, `IRON_RICH`, `CALCIUM_RICH`) suy từ nguyên liệu.
 
+## Ghi nhớ: dị ứng & sở thích (`/dietary/me`)
+
+Trợ lý lên thực đơn nhớ hai danh sách câu ngắn bằng ngôn ngữ tự nhiên, người dùng xem và sửa được trong Hồ sơ ăn uống:
+
+- `allergies`: dị ứng, không dung nạp, thứ không được ăn vì sức khoẻ hay tôn giáo ("Dị ứng đậu phộng", "Ăn chay ngũ vị tân").
+  Backend suy từ khoá dị ứng từ các dòng này để loại món khi lên thực đơn, chặn lưu món (`AVOIDED_INGREDIENT`), lọc
+  `suitableForMe` và đánh dấu món nhà hàng.
+- `preferences`: sở thích, thói quen lâu dài ("Không thích nấm", "Chỉ nấu bữa tối", "Nấu cho 3 người"). Chỉ trợ lý đọc.
+
+`PUT /dietary/me` nhận `{ allergies?: string[], preferences?: string[] }`, mỗi danh sách tối đa 30 dòng, mỗi dòng ≤ 200
+ký tự; backend trim từng dòng, bỏ dòng rỗng và dòng trùng. Bỏ một trường thì giữ nguyên danh sách đó; gửi `[]` thì xoá hết.
+Response giống `GET`. Không còn nguyên liệu/nhóm tránh theo ID, `allergyNote`, `preferenceNote` hay `GET /dietary/options`;
+ghi chú cũ của tài khoản được tự tách thành dòng ở lần đọc đầu tiên.
+
 ## Hồ sơ BMI Châu Á, TDEE & Lịch sử cân nặng (`/dietary/nutrition`)
 
 - `GET /dietary/nutrition`: trả `heightCm`, `weightKg`, `targetWeightKg`, `birthYear`, `biologicalSex`,
@@ -167,10 +181,10 @@ suất cả nồi dùng cho danh sách đi chợ) và `nutritionPillars` (`PLANT
 - `POST /dietary/nutrition/check-in`: ghi nhận `{ weightKg, heightCm?, date?, feeling?, note? }` cho một ngày
   (`<= today`). Ghi đè nếu cùng ngày đã có bản ghi, và đồng bộ `weightKg` mới nhất lên hồ sơ người dùng.
 
-Thuật toán `generate`/`fillSlots`/`autoBalancePlan` tự động cộng điểm cho món hợp mục tiêu BMI (tối thanh nhẹ khi `LOSE_WEIGHT`, ghép nhiều món bổ trợ cho mâm cơm cân bằng hoặc khi hụt Kcal để tiệm cận mục tiêu `~88%–115%` Kcal/ngày, nhưng bỏ qua các ngày ăn thiếu bữa chính do ăn ngoài) và cân bằng 5 nhóm dưỡng chất chay theo từng ngày. Trợ lý chat (`POST /meal-plan/chat`) nhận ngữ cảnh BMI, `allergyNote`, calo ước tính và xu hướng cân nặng, được trang bị:
+Thuật toán `generate`/`fillSlots`/`autoBalancePlan` tự động cộng điểm cho món hợp mục tiêu BMI (tối thanh nhẹ khi `LOSE_WEIGHT`, ghép nhiều món bổ trợ cho mâm cơm cân bằng hoặc khi hụt Kcal để tiệm cận mục tiêu `~88%–115%` Kcal/ngày, nhưng bỏ qua các ngày ăn thiếu bữa chính do ăn ngoài) và cân bằng 5 nhóm dưỡng chất chay theo từng ngày. Trợ lý chat (`POST /meal-plan/chat`) nhận ngữ cảnh BMI, `allergies`/`preferences`, calo ước tính và xu hướng cân nặng, được trang bị:
 - `autoBalancePlan`: tự động cân đối & bổ sung món kết hợp (kể cả phần `OTHER`) khi thực đơn đang hụt/dư Kcal.
 - `consultNutritionSubagent`: subagent nghiên cứu dinh dưỡng có sẵn `webSearch` + `searchRecipes` để tra món ăn ngoài hệ thống, tính Kcal còn lại và gợi ý món Vedora tương ứng.
-- `verifyMealPlanAllergies`: subagent kiểm định dị ứng đọc toàn bộ nguyên liệu + bước nấu của các món trên lịch đối chiếu với `allergyNote` ngôn ngữ tự nhiên và tự động đổi sang món an toàn nếu phát hiện rủi ro.
+- `verifyMealPlanAllergies`: subagent kiểm định dị ứng đọc toàn bộ nguyên liệu + bước nấu của các món trên lịch đối chiếu với các dòng `allergies` ngôn ngữ tự nhiên và tự động đổi sang món an toàn nếu phát hiện rủi ro.
 
 ### Ảnh món
 
@@ -258,20 +272,16 @@ trong khoảng đó mà người dùng không cần chuyển trang. Khi tuần �
 - FE có nút Dừng (`stop()` của `useChat`); những gì công cụ đã lưu trước đó vẫn giữ. Tin nhắn gõ trong lúc trợ lý
   đang chạy được xếp hàng và gửi khi lượt hiện tại kết thúc.
 
-#### Ghi nhớ vào hồ sơ: `updatePreferences`, `updateAllergyNote`
+#### Ghi nhớ vào hồ sơ: `updateMemory`
 
-Trợ lý đọc `preferenceNote` (mục "Sở thích") và `allergyNote` (mục "Dị ứng") trong Hồ sơ ăn uống ở đầu mỗi đoạn chat,
-và tự cập nhật khi người dùng kể thêm trong lúc chat:
+Trợ lý đọc `allergies` (mục "Dị ứng") và `preferences` (mục "Sở thích") ở đầu mỗi đoạn chat, và tự thêm/bớt dòng khi
+người dùng kể thêm trong lúc chat bằng `updateMemory` với input
+`{ section: 'allergies' | 'preferences', add?: string[], remove?: string[] }` (`remove` khớp đúng dòng đang lưu).
+Trợ lý chỉ bỏ một dòng dị ứng khi người dùng nói rõ và đã xác nhận qua `askUser`; sau khi thêm dị ứng thì chạy
+`verifyMealPlanAllergies` nếu lịch đã có món. Dị ứng mới có hiệu lực ngay trong lượt đó.
+Output: `{ section, lines: string[] }` (danh sách mới của mục đó).
 
-- `updatePreferences` với input `{ note: string }` (≤ 1000 ký tự, cả ghi chú mới; chuỗi rỗng xoá) khi người dùng nói
-  một sở thích lâu dài ("không thích nấm", "chỉ nấu bữa tối"). Output: `{ preferenceNote: string | null }`.
-- `updateAllergyNote` với input `{ note: string }` (≤ 1000 ký tự) khi người dùng kể thêm dị ứng, không dung nạp hay thứ
-  không được ăn. Trợ lý giữ nguyên các mục cũ, chỉ bỏ một mục khi người dùng nói rõ và đã xác nhận qua `askUser`; sau đó
-  chạy `verifyMealPlanAllergies` nếu lịch đã có món. Ghi chú mới có hiệu lực ngay trong lượt đó. Output:
-  `{ allergyNote: string | null }`.
-
-FE hiện thẻ "Đã cập nhật Sở thích/Dị ứng trong hồ sơ" và tải lại `GET /dietary/me`. Người dùng sửa cùng các ghi chú này
-trong Hồ sơ ăn uống.
+FE hiện thẻ "Đã cập nhật Sở thích/Dị ứng trong hồ sơ" và tải lại `GET /dietary/me`.
 
 #### Hỏi người dùng: `askUser`
 

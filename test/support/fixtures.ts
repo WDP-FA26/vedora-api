@@ -36,8 +36,6 @@ export function createUser(
     accountVersion: 0,
     isProfessional: false,
     emailVerifiedAt: new Date(),
-    avoidedIngredientIds: [],
-    avoidedGroupIds: [],
     ...rest,
   });
 }

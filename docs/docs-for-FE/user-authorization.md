@@ -22,7 +22,7 @@ vai trò đầu bếp hoặc hệ thống xét duyệt huy hiệu.
 
 ## Trường `role` trong response
 
-User object có thêm `role: "USER" | "ADMIN"`. Ví dụ `GET /auth/me`:
+User object có `role: "USER" | "ADMIN"` và `accountType: "PERSONAL" | "PAGE"`. Ví dụ `GET /auth/me`:
 
 ```json
 {
@@ -42,7 +42,7 @@ Các response sau cũng có trường này:
 
 - `user` trong response thành công của `POST /auth/login`, `POST /auth/verify-email`,
   `POST /auth/google`, `POST /auth/refresh`.
-- Các user object trả về từ `/users`, gồm cả API đổi vai trò.
+- Các user object trả về từ `/users`, gồm cả API đổi vai trò (mỗi item có `accountType: "PERSONAL" | "PAGE"`; với `PAGE`, `email` là địa chỉ nội bộ nên FE ẩn bằng `—` và không hiện thao tác sao chép email).
 
 `POST /auth/register` vẫn chỉ trả `{ "email": "..." }`, chưa trả token hay user.
 Author object trong response bài đăng vẫn chỉ gồm `id`, `username`, `fullName`.
@@ -52,21 +52,22 @@ access/refresh token và luồng đăng nhập hiện tại tiếp tục sử d�
 
 ## Bảng quyền API
 
+> **Trạng thái:** Hai endpoint `POST /users` và `DELETE /users/:id` hiện đang được tạm khóa (`DisabledEndpointGuard`, trả `404 NOT_FOUND` và ẩn khỏi Swagger `/docs`) vì FE không còn giao diện tạo/xóa tài khoản.
+
 Tất cả endpoint trong bảng yêu cầu `Authorization: Bearer <accessToken>`.
 `:id` phải là UUID của tài khoản được thao tác.
 
-| Method | Endpoint          | USER                            | ADMIN              |
-| ------ | ----------------- | ------------------------------- | ------------------ |
-| GET    | `/auth/me`        | Tài khoản hiện tại              | Tài khoản hiện tại |
-| POST   | `/users`          | 403                             | Được phép          |
-| GET    | `/users`          | 403                             | Được phép          |
-| GET    | `/users/:id`      | Chỉ khi `:id === user.id`       | Bất kỳ tài khoản   |
-| PATCH  | `/users/:id`      | Chỉ tài khoản của mình          | Bất kỳ tài khoản   |
-| DELETE | `/users/:id`      | Chỉ tài khoản của mình          | Bất kỳ tài khoản   |
-| PATCH  | `/users/:id/role` | 403, kể cả đổi vai trò của mình | Bất kỳ tài khoản   |
+| Method | Endpoint          | USER                                 | ADMIN                           |
+| ------ | ----------------- | ------------------------------------ | ------------------------------- |
+| GET    | `/auth/me`        | Tài khoản hiện tại                   | Tài khoản hiện tại              |
+| POST   | `/users`          | 403                                  | Đã tạm khóa (`404 NOT_FOUND`)   |
+| GET    | `/users`          | 403                                  | Được phép                       |
+| GET    | `/users/:id`      | Chỉ khi `:id === user.id`            | Bất kỳ tài khoản                |
+| PATCH  | `/users/:id`      | Chỉ tài khoản của mình               | Bất kỳ tài khoản                |
+| DELETE | `/users/:id`      | Đã tạm khóa (`404 NOT_FOUND`)        | Đã tạm khóa (`404 NOT_FOUND`)   |
+| PATCH  | `/users/:id/role` | 403, kể cả đổi vai trò của mình      | Bất kỳ tài khoản                |
 
-GET/PATCH thành công trả `200`, POST tạo tài khoản trả `201`, DELETE trả `204`
-không có body. Tài khoản không tồn tại trả `404` khi người gọi có quyền thao tác;
+GET/PATCH thành công trả `200`. `POST /users` và `DELETE /users/:id` hiện đã được tạm khóa qua `DisabledEndpointGuard` (`404 NOT_FOUND`; riêng phiên page gọi `DELETE /users/:id` vẫn nhận `403 PAGE_SESSION_NOT_ALLOWED` trước). Tài khoản không tồn tại trả `404` khi người gọi có quyền thao tác;
 USER truy cập ID khác trả `403` trước khi tra cứu tài khoản đó.
 
 Profile update vẫn chỉ nhận `username` và `fullName`; đổi `email` qua `PATCH /users/:id`

@@ -11,9 +11,9 @@ Redis, blacklist, session hay authEpoch theo quyết định của requester.
 - `q` tùy chọn, tối đa 100 ký tự, trim, tìm không phân biệt hoa/thường trong
   username/fullName/email. `status` tùy chọn: PENDING_EMAIL/ACTIVE/SUSPENDED/DELETED.
 - Response `{ items, meta }` như phân trang hiện tại; lọc và count cùng snapshot.
-- Dữ liệu `/users`, `/users/:id`, `/auth/me` và auth response thêm `status` và
-  `accountVersion` (integer bắt đầu từ 0). Đây là dữ liệu admin/chính chủ; public
-  profile không thêm email hoặc trạng thái tài khoản.
+- Dữ liệu `/users`, `/users/:id`, `/auth/me` và auth response có `status`,
+  `accountVersion` (integer bắt đầu từ 0) và `accountType` (`"PERSONAL" | "PAGE"`). Đây là dữ liệu admin/chính chủ; public
+  profile không thêm email hoặc trạng thái tài khoản. Với account `PAGE`, `email` là địa chỉ nội bộ nên FE hiển thị `—` và bỏ qua khi sao chép email.
 - Không nhận `include`, userId, sort hay quan hệ chat/dietary/meal-plan tùy ý.
 
 ## Suspend/Reactivate
@@ -49,8 +49,8 @@ cũ sau một thay đổi vẫn trả version conflict; không tự retry mù.
 }
 ```
 
-Role/status update và `DELETE /users/:id` dùng cùng transaction gate. Không cho
-khóa, hạ quyền hay xóa ADMIN ACTIVE cuối cùng, kể cả hai request đồng thời trên
+Role/status update và `UsersService.remove` dùng cùng transaction gate (`DELETE /users/:id` hiện đã được tạm khóa qua `DisabledEndpointGuard` → `404 NOT_FOUND`). Không cho
+khóa hay hạ quyền ADMIN ACTIVE cuối cùng, kể cả hai request đồng thời trên
 hai admin khác nhau. Admin tự hạ quyền được khi còn admin ACTIVE khác. Admin
 SUSPENDED hoặc PENDING_EMAIL không được tính là admin thay thế.
 

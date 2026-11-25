@@ -117,9 +117,10 @@ export class RecipeCatalogService {
       });
     }
     if (query.suitableForMe && userId) {
-      const avoided = await this.dietary.avoidedIngredientIds(userId);
+      const keywords = await this.dietary.allergyKeywords(userId);
+      const allergenIds = await this.allergenIngredientIds(keywords);
       matching = matching.filter(({ ingredients }) =>
-        ingredients.every(({ ingredientId }) => !avoided.has(ingredientId)),
+        ingredients.every(({ ingredientId }) => !allergenIds.has(ingredientId)),
       );
       const conflicts = await this.rules.findConflictsForEach(
         matching.map(({ ingredients }) =>
@@ -132,6 +133,25 @@ export class RecipeCatalogService {
       rows: matching.slice(paging.skip, paging.skip + paging.take),
       total: matching.length,
     };
+  }
+
+  /** Ingredients whose name or alias contains one of the allergen keywords. */
+  private async allergenIngredientIds(
+    keywords: readonly string[],
+  ): Promise<Set<string>> {
+    if (keywords.length === 0) return new Set();
+    const clauses = keywords.flatMap((keyword) => {
+      const pattern = escapeRegExp(keyword);
+      return [
+        { name: { $regex: pattern, $options: 'i' } },
+        { aliases: { $regex: pattern, $options: 'i' } },
+      ];
+    });
+    const rows = await this.ingredients
+      .find({ $or: clauses })
+      .select('_id')
+      .exec();
+    return new Set(rows.map(({ id }) => id));
   }
 
   private async matchingRecipeIds(text: string): Promise<Set<string>> {

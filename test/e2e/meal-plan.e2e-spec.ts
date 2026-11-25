@@ -59,7 +59,7 @@ describe('Meal plan (e2e)', () => {
       .deleteMany({ userId: user.id });
     await e2e.mongo.connection
       .model<User>('User')
-      .updateOne({ _id: user.id }, { $set: { avoidedIngredientIds: [] } });
+      .updateOne({ _id: user.id }, { $set: { allergies: [] } });
   });
   afterAll(async () => {
     vi.useRealTimers();
@@ -133,12 +133,12 @@ describe('Meal plan (e2e)', () => {
       .expect(400);
   });
 
-  it('answers 409 for a recipe with an avoided ingredient', async () => {
+  it('answers 409 for a recipe with an ingredient the user is allergic to', async () => {
     await e2e.mongo.connection
       .model<User>('User')
       .updateOne(
         { _id: user.id },
-        { $set: { avoidedIngredientIds: [tofu.id] } },
+        { $set: { allergies: ['Dị ứng đậu nành'] } },
       );
     const response = await auth(request(server()).put('/api/v1/meal-plan/days'))
       .send(body)

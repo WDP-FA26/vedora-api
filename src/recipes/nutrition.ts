@@ -500,10 +500,10 @@ const DIRECT_INGREDIENT_HINTS = [
  * dietary notes, expanding common allergen families (soy, gluten, nuts, sesame, etc.).
  */
 export function extractAllergyKeywords(
-  allergyNote: string | null | undefined,
+  text: string | null | undefined,
 ): string[] {
-  if (!allergyNote) return [];
-  const normalized = allergyNote.normalize('NFC').trim().toLowerCase();
+  if (!text) return [];
+  const normalized = text.normalize('NFC').trim().toLowerCase();
   if (!normalized) return [];
 
   const found = new Set<string>();

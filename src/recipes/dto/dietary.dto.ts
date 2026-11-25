@@ -1,16 +1,13 @@
-import { runtimeConfig } from '../../config/runtime-config.js';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Transform } from 'class-transformer';
 import {
   ArrayMaxSize,
-  ArrayUnique,
   IsArray,
   IsEnum,
   IsInt,
   IsNumber,
   IsOptional,
   IsString,
-  IsUUID,
   Matches,
   Max,
   MaxLength,
@@ -24,99 +21,68 @@ import {
   BodyFeeling,
   NutritionGoal,
 } from '../../mongo/models.js';
-import { NamedRefDto } from './ingredient.dto.js';
 
-export const MAX_AVOIDED_INGREDIENTS =
-  runtimeConfig.DIETARY_MAX_AVOIDED_INGREDIENTS;
-export const MAX_AVOIDED_GROUPS = runtimeConfig.DIETARY_MAX_AVOIDED_GROUPS;
-export const MAX_ALLERGY_NOTE_LENGTH = 1000;
-export const MAX_PREFERENCE_NOTE_LENGTH = 1000;
+export const MAX_MEMORY_ITEMS = 30;
+export const MAX_MEMORY_ITEM_LENGTH = 200;
 
 const trim = ({ value }: { value: unknown }): unknown =>
   typeof value === 'string' ? value.trim() : value;
 
-export class DietaryIngredientOptionDto extends NamedRefDto {
-  @ApiProperty({ type: [String] }) aliases!: string[];
-}
+/** Trims each line and drops blanks and repeats; anything else is left for the validators. */
+const cleanLines = ({ value }: { value: unknown }): unknown => {
+  if (!Array.isArray(value)) return value;
+  const lines: unknown[] = [];
+  for (const item of value) {
+    const line: unknown = typeof item === 'string' ? item.trim() : item;
+    if (line === '' || lines.includes(line)) continue;
+    lines.push(line);
+  }
+  return lines;
+};
 
-export class DietaryGroupOptionDto extends NamedRefDto {
-  @ApiProperty({ type: [String], description: 'Names of its ingredients' })
-  ingredients!: string[];
-}
-
-export class DietaryOptionsDto {
-  @ApiProperty({ type: [DietaryIngredientOptionDto] })
-  ingredients!: DietaryIngredientOptionDto[];
-
-  @ApiProperty({ type: [DietaryGroupOptionDto] })
-  groups!: DietaryGroupOptionDto[];
-}
-
-export class DietaryRestrictionsDto {
-  @ApiProperty({ type: [NamedRefDto] }) ingredients!: NamedRefDto[];
-  @ApiProperty({ type: [NamedRefDto] }) groups!: NamedRefDto[];
-
-  @ApiPropertyOptional({
-    nullable: true,
-    type: String,
-    maxLength: MAX_ALLERGY_NOTE_LENGTH,
+/** What the meal planner remembers about the user, in their own words. */
+export class DietaryMemoryDto {
+  @ApiProperty({
+    type: [String],
     description:
-      'Natural-language description of allergies, intolerances, and dietary rules',
+      'Allergies, intolerances and things the user must never eat (health, religion), one short natural-language line each',
   })
-  allergyNote?: string | null;
+  allergies!: string[];
 
-  @ApiPropertyOptional({
-    nullable: true,
-    type: String,
-    maxLength: MAX_PREFERENCE_NOTE_LENGTH,
+  @ApiProperty({
+    type: [String],
     description:
-      'Natural-language tastes and habits the meal planner keeps in mind (dislikes, meals cooked at home, budget, household size)',
+      'Lasting tastes and habits the planner keeps in mind (dislikes, meals cooked at home, budget, household size), one line each',
   })
-  preferenceNote?: string | null;
+  preferences!: string[];
 }
 
-export class SaveDietaryRestrictionsDto {
-  @ApiProperty({ type: [String], format: 'uuid' })
-  @IsArray()
-  @ArrayMaxSize(MAX_AVOIDED_INGREDIENTS)
-  @ArrayUnique()
-  @IsUUID('4', { each: true })
-  ingredientIds!: string[];
-
-  @ApiProperty({ type: [String], format: 'uuid' })
-  @IsArray()
-  @ArrayMaxSize(MAX_AVOIDED_GROUPS)
-  @ArrayUnique()
-  @IsUUID('4', { each: true })
-  groupIds!: string[];
-
+export class SaveDietaryMemoryDto {
   @ApiPropertyOptional({
-    nullable: true,
-    type: String,
-    maxLength: MAX_ALLERGY_NOTE_LENGTH,
-    description:
-      'Optional free-text description of food allergies or restrictions checked by the planner subagent',
+    type: [String],
+    maxItems: MAX_MEMORY_ITEMS,
+    description: `Replaces the allergy lines (each ≤ ${MAX_MEMORY_ITEM_LENGTH} chars, trimmed, blanks and repeats dropped); omit to keep them`,
   })
   @IsOptional()
-  @ValidateIf((_, value) => value !== null)
-  @Transform(trim)
-  @IsString()
-  @MaxLength(MAX_ALLERGY_NOTE_LENGTH)
-  allergyNote?: string | null;
+  @Transform(cleanLines)
+  @IsArray()
+  @ArrayMaxSize(MAX_MEMORY_ITEMS)
+  @IsString({ each: true })
+  @MaxLength(MAX_MEMORY_ITEM_LENGTH, { each: true })
+  allergies?: string[];
 
   @ApiPropertyOptional({
-    nullable: true,
-    type: String,
-    maxLength: MAX_PREFERENCE_NOTE_LENGTH,
-    description:
-      'Optional free-text tastes and habits for the meal planner; omit to keep the saved one, null or blank clears it',
+    type: [String],
+    maxItems: MAX_MEMORY_ITEMS,
+    description: `Replaces the preference lines (each ≤ ${MAX_MEMORY_ITEM_LENGTH} chars, trimmed, blanks and repeats dropped); omit to keep them`,
   })
   @IsOptional()
-  @ValidateIf((_, value) => value !== null)
-  @Transform(trim)
-  @IsString()
-  @MaxLength(MAX_PREFERENCE_NOTE_LENGTH)
-  preferenceNote?: string | null;
+  @Transform(cleanLines)
+  @IsArray()
+  @ArrayMaxSize(MAX_MEMORY_ITEMS)
+  @IsString({ each: true })
+  @MaxLength(MAX_MEMORY_ITEM_LENGTH, { each: true })
+  preferences?: string[];
 }
 
 export class SaveNutritionProfileDto {

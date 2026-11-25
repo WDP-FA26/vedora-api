@@ -29,6 +29,7 @@ import { NUTRITION_POLICY } from '../ai/guardrails/policies/nutrition.js';
 import { searchKnowledgeTool } from '../knowledge/tools/search-knowledge.tool.js';
 import { KnowledgeSearchService } from '../knowledge/retrieval/knowledge-search.service.js';
 import { DietaryService } from '../recipes/dietary.service.js';
+import { extractAllergyKeywords } from '../recipes/nutrition.js';
 import type { PlannerToolOutputDto } from './dto/meal-plan.dto.js';
 import type { MealPlanVoiceScreenDto } from './dto/meal-plan-voice.dto.js';
 import { MealLogService } from './meal-log/meal-log.service.js';
@@ -51,10 +52,7 @@ import {
 import { editPlanTool } from './tools/edit-plan.tool.js';
 import { verifyMealPlanAllergiesTool } from './tools/allergy-verifier-subagent.tool.js';
 import { askUserTool } from './tools/ask-user.tool.js';
-import {
-  updateAllergyNoteTool,
-  updatePreferencesTool,
-} from './tools/dietary-notes.tool.js';
+import { updateMemoryTool } from './tools/dietary-memory.tool.js';
 import { autoBalancePlanTool } from './tools/auto-balance-plan.tool.js';
 import { fillSlotsTool } from './tools/fill-slots.tool.js';
 import { getEatingLogTool } from './tools/get-eating-log.tool.js';
@@ -411,7 +409,7 @@ export class MealPlannerChatService {
         return cannedReply(spoken, assistantMessageId);
       }
 
-      const [restrictions, plan, nutrition] = await Promise.all([
+      const [memory, plan, nutrition] = await Promise.all([
         this.dietary.find(userId),
         this.mealPlan.find(userId, weekStart),
         Promise.resolve(this.dietary.findNutrition(userId)).then(
@@ -424,25 +422,24 @@ export class MealPlannerChatService {
         plan.weekStart < plan.currentWeekStart
           ? plan.currentWeekStart
           : plan.weekStart;
-      const avoidedTerms = [
-        ...restrictions.ingredients.map(({ name }) => name),
-        ...restrictions.groups.map(({ name }) => name),
-        ...(restrictions.allergyNote ? [restrictions.allergyNote] : []),
-      ];
-      // A note the user adds mid-chat applies to the rest of this turn too:
-      // the allergy check and the restaurant/consult filters read these.
-      const onAllergyNoteSaved = (note: string | null) => {
-        const previous = restrictions.allergyNote;
-        restrictions.allergyNote = note;
-        const index = previous ? avoidedTerms.indexOf(previous) : -1;
-        if (index >= 0) avoidedTerms.splice(index, 1);
-        if (note) avoidedTerms.push(note);
-      };
-      const plannerContext = plannerDynamicContext(
-        restrictions,
-        plan,
-        nutrition,
+      // Restaurant dishes are matched on allergen keywords; the nutrition
+      // subagent reads the allergy lines themselves.
+      const allergyKeywords = extractAllergyKeywords(
+        memory.allergies.join('\n'),
       );
+      const allergyLines = [...memory.allergies];
+      // An allergy the user adds mid-chat applies to the rest of this turn too:
+      // the allergy check and the restaurant/consult filters read these arrays.
+      const onAllergiesSaved = (allergies: string[]) => {
+        memory.allergies = allergies;
+        allergyLines.splice(0, allergyLines.length, ...allergies);
+        allergyKeywords.splice(
+          0,
+          allergyKeywords.length,
+          ...extractAllergyKeywords(allergies.join('\n')),
+        );
+      };
+      const plannerContext = plannerDynamicContext(memory, plan, nutrition);
       const dynamicContext =
         voice && screen
           ? `${plannerContext}\n\n${await this.screenContext(userId, screen)}`
@@ -456,32 +453,27 @@ export class MealPlannerChatService {
         autoBalancePlan: autoBalancePlanTool(this.mealPlan, userId, toolWeek),
         editPlan: editPlanTool(this.mealPlan, userId, toolWeek),
         askUser: askUserTool(),
-        updatePreferences: updatePreferencesTool(this.dietary, userId),
-        updateAllergyNote: updateAllergyNoteTool(
-          this.dietary,
-          userId,
-          onAllergyNoteSaved,
-        ),
+        updateMemory: updateMemoryTool(this.dietary, userId, onAllergiesSaved),
         consultNutritionSubagent: consultNutritionSubagentTool(
           this.model,
           this.mealPlan,
           this.knowledge,
           userId,
           nutrition,
-          avoidedTerms,
+          allergyLines,
         ),
         verifyMealPlanAllergies: verifyMealPlanAllergiesTool(
           this.model,
           this.mealPlan,
           userId,
           toolWeek,
-          restrictions,
+          memory,
         ),
         ...(this.restaurantMenu
           ? {
               searchRestaurantDishes: searchRestaurantDishesTool(
                 this.restaurantMenu,
-                avoidedTerms,
+                allergyKeywords,
               ),
             }
           : {}),

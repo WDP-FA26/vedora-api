@@ -61,7 +61,7 @@ Chạy planner ở chế độ voice cho một lượt nói (một delegation c�
 | `updateBodyMetrics` | `{ heightCm, weightKg, targetWeightKg, bmi, bmiCategory, dailyCalorieTarget }` | làm mới `/dietary/nutrition`, mở tab BMI |
 | `undoLastChange` | `{ messageId, weeks: [{ weekStart, restored, skipped, droppedDishes }] }` | làm mới thực đơn, chuyển tới ngày vừa khôi phục |
 | `fillSlots`, `editPlan`, `autoBalancePlan`, `verifyMealPlanAllergies` | như chat chữ | làm mới thực đơn |
-| `updatePreferences`, `updateAllergyNote` | như chat chữ | làm mới `/dietary/me` |
+| `updateMemory` | như chat chữ | làm mới `/dietary/me` |
 
 Mở một panel (công thức, nhật ký, chỉ số cơ thể) thì FE đóng các panel khác đang mở. Các tool `showRecipe`, `showPlanDay`, `closeScreen`, `openEatingLog`, `showBodyMetrics` của các lượt cũ chỉ còn để đọc lịch sử; lượt mới không gọi chúng nữa.
 

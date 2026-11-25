@@ -2,9 +2,9 @@ import 'reflect-metadata';
 import { plainToInstance } from 'class-transformer';
 import { validate } from 'class-validator';
 import {
-  MAX_AVOIDED_GROUPS,
-  MAX_AVOIDED_INGREDIENTS,
-  SaveDietaryRestrictionsDto,
+  MAX_MEMORY_ITEM_LENGTH,
+  MAX_MEMORY_ITEMS,
+  SaveDietaryMemoryDto,
   SaveNutritionProfileDto,
   WeightCheckInDto,
 } from '@src/recipes/dto/dietary.dto.js';
@@ -37,49 +37,34 @@ const uuid = (n: number) =>
   `a1a2d3e4-0000-4000-8000-${String(n).padStart(12, '0')}`;
 
 describe('Recipes DTOs', () => {
-  describe('SaveDietaryRestrictionsDto', () => {
-    it('accepts valid unique UUID v4 arrays and natural-language allergyNote', async () => {
-      const dto = plainToInstance(SaveDietaryRestrictionsDto, {
-        ingredientIds: [uuid(1)],
-        groupIds: [uuid(2)],
-        allergyNote: '  Dị ứng đậu phộng và mè đen  ',
+  describe('SaveDietaryMemoryDto', () => {
+    it('trims lines and drops blanks and repeats', async () => {
+      const dto = plainToInstance(SaveDietaryMemoryDto, {
+        allergies: [
+          '  Dị ứng đậu phộng  ',
+          '',
+          'Dị ứng đậu phộng',
+          'Dị ứng mè',
+        ],
       });
       expect(await validate(dto)).toHaveLength(0);
-      expect(dto.allergyNote).toBe('Dị ứng đậu phộng và mè đen');
+      expect(dto.allergies).toEqual(['Dị ứng đậu phộng', 'Dị ứng mè']);
+      expect(dto.preferences).toBeUndefined();
     });
 
-    it('rejects duplicate, non-UUID, or oversized arrays', async () => {
-      expect(
-        await validate(
-          plainToInstance(SaveDietaryRestrictionsDto, {
-            ingredientIds: [uuid(1), uuid(1)],
-            groupIds: [],
-          }),
-        ),
-      ).not.toHaveLength(0);
-
-      expect(
-        await validate(
-          plainToInstance(SaveDietaryRestrictionsDto, {
-            ingredientIds: ['bad-id'],
-            groupIds: [],
-          }),
-        ),
-      ).not.toHaveLength(0);
-
-      expect(
-        await validate(
-          plainToInstance(SaveDietaryRestrictionsDto, {
-            ingredientIds: Array.from(
-              { length: MAX_AVOIDED_INGREDIENTS + 1 },
-              (_, i) => uuid(i + 1),
-            ),
-            groupIds: Array.from({ length: MAX_AVOIDED_GROUPS + 1 }, (_, i) =>
-              uuid(i + 1),
-            ),
-          }),
-        ),
-      ).not.toHaveLength(0);
+    it('rejects non-string, too long, or too many lines', async () => {
+      for (const preferences of [
+        'Không thích nấm',
+        [42],
+        ['x'.repeat(MAX_MEMORY_ITEM_LENGTH + 1)],
+        Array.from({ length: MAX_MEMORY_ITEMS + 1 }, (_, i) => `Dòng ${i}`),
+      ]) {
+        expect(
+          await validate(
+            plainToInstance(SaveDietaryMemoryDto, { preferences }),
+          ),
+        ).not.toHaveLength(0);
+      }
     });
   });
 

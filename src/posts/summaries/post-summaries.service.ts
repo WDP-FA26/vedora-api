@@ -143,8 +143,6 @@ export class PostSummariesService {
             role: SYSTEM_ACCOUNT.role,
             isProfessional: SYSTEM_ACCOUNT.isProfessional,
             accountVersion: 0,
-            avoidedIngredientIds: [],
-            avoidedGroupIds: [],
           },
         },
         { upsert: true },

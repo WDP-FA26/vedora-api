@@ -81,78 +81,106 @@ describe('DietaryService', () => {
     await app.close();
   });
 
-  it('lists all ingredients and only dietary=true groups sorted by name', async () => {
-    const opts = await service.options();
-
-    expect(opts.ingredients.map((i) => i.name)).toEqual([
-      'Hành',
-      'Tỏi',
-      'Đậu hũ',
-    ]);
-    expect(opts.ingredients.find((i) => i.id === TOFU_ID)?.aliases).toEqual([
-      'Tofu',
-    ]);
-    expect(opts.groups).toEqual([
-      {
-        id: ALLIUM_GROUP,
-        name: 'Ngũ vị tân',
-        ingredients: ['Hành', 'Tỏi'],
-      },
-    ]);
-  });
-
-  it('returns empty preferences when user does not exist', async () => {
+  it('returns empty lists when the user does not exist', async () => {
     await expect(
       service.find('4a1e32e4-e18e-4dd7-8b4a-246ef2113fff'),
-    ).resolves.toEqual({
-      ingredients: [],
-      groups: [],
-    });
+    ).resolves.toEqual({ allergies: [], preferences: [] });
   });
 
-  it('replaces, reads back, and expands avoided ingredients from both direct and group selections', async () => {
+  it('replaces only the lists that are sent', async () => {
     const saved = await service.replace(USER_ID, {
-      ingredientIds: [ONION_ID],
-      groupIds: [ALLIUM_GROUP],
-      allergyNote: '  Dị ứng đậu phộng và kiêng ăn cay  ',
+      allergies: ['Dị ứng đậu phộng', 'Kiêng ăn cay'],
+      preferences: ['Không thích nấm'],
     });
-
     expect(saved).toEqual({
-      ingredients: [{ id: ONION_ID, name: 'Hành' }],
-      groups: [{ id: ALLIUM_GROUP, name: 'Ngũ vị tân' }],
-      allergyNote: 'Dị ứng đậu phộng và kiêng ăn cay',
+      allergies: ['Dị ứng đậu phộng', 'Kiêng ăn cay'],
+      preferences: ['Không thích nấm'],
     });
 
-    await expect(service.find(USER_ID)).resolves.toEqual(saved);
-
-    const cleared = await service.replace(USER_ID, {
-      ingredientIds: [ONION_ID],
-      groupIds: [ALLIUM_GROUP],
-      allergyNote: null,
+    const kept = await service.replace(USER_ID, { preferences: [] });
+    expect(kept).toEqual({
+      allergies: ['Dị ứng đậu phộng', 'Kiêng ăn cay'],
+      preferences: [],
     });
-    expect(cleared).toEqual({
-      ingredients: [{ id: ONION_ID, name: 'Hành' }],
-      groups: [{ id: ALLIUM_GROUP, name: 'Ngũ vị tân' }],
-    });
-
-    const avoided = await service.avoidedIngredientIds(USER_ID);
-    expect([...avoided].sort()).toEqual([GARLIC_ID, ONION_ID].sort());
+    await expect(service.find(USER_ID)).resolves.toEqual(kept);
   });
 
-  it('rejects unknown ingredient or group references', async () => {
-    await expect(
-      service.replace(USER_ID, {
-        ingredientIds: ['a1a2d3e4-0000-4000-8000-000000000099'],
-        groupIds: [],
-      }),
-    ).rejects.toMatchObject({ code: 'UNKNOWN_REFERENCE' });
+  it('adds and removes memory lines without touching the other section', async () => {
+    await service.replace(USER_ID, {
+      allergies: ['Dị ứng đậu phộng'],
+      preferences: ['Không thích nấm'],
+    });
 
     await expect(
-      service.replace(USER_ID, {
-        ingredientIds: [],
-        groupIds: ['b1a2d3e4-0000-4000-8000-000000000099'],
+      service.updateMemory(USER_ID, 'allergies', {
+        add: ['  Dị ứng mè ', 'Dị ứng đậu phộng', ''],
       }),
-    ).rejects.toMatchObject({ code: 'UNKNOWN_REFERENCE' });
+    ).resolves.toEqual(['Dị ứng đậu phộng', 'Dị ứng mè']);
+
+    await expect(
+      service.updateMemory(USER_ID, 'preferences', {
+        remove: ['Không thích nấm', 'Không có dòng này'],
+        add: ['Chỉ nấu bữa tối'],
+      }),
+    ).resolves.toEqual(['Chỉ nấu bữa tối']);
+
+    await expect(service.find(USER_ID)).resolves.toEqual({
+      allergies: ['Dị ứng đậu phộng', 'Dị ứng mè'],
+      preferences: ['Chỉ nấu bữa tối'],
+    });
+  });
+
+  it('refuses to grow a section past its limit', async () => {
+    const full = Array.from({ length: 30 }, (_, index) => `Dòng ${index}`);
+    await service.replace(USER_ID, { preferences: full });
+
+    await expect(
+      service.updateMemory(USER_ID, 'preferences', { add: ['Dòng mới'] }),
+    ).rejects.toMatchObject({ code: 'DIETARY_MEMORY_FULL' });
+  });
+
+  it('turns legacy notes and avoided ids into lines on first read', async () => {
+    await mongo.connection.collection('users').updateOne(
+      { _id: USER_ID },
+      {
+        $set: {
+          allergyNote: '- Dị ứng đậu phộng\n\nKiêng ăn cay',
+          preferenceNote: 'Không thích nấm',
+          avoidedIngredientIds: [TOFU_ID],
+          avoidedGroupIds: [ALLIUM_GROUP],
+        },
+        $unset: { allergies: '', foodPreferences: '' },
+      },
+    );
+
+    await expect(service.find(USER_ID)).resolves.toEqual({
+      allergies: [
+        'Dị ứng đậu phộng',
+        'Kiêng ăn cay',
+        'Không ăn: nhóm Ngũ vị tân, Đậu hũ',
+      ],
+      preferences: ['Không thích nấm'],
+    });
+
+    const stored = await mongo.connection
+      .collection('users')
+      .findOne({ username: 'dietary.user' });
+    expect(stored).not.toHaveProperty('allergyNote');
+    expect(stored).not.toHaveProperty('preferenceNote');
+    expect(stored).not.toHaveProperty('avoidedIngredientIds');
+    expect(stored).not.toHaveProperty('avoidedGroupIds');
+    expect(stored?.allergies).toHaveLength(3);
+  });
+
+  it('extracts allergen keywords from the allergy lines', async () => {
+    await service.replace(USER_ID, {
+      allergies: ['Dị ứng đậu nành'],
+      preferences: ['Không thích nấm'],
+    });
+
+    const keywords = await service.allergyKeywords(USER_ID);
+    expect(keywords).toContain('đậu hũ');
+    expect(keywords).not.toContain('nấm');
   });
 
   it('saves nutrition profile, logs weight check-ins by date, and refuses unsafe underweight loss goals', async () => {

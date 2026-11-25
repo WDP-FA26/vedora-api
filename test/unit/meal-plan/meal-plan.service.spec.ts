@@ -16,7 +16,6 @@ import {
 import { MongoModule } from '@src/mongo/mongo.module.js';
 import {
   type IncompatibilityRule,
-  type IngredientGroup,
   type MealPlanEntry,
   MealSection,
   RecipeTag,
@@ -48,8 +47,6 @@ describe('MealPlanService', () => {
 
   const entries = () => mongo.connection.model<MealPlanEntry>('MealPlanEntry');
   const users = () => mongo.connection.model('User');
-  const groups = () =>
-    mongo.connection.model<IngredientGroup>('IngredientGroup');
   const ingredients = () => mongo.connection.model('Ingredient');
   const rules = () =>
     mongo.connection.model<IncompatibilityRule>('IncompatibilityRule');
@@ -233,7 +230,7 @@ describe('MealPlanService', () => {
   it('rejects a recipe with an ingredient the user avoids', async () => {
     await users().updateOne(
       { _id: USER_ID },
-      { $set: { avoidedIngredientIds: [TOFU_ID] } },
+      { $set: { allergies: ['Dị ứng đậu nành'] } },
     );
 
     const { problems } = await service.preview(USER_ID, WEEK, [
@@ -260,7 +257,7 @@ describe('MealPlanService', () => {
   it('shows an avoided recipe to the assistant but keeps it out of the plan', async () => {
     await users().updateOne(
       { _id: USER_ID },
-      { $set: { avoidedIngredientIds: [TOFU_ID] } },
+      { $set: { allergies: ['Dị ứng đậu nành'] } },
     );
 
     const recipe = await service.recipeInstructions(USER_ID, TOFU_RECIPE);
@@ -475,16 +472,9 @@ describe('MealPlanService', () => {
   });
 
   it('flags avoided recipes after the safe ones and filters internal conflicts and search query', async () => {
-    const groupId = 'b1a2d3e4-0000-4000-8000-000000000001';
-    await groups().create({
-      _id: groupId,
-      name: 'Nhóm đậu',
-      dietary: true,
-      ingredientIds: [TOFU_ID],
-    });
     await users().updateOne(
       { _id: USER_ID },
-      { $set: { avoidedGroupIds: [groupId] } },
+      { $set: { allergies: ['Dị ứng đậu nành'] } },
     );
     await ingredients().updateOne(
       { _id: RICE_ID },

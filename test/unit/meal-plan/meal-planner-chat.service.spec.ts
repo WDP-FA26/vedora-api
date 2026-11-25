@@ -143,10 +143,7 @@ describe('MealPlannerChatService', () => {
     history.loadContextMessages.mockResolvedValue([]);
     history.recordAssistantMessage.mockResolvedValue(undefined);
 
-    dietary.find.mockResolvedValue({
-      ingredients: [],
-      groups: [],
-    });
+    dietary.find.mockResolvedValue({ allergies: [], preferences: [] });
     mealPlan.find.mockResolvedValue({
       weekStart: WEEK,
       currentWeekStart: WEEK,
@@ -321,8 +318,7 @@ describe('MealPlannerChatService', () => {
       'autoBalancePlan',
       'editPlan',
       'askUser',
-      'updatePreferences',
-      'updateAllergyNote',
+      'updateMemory',
       'consultNutritionSubagent',
       'verifyMealPlanAllergies',
       'searchRestaurantDishes',
@@ -855,8 +851,8 @@ describe('MealPlannerChatService', () => {
 
   it('calls RestaurantMenuService when the planner invokes searchRestaurantDishes', async () => {
     dietary.find.mockResolvedValue({
-      ingredients: [{ id: 'ing-1', name: 'Đậu phộng' }],
-      groups: [],
+      allergies: ['Dị ứng đậu phộng'],
+      preferences: [],
     });
     restaurantMenu.suggestForPlanner.mockResolvedValue([
       {
@@ -908,7 +904,7 @@ describe('MealPlannerChatService', () => {
     expect(restaurantMenu.suggestForPlanner).toHaveBeenCalledWith(
       'bún bò chay',
       5,
-      ['Đậu phộng'],
+      expect.arrayContaining(['đậu phộng']),
     );
     expect(replyText(chunks)).toBe('Mình đã gợi ý thực đơn.');
   });

@@ -10,20 +10,19 @@ import {
   NutritionGoal,
   User,
 } from '../mongo/models.js';
-import { allExist } from '../mongo/references.js';
 import {
-  DietaryOptionsDto,
-  DietaryRestrictionsDto,
+  DietaryMemoryDto,
+  MAX_MEMORY_ITEM_LENGTH,
+  MAX_MEMORY_ITEMS,
   NutritionProfileDto,
-  SaveDietaryRestrictionsDto,
-  MAX_ALLERGY_NOTE_LENGTH,
-  MAX_PREFERENCE_NOTE_LENGTH,
+  SaveDietaryMemoryDto,
   SaveNutritionProfileDto,
   WeightCheckInDto,
 } from './dto/dietary.dto.js';
 import {
   calculateBmi,
   computeNutritionMetrics,
+  extractAllergyKeywords,
   todayDateInZone,
 } from './nutrition.js';
 import { InvalidInputException } from '../common/exceptions/invalid-input.exception.js';
@@ -38,6 +37,8 @@ function isRealDate(value: string): boolean {
   return new Date(parsed).toISOString().slice(0, 10) === value;
 }
 
+export type MemorySection = keyof DietaryMemoryDto;
+
 @Injectable()
 export class DietaryService {
   constructor(
@@ -51,95 +52,72 @@ export class DietaryService {
     private readonly metricLogs?: Model<BodyMetricLog>,
   ) {}
 
-  async options(): Promise<DietaryOptionsDto> {
-    const [ingredients, groups] = await Promise.all([
-      this.ingredients.find().sort({ name: 1 }).exec(),
-      this.groups.find({ dietary: true }).sort({ name: 1 }).exec(),
-    ]);
-    const nameOf = new Map(ingredients.map(({ id, name }) => [id, name]));
-    return {
-      ingredients: ingredients.map(({ id, name, aliases }) => ({
-        id,
-        name,
-        aliases: [...aliases],
-      })),
-      groups: groups.map(({ id, name, ingredientIds }) => ({
-        id,
-        name,
-        ingredients: ingredientIds
-          .map((ingredientId) => nameOf.get(ingredientId) ?? '')
-          .sort(),
-      })),
-    };
-  }
-
-  async find(userId: string): Promise<DietaryRestrictionsDto> {
-    const user = await this.preferences(userId);
-    const [ingredients, groups] = await Promise.all([
-      this.ingredients
-        .find({ _id: { $in: [...user.avoidedIngredientIds] } })
-        .select('name')
-        .sort({ name: 1 })
-        .exec(),
-      this.groups
-        .find({ _id: { $in: [...user.avoidedGroupIds] } })
-        .select('name')
-        .sort({ name: 1 })
-        .exec(),
-    ]);
-    return {
-      ingredients: ingredients.map(({ id, name }) => ({ id, name })),
-      groups: groups.map(({ id, name }) => ({ id, name })),
-      ...(user.allergyNote ? { allergyNote: user.allergyNote } : {}),
-      ...(user.preferenceNote ? { preferenceNote: user.preferenceNote } : {}),
-    };
-  }
-
-  async avoidedIngredientIds(userId: string): Promise<Set<string>> {
-    const user = await this.preferences(userId);
-    const viaGroups = await this.groups
-      .find({ _id: { $in: [...user.avoidedGroupIds] } })
-      .select('ingredientIds')
+  async find(userId: string): Promise<DietaryMemoryDto> {
+    const user = await this.users
+      .findOne({ _id: userId })
+      .select(['allergies', 'foodPreferences', ...LEGACY_FIELDS])
+      .lean<LegacyDietaryFields>()
       .exec();
-    return new Set([
-      ...user.avoidedIngredientIds,
-      ...viaGroups.flatMap(({ ingredientIds }) => ingredientIds),
-    ]);
+    if (!user) return { allergies: [], preferences: [] };
+    if (LEGACY_FIELDS.some((key) => user[key] !== undefined)) {
+      return this.migrateLegacy(user);
+    }
+    return {
+      allergies: user.allergies ?? [],
+      preferences: user.foodPreferences ?? [],
+    };
+  }
+
+  /** Allergen keywords from the allergy lines, used to keep dishes off the plan. */
+  async allergyKeywords(userId: string): Promise<string[]> {
+    const { allergies } = await this.find(userId);
+    return extractAllergyKeywords(allergies.join('\n'));
   }
 
   async replace(
     userId: string,
-    dto: SaveDietaryRestrictionsDto,
-  ): Promise<DietaryRestrictionsDto> {
-    const [ingredients, groups] = await Promise.all([
-      allExist(this.ingredients, dto.ingredientIds),
-      allExist(this.groups, dto.groupIds),
-    ]);
-    if (!ingredients || !groups) {
+    dto: SaveDietaryMemoryDto,
+  ): Promise<DietaryMemoryDto> {
+    // Read first so a legacy note is folded in before the new lists land.
+    await this.find(userId);
+    const updateSet: Record<string, string[]> = {};
+    if (dto.allergies !== undefined) updateSet.allergies = dto.allergies;
+    if (dto.preferences !== undefined) {
+      updateSet.foodPreferences = dto.preferences;
+    }
+    if (Object.keys(updateSet).length > 0) {
+      await this.users.updateOne({ _id: userId }, { $set: updateSet }).exec();
+    }
+    return this.find(userId);
+  }
+
+  /**
+   * Adds and removes lines in one memory section. Removal matches a saved line
+   * exactly (after trimming); unknown lines are ignored.
+   */
+  async updateMemory(
+    userId: string,
+    section: MemorySection,
+    change: { add?: readonly string[]; remove?: readonly string[] },
+  ): Promise<string[]> {
+    const current = await this.find(userId);
+    const removed = new Set((change.remove ?? []).map((line) => line.trim()));
+    const lines = current[section].filter((line) => !removed.has(line));
+    for (const raw of change.add ?? []) {
+      const line = raw.trim().slice(0, MAX_MEMORY_ITEM_LENGTH);
+      if (line !== '' && !lines.includes(line)) lines.push(line);
+    }
+    if (lines.length > MAX_MEMORY_ITEMS) {
       throw new InvalidInputException(
-        'UNKNOWN_REFERENCE',
-        'An ingredient or group in the request does not exist',
+        'DIETARY_MEMORY_FULL',
+        `A memory section holds at most ${MAX_MEMORY_ITEMS} lines`,
       );
     }
-    const updateSet: Record<string, unknown> = {
-      avoidedIngredientIds: dto.ingredientIds,
-      avoidedGroupIds: dto.groupIds,
-    };
-    if (dto.allergyNote !== undefined) {
-      const normalizedNote = dto.allergyNote?.trim() ?? null;
-      updateSet.allergyNote = normalizedNote || null;
-    }
-    if (dto.preferenceNote !== undefined) {
-      updateSet.preferenceNote = dto.preferenceNote?.trim() || null;
-    }
+    const field = section === 'allergies' ? 'allergies' : 'foodPreferences';
     await this.users
-      .findOneAndUpdate(
-        { _id: userId },
-        { $set: updateSet },
-        { returnDocument: 'after' },
-      )
+      .updateOne({ _id: userId }, { $set: { [field]: lines } })
       .exec();
-    return this.find(userId);
+    return lines;
   }
 
   async findNutrition(userId: string): Promise<NutritionProfileDto> {
@@ -363,39 +341,102 @@ export class DietaryService {
     return this.findNutrition(userId);
   }
 
-  /** Replaces the free-text allergy note; blank clears it. */
-  async saveAllergyNote(userId: string, note: string): Promise<string | null> {
-    const normalized = note.trim().slice(0, MAX_ALLERGY_NOTE_LENGTH) || null;
-    await this.users
-      .updateOne({ _id: userId }, { $set: { allergyNote: normalized } })
-      .exec();
-    return normalized;
-  }
-
-  /** Replaces the tastes and habits note; blank clears it. */
-  async savePreferenceNote(
-    userId: string,
-    note: string,
-  ): Promise<string | null> {
-    const normalized = note.trim().slice(0, MAX_PREFERENCE_NOTE_LENGTH) || null;
-    await this.users
-      .updateOne({ _id: userId }, { $set: { preferenceNote: normalized } })
-      .exec();
-    return normalized;
-  }
-
-  private async preferences(userId: string) {
-    const user = await this.users
-      .findOne({ _id: userId })
-      .select('avoidedIngredientIds avoidedGroupIds allergyNote preferenceNote')
-      .exec();
-    return (
-      user ?? {
-        avoidedIngredientIds: [],
-        avoidedGroupIds: [],
-        allergyNote: null,
-        preferenceNote: null,
-      }
+  /**
+   * Accounts saved before the memory lists kept free-text notes and avoided
+   * ingredient/group ids. The first read turns them into lines and drops the
+   * old fields.
+   */
+  private async migrateLegacy(
+    user: LegacyDietaryFields,
+  ): Promise<DietaryMemoryDto> {
+    const avoidedNames = await this.avoidedNames(
+      user.avoidedIngredientIds ?? [],
+      user.avoidedGroupIds ?? [],
     );
+    const allergyLines = [
+      ...(user.allergies ?? []),
+      ...noteLines(user.allergyNote),
+    ];
+    if (avoidedNames.length > 0) {
+      allergyLines.push(`Không ăn: ${avoidedNames.join(', ')}`);
+    }
+    const memory: DietaryMemoryDto = {
+      allergies: uniqueLines(allergyLines),
+      preferences: uniqueLines([
+        ...(user.foodPreferences ?? []),
+        ...noteLines(user.preferenceNote),
+      ]),
+    };
+    const unset: Record<string, ''> = {};
+    for (const key of LEGACY_FIELDS) unset[key] = '';
+    // strict: false, or Mongoose drops the $unset of fields the schema no longer has.
+    await this.users
+      .updateOne(
+        { _id: user._id },
+        {
+          $set: {
+            allergies: memory.allergies,
+            foodPreferences: memory.preferences,
+          },
+          $unset: unset,
+        },
+        { strict: false },
+      )
+      .exec();
+    return memory;
   }
+
+  private async avoidedNames(
+    ingredientIds: readonly string[],
+    groupIds: readonly string[],
+  ): Promise<string[]> {
+    if (ingredientIds.length === 0 && groupIds.length === 0) return [];
+    const [ingredients, groups] = await Promise.all([
+      this.ingredients
+        .find({ _id: { $in: [...ingredientIds] } })
+        .select('name')
+        .exec(),
+      this.groups
+        .find({ _id: { $in: [...groupIds] } })
+        .select('name')
+        .exec(),
+    ]);
+    const names = [
+      ...groups.map(({ name }) => `nhóm ${name}`),
+      ...ingredients.map(({ name }) => name),
+    ];
+    return names.sort();
+  }
+}
+
+const LEGACY_FIELDS = [
+  'allergyNote',
+  'preferenceNote',
+  'avoidedIngredientIds',
+  'avoidedGroupIds',
+] as const;
+
+interface LegacyDietaryFields {
+  _id: string;
+  allergies?: string[];
+  foodPreferences?: string[];
+  allergyNote?: string | null;
+  preferenceNote?: string | null;
+  avoidedIngredientIds?: string[];
+  avoidedGroupIds?: string[];
+}
+
+/** Splits a legacy note into lines, dropping list bullets. */
+function noteLines(note: string | null | undefined): string[] {
+  if (!note) return [];
+  const lines: string[] = [];
+  for (const raw of note.split('\n')) {
+    const line = raw.replace(/^\s*[-*•]\s*/, '').trim();
+    if (line !== '') lines.push(line.slice(0, MAX_MEMORY_ITEM_LENGTH));
+  }
+  return lines;
+}
+
+function uniqueLines(lines: readonly string[]): string[] {
+  return [...new Set(lines)].slice(0, MAX_MEMORY_ITEMS);
 }

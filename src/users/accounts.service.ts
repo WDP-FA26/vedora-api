@@ -44,8 +44,6 @@ export class AccountsService {
         status: AccountStatus.PENDING_EMAIL,
         accountVersion: 0,
         isProfessional: false,
-        avoidedIngredientIds: [],
-        avoidedGroupIds: [],
         ...data,
       });
       if (user.status === AccountStatus.ACTIVE && user.emailVerifiedAt) {

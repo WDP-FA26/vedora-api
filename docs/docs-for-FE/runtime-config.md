@@ -4,6 +4,8 @@ BE externalizes operational settings into env. Defaults preserve the previous be
 
 ## Public limits
 
+> **Trạng thái:** Endpoint `GET /api/v1/public-config` hiện đang được tạm khóa (`DisabledEndpointGuard`, trả `404 NOT_FOUND` và ẩn khỏi Swagger `/docs`) do FE chưa tiêu thụ.
+
 `GET /api/v1/public-config` (adjust API_PREFIX if configured) requires no authentication and returns `Cache-Control: no-store`.
 
 Response groups:
@@ -32,7 +34,7 @@ No API keys, credentials, model prompts, policy files or private deployment conf
 
 ## FE follow-up
 
-This change modifies BE only. FE still has its previous local constants until its follow-up task is implemented. Before increasing/decreasing public limits in production, update FE to consume this endpoint and build Zod/form schemas from the returned values. In particular, FE currently assumes six OTP digits, fixed post/recipe limits and a fixed VietQR origin; custom env values can require FE changes and a CSP update.
+Endpoint `GET /api/v1/public-config` hiện đang tạm khóa bằng `DisabledEndpointGuard` (`404 NOT_FOUND`, ẩn khỏi Swagger `/docs`). FE vẫn dùng các hằng số cục bộ cho tới khi mở lại endpoint này để tiêu thụ trực tiếp. Before increasing/decreasing public limits in production, re-enable this endpoint and update FE to consume it and build Zod/form schemas from the returned values. In particular, FE currently assumes six OTP digits, fixed post/recipe limits and a fixed VietQR origin; custom env values can require FE changes and a CSP update.
 
 `MAX_VIDEO_DURATION_SEC` already comes from existing BE env, while the current FE has a fixed 180-second input check. This setting is not included in this endpoint yet; FE must coordinate any change to that existing env. The recipe-image 10 MB and blog-video 100 MB frontend-only caps have not been misrepresented as new backend enforcement.
 

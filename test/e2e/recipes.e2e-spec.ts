@@ -139,24 +139,30 @@ describe('Recipes and ingredients (e2e)', () => {
     expect(response.body).toHaveLength(1);
   });
 
-  it('replaces what a signed-in user does not eat', async () => {
+  it('replaces what the planner remembers about a signed-in user', async () => {
     const dietary = {
-      ingredientIds: [tofu.id],
-      groupIds: [],
+      allergies: [' Dị ứng đậu phộng ', 'Dị ứng đậu phộng'],
+      preferences: ['Không thích nấm'],
     };
     await request(server()).put('/api/v1/dietary/me').send(dietary).expect(401);
+    await request(server())
+      .put('/api/v1/dietary/me')
+      .set('Authorization', `Bearer ${memberToken}`)
+      .send({ allergies: ['x'.repeat(201)] })
+      .expect(400);
     const response = await request(server())
       .put('/api/v1/dietary/me')
       .set('Authorization', `Bearer ${memberToken}`)
       .send(dietary)
       .expect(200);
     expect(response.body).toEqual({
-      ingredients: [{ id: tofu.id, name: 'Đậu hũ' }],
-      groups: [],
+      allergies: ['Dị ứng đậu phộng'],
+      preferences: ['Không thích nấm'],
     });
     const stored = await e2e.mongo.connection
       .model<User>('User')
       .findOne({ _id: member.id });
-    expect(stored?.avoidedIngredientIds).toEqual([tofu.id]);
+    expect(stored?.allergies).toEqual(['Dị ứng đậu phộng']);
+    expect(stored?.foodPreferences).toEqual(['Không thích nấm']);
   });
 });

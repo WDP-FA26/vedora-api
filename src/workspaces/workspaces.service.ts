@@ -740,8 +740,6 @@ export class WorkspacesService {
             // Profiles, follows and search only list accounts with this set;
             // a page has no mailbox, so approval stands in for verification.
             emailVerifiedAt: now,
-            avoidedIngredientIds: [],
-            avoidedGroupIds: [],
           },
         ],
         { session },

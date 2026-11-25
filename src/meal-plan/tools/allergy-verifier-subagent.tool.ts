@@ -3,7 +3,7 @@ import { generateText, type LanguageModel, Output, tool } from 'ai';
 import { z } from 'zod';
 import { PromptCache } from '../../ai/prompt-cache.js';
 import { MealSection, Weekday } from '../../mongo/models.js';
-import type { DietaryRestrictionsDto } from '../../recipes/dto/dietary.dto.js';
+import type { DietaryMemoryDto } from '../../recipes/dto/dietary.dto.js';
 import { extractAllergyKeywords } from '../../recipes/nutrition.js';
 import { MEAL_SECTIONS } from '../dto/meal-plan.dto.js';
 import type { DraftOp } from '../meal-plan-draft.js';
@@ -102,7 +102,6 @@ function recipeHaystack(recipe: RecipeDetails): string {
 async function runSemanticAllergyAudit(
   model: LanguageModel,
   combinedNotes: string,
-  avoidedTerms: readonly string[],
   recipes: RecipeDetails[],
   abortSignal?: AbortSignal,
 ): Promise<{
@@ -130,8 +129,7 @@ async function runSemanticAllergyAudit(
     }),
     prompt: [
       `<allergy_profile>`,
-      `Thực phẩm người dùng tránh trong hồ sơ có cấu trúc: ${avoidedTerms.length > 0 ? avoidedTerms.join(', ') : 'không có'}.`,
-      `Mô tả dị ứng & lưu ý ăn uống tự nhiên: ${combinedNotes || 'không có mô tả thêm'}.`,
+      `Dị ứng & thứ người dùng không được ăn: ${combinedNotes || 'không có mô tả thêm'}.`,
       `</allergy_profile>`,
       `<recipes>\n${recipeLines.join('\n')}\n</recipes>`,
     ].join('\n\n'),
@@ -151,7 +149,7 @@ export function verifyMealPlanAllergiesTool(
   mealPlan: MealPlanService,
   userId: string,
   openWeekStart: string,
-  restrictions: DietaryRestrictionsDto,
+  memory: DietaryMemoryDto,
 ) {
   return tool({
     description:
@@ -163,7 +161,7 @@ export function verifyMealPlanAllergiesTool(
         .max(1000)
         .optional()
         .describe(
-          'Optional allergy or intolerance description mentioned in the chat turn to combine with the saved allergyNote',
+          'Optional allergy or intolerance description mentioned in the chat turn to combine with the saved allergies',
         ),
       replaceFlagged: z
         .boolean()
@@ -198,13 +196,9 @@ export function verifyMealPlanAllergiesTool(
         if (item) recipeMap.set(item.id, item);
       }
 
-      const combinedNotes = [restrictions.allergyNote, allergyDescription]
+      const combinedNotes = [...memory.allergies, allergyDescription]
         .filter((value): value is string => Boolean(value && value.trim()))
         .join(' | ');
-      const avoidedTerms = [
-        ...restrictions.groups.map((item) => item.name),
-        ...restrictions.ingredients.map((item) => item.name),
-      ];
       const keywords = extractAllergyKeywords(combinedNotes);
 
       const flaggedReasons = new Map<string, string>();
@@ -239,7 +233,6 @@ export function verifyMealPlanAllergiesTool(
           const audit = await runSemanticAllergyAudit(
             model,
             combinedNotes,
-            avoidedTerms,
             unflaggedRecipes,
             abortSignal,
           );

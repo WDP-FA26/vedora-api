@@ -1,5 +1,5 @@
 import type {
-  DietaryRestrictionsDto,
+  DietaryMemoryDto,
   NutritionProfileDto,
 } from '../recipes/dto/dietary.dto.js';
 import type { MealPlanDto } from './dto/meal-plan.dto.js';
@@ -42,7 +42,7 @@ Cách làm việc với người dùng
 - Khi người dùng chỉ nhờ nhận xét hay kiểm tra thực đơn: nhận xét ngắn (hụt/dư Kcal, thiếu nhóm chất) rồi hỏi họ có muốn chỉnh không; chưa được nhờ thì không sửa.
 - Người dùng có thể tự sửa lịch hoặc quay lại phiên bản cũ giữa các lượt, nên đọc lại thực đơn trước khi sửa tiếp nếu không chắc.
 - Ứng dụng đã hiện thay đổi trong khung chat, nên mặc định không chép lại cả bảng thực đơn: tóm tắt tổng Kcal ước tính mỗi ngày và lý do phối món. Người dùng muốn xem bảng hay cách trình bày khác thì làm theo họ.
-- Khi người dùng nói một sở thích hay thói quen lâu dài, ghi lại vào mục Sở thích để lần sau vẫn nhớ. Khi họ kể thêm dị ứng, không dung nạp hay thứ không được ăn, ghi ngay vào mục Dị ứng (giữ nguyên những gì đã có) rồi kiểm tra lại các món đã lên lịch.
+- Khi người dùng nói một sở thích hay thói quen lâu dài, ghi lại vào mục Sở thích (updateMemory) để lần sau vẫn nhớ. Khi họ kể thêm dị ứng, không dung nạp hay thứ không được ăn, ghi ngay vào mục Dị ứng rồi kiểm tra lại các món đã lên lịch.
 - Người dùng có thể dừng bạn giữa chừng; khi đó những gì đã lưu vẫn giữ nguyên, đọc lại thực đơn nếu cần.
 
 Lịch và tuần
@@ -305,14 +305,10 @@ export function plannerVoiceInstructions(allowWebSearch = false): string {
  * the static system prefix remains cacheable.
  */
 export function plannerDynamicContext(
-  restrictions: DietaryRestrictionsDto,
+  memory: DietaryMemoryDto,
   plan: MealPlanDto,
   nutrition?: NutritionProfileDto | null,
 ): string {
-  const avoided = [
-    ...restrictions.groups.map(({ name }) => `nhóm ${name}`),
-    ...restrictions.ingredients.map(({ name }) => name),
-  ];
   const days = plan.days.map(({ day, sections }) => {
     const dayPillars = new Set<NutritionPillar>();
     let dayCalories = 0;
@@ -342,35 +338,38 @@ export function plannerDynamicContext(
       : '';
     return `- ${DAY_NAMES[day]}: ${filled.length > 0 ? filled.join('; ') : '(trống)'}${nutritionNote}`;
   });
-  const allergyNote = restrictions.allergyNote?.trim()
-    ? stripPlannerContextTags(restrictions.allergyNote.trim())
-    : 'chưa mô tả thêm';
-  const preferenceNote = restrictions.preferenceNote?.trim()
-    ? stripPlannerContextTags(restrictions.preferenceNote.trim())
-    : 'chưa có';
 
   return `${plannerCalendar(plan)}
 
 ${nutritionSummary(nutrition)}
 
-Thực phẩm người dùng không ăn (searchRecipes và getRecipe vẫn trả món chứa chúng, đánh dấu AVOIDED): ${
-    avoided.length > 0 ? avoided.join(', ') : 'chưa khai báo gì'
-  }.
-Mô tả dị ứng & lưu ý ăn uống của người dùng (mục Dị ứng trong Hồ sơ ăn uống, bạn bổ sung bằng updateAllergyNote): ${allergyNote}.
-Sở thích và thói quen người dùng (mục "Sở thích" trong Hồ sơ ăn uống, bạn cập nhật bằng updatePreferences; tôn trọng khi lên món): ${preferenceNote}.
+Ghi nhớ về người dùng (mục "Ghi nhớ" trong Hồ sơ ăn uống; bạn thêm/bớt bằng updateMemory):
+Dị ứng (tuyệt đối tránh; searchRecipes và getRecipe đánh dấu AVOIDED món có thành phần khớp):
+${memoryLines(memory.allergies, 'chưa khai báo gì')}
+Sở thích (tôn trọng khi lên món):
+${memoryLines(memory.preferences, 'chưa có')}
 
 Thực đơn hiện tại của tuần người dùng đang xem (weekStart ${plan.weekStart}, gọi getPlan để xem tuần khác):
 ${days.join('\n')}`;
 }
 
+function memoryLines(lines: readonly string[], empty: string): string {
+  const shown: string[] = [];
+  for (const line of lines) {
+    const clean = stripPlannerContextTags(line).trim();
+    if (clean !== '') shown.push(`- ${clean}`);
+  }
+  return shown.length > 0 ? shown.join('\n') : `- (${empty})`;
+}
+
 export function plannerInstructions(
-  restrictions: DietaryRestrictionsDto,
+  memory: DietaryMemoryDto,
   plan: MealPlanDto,
   allowWebSearch = false,
   nutrition?: NutritionProfileDto | null,
 ): string {
   return `${plannerStaticInstructions(allowWebSearch)}\n\n${plannerDynamicContext(
-    restrictions,
+    memory,
     plan,
     nutrition,
   )}`;

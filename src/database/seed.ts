@@ -55,8 +55,6 @@ export async function seedDatabase(mongo: MongoService): Promise<void> {
       status: AccountStatus.ACTIVE,
       accountVersion: 0,
       isProfessional: false,
-      avoidedIngredientIds: [],
-      avoidedGroupIds: [],
     });
   }
 }

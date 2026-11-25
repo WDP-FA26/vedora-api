@@ -78,17 +78,13 @@ export class User extends Identified {
   @Prop({ type: Date, default: null })
   searchIndexedAt!: Date | null;
 
+  /** What the meal planner must never serve this user, one natural-language line each. */
   @Prop({ type: [String], required: true, default: [] })
-  avoidedIngredientIds!: string[];
+  allergies!: string[];
 
+  /** Lasting tastes and habits the meal planner keeps in mind, one line each. */
   @Prop({ type: [String], required: true, default: [] })
-  avoidedGroupIds!: string[];
-
-  @Prop({ type: String, default: null })
-  allergyNote!: string | null;
-
-  @Prop({ type: String, default: null })
-  preferenceNote!: string | null;
+  foodPreferences!: string[];
 
   @Prop({ type: Number, default: null })
   heightCm!: number | null;
