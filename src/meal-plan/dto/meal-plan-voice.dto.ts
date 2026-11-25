@@ -152,7 +152,7 @@ export class MealPlanVoiceTurnRequestDto {
   @ApiPropertyOptional({
     type: MealPlanVoiceWebSearchRequestDto,
     description:
-      'Send when the previous turn ended on `requestWebSearch`: `message` is then read as the spoken answer, and an approval turns web search on for this turn',
+      'Ignored: voice turns search the web without asking, so no turn ends on `requestWebSearch`. Still accepted so older clients validate.',
   })
   @IsOptional()
   @ValidateNested()

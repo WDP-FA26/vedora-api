@@ -337,6 +337,7 @@ không theo prompt:
   - Quyết định được server lưu trực tiếp vào `parts` của tin nhắn trợ lý khi nhận `toolOutput`, nên FE
     dựng lại trạng thái đồng ý từ quyết định mới nhất khi mở lại đoạn chat. Đoạn chat mới luôn bắt đầu chưa cho phép.
 - **Đã cho phép** (`true`, mặc định trên FE từ đầu hội thoại; có thể tắt nếu người dùng từ chối): trợ lý có công cụ server `openrouter:web_search` của OpenRouter (engine Parallel chế độ `fast`, context `medium`, tối đa `PLANNER_WEB_SEARCH_MAX_USES` = 4 lần, 5 kết quả/lần) và có thể ủy quyền tra cứu sâu cho `consultNutritionSubagent`. Nguồn web đến dưới dạng part `source-url` (`{ sourceId, url, title }`) để FE hiển thị riêng.
+- Câu trả lời dùng kết quả web thì trợ lý nói rõ phần đó là thông tin tìm trên web, Vedora chưa kiểm chứng.
 - Món trong thực đơn vẫn chỉ lấy từ kho món của Vedora. Phí tìm web nằm trong cùng một lượt AI (một ticket quota).
 
 ### Danh sách đi chợ

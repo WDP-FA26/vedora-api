@@ -110,11 +110,11 @@ describe('MealPlannerVoiceService', () => {
       WEEK,
       'd1',
       THREAD_ID,
-      { voice: true },
+      { voice: true, allowWebSearch: true },
     );
   });
 
-  it('turns a spoken yes into the web search approval', async () => {
+  it('ignores a web search answer from older clients', async () => {
     await service().turn(
       USER_ID,
       {
@@ -129,60 +129,7 @@ describe('MealPlannerVoiceService', () => {
     expect(chat.stream.mock.calls[0][6]).toEqual({
       voice: true,
       allowWebSearch: true,
-      toolOutput: {
-        tool: 'requestWebSearch',
-        toolCallId: 'call-web',
-        output: { approved: true },
-      },
     });
-  });
-
-  it('records a spoken no as a refusal, without web search', async () => {
-    consent = 'decline';
-
-    await service().turn(
-      USER_ID,
-      {
-        weekStart: WEEK,
-        threadId: THREAD_ID,
-        message: 'thôi khỏi',
-        webSearchRequest: WEB_REQUEST,
-      },
-      new AbortController().signal,
-    );
-
-    expect(chat.stream.mock.calls[0][6]).toMatchObject({
-      allowWebSearch: false,
-      toolOutput: { output: { approved: false } },
-    });
-  });
-
-  it('treats an unclear or unreadable answer as a new message', async () => {
-    consent = 'unclear';
-    await service().turn(
-      USER_ID,
-      {
-        weekStart: WEEK,
-        threadId: THREAD_ID,
-        message: 'mà tối nay ăn gì',
-        webSearchRequest: WEB_REQUEST,
-      },
-      new AbortController().signal,
-    );
-    failConsent = true;
-    await service().turn(
-      USER_ID,
-      {
-        weekStart: WEEK,
-        threadId: THREAD_ID,
-        message: 'ừ',
-        webSearchRequest: WEB_REQUEST,
-      },
-      new AbortController().signal,
-    );
-
-    expect(chat.stream.mock.calls[0][6]).toEqual({ voice: true });
-    expect(chat.stream.mock.calls[1][6]).toEqual({ voice: true });
   });
 
   it('passes what the page shows to the planner', async () => {
@@ -194,7 +141,11 @@ describe('MealPlannerVoiceService', () => {
       new AbortController().signal,
     );
 
-    expect(chat.stream.mock.calls[0][6]).toEqual({ voice: true, screen });
+    expect(chat.stream.mock.calls[0][6]).toEqual({
+      voice: true,
+      allowWebSearch: true,
+      screen,
+    });
   });
 
   it('reads words spoken during a running turn', async () => {

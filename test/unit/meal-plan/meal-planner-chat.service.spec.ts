@@ -359,7 +359,7 @@ describe('MealPlannerChatService', () => {
     expect(tools.some((t) => t.type === 'provider')).toBe(false);
     const [system] = model.doStreamCalls[0].prompt;
     expect(system.role === 'system' && system.content).toContain(
-      'người dùng chưa cho phép bạn tự tìm trên web',
+      'người dùng chưa cho phép bạn tìm trên web',
     );
   });
 
@@ -397,7 +397,7 @@ describe('MealPlannerChatService', () => {
     );
     const [system] = model.doStreamCalls[0].prompt;
     expect(system.role === 'system' && system.content).toContain(
-      'người dùng đã cho phép bạn tìm trên web',
+      'bạn được tìm trên web (webSearch)',
     );
   });
 

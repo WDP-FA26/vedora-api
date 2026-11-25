@@ -40,8 +40,7 @@ Chạy planner ở chế độ voice cho một lượt nói (một delegation c�
   "weekStart": "2026-11-23",
   "message": "trưa nay mình ăn một tô phở chay",
   "threadId": "8a2c…",
-  "requestId": "item_9tA2bF3h7K9m2P5q8R1s4",
-  "webSearchRequest": { "toolCallId": "call_…", "reason": "Tìm nơi bán tempeh ở Đà Nẵng" }
+  "requestId": "item_9tA2bF3h7K9m2P5q8R1s4"
 }
 ```
 
@@ -49,7 +48,7 @@ Chạy planner ở chế độ voice cho một lượt nói (một delegation c�
 - `threadId`: thread chat để lưu lượt này. FE gửi thread đang mở trong khung chat, rồi tải lại thread đó (`GET /meal-plan/chat/threads/:threadId`) để lượt nói hiện ngay trong khung chat. Bỏ trống thì API tạo thread mới.
 - `requestId`: nên dùng delegation id để quota không bị trừ hai lần khi gửi lại.
 - `screen` (tùy chọn, nên gửi): trạng thái trang lúc người dùng nói, để agent hiểu "món này", "đóng nó đi", "bước tiếp theo". `{ weekStart, day?, panel: "none" | "recipe" | "eatingLog" | "bodyMetrics", recipeId?, recipeSection?: "top" | "ingredients" | "steps", eatingLogDate? }`. API tự lấy tên món từ danh mục theo `recipeId`.
-- `webSearchRequest` (tùy chọn): gửi khi lượt trước kết thúc ở `requestWebSearch` (phần tool ở trạng thái `input-available`). API đọc `message` như câu trả lời bằng lời (đồng ý / từ chối / chưa rõ); đồng ý thì lượt này được tìm web, chưa rõ thì `message` được xử lý như một yêu cầu mới.
+- Tìm web: lượt voice luôn được tìm web, như mặc định của chat chữ, bằng tool web search của provider (AI Gateway: `parallelSearch`). Planner tra dữ liệu Vedora trước, không có thì tìm web, và nói rõ phần nào lấy từ web ("mình tìm trên web thì thấy…"). Nguồn web đến dưới dạng part `source-url`. `webSearchRequest` cũ vẫn được nhận nhưng bị bỏ qua.
 
 Đọc stream bằng `parseJsonEventStream` + `readUIMessageStream` của `ai`. Mỗi phần tool chuyển sang `output-available` là một việc đã xong, FE phản chiếu ngay lên màn hình:
 

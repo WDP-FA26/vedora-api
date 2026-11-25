@@ -13,14 +13,14 @@ const MAX_REASON_LENGTH = 200;
 export function requestWebSearchTool() {
   return tool({
     description:
-      'Xin người dùng cho phép tìm thông tin trên web. Chỉ gọi khi searchKnowledge và searchRecipes không đủ để trả lời và câu hỏi thật sự cần thông tin bên ngoài. Gọi xong thì dừng, không trả lời thêm.',
+      'Ask the user for permission to search the web. Call it when the user asks about a dish, ingredient, product or fact that searchRecipes and searchKnowledge do not cover, so they get information they can use instead of only hearing that Vedora does not have it. When you also suggest similar Vedora dishes, still offer the search in the same turn. Stop after calling it: the user answers in the next turn.',
     inputSchema: z.object({
       reason: z
         .string()
         .min(1)
         .max(MAX_REASON_LENGTH)
         .describe(
-          'Một câu ngắn bằng tiếng Việt: cần tìm gì trên web và vì sao',
+          'One short sentence in Vietnamese, shown to the user: what to look up on the web and why',
         ),
     }),
     outputSchema: z.object({

@@ -13,17 +13,12 @@ import type {
   MealPlanVoiceInterruptionRequestDto,
   MealPlanVoiceSessionDto,
   MealPlanVoiceTurnRequestDto,
-  MealPlanVoiceWebSearchRequestDto,
   VoiceInterruption,
 } from '../dto/meal-plan-voice.dto.js';
 import {
   MealPlannerChatService,
   type PlannerChatOptions,
 } from '../meal-planner-chat.service.js';
-import {
-  WEB_SEARCH_CONSENT_POLICY,
-  type WebSearchConsent,
-} from './web-search-consent.js';
 import { VOICE_INTERRUPTION_POLICY } from './voice-interruption.js';
 
 /** Long enough to open the WebSocket; an open session keeps going after it. */
@@ -87,30 +82,19 @@ export class MealPlannerVoiceService {
     return { token, url, expiresAt: expiresAt ?? null, model: this.model };
   }
 
-  /** One spoken turn as an AI SDK UI message stream, the same as the text chat's. */
+  /**
+   * One spoken turn as an AI SDK UI message stream, the same as the text chat's.
+   * Web search is on, as it is by default in the text chat: asking first would
+   * cost the caller a spoken round trip, so the planner says aloud when an
+   * answer comes from the web instead.
+   */
   async turn(
     userId: string,
     dto: MealPlanVoiceTurnRequestDto,
     abortSignal: AbortSignal,
   ): Promise<ReadableStream<UIMessageChunk>> {
-    const options: PlannerChatOptions = { voice: true };
+    const options: PlannerChatOptions = { voice: true, allowWebSearch: true };
     if (dto.screen) options.screen = dto.screen;
-    if (dto.webSearchRequest) {
-      const consent = await this.webSearchConsent(
-        dto.webSearchRequest,
-        dto.message,
-        abortSignal,
-      );
-      // An unclear answer leaves the request pending: the turn is a new message.
-      if (consent !== 'unclear') {
-        options.allowWebSearch = consent === 'approve';
-        options.toolOutput = {
-          tool: 'requestWebSearch',
-          toolCallId: dto.webSearchRequest.toolCallId,
-          output: { approved: consent === 'approve' },
-        };
-      }
-    }
     return this.chat.stream(
       userId,
       dto.message,
@@ -147,33 +131,6 @@ export class MealPlannerVoiceService {
       if (abortSignal.aborted) throw error;
       this.logger.warn(`Voice interruption check failed: ${String(error)}`);
       return 'supersede';
-    }
-  }
-
-  private async webSearchConsent(
-    request: MealPlanVoiceWebSearchRequestDto,
-    answer: string,
-    abortSignal: AbortSignal,
-  ): Promise<WebSearchConsent> {
-    try {
-      const { choice } = await decide(
-        this.decisionModel,
-        [
-          {
-            role: 'assistant',
-            text: `Mình cần tìm trên web: ${request.reason}. Bạn có đồng ý cho mình tìm không?`,
-          },
-          { role: 'user', text: answer },
-        ],
-        abortSignal,
-        WEB_SEARCH_CONSENT_POLICY,
-      );
-      return choice;
-    } catch (error) {
-      if (abortSignal.aborted) throw error;
-      // Without a reading the search stays off; the planner still answers the turn.
-      this.logger.warn(`Web search consent check failed: ${String(error)}`);
-      return 'unclear';
     }
   }
 }

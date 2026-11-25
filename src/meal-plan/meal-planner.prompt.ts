@@ -79,9 +79,9 @@ Phạm vi và trình bày
 
 const WEEKDAYS: readonly Weekday[] = Object.values(Weekday);
 
-const WEB_SEARCH_ASK = `Tìm trên web: người dùng chưa cho phép bạn tự tìm trên web. Chuyên gia dinh dưỡng chạy ngầm vẫn tra được web cho món ngoài hệ thống, đồ đóng gói hay kiến thức chưa có trong tài liệu nội bộ; chỉ xin phép tìm web trực tiếp khi người dùng cần xem nguồn.`;
+const WEB_SEARCH_ASK = `Tìm trên web: người dùng chưa cho phép bạn tìm trên web trong đoạn chat này. Khi họ hỏi về một món, nguyên liệu, sản phẩm hay thông tin mà dữ liệu Vedora không có, xin phép tìm bằng requestWebSearch thay vì chỉ nói rằng Vedora chưa có, vì họ hỏi để có thông tin dùng được. Số liệu dinh dưỡng của món ăn ngoài hay đồ đóng gói (calo, vi chất) thì chuyên gia dinh dưỡng chạy ngầm (consultNutritionSubagent) tra được mà không cần xin phép.`;
 
-const WEB_SEARCH_ALLOWED = `Tìm trên web: người dùng đã cho phép bạn tìm trên web. Dùng nó cho món ngoài hệ thống, đồ đóng gói, mùa vụ hay kiến thức chưa có trong tài liệu nội bộ.`;
+const WEB_SEARCH_ALLOWED = `Tìm trên web: bạn được tìm trên web (webSearch). Khi dữ liệu Vedora không có điều người dùng hỏi, như một món ngoài danh mục, đồ đóng gói, mùa vụ hay kiến thức chưa có trong tài liệu nội bộ, tìm trên web rồi mới trả lời, kể cả khi bạn đã biết sơ qua, vì câu trả lời dựa trên nguồn đúng và đầy đủ hơn trí nhớ của bạn. Người dùng hỏi về một món mà Vedora không có thì tìm trên web để kể cho họ về món đó, cả khi bạn cũng gợi ý món Vedora gần giống. Khi câu trả lời dùng kết quả web, nói rõ phần đó là thông tin tìm trên web, Vedora chưa kiểm chứng, để người dùng biết mà cân nhắc. Món tìm được trên web chỉ để tham khảo, không đưa vào thực đơn. Người dùng nói không muốn tìm trên web thì làm theo họ trong cả đoạn chat.`;
 
 /** `2026-11-19` as `19/11`. */
 function dayMonth(date: string): string {
@@ -226,7 +226,7 @@ Lượt này đến từ một cuộc gọi thoại. Người dùng nói chuyệ
 Hiểu lời người dùng
 - Tin nhắn là bản chép lời nói: có thể thiếu dấu, sai chữ, lặp từ, câu dở dang hoặc tự sửa ở cuối câu. Hiểu theo ý sau cùng của họ.
 - Khi thiếu một chi tiết mà đoán sai sẽ lưu nhầm dữ liệu của họ (bữa nào, ngày nào, món nào), hỏi đúng chi tiết đó; họ trả lời ở lượt sau. Một con số khác hẳn số đang lưu, như chiều cao hay cân nặng, có thể do chép lời sai, nên xác nhận lại trước khi lưu.
-- Cuộc gọi không có nút bấm nên bạn không có askUser. Khi cần họ chọn, nêu tối đa ba lựa chọn ngắn bằng lời. Xin phép tìm web vẫn dùng requestWebSearch như trong chat; câu trả lời của họ đến ở lượt sau.
+- Cuộc gọi không có nút bấm nên bạn không có askUser. Khi cần họ chọn, nêu tối đa ba lựa chọn ngắn bằng lời. Bạn được tìm trên web mà không cần hỏi trước: người dùng hỏi về một món Vedora không có thì tìm luôn rồi kể ngắn, vì hỏi lại "có muốn mình tìm không" tốn thêm một lượt nói. Khi câu trả lời dùng kết quả tìm trên web, nói như "mình tìm trên web thì thấy…", vì người nghe không thấy nguồn trên màn hình.
 - Người dùng có thể nói chen khi bạn đang làm. Nếu lời mới sửa hoặc hủy việc đang làm, lượt trước bị dừng giữa chừng và những gì đã lưu vẫn giữ. Khi lượt trước trong lịch sử không có câu trả lời, xem lại dữ liệu (getPlan, getEatingLog) trước khi nói phần nào đã xong.
 
 Màn hình
@@ -292,7 +292,7 @@ export function voiceScreenContext(
 }
 
 /**
- * Planner rules for a voice turn: the static rules (without web search), then
+ * Planner rules for a voice turn: the static rules, then
  * what changes when a voice model relays the user's words and speaks the
  * reply (written to Anthropic's prompting guidance, in the RULES style).
  */

@@ -93,8 +93,8 @@ export interface PlannerChatOptions {
   toolOutput?: PlannerToolOutputDto;
   /**
    * The turn comes from the voice agent: short spoken replies, no `askUser`,
-   * plus the screen tools, the diary/body-metrics writers and undo. Web search
-   * consent works as in the text chat, through `requestWebSearch`.
+   * plus the screen tools, the diary/body-metrics writers and undo. The voice
+   * service turns web search on, as the text chat does by default.
    */
   voice?: boolean;
   /** Voice only: what the page shows while the user speaks. */
