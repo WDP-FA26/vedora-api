@@ -83,6 +83,8 @@ import { RestaurantMenuService } from '../workspaces/restaurant-menu.service.js'
 
 const MAX_STEPS = runtimeConfig.PLANNER_CHAT_MAX_STEPS;
 const SEARCH_TIMEOUT_MS = runtimeConfig.AI_KNOWLEDGE_TOOL_TIMEOUT_MS;
+const VOICE_CHAT_TIMEOUT_MS = 60_000;
+const VOICE_SUBAGENT_TIMEOUT_MS = 25_000;
 const VOICE_CACHE_WARMUP_COOLDOWN_MS = 2 * 60 * 1000;
 const VOICE_CACHE_WARMUP_TIMEOUT_MS = 10_000;
 const VOICE_CACHE_WARMUP_MAX_ENTRIES = 1_000;
@@ -502,9 +504,12 @@ export class MealPlannerChatService {
       await this.history?.assertThreadAccess(userId, threadId);
     }
     const activeThreadId = threadId ?? randomUUID();
+    const turnTimeoutMs = voice
+      ? Math.min(runtimeConfig.AI_CHAT_TIMEOUT_MS, VOICE_CHAT_TIMEOUT_MS)
+      : runtimeConfig.AI_CHAT_TIMEOUT_MS;
     abortSignal = AbortSignal.any([
       abortSignal,
-      AbortSignal.timeout(runtimeConfig.AI_CHAT_TIMEOUT_MS),
+      AbortSignal.timeout(turnTimeoutMs),
     ]);
     const ticket = await this.usage.consume(userId, AiFeature.MEAL_PLAN_CHAT, {
       requestId,
@@ -730,6 +735,12 @@ export class MealPlannerChatService {
           tools: {
             searchKnowledgeMs: SEARCH_TIMEOUT_MS,
             searchRestaurantDishesMs: SEARCH_TIMEOUT_MS,
+            ...(voice
+              ? {
+                  consultNutritionSubagentMs: VOICE_SUBAGENT_TIMEOUT_MS,
+                  verifyMealPlanAllergiesMs: VOICE_SUBAGENT_TIMEOUT_MS,
+                }
+              : {}),
           },
         },
         experimental_transform: replyFilter(),
