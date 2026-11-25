@@ -122,8 +122,9 @@ async function runSemanticAllergyAudit(
     ...PromptCache.singleTurn({
       session: 'vedora-allergy-verifier',
       instructions: ALLERGY_AUDIT_INSTRUCTIONS,
-      // A missed allergen is a safety failure; this call is rare and short.
-      effort: 'high',
+      // Medium keeps the voice planner responsive; the keyword pass above
+      // still flags the obvious allergens before this call.
+      effort: 'medium',
       // Runs inside a meal planner session: 5m, like the planner.
       ttl: '5m',
     }),

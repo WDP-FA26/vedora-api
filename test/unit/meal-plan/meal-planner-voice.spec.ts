@@ -33,10 +33,6 @@ const THREAD_ID = '8f0c1f2e-5b7a-4d3c-9e1f-2a3b4c5d6e7f';
 const WEEK = '2026-11-23';
 const RECIPE_ID = 'd1a2d3e4-0000-4000-8000-000000000001';
 const execOptions = { toolCallId: 'call-1', messages: [], context: {} };
-const WEB_REQUEST = {
-  toolCallId: 'call-web',
-  reason: 'Tìm nơi bán tempeh ở Đà Nẵng',
-};
 
 function emptyStream() {
   return simulateReadableStream<UIMessageChunk>({
@@ -110,26 +106,8 @@ describe('MealPlannerVoiceService', () => {
       WEEK,
       'd1',
       THREAD_ID,
-      { voice: true, allowWebSearch: true },
+      { voice: true },
     );
-  });
-
-  it('ignores a web search answer from older clients', async () => {
-    await service().turn(
-      USER_ID,
-      {
-        weekStart: WEEK,
-        threadId: THREAD_ID,
-        message: 'ừ tìm đi',
-        webSearchRequest: WEB_REQUEST,
-      },
-      new AbortController().signal,
-    );
-
-    expect(chat.stream.mock.calls[0][6]).toEqual({
-      voice: true,
-      allowWebSearch: true,
-    });
   });
 
   it('passes what the page shows to the planner', async () => {
@@ -143,7 +121,6 @@ describe('MealPlannerVoiceService', () => {
 
     expect(chat.stream.mock.calls[0][6]).toEqual({
       voice: true,
-      allowWebSearch: true,
       screen,
     });
   });
@@ -254,6 +231,62 @@ describe('voice tools', () => {
 
     expect(output).toMatchObject({ applied: false, view: 'recipe' });
     expect(output?.problem).toContain('recipeId');
+  });
+
+  it('setScreen opens a recipe directly by query and preserves done', async () => {
+    const mealPlan = mockDeep<MealPlanService>();
+    mealPlan.suggestions.mockResolvedValue([
+      {
+        id: RECIPE_ID,
+        title: 'Bún riêu chay',
+        tag: null,
+        minutes: 25,
+        caloriesPerServing: 380,
+        nutritionPillars: [],
+        ingredients: [],
+        avoided: [],
+      },
+    ]);
+    const toolDef = setScreenTool(
+      mealPlan,
+      mockDeep<DietaryService>(),
+      USER_ID,
+      WEEK,
+    );
+
+    const output = await toolDef.execute?.(
+      { view: 'recipe', query: 'bún riêu', done: true },
+      execOptions,
+    );
+
+    expect(mealPlan.suggestions).toHaveBeenCalledWith(USER_ID, 'bún riêu');
+    expect(mealPlan.recipeInstructions).not.toHaveBeenCalled();
+    expect(output).toMatchObject({
+      applied: true,
+      view: 'recipe',
+      recipeId: RECIPE_ID,
+      title: 'Bún riêu chay',
+      done: true,
+    });
+  });
+
+  it('setScreen returns a refusal when query finds no matching dish', async () => {
+    const mealPlan = mockDeep<MealPlanService>();
+    mealPlan.suggestions.mockResolvedValue([]);
+    const toolDef = setScreenTool(
+      mealPlan,
+      mockDeep<DietaryService>(),
+      USER_ID,
+      WEEK,
+    );
+
+    const output = await toolDef.execute?.(
+      { view: 'recipe', query: 'món lạ', done: true },
+      execOptions,
+    );
+
+    expect(output).toMatchObject({ applied: false, view: 'recipe' });
+    expect(output?.done).toBeUndefined();
   });
 
   it('setScreen goes back to the calendar on the week shown', async () => {

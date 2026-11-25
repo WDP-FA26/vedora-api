@@ -417,8 +417,8 @@ describe('MealPlannerChatService', () => {
     );
     const names = (model.doStreamCalls[0].tools ?? []).map((t) => t.name);
     expect(names).not.toContain('askUser');
-    // Web search consent is asked out loud, through the same tool as the text chat.
-    expect(names).toContain('requestWebSearch');
+    expect(names).not.toContain('requestWebSearch');
+    expect(names).not.toContain('webSearch');
     expect(names).toEqual(
       expect.arrayContaining([
         'searchRecipes',
@@ -433,6 +433,68 @@ describe('MealPlannerChatService', () => {
     expect(system.role === 'system' && system.content).toContain(
       'Chế độ giọng nói',
     );
+  });
+
+  it('stops after step 1 in voice mode for endCall and setScreen(done: true)', async () => {
+    steps = [
+      [
+        {
+          type: 'tool-call',
+          toolCallId: 'call-end',
+          toolName: 'endCall',
+          input: '{}',
+        },
+        {
+          type: 'finish',
+          finishReason: { unified: 'tool-calls', raw: undefined },
+          usage,
+        },
+      ],
+    ];
+    const service = await createService();
+
+    await convertReadableStreamToArray(
+      await service.stream(
+        USER_ID,
+        'Tạm biệt nhé',
+        new AbortController().signal,
+        WEEK,
+        undefined,
+        undefined,
+        { voice: true },
+      ),
+    );
+    expect(model.doStreamCalls).toHaveLength(1);
+
+    model.doStreamCalls.length = 0;
+    steps = [
+      [
+        {
+          type: 'tool-call',
+          toolCallId: 'call-screen',
+          toolName: 'setScreen',
+          input: JSON.stringify({ view: 'calendar', done: true }),
+        },
+        {
+          type: 'finish',
+          finishReason: { unified: 'tool-calls', raw: undefined },
+          usage,
+        },
+      ],
+    ];
+
+    await convertReadableStreamToArray(
+      await service.stream(
+        USER_ID,
+        'Đóng lại giúp mình',
+        new AbortController().signal,
+        WEEK,
+        undefined,
+        undefined,
+        { voice: true },
+      ),
+    );
+    expect(model.doStreamCalls).toHaveLength(1);
   });
 
   it('skips the moderation decision check in voice mode', async () => {

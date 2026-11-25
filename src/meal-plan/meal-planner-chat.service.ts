@@ -8,6 +8,7 @@ import {
   isTextUIPart,
   type LanguageModel,
   pruneMessages,
+  type StopCondition,
   ToolLoopAgent,
   type ToolSet,
   toUIMessageStream,
@@ -130,6 +131,33 @@ function withToolInputs(message: StoredChatMessage): StoredChatMessage {
 function stripPlannerTags(text: string): string {
   return text.replace(/<\/?(?:planner_context|system-reminder)\b[^>]*>?/gi, '');
 }
+
+function isQuickSetScreenResult(output: unknown): boolean {
+  return (
+    typeof output === 'object' &&
+    output !== null &&
+    'applied' in output &&
+    output.applied === true &&
+    'done' in output &&
+    output.done === true
+  );
+}
+
+/** Ends a voice turn right after step 1 for `endCall` or a pure `setScreen(done: true)`. */
+const voiceQuickStop: StopCondition<ToolSet> = ({ steps }) => {
+  const latest = steps[steps.length - 1];
+  if (!latest || latest.toolResults.length === 0) return false;
+  if (latest.toolResults.some((item) => item.toolName === 'endCall')) {
+    return true;
+  }
+  if (latest.toolResults.length === 1) {
+    const [only] = latest.toolResults;
+    return (
+      only.toolName === 'setScreen' && isQuickSetScreenResult(only.output)
+    );
+  }
+  return false;
+};
 
 /**
  * Web search is the user's choice: without consent the planner only gets the
@@ -495,7 +523,7 @@ export class MealPlannerChatService {
               getEatingLog: getEatingLogTool(this.mealLog, userId, toolWeek),
             }
           : {}),
-        ...webTools(allowWebSearch),
+        ...(voice ? {} : webTools(allowWebSearch)),
       };
       if (voice) {
         // Nobody can tap an option mid-call, so choices are asked out loud.
@@ -511,19 +539,20 @@ export class MealPlannerChatService {
           session: 'vedora-planner',
           scope: [userId, activeThreadId],
           instructions: voice
-            ? plannerVoiceInstructions(allowWebSearch)
+            ? plannerVoiceInstructions()
             : plannerStaticInstructions(allowWebSearch),
           // Long prompt, many tools, up to 20 steps: at low effort Haiku 5.5
           // is more likely to skip a lookup or a check.
           effort: 'medium',
-          // Session-scoped feature: a user's turns come minutes apart, so the
-          // 5m write (1.25x input) beats 1h (2x). 1h is for always-busy
-          // prefixes such as moderation.
-          systemTtl: '5m',
+          // Voice turns are bounded by a 5-minute call with pauses; 1h keeps the
+          // prefix hot across long thinking/speaking gaps.
+          systemTtl: voice ? '1h' : '5m',
         }),
         maxOutputTokens: runtimeConfig.PLANNER_CHAT_MAX_OUTPUT_TOKENS,
         tools: agentTools,
-        stopWhen: isStepCount(MAX_STEPS),
+        stopWhen: voice
+          ? [isStepCount(MAX_STEPS), voiceQuickStop]
+          : isStepCount(MAX_STEPS),
         prepareStep: PromptCache.finalStepGuard(MAX_STEPS, LAST_STEP_NOTE),
       });
 

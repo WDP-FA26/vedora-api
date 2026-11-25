@@ -2,7 +2,7 @@ import { tool } from 'ai';
 import { z } from 'zod';
 import type { BmiCategory } from '../../mongo/models.js';
 import type { DietaryService } from '../../recipes/dietary.service.js';
-import { WEEKDAYS } from '../dto/meal-plan.dto.js';
+import { MAX_GENERATE_QUERY_LENGTH, WEEKDAYS } from '../dto/meal-plan.dto.js';
 import {
   RECIPE_SECTIONS,
   type RecipeSection,
@@ -200,6 +200,7 @@ export interface SetScreenOutput {
   metrics: BodyMetricsSummary | null;
   /** Why nothing changed, worded so the agent can fix the call. */
   problem: string | null;
+  done?: boolean;
 }
 
 function screenOutput(
@@ -269,7 +270,7 @@ export function setScreenTool(
 ) {
   return tool({
     description:
-      "Change what the user's screen shows by naming the view they should see. The user is on a call and often has busy hands, so you are the one who opens, scrolls and closes things for them; the screen section of your context says what they see right now. Views: calendar is the week calendar with every panel closed (pass day, and weekStart for another week, to pick a day); recipe is one recipe card with its ingredients and steps (pass recipeId, and section to scroll to the ingredients or the steps; for the recipe already open this only scrolls); eatingLog is the food diary (pass date for a day other than today); bodyMetrics is the BMI, weight and daily kcal panel, and it also returns the current values. Opening a view closes the panel that was open before. It changes nothing the user has saved, and plan changes already show the day they changed.",
+      "Change what the user's screen shows by naming the view they should see. The user is on a call and often has busy hands, so you are the one who opens, scrolls and closes things for them; the screen section of your context says what they see right now. Views: calendar is the week calendar with every panel closed (pass day, and weekStart for another week, to pick a day); recipe is one recipe card with its ingredients and steps (pass recipeId, or query with the dish name to look up and open it directly, and section to scroll to the ingredients or the steps; with neither recipeId nor query on an open recipe this scrolls); eatingLog is the food diary (pass date for a day other than today); bodyMetrics is the BMI, weight and daily kcal panel, and it also returns the current values. Opening a view closes the panel that was open before. Pass done: true when the user only asked to open, close or scroll the screen and needs no further advice.",
     inputSchema: z.object({
       view: z
         .enum(SCREEN_VIEWS)
@@ -282,6 +283,14 @@ export function setScreenTool(
         .optional()
         .describe(
           'Only with view recipe: an id from searchRecipes, getPlan, getRecipe or the screen section',
+        ),
+      query: z
+        .string()
+        .min(1)
+        .max(MAX_GENERATE_QUERY_LENGTH)
+        .optional()
+        .describe(
+          'Only with view recipe when no recipeId is in context or the calendar: Vietnamese dish name to look up and open directly',
         ),
       section: z
         .enum(RECIPE_SECTIONS)
@@ -303,31 +312,61 @@ export function setScreenTool(
         .describe(
           'Only with view eatingLog: the day to show, YYYY-MM-DD; leave it out for today',
         ),
+      done: z
+        .boolean()
+        .optional()
+        .describe(
+          'Set to true when the user only asked to open, close or scroll the screen and needs no further analysis',
+        ),
     }),
     execute: async (input): Promise<SetScreenOutput> => {
+      const doneFlag = input.done === true ? { done: true } : {};
       if (input.view === 'recipe') {
-        const recipeId = input.recipeId ?? screen?.recipeId;
+        let recipeId = input.recipeId;
+        let title: string | null = null;
+        if (!recipeId && input.query) {
+          const matches = await mealPlan.suggestions(userId, input.query);
+          const first = matches[0];
+          if (!first) {
+            return screenRefusal(
+              'recipe',
+              `no recipe matched "${input.query}"; search with searchRecipes or tell the user it is not in the catalog.`,
+            );
+          }
+          recipeId = first.id;
+          title = first.title;
+        }
+        if (!recipeId) {
+          recipeId = screen?.recipeId;
+        }
         if (recipeId === undefined) {
           return screenRefusal(
             'recipe',
-            'view recipe needs recipeId; find the dish with searchRecipes or getPlan first.',
+            'view recipe needs recipeId or query; find the dish with searchRecipes or pass its name in query.',
           );
         }
-        const recipe = await mealPlan.recipeInstructions(userId, recipeId);
-        if (recipe === null) {
-          return screenRefusal(
-            'recipe',
-            `no recipe has id ${recipeId}; look it up with searchRecipes.`,
-          );
+        if (title === null) {
+          const recipe = await mealPlan.recipeInstructions(userId, recipeId);
+          if (recipe === null) {
+            return screenRefusal(
+              'recipe',
+              `no recipe has id ${recipeId}; look it up with searchRecipes.`,
+            );
+          }
+          title = recipe.title;
         }
         return screenOutput('recipe', {
           recipeId,
-          title: recipe.title,
+          title,
           section: input.section ?? null,
+          ...doneFlag,
         });
       }
       if (input.view === 'eatingLog') {
-        return screenOutput('eatingLog', { date: input.date ?? null });
+        return screenOutput('eatingLog', {
+          date: input.date ?? null,
+          ...doneFlag,
+        });
       }
       if (input.view === 'bodyMetrics') {
         const profile = await dietary.findNutrition(userId);
@@ -340,11 +379,13 @@ export function setScreenTool(
             bmiCategory: profile.bmiCategory,
             dailyCalorieTarget: profile.dailyCalorieTarget,
           },
+          ...doneFlag,
         });
       }
       return screenOutput('calendar', {
         weekStart: input.weekStart ?? screen?.weekStart ?? openWeekStart,
         day: input.day ?? null,
+        ...doneFlag,
       });
     },
     toModelOutput: ({ output }) => ({

@@ -84,16 +84,15 @@ export class MealPlannerVoiceService {
 
   /**
    * One spoken turn as an AI SDK UI message stream, the same as the text chat's.
-   * Web search is on, as it is by default in the text chat: asking first would
-   * cost the caller a spoken round trip, so the planner says aloud when an
-   * answer comes from the web instead.
+   * Web search stays off in voice mode to avoid extra round trips and keep spoken
+   * latency low.
    */
   async turn(
     userId: string,
     dto: MealPlanVoiceTurnRequestDto,
     abortSignal: AbortSignal,
   ): Promise<ReadableStream<UIMessageChunk>> {
-    const options: PlannerChatOptions = { voice: true, allowWebSearch: true };
+    const options: PlannerChatOptions = { voice: true };
     if (dto.screen) options.screen = dto.screen;
     return this.chat.stream(
       userId,

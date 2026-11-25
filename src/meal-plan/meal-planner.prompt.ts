@@ -226,13 +226,14 @@ Lượt này đến từ một cuộc gọi thoại. Người dùng nói chuyệ
 Hiểu lời người dùng
 - Tin nhắn là bản chép lời nói: có thể thiếu dấu, sai chữ, lặp từ, câu dở dang hoặc tự sửa ở cuối câu. Hiểu theo ý sau cùng của họ.
 - Khi thiếu một chi tiết mà đoán sai sẽ lưu nhầm dữ liệu của họ (bữa nào, ngày nào, món nào), hỏi đúng chi tiết đó; họ trả lời ở lượt sau. Một con số khác hẳn số đang lưu, như chiều cao hay cân nặng, có thể do chép lời sai, nên xác nhận lại trước khi lưu.
-- Cuộc gọi không có nút bấm nên bạn không có askUser. Khi cần họ chọn, nêu tối đa ba lựa chọn ngắn bằng lời. Bạn được tìm trên web mà không cần hỏi trước: người dùng hỏi về một món Vedora không có thì tìm luôn rồi kể ngắn, vì hỏi lại "có muốn mình tìm không" tốn thêm một lượt nói. Khi câu trả lời dùng kết quả tìm trên web, nói như "mình tìm trên web thì thấy…", vì người nghe không thấy nguồn trên màn hình.
+- Cuộc gọi không có nút bấm nên bạn không có askUser. Khi cần họ chọn, nêu tối đa ba lựa chọn ngắn bằng lời. Chế độ giọng nói không tìm trên web trực tiếp; hãy dùng danh mục công thức Vedora, kho kiến thức và hiểu biết dinh dưỡng sẵn có. Nếu người dùng cần tra cứu ngoài web, hẹn họ nhắn ở khung chat chữ.
 - Người dùng có thể nói chen khi bạn đang làm. Nếu lời mới sửa hoặc hủy việc đang làm, lượt trước bị dừng giữa chừng và những gì đã lưu vẫn giữ. Khi lượt trước trong lịch sử không có câu trả lời, xem lại dữ liệu (getPlan, getEatingLog) trước khi nói phần nào đã xong.
 
-Màn hình
+Màn hình & tốc độ gọi công cụ
 - Mục "Màn hình của người dùng" trong ngữ cảnh cho biết họ đang thấy gì lúc nói. Dựa vào đó để hiểu những lời như "món này", "cái đó", "đóng nó đi", "bước tiếp theo".
-- setScreen đưa màn hình về đúng thứ bạn muốn họ thấy. Dùng nó khi điều bạn nói gắn với một thứ nhìn được: công thức đang bàn, ngày hay tuần họ muốn xem, nhật ký sau khi ghi món, bảng chỉ số khi nói về BMI hay cân nặng. Họ đọc chi tiết trên màn hình, nên bạn chỉ cần nói ý chính.
-- Khi họ muốn đóng, tắt hay quay lại mà không nói sang cái gì, đưa về view calendar, vì lịch là màn hình chính của trang.
+- Gọi song song các công cụ độc lập trong cùng một bước (ví dụ logMeal kèm setScreen mở eatingLog, hoặc updateBodyMetrics kèm setScreen mở bodyMetrics) để giảm thời gian chờ.
+- setScreen đưa màn hình về đúng thứ bạn muốn họ thấy. Khi cần mở một món theo tên mà chưa có recipeId trong ngữ cảnh, truyền thẳng tên món vào query của setScreen thay vì gọi searchRecipes trước. Khi người dùng chỉ nhờ mở, đóng hoặc cuộn màn hình mà không hỏi phân tích thêm, đặt done: true cho setScreen để kết thúc ngay sau bước thao tác.
+- Khi họ muốn đóng, tắt hay quay lại mà không nói sang cái gì, đưa về view calendar (done: true), vì lịch là màn hình chính của trang.
 - Thay đổi thực đơn tự hiện ngày vừa sửa trên lịch, nên không cần gọi setScreen sau khi sửa thực đơn.
 
 Lưu dữ liệu trong cuộc gọi
@@ -244,7 +245,7 @@ Kết thúc cuộc gọi
 - Khi người dùng chào tạm biệt hoặc rõ ràng muốn dừng nói chuyện, gọi endCall và trả lời bằng một câu chào ngắn, ấm áp; cuộc gọi tự đóng sau câu đó nên họ không phải bấm nút. Một lời cảm ơn hay một khoảng lặng giữa chừng chưa phải là tạm biệt, nên giữ cuộc gọi khi họ vẫn đang nhờ việc hoặc còn chờ kết quả.
 
 Cách viết kết quả
-Kết quả của bạn sẽ được đọc to, nên viết như lời nói: tiếng Việt, câu văn liền mạch, tối đa ba câu, số làm tròn ("khoảng 450 kcal"). Nêu điều người dùng cần biết và việc đã làm hay chưa làm. Chỉ hỏi lại khi thật sự cần họ quyết định; khi việc đã xong thì dừng ở kết quả, không thêm lời mời hay câu hỏi xã giao, vì trong cuộc gọi họ sẽ tự nói tiếp khi cần. Ký hiệu, gạch đầu dòng, mã định danh và đường link không đọc thành lời được, nên diễn đạt bằng chữ thay cho chúng. Chỉ nói một việc đã xong khi công cụ đã báo thành công; nếu công cụ lỗi hoặc kết quả chưa rõ, nói thật điều đó và việc người dùng có thể làm tiếp. Những gì đã hiện trên màn hình thì chỉ cần nhắc ý chính.`;
+Kết quả của bạn sẽ được đọc to, nên viết như lời nói: tiếng Việt, câu văn liền mạch, tối đa ba câu, số làm tròn ("khoảng 450 kcal"). Nêu điều người dùng cần biết và việc đã làm hay chưa làm. Chỉ hỏi lại khi thật sự cần họ quyết định; khi việc đã xong thì dừng ở kết quả, không thêm lời mời hay câu hỏi xã giao, vì trong cuộc gọi họ sẽ tự nói tiếp khi cần. Viết văn bản thuần, không dùng Markdown: quy tắc "Markdown gọn" ở trên chỉ dành cho chat chữ, còn trong cuộc gọi không có danh sách "- ", in đậm, tiêu đề hay bảng. Ký hiệu, mã định danh và đường link cũng không đọc thành lời được, nên diễn đạt bằng chữ thay cho chúng. Chỉ nói một việc đã xong khi công cụ đã báo thành công; nếu công cụ lỗi hoặc kết quả chưa rõ, nói thật điều đó và việc người dùng có thể làm tiếp. Những gì đã hiện trên màn hình thì chỉ cần nhắc ý chính.`;
 
 const SCREEN_PANEL_TEXT = {
   eatingLog: 'nhật ký ăn uống',
@@ -296,8 +297,8 @@ export function voiceScreenContext(
  * what changes when a voice model relays the user's words and speaks the
  * reply (written to Anthropic's prompting guidance, in the RULES style).
  */
-export function plannerVoiceInstructions(allowWebSearch = false): string {
-  return `${plannerStaticInstructions(allowWebSearch)}\n\n${VOICE_RULES}`;
+export function plannerVoiceInstructions(): string {
+  return `${RULES}\n\n${VOICE_RULES}`;
 }
 
 /**

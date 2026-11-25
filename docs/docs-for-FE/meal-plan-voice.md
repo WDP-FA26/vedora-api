@@ -48,14 +48,14 @@ Chạy planner ở chế độ voice cho một lượt nói (một delegation c�
 - `threadId`: thread chat để lưu lượt này. FE gửi thread đang mở trong khung chat, rồi tải lại thread đó (`GET /meal-plan/chat/threads/:threadId`) để lượt nói hiện ngay trong khung chat. Bỏ trống thì API tạo thread mới.
 - `requestId`: nên dùng delegation id để quota không bị trừ hai lần khi gửi lại.
 - `screen` (tùy chọn, nên gửi): trạng thái trang lúc người dùng nói, để agent hiểu "món này", "đóng nó đi", "bước tiếp theo". `{ weekStart, day?, panel: "none" | "recipe" | "eatingLog" | "bodyMetrics", recipeId?, recipeSection?: "top" | "ingredients" | "steps", eatingLogDate? }`. API tự lấy tên món từ danh mục theo `recipeId`.
-- Tìm web: lượt voice luôn được tìm web, như mặc định của chat chữ, bằng tool web search của provider (AI Gateway: `parallelSearch`). Planner tra dữ liệu Vedora trước, không có thì tìm web, và nói rõ phần nào lấy từ web ("mình tìm trên web thì thấy…"). Nguồn web đến dưới dạng part `source-url`. `webSearchRequest` cũ vẫn được nhận nhưng bị bỏ qua.
+- Tìm web: tắt ở chế độ voice để giữ độ trễ thấp (không gọi `webSearch` hay `requestWebSearch`). `webSearchRequest` cũ vẫn được nhận nhưng bị bỏ qua.
 
 Đọc stream bằng `parseJsonEventStream` + `readUIMessageStream` của `ai`. Mỗi phần tool chuyển sang `output-available` là một việc đã xong, FE phản chiếu ngay lên màn hình:
 
 | tool | output | FE làm gì |
 | --- | --- | --- |
-| `endCall` | `{ ended: true }` | người dùng tạm biệt: gửi câu trả lời như mọi lượt, đợi GPT-Live nói xong rồi đóng cuộc gọi |
-| `setScreen` | `{ applied, view, recipeId, title, section, weekStart, day, date, metrics, problem }` | `applied: false` thì không làm gì (`problem` là lý do cho agent). `view: recipe`: mở công thức `recipeId` (trên lịch nếu món có trong tuần, không thì sheet riêng), không hiện ảnh, cuộn tới `section` (`top`, `ingredients`, `steps`). `view: calendar`: đóng mọi panel, chuyển tới tuần `weekStart` và chọn `day` nếu có. `view: eatingLog`: mở nhật ký ở `date` (null = hôm nay). `view: bodyMetrics`: mở tab BMI |
+| `endCall` | `{ ended: true }` | người dùng tạm biệt: agent có thể dừng ngay sau bước tool (nếu `text` rỗng FE tự tạo lời nhắc chào tạm biệt), đợi GPT-Live nói xong rồi đóng cuộc gọi |
+| `setScreen` | `{ applied, view, recipeId, title, section, weekStart, day, date, metrics, problem, done? }` | `applied: false` thì không làm gì (`problem` là lý do cho agent). `view: recipe`: mở công thức `recipeId` (hoặc tra trực tiếp bằng `query`), không hiện ảnh, cuộn tới `section` (`top`, `ingredients`, `steps`). `view: calendar`: đóng mọi panel, chuyển tới tuần `weekStart` và chọn `day` nếu có. `view: eatingLog`: mở nhật ký ở `date` (null = hôm nay). `view: bodyMetrics`: mở tab BMI. Khi `done: true` agent có thể dừng sau bước tool và FE tự tóm tắt ngắn từ `output` nếu `text` rỗng |
 | `logMeal` | `{ entry }` (như `POST /meal-plan/log`) | làm mới nhật ký, mở ngày `entry.date` |
 | `updateBodyMetrics` | `{ heightCm, weightKg, targetWeightKg, bmi, bmiCategory, dailyCalorieTarget }` | làm mới `/dietary/nutrition`, mở tab BMI |
 | `undoLastChange` | `{ messageId, weeks: [{ weekStart, restored, skipped, droppedDishes }] }` | làm mới thực đơn, chuyển tới ngày vừa khôi phục |
