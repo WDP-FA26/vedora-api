@@ -1,12 +1,16 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import {
+  IsBoolean,
   IsIn,
+  IsInt,
   IsOptional,
   IsString,
   IsUUID,
   Matches,
+  Max,
   MaxLength,
+  Min,
   MinLength,
   ValidateNested,
 } from 'class-validator';
@@ -82,6 +86,27 @@ export type VoiceScreenPanel = (typeof VOICE_SCREEN_PANELS)[number];
 export const RECIPE_SECTIONS = ['top', 'ingredients', 'steps'] as const;
 export type RecipeSection = (typeof RECIPE_SECTIONS)[number];
 
+/** Relative scroll directions supported by `setScreen` on the active view. */
+export const SCREEN_SCROLL_DIRECTIONS = ['up', 'down', 'top', 'bottom'] as const;
+export type ScreenScrollDirection = (typeof SCREEN_SCROLL_DIRECTIONS)[number];
+
+/** Live scroll position of the active panel or calendar, read from the DOM as the user speaks. */
+export class MealPlanVoiceScrollStateDto {
+  @ApiProperty({ minimum: 0, maximum: 100 })
+  @IsInt()
+  @Min(0)
+  @Max(100)
+  percent!: number;
+
+  @ApiProperty()
+  @IsBoolean()
+  atTop!: boolean;
+
+  @ApiProperty()
+  @IsBoolean()
+  atBottom!: boolean;
+}
+
 /** What the planner page shows while the user speaks, so the agent can refer to it. */
 export class MealPlanVoiceScreenDto {
   @ApiProperty({
@@ -127,6 +152,18 @@ export class MealPlanVoiceScreenDto {
   recipeSection?: RecipeSection;
 
   @ApiPropertyOptional({
+    minimum: 1,
+    maximum: 50,
+    description:
+      'With `panel: recipe`: the 1-based cooking step currently focused',
+  })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(50)
+  recipeStep?: number;
+
+  @ApiPropertyOptional({
     example: '2026-11-25',
     description: 'With `panel: eatingLog`: the day the diary shows',
   })
@@ -134,6 +171,15 @@ export class MealPlanVoiceScreenDto {
   @IsString()
   @Matches(/^\d{4}-\d{2}-\d{2}$/)
   eatingLogDate?: string;
+
+  @ApiPropertyOptional({
+    type: MealPlanVoiceScrollStateDto,
+    description: 'Current scroll position of the active view (panel or calendar)',
+  })
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => MealPlanVoiceScrollStateDto)
+  scrollState?: MealPlanVoiceScrollStateDto;
 }
 
 export class MealPlanVoiceTurnRequestDto {

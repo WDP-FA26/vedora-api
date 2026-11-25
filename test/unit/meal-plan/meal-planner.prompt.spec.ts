@@ -6,6 +6,7 @@ import {
   plannerStaticInstructions,
   plannerVoiceInstructions,
   SECTION_NAMES,
+  voiceScreenContext,
 } from '@src/meal-plan/meal-planner.prompt.js';
 import { PLANNER_REFUSALS } from '@src/meal-plan/meal-planner.refusals.js';
 import {
@@ -242,5 +243,32 @@ describe('meal-planner prompt & refusals', () => {
     expect(voicePrompt).not.toContain('Compact Markdown');
     expect(voicePrompt).not.toContain('clickable choices via askUser');
     expect(voicePrompt).toContain('Voice mode');
+  });
+
+  it('includes recipe step and live scroll position in voiceScreenContext', () => {
+    const context = voiceScreenContext(
+      {
+        weekStart: '2026-11-23',
+        panel: 'recipe',
+        recipeId: 'rec-1',
+        recipeSection: 'steps',
+        recipeStep: 3,
+        scrollState: { percent: 60, atTop: false, atBottom: false },
+      },
+      'Phở chay',
+    );
+
+    expect(context).toContain('bước 3');
+    expect(context).toContain('khoảng 60%');
+
+    const bottomContext = voiceScreenContext(
+      {
+        weekStart: '2026-11-23',
+        panel: 'eatingLog',
+        scrollState: { percent: 100, atTop: false, atBottom: true },
+      },
+      null,
+    );
+    expect(bottomContext).toContain('đã ở cuối (100%)');
   });
 });

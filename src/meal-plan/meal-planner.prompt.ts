@@ -236,7 +236,7 @@ Understanding spoken input
 Screen control & tool latency
 - The "Màn hình của người dùng" section in context shows what is currently on screen. Use it to resolve references like "this dish", "that one", "close it", or "next step".
 - Call independent tools in parallel in the same step (for example, logMeal together with setScreen to open eatingLog, or updateBodyMetrics together with setScreen to open bodyMetrics) to reduce latency.
-- Use setScreen to show the exact view the user needs. When opening a dish by name without a recipeId in context, pass the dish name directly to setScreen's query instead of calling searchRecipes first. When the user only asks to open, close, or scroll the screen without asking for analysis, set done: true on setScreen to finish right after that step.
+- Use setScreen to show or scroll the exact view the user needs. When opening a dish by name without a recipeId in context, pass the dish name directly to setScreen's query instead of calling searchRecipes first. On an open recipe you can jump straight to a cooking step with step (1-based) or section (ingredients, steps, top); on any open view or calendar you can also scroll with scroll (down, up, top, bottom). When the user only asks to open, close, or scroll the screen without asking for analysis, set done: true on setScreen to finish right after that step.
 - When they ask to close, dismiss, or go back without naming another view, switch to view "calendar" (done: true), since the calendar is the main view.
 - Meal plan edits automatically highlight the updated day on the calendar, so do not call setScreen after editing the plan.
 
@@ -283,8 +283,10 @@ export function voiceScreenContext(
     const section = screen.recipeSection
       ? `, đang ở ${RECIPE_SECTION_TEXT[screen.recipeSection]}`
       : '';
+    const step =
+      screen.recipeStep !== undefined ? `, bước ${screen.recipeStep}` : '';
     lines.push(
-      `- Đang mở công thức ${title} (id ${screen.recipeId})${section}.`,
+      `- Đang mở công thức ${title} (id ${screen.recipeId})${section}${step}.`,
     );
   } else if (screen.panel === 'eatingLog') {
     const date = screen.eatingLogDate ? ` ngày ${screen.eatingLogDate}` : '';
@@ -293,6 +295,18 @@ export function voiceScreenContext(
     lines.push(`- Đang mở ${SCREEN_PANEL_TEXT.bodyMetrics}.`);
   } else {
     lines.push('- Không có bảng nào mở, người dùng đang xem lịch.');
+  }
+  if (screen.scrollState) {
+    const { percent, atTop, atBottom } = screen.scrollState;
+    if (atTop && atBottom) {
+      lines.push('- Vị trí cuộn: toàn bộ nội dung đang hiện gọn trong khung nhìn, không cần cuộn.');
+    } else if (atTop) {
+      lines.push('- Vị trí cuộn: đang ở đầu (0%), còn nội dung bên dưới.');
+    } else if (atBottom) {
+      lines.push('- Vị trí cuộn: đã ở cuối (100%), không cuộn xuống thêm được nữa.');
+    } else {
+      lines.push(`- Vị trí cuộn: khoảng ${percent}% (có thể cuộn lên hoặc xuống).`);
+    }
   }
   return lines.join('\n');
 }

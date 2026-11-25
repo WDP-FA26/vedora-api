@@ -5,8 +5,10 @@ import type { DietaryService } from '../../recipes/dietary.service.js';
 import { MAX_GENERATE_QUERY_LENGTH, WEEKDAYS } from '../dto/meal-plan.dto.js';
 import {
   RECIPE_SECTIONS,
-  type RecipeSection,
+  SCREEN_SCROLL_DIRECTIONS,
   type MealPlanVoiceScreenDto,
+  type RecipeSection,
+  type ScreenScrollDirection,
 } from '../dto/meal-plan-voice.dto.js';
 import type { Weekday } from '../../mongo/models.js';
 import type { MealPlanService } from '../meal-plan.service.js';
@@ -194,6 +196,8 @@ export interface SetScreenOutput {
   recipeId: string | null;
   title: string | null;
   section: RecipeSection | null;
+  step: number | null;
+  scroll: ScreenScrollDirection | null;
   weekStart: string | null;
   day: Weekday | null;
   date: string | null;
@@ -213,6 +217,8 @@ function screenOutput(
     recipeId: null,
     title: null,
     section: null,
+    step: null,
+    scroll: null,
     weekStart: null,
     day: null,
     date: null,
@@ -232,27 +238,40 @@ const SECTION_LABELS: Record<RecipeSection, string> = {
   steps: 'phần cách làm',
 };
 
+const SCROLL_LABELS: Record<ScreenScrollDirection, string> = {
+  down: 'đã cuộn xuống',
+  up: 'đã cuộn lên',
+  top: 'đã cuộn lên đầu',
+  bottom: 'đã cuộn xuống cuối',
+};
+
 function setScreenText(output: SetScreenOutput): string {
   if (!output.applied) return `Màn hình chưa đổi: ${output.problem}`;
+  const scrollNote =
+    output.scroll === null ? '' : `, ${SCROLL_LABELS[output.scroll]}`;
   if (output.view === 'recipe') {
-    const section =
-      output.section === null ? '' : `, ở ${SECTION_LABELS[output.section]}`;
-    return `Màn hình đang hiện công thức "${output.title}"${section}.`;
+    const location =
+      output.step !== null
+        ? `, ở bước ${output.step}`
+        : output.section === null
+          ? ''
+          : `, ở ${SECTION_LABELS[output.section]}`;
+    return `Màn hình đang hiện công thức "${output.title}"${location}${scrollNote}.`;
   }
   if (output.view === 'eatingLog') {
     const day = output.date === null ? 'hôm nay' : `ngày ${output.date}`;
-    return `Màn hình đang hiện nhật ký ăn uống ${day}.`;
+    return `Màn hình đang hiện nhật ký ăn uống ${day}${scrollNote}.`;
   }
   if (output.view === 'bodyMetrics') {
     const metrics =
       output.metrics === null ? '' : ` ${bodyMetricsText(output.metrics)}`;
-    return `Màn hình đang hiện bảng chỉ số cơ thể.${metrics}`;
+    return `Màn hình đang hiện bảng chỉ số cơ thể${scrollNote}.${metrics}`;
   }
   const day =
     output.day === null
       ? ''
       : `, đang chọn ${DAY_NAMES[output.day]} của tuần bắt đầu ${output.weekStart}`;
-  return `Đã đóng các bảng; màn hình đang hiện lịch${day}.`;
+  return `Đã đóng các bảng; màn hình đang hiện lịch${day}${scrollNote}.`;
 }
 
 /**
@@ -270,7 +289,7 @@ export function setScreenTool(
 ) {
   return tool({
     description:
-      "Change what the user's screen shows by naming the view they should see. The user is on a call and often has busy hands, so you are the one who opens, scrolls and closes things for them; the screen section of your context says what they see right now. Views: calendar is the week calendar with every panel closed (pass day, and weekStart for another week, to pick a day); recipe is one recipe card with its ingredients and steps (pass recipeId, or query with the dish name to look up and open it directly, and section to scroll to the ingredients or the steps; with neither recipeId nor query on an open recipe this scrolls); eatingLog is the food diary (pass date for a day other than today); bodyMetrics is the BMI, weight and daily kcal panel, and it also returns the current values. Opening a view closes the panel that was open before. Pass done: true when the user only asked to open, close or scroll the screen and needs no further advice.",
+      "Change or scroll what the user's screen shows by naming the view they should see. The user is on a call and often has busy hands, so you are the one who opens, scrolls and closes things for them; the screen section of your context says what they see right now. Views: calendar is the week calendar with every panel closed (pass day, and weekStart for another week, to pick a day); recipe is one recipe card with its ingredients and steps (pass recipeId, or query with the dish name to look up and open it directly, section to scroll to ingredients/steps/top, or step with a 1-based step number to jump straight to that step; with neither recipeId nor query on an open recipe this scrolls); eatingLog is the food diary (pass date for a day other than today); bodyMetrics is the BMI, weight and daily kcal panel, and it also returns the current values. Pass scroll (down, up, top, bottom) on any view to scroll its content smoothly. Opening a view closes the panel that was open before. Pass done: true when the user only asked to open, close or scroll the screen and needs no further advice.",
     inputSchema: z.object({
       view: z
         .enum(SCREEN_VIEWS)
@@ -298,6 +317,21 @@ export function setScreenTool(
         .describe(
           'Only with view recipe: the part to scroll to, for example steps when the user asks what comes next while cooking',
         ),
+      step: z
+        .number()
+        .int()
+        .min(1)
+        .max(50)
+        .optional()
+        .describe(
+          'Only with view recipe: 1-based cooking step number to scroll to and highlight (e.g. 3 for step 3)',
+        ),
+      scroll: z
+        .enum(SCREEN_SCROLL_DIRECTIONS)
+        .optional()
+        .describe(
+          'Scroll the active view smoothly: down/up moves one viewport (~70%), top/bottom jumps to the start or end',
+        ),
       weekStart: weekStartInput(plannableWeekStarts()).describe(
         'Only with view calendar: Monday (YYYY-MM-DD) of the week to show; leave it out to stay on the week shown now',
       ),
@@ -321,6 +355,7 @@ export function setScreenTool(
     }),
     execute: async (input): Promise<SetScreenOutput> => {
       const doneFlag = input.done === true ? { done: true } : {};
+      const scroll = input.scroll ?? null;
       if (input.view === 'recipe') {
         let recipeId = input.recipeId;
         let title: string | null = null;
@@ -355,16 +390,21 @@ export function setScreenTool(
           }
           title = recipe.title;
         }
+        const step = input.step ?? null;
+        const section = input.section ?? (step !== null ? 'steps' : null);
         return screenOutput('recipe', {
           recipeId,
           title,
-          section: input.section ?? null,
+          section,
+          step,
+          scroll,
           ...doneFlag,
         });
       }
       if (input.view === 'eatingLog') {
         return screenOutput('eatingLog', {
           date: input.date ?? null,
+          scroll,
           ...doneFlag,
         });
       }
@@ -379,12 +419,14 @@ export function setScreenTool(
             bmiCategory: profile.bmiCategory,
             dailyCalorieTarget: profile.dailyCalorieTarget,
           },
+          scroll,
           ...doneFlag,
         });
       }
       return screenOutput('calendar', {
         weekStart: input.weekStart ?? screen?.weekStart ?? openWeekStart,
         day: input.day ?? null,
+        scroll,
         ...doneFlag,
       });
     },
