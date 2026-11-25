@@ -1,10 +1,14 @@
 import { randomUUID } from 'node:crypto';
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { createGateway, type UIMessageChunk } from 'ai';
+import { type UIMessageChunk } from 'ai';
 import { MODERATION_MODEL } from '../../ai/guardrails/guardrail.js';
+import { createGatewayRealtimeClient } from '../../ai/providers/provider-registry.js';
 import { decide, type DecisionModel } from '../../common/decision/decision.js';
 import { FeatureUnavailableException } from '../../common/exceptions/feature-unavailable.exception.js';
+import { QuotaReachedException } from '../../common/exceptions/quota-reached.exception.js';
+import { AiFeature } from '../../mongo/models.js';
+import { AiUsageService } from '../../subscriptions/ai-usage.service.js';
 import type {
   MealPlanVoiceSessionDto,
   MealPlanVoiceTurnRequestDto,
@@ -22,7 +26,7 @@ import {
 /** Long enough to open the WebSocket; an open session keeps going after it. */
 const TOKEN_TTL_SECONDS = 60;
 
-type Gateway = ReturnType<typeof createGateway>;
+type Gateway = ReturnType<typeof createGatewayRealtimeClient>;
 
 /**
  * The meal planner's voice agent. The browser talks to the realtime model
@@ -40,20 +44,36 @@ export class MealPlannerVoiceService {
     config: ConfigService,
     private readonly chat: MealPlannerChatService,
     @Inject(MODERATION_MODEL) private readonly decisionModel: DecisionModel,
+    private readonly usage: AiUsageService,
   ) {
     const apiKey = config.get<string>('AI_GATEWAY_API_KEY', '');
-    this.gateway = apiKey ? createGateway({ apiKey }) : null;
+    this.gateway = apiKey ? createGatewayRealtimeClient(apiKey) : null;
     this.model = config.get<string>(
       'VOICE_REALTIME_MODEL',
       'openai/gpt-live-1.1',
     );
   }
 
-  async createSession(): Promise<MealPlanVoiceSessionDto> {
+  /**
+   * Every spoken request runs on the meal planner chat quota, so a user with none
+   * left gets no session: the call would connect and then fail on every turn.
+   * Admins are never limited, as in the text chat.
+   */
+  async createSession(userId: string): Promise<MealPlanVoiceSessionDto> {
     if (!this.gateway) {
       throw new FeatureUnavailableException(
         'SERVICE_UNAVAILABLE',
         'Voice is not configured',
+      );
+    }
+    const allowed = await this.usage.hasAllowance(
+      userId,
+      AiFeature.MEAL_PLAN_CHAT,
+    );
+    if (!allowed) {
+      throw new QuotaReachedException(
+        'AI_QUOTA_EXCEEDED',
+        'Your shared AI text allowance is exhausted',
       );
     }
     const { token, url, expiresAt } =

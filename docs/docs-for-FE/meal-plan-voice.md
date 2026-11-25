@@ -29,7 +29,7 @@ Cấp token ngắn hạn (`vcst_…`, 60 giây để mở WebSocket; phiên đã
 
 `experimental_useRealtime` gọi endpoint token bằng `fetch` không kèm header Authorization, nên FE đặt một route cùng origin (`/api/meal-planner/voice/session`) đọc cookie phiên rồi gọi endpoint này.
 
-Lỗi: `401` chưa đăng nhập, `429` gọi quá nhanh, `503 SERVICE_UNAVAILABLE` chưa cấu hình voice.
+Lỗi: `401` chưa đăng nhập, `429 TOO_MANY_REQUESTS` gọi quá nhanh, `429 AI_QUOTA_EXCEEDED` đã dùng hết lượt AI chữ (mỗi lượt nói tính vào quota chat thực đơn, nên không cấp phiên khi không còn lượt; tài khoản admin không bị giới hạn, giống chat chữ), `503 SERVICE_UNAVAILABLE` chưa cấu hình voice.
 
 ## POST /meal-plan/voice/turns
 

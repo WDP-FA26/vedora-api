@@ -37,7 +37,8 @@ import { MealPlannerVoiceService } from './meal-planner-voice.service.js';
 })
 @ApiTooManyRequestsResponse({
   type: ErrorBodyDto,
-  description: 'Too many requests a minute',
+  description:
+    'Too many requests a minute, or `AI_QUOTA_EXCEEDED` when the shared AI text allowance is used up',
 })
 @UseGuards(JwtAuthGuard, UserThrottlerGuard)
 @Controller('meal-plan/voice')
@@ -49,15 +50,17 @@ export class MealPlannerVoiceController {
   @ApiOperation({
     summary: 'Start a voice session with the meal planner',
     description:
-      'Mints a short-lived Vercel AI Gateway client secret for the realtime voice model (GPT-Live by default). The browser opens the WebSocket with it; the voice model delegates the actual work to `POST /meal-plan/voice/turns`.',
+      'Mints a short-lived Vercel AI Gateway client secret for the realtime voice model (GPT-Live by default). The browser opens the WebSocket with it; the voice model delegates the actual work to `POST /meal-plan/voice/turns`. Refused with `429 AI_QUOTA_EXCEEDED` when the meal planner chat quota is used up, since every turn would fail.',
   })
   @ApiOkResponse({ type: MealPlanVoiceSessionDto })
   @ApiServiceUnavailableResponse({
     type: ErrorBodyDto,
     description: 'Voice is not configured (no AI_GATEWAY_API_KEY)',
   })
-  createSession(): Promise<MealPlanVoiceSessionDto> {
-    return this.voice.createSession();
+  createSession(
+    @Req() request: AuthenticatedRequest,
+  ): Promise<MealPlanVoiceSessionDto> {
+    return this.voice.createSession(request.user.sub);
   }
 
   @Post('turns')
