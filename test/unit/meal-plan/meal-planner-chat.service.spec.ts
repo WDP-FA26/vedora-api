@@ -435,6 +435,25 @@ describe('MealPlannerChatService', () => {
     );
   });
 
+  it('skips the moderation decision check in voice mode', async () => {
+    rateLimitModeration = true;
+    const service = await createService();
+
+    const chunks = await convertReadableStreamToArray(
+      await service.stream(
+        USER_ID,
+        'Đổi bữa tối sang đậu hũ sốt cà',
+        new AbortController().signal,
+        WEEK,
+        undefined,
+        undefined,
+        { voice: true },
+      ),
+    );
+    expect(chunks.some((chunk) => chunk.type === 'text-delta')).toBe(true);
+    expect(model.doStreamCalls).toHaveLength(1);
+  });
+
   it('forwards web citations to the client as source parts', async () => {
     steps = [
       [

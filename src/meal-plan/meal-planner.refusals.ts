@@ -15,18 +15,3 @@ export const PLANNER_REFUSALS: Record<
   harmful:
     'Mình không thể giúp yêu cầu này. Nếu bạn muốn lên thực đơn hay hỏi về món ăn thực vật, mình sẵn sàng hỗ trợ nhé.',
 };
-
-/**
- * What a voice turn hands GPT-Live instead of the chat refusal, for verdicts that only
- * mean "not a planner task". GPT-Live speaks for itself, so it gets the fact and room to
- * answer small talk or what it already knows (such as today's date) like a person would.
- * The other verdicts keep their fixed wording.
- */
-export const VOICE_PLANNER_REFUSALS: Partial<
-  Record<Exclude<ModerationVerdict, 'allow'>, string>
-> = {
-  off_topic:
-    'Backend không xử lý câu này vì nó nằm ngoài thực đơn và dinh dưỡng. Nếu đó là chuyện phiếm hay điều có sẵn trong cuộc trò chuyện (như hôm nay là ngày nào), cứ trả lời tự nhiên; còn không thì nói nhẹ nhàng rằng mình chỉ lo phần ăn uống.',
-  injection:
-    'Backend không xử lý câu này vì nó nằm ngoài thực đơn và dinh dưỡng.',
-};

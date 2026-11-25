@@ -1,6 +1,6 @@
 # Trợ lý giọng nói của meal planner
 
-Người dùng nói chuyện trực tiếp (full duplex) với mô hình giọng nói **GPT-Live 1.1** qua **Vercel AI Gateway**. Phần việc thật (thực đơn, công thức, nhật ký, chỉ số cơ thể) vẫn do **agent planner hiện tại** (Claude Haiku) làm ở API, với cùng tool, moderation, quota và lịch sử thread như chat chữ.
+Người dùng nói chuyện trực tiếp (full duplex) với mô hình giọng nói **GPT-Live 1.1** qua **Vercel AI Gateway**. Phần việc thật (thực đơn, công thức, nhật ký, chỉ số cơ thể) vẫn do **agent planner hiện tại** (Claude Haiku) làm ở API, với cùng tool, quota và lịch sử thread như chat chữ (bỏ qua bước moderation `decide` riêng để giảm latency).
 
 ```
 Mic ─► experimental_useRealtime ─WS─► AI Gateway ─► GPT-Live 1.1
@@ -81,7 +81,7 @@ Lỗi khi phân loại thì trả `supersede`. Không tính vào quota chat.
 
 **Hủy:** đóng request (abort) khi người dùng nói tiếp hoặc kết thúc cuộc gọi; agent dừng, những gì đã lưu vẫn giữ. FE báo cho GPT-Live bằng `context-append` kênh `thinking` cho delegation cũ.
 
-Lỗi (trước khi stream bắt đầu, dạng JSON như mọi endpoint): `429 AI_QUOTA_EXCEEDED` hết lượt AI, `429` gọi quá nhanh, `503` moderation hoặc model lỗi, `404` thread không thuộc người dùng. Lỗi giữa stream đến dưới dạng phần `error`. Khi lỗi, FE vẫn gửi một câu `commentary` nói thật là chưa làm xong để GPT-Live không đoán kết quả.
+Lỗi (trước khi stream bắt đầu, dạng JSON như mọi endpoint): `429 AI_QUOTA_EXCEEDED` hết lượt AI, `429` gọi quá nhanh, `503` model lỗi, `404` thread không thuộc người dùng. Lỗi giữa stream đến dưới dạng phần `error`. Khi lỗi, FE vẫn gửi một câu `commentary` nói thật là chưa làm xong để GPT-Live không đoán kết quả.
 
 ## Phía FE
 

@@ -45,10 +45,7 @@ import {
   plannerVoiceInstructions,
   voiceScreenContext,
 } from './meal-planner.prompt.js';
-import {
-  PLANNER_REFUSALS,
-  VOICE_PLANNER_REFUSALS,
-} from './meal-planner.refusals.js';
+import { PLANNER_REFUSALS } from './meal-planner.refusals.js';
 import { editPlanTool } from './tools/edit-plan.tool.js';
 import { verifyMealPlanAllergiesTool } from './tools/allergy-verifier-subagent.tool.js';
 import { askUserTool } from './tools/ask-user.tool.js';
@@ -379,34 +376,34 @@ export class MealPlannerChatService {
         storedMessages.push(currentMessage);
       }
 
-      const { choice: verdict } = await decide(
-        this.moderator,
-        conversationModerationState(toModerationTurns(storedMessages)),
-        abortSignal,
-        NUTRITION_POLICY,
-      ).catch((error: unknown) => {
-        if (abortSignal.aborted) throw error;
-        this.logger.error(`Moderation failed: ${String(error)}`);
-        throw new FeatureUnavailableException(
-          'SERVICE_UNAVAILABLE',
-          'Moderation is unavailable',
-        );
-      });
-      if (verdict !== 'allow') {
-        this.logger.warn(`Moderation answered ${verdict}`);
-        const assistantMessageId = randomUUID();
-        await this.history?.recordAssistantMessage(userId, activeThreadId, {
-          id: assistantMessageId,
-          role: 'assistant',
-          parts: [{ type: 'text', text: PLANNER_REFUSALS[verdict] }],
-          metadata: { refused: true },
+      // Voice turns run behind GPT-Live and the planner model's built-in safety,
+      // so skip the extra moderation round-trip to keep spoken latency low.
+      if (!voice) {
+        const { choice: verdict } = await decide(
+          this.moderator,
+          conversationModerationState(toModerationTurns(storedMessages)),
+          abortSignal,
+          NUTRITION_POLICY,
+        ).catch((error: unknown) => {
+          if (abortSignal.aborted) throw error;
+          this.logger.error(`Moderation failed: ${String(error)}`);
+          throw new FeatureUnavailableException(
+            'SERVICE_UNAVAILABLE',
+            'Moderation is unavailable',
+          );
         });
-        await this.usage.refund(ticket);
-        // The chat keeps the user-facing refusal; a voice turn hands GPT-Live the fact instead.
-        const spoken = voice
-          ? (VOICE_PLANNER_REFUSALS[verdict] ?? PLANNER_REFUSALS[verdict])
-          : PLANNER_REFUSALS[verdict];
-        return cannedReply(spoken, assistantMessageId);
+        if (verdict !== 'allow') {
+          this.logger.warn(`Moderation answered ${verdict}`);
+          const assistantMessageId = randomUUID();
+          await this.history?.recordAssistantMessage(userId, activeThreadId, {
+            id: assistantMessageId,
+            role: 'assistant',
+            parts: [{ type: 'text', text: PLANNER_REFUSALS[verdict] }],
+            metadata: { refused: true },
+          });
+          await this.usage.refund(ticket);
+          return cannedReply(PLANNER_REFUSALS[verdict], assistantMessageId);
+        }
       }
 
       const [memory, plan, nutrition] = await Promise.all([
