@@ -6,6 +6,7 @@ const base = {
   DATABASE_URL: 'mongodb://localhost:27017/vedora',
   JWT_SECRET: 'x'.repeat(32),
   OPENROUTER_API_KEY: 'test-key',
+  AI_GATEWAY_API_KEY: 'test-gateway-key',
   QDRANT_URL: 'http://localhost:6333',
 };
 

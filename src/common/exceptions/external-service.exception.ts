@@ -1,6 +1,7 @@
 import { AppException } from './app-exception.js';
 
 export const EXTERNAL_SERVICES = [
+  'ai-gateway',
   'openrouter',
   'qdrant',
   'cloudinary',

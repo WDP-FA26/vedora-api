@@ -1,17 +1,11 @@
-import { OpenRouterError } from '@openrouter/sdk/models/errors';
 import {
-  DEFAULT_OPENROUTER_APP_TITLE,
-  DEFAULT_OPENROUTER_APP_URL,
-  openRouterAttribution,
-  openRouterAttributionHeaders,
+  DEFAULT_AI_APP_TITLE,
+  DEFAULT_AI_APP_URL,
+  aiAppAttribution,
   ephemeralCache,
-} from '@src/ai/openrouter.js';
+} from '@src/ai/providers/provider-shared.js';
 import { PromptCache } from '@src/ai/prompt-cache.js';
-import {
-  createOpenRouterClient,
-  openRouterFailure,
-} from '@src/ai/openrouter-client.js';
-import { ExternalServiceException } from '@src/common/exceptions/external-service.exception.js';
+import { createOpenRouterClient } from '@src/ai/providers/openrouter/openrouter.client.js';
 
 describe('openrouter-client', () => {
   it('creates a client with a custom fetcher when provided and attaches attribution headers', async () => {
@@ -38,80 +32,33 @@ describe('openrouter-client', () => {
     expect(request).toBeInstanceOf(Request);
     const headers =
       request instanceof Request ? request.headers : new Headers();
-    expect(headers.get('HTTP-Referer')).toBe(DEFAULT_OPENROUTER_APP_URL);
-    expect(headers.get('X-OpenRouter-Title')).toBe(
-      DEFAULT_OPENROUTER_APP_TITLE,
-    );
+    expect(headers.get('HTTP-Referer')).toBe(DEFAULT_AI_APP_URL);
+    expect(headers.get('X-OpenRouter-Title')).toBe(DEFAULT_AI_APP_TITLE);
   });
 
   it('resolves attribution defaults and env overrides', () => {
-    const prevUrl = process.env.OPENROUTER_APP_URL;
-    const prevTitle = process.env.OPENROUTER_APP_TITLE;
+    const prevUrl = process.env.AI_APP_URL;
+    const prevTitle = process.env.AI_APP_TITLE;
     try {
-      delete process.env.OPENROUTER_APP_URL;
-      delete process.env.OPENROUTER_APP_TITLE;
-      expect(openRouterAttribution()).toEqual({
-        appUrl: DEFAULT_OPENROUTER_APP_URL,
-        appTitle: DEFAULT_OPENROUTER_APP_TITLE,
+      delete process.env.AI_APP_URL;
+      delete process.env.AI_APP_TITLE;
+      expect(aiAppAttribution()).toEqual({
+        appUrl: DEFAULT_AI_APP_URL,
+        appTitle: DEFAULT_AI_APP_TITLE,
       });
 
-      process.env.OPENROUTER_APP_URL = ' https://custom.vedora.test ';
-      process.env.OPENROUTER_APP_TITLE = ' Custom Vedora ';
-      expect(openRouterAttributionHeaders()).toEqual({
-        'HTTP-Referer': 'https://custom.vedora.test',
-        'X-OpenRouter-Title': 'Custom Vedora',
+      process.env.AI_APP_URL = ' https://custom.vedora.test ';
+      process.env.AI_APP_TITLE = ' Custom Vedora ';
+      expect(aiAppAttribution()).toEqual({
+        appUrl: 'https://custom.vedora.test',
+        appTitle: 'Custom Vedora',
       });
     } finally {
-      if (prevUrl === undefined) delete process.env.OPENROUTER_APP_URL;
-      else process.env.OPENROUTER_APP_URL = prevUrl;
-      if (prevTitle === undefined) delete process.env.OPENROUTER_APP_TITLE;
-      else process.env.OPENROUTER_APP_TITLE = prevTitle;
+      if (prevUrl === undefined) delete process.env.AI_APP_URL;
+      else process.env.AI_APP_URL = prevUrl;
+      if (prevTitle === undefined) delete process.env.AI_APP_TITLE;
+      else process.env.AI_APP_TITLE = prevTitle;
     }
-  });
-
-  it('returns an existing ExternalServiceException unchanged', () => {
-    const existing = new ExternalServiceException(
-      'openrouter',
-      'already wrapped',
-    );
-    expect(openRouterFailure('Rerank', existing)).toBe(existing);
-  });
-
-  it('wraps OpenRouterError with HTTP status code and message', () => {
-    const response = new Response('{"error":"rate limited"}', {
-      status: 429,
-      headers: { 'content-type': 'application/json' },
-    });
-    const request = new Request('https://openrouter.ai/api/v1/rerank');
-    const sdkError = new OpenRouterError('Too many requests', {
-      response,
-      request,
-      body: '{"error":"rate limited"}',
-    });
-
-    const wrapped = openRouterFailure('Rerank', sdkError);
-    expect(wrapped).toBeInstanceOf(ExternalServiceException);
-    expect(wrapped).toMatchObject({
-      message: 'openrouter request failed',
-      reason: 'Rerank failed (429): Too many requests',
-      cause: sdkError,
-    });
-  });
-
-  it('wraps generic Error and non-Error throwables cleanly', () => {
-    const fromError = openRouterFailure('Embeddings', new Error('timeout'));
-    expect(fromError).toBeInstanceOf(ExternalServiceException);
-    expect(fromError).toMatchObject({
-      message: 'openrouter request failed',
-      reason: 'Embeddings failed: timeout',
-    });
-
-    const fromPrimitive = openRouterFailure('OCR', 'socket hang up');
-    expect(fromPrimitive).toBeInstanceOf(ExternalServiceException);
-    expect(fromPrimitive).toMatchObject({
-      message: 'openrouter request failed',
-      reason: 'OCR failed: socket hang up',
-    });
   });
 });
 

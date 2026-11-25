@@ -1,12 +1,14 @@
 import { generateText } from 'ai';
 import { describe, expect, it } from 'vitest';
 import {
-  DEFAULT_MODERATION_PROVIDER_ORDER,
-  DEFAULT_OPENROUTER_APP_TITLE,
-  DEFAULT_OPENROUTER_APP_URL,
+  DEFAULT_OPENROUTER_MODERATION_PROVIDER_ORDER,
   openRouterModels,
+} from '@src/ai/providers/openrouter/openrouter.adapter.js';
+import {
+  DEFAULT_AI_APP_TITLE,
+  DEFAULT_AI_APP_URL,
   providerOrderFrom,
-} from '@src/ai/openrouter.js';
+} from '@src/ai/providers/provider-shared.js';
 
 interface CapturedRequest {
   body: Record<string, unknown>;
@@ -55,7 +57,7 @@ describe('providerOrderFrom', () => {
     expect(
       providerOrderFrom(' anthropic, google-vertex/global,,azure/global '),
     ).toEqual(['anthropic', 'google-vertex/global', 'azure/global']);
-    expect(providerOrderFrom(DEFAULT_MODERATION_PROVIDER_ORDER)).toEqual([
+    expect(providerOrderFrom(DEFAULT_OPENROUTER_MODERATION_PROVIDER_ORDER)).toEqual([
       'anthropic',
       'google-vertex/global',
       'azure/global',
@@ -84,9 +86,7 @@ describe('OpenRouter chat model provider order and attribution', () => {
 
   it('sends Vedora Platform attribution headers on requests', async () => {
     const { headers } = await captureRequest();
-    expect(headers.get('HTTP-Referer')).toBe(DEFAULT_OPENROUTER_APP_URL);
-    expect(headers.get('X-OpenRouter-Title')).toBe(
-      DEFAULT_OPENROUTER_APP_TITLE,
-    );
+    expect(headers.get('HTTP-Referer')).toBe(DEFAULT_AI_APP_URL);
+    expect(headers.get('X-OpenRouter-Title')).toBe(DEFAULT_AI_APP_TITLE);
   });
 });

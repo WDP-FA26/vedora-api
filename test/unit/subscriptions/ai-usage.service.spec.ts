@@ -500,4 +500,49 @@ describe('AiUsageService', () => {
     expect(imageTicket).not.toBeNull();
     await usage.complete(imageTicket as UsageTicket);
   });
+
+  it('reports an allowance for an ADMIN whose FREE text quota is used up', async () => {
+    const adminId = randomUUID();
+    await users().create({
+      _id: adminId,
+      username: 'ai.admin.voice',
+      fullName: 'AI Admin',
+      email: 'ai.admin.voice@vedora.local',
+      role: UserRole.ADMIN,
+      status: AccountStatus.ACTIVE,
+    });
+    const period = await subscriptions.period(adminId, NOW);
+    for (let i = 0; i < period.textLimit; i++) {
+      const ticket = await usage.consume(
+        adminId,
+        AiFeature.MEAL_PLAN_CHAT,
+        {},
+        NOW,
+      );
+      await usage.complete(ticket as UsageTicket);
+    }
+
+    const quota = await usage.summary(adminId, AiFeature.MEAL_PLAN_CHAT, NOW);
+    expect(quota.remaining).toBe(0);
+    await expect(
+      usage.hasAllowance(adminId, AiFeature.MEAL_PLAN_CHAT, NOW),
+    ).resolves.toBe(true);
+  });
+
+  it('reports no allowance for a user whose FREE text quota is used up', async () => {
+    const period = await subscriptions.period(USER_ID, NOW);
+    for (let i = 0; i < period.textLimit; i++) {
+      const ticket = await usage.consume(
+        USER_ID,
+        AiFeature.MEAL_PLAN_CHAT,
+        {},
+        NOW,
+      );
+      await usage.complete(ticket as UsageTicket);
+    }
+
+    await expect(
+      usage.hasAllowance(USER_ID, AiFeature.MEAL_PLAN_CHAT, NOW),
+    ).resolves.toBe(false);
+  });
 });

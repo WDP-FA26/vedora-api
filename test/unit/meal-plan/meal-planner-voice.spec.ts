@@ -3,6 +3,8 @@ import { FakeModel, providerError } from '@nestjs/ai/testing';
 import { asSchema, simulateReadableStream, type UIMessageChunk } from 'ai';
 import { type DeepMockProxy, mockDeep } from 'vitest-mock-extended';
 import { FeatureUnavailableException } from '@src/common/exceptions/feature-unavailable.exception.js';
+import { QuotaReachedException } from '@src/common/exceptions/quota-reached.exception.js';
+import type { AiUsageService } from '@src/subscriptions/ai-usage.service.js';
 import type { MealLogService } from '@src/meal-plan/meal-log/meal-log.service.js';
 import type { MealPlanService } from '@src/meal-plan/meal-plan.service.js';
 import type { MealPlannerChatHistoryService } from '@src/meal-plan/meal-planner-chat-history.service.js';
@@ -17,6 +19,7 @@ import {
 import { MealPlannerVoiceService } from '@src/meal-plan/voice/meal-planner-voice.service.js';
 import type { DietaryService } from '@src/recipes/dietary.service.js';
 import {
+  AiFeature,
   CalorieSource,
   MealLogSource,
   MealSection,
@@ -43,6 +46,7 @@ function emptyStream() {
 
 describe('MealPlannerVoiceService', () => {
   let chat: DeepMockProxy<MealPlannerChatService>;
+  let usage: DeepMockProxy<AiUsageService>;
   let consent = 'approve';
   let failConsent = false;
   const decisionModel = new FakeModel(() =>
@@ -52,16 +56,34 @@ describe('MealPlannerVoiceService', () => {
   beforeEach(() => {
     chat = mockDeep<MealPlannerChatService>();
     chat.stream.mockResolvedValue(emptyStream());
+    usage = mockDeep<AiUsageService>();
     consent = 'approve';
     failConsent = false;
   });
 
-  const service = () =>
-    new MealPlannerVoiceService(new ConfigService({}), chat, decisionModel);
+  const service = (config: Record<string, string> = {}) =>
+    new MealPlannerVoiceService(
+      new ConfigService(config),
+      chat,
+      decisionModel,
+      usage,
+    );
 
   it('refuses a session when no gateway key is configured', async () => {
-    await expect(service().createSession()).rejects.toThrow(
+    await expect(service().createSession(USER_ID)).rejects.toThrow(
       FeatureUnavailableException,
+    );
+  });
+
+  it('refuses a session once the chat quota is used up', async () => {
+    usage.hasAllowance.mockResolvedValue(false);
+
+    await expect(
+      service({ AI_GATEWAY_API_KEY: 'test-key' }).createSession(USER_ID),
+    ).rejects.toThrow(QuotaReachedException);
+    expect(usage.hasAllowance).toHaveBeenCalledWith(
+      USER_ID,
+      AiFeature.MEAL_PLAN_CHAT,
     );
   });
 

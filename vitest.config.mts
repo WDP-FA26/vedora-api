@@ -16,7 +16,12 @@ export default defineConfig({
     testTimeout: 15_000,
     // runtime-config imports dotenv/config; point it at an empty file so a
     // developer's .env (Cloudinary, OpenRouter, ...) cannot change results.
-    env: { DOTENV_CONFIG_PATH: 'test/unit/unit.env' },
+    // Feature specs assert OpenRouter's spelling of provider options; the
+    // Gateway adapter has specs of its own (test/unit/ai/gateway.spec.ts).
+    env: {
+      DOTENV_CONFIG_PATH: 'test/unit/unit.env',
+      AI_PROVIDER: 'openrouter',
+    },
     maxWorkers: 4,
     coverage: {
       include: ['src/**/*.ts'],

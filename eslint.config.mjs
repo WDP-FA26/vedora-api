@@ -21,6 +21,35 @@ const retiredPathPatterns = [
   },
 ];
 
+const providerInternalPatterns = [
+  {
+    group: ['**/ai/providers/gateway/**', '**/ai/providers/openrouter/**'],
+    message:
+      'Import from src/ai/providers/provider-registry or ai-provider.interface instead of concrete provider adapters.',
+  },
+];
+
+const aiSharedLayerGroup = [
+  '**/auth/**',
+  '**/users/**',
+  '**/profiles/**',
+  '**/posts/**',
+  '**/media/**',
+  '**/recipes/**',
+  '**/meal-plan/**',
+  '**/nutrition-chat/**',
+  '**/payments/**',
+  '**/notifications/**',
+  '**/verification/**',
+  '**/admin-dashboard/**',
+  '**/storage/**',
+  '**/knowledge/**',
+  '**/cloudinary/**',
+  '**/mail/**',
+  '**/qdrant/**',
+  '**/database/**',
+];
+
 // Modules above the shared layers; the layers below must never import them.
 const featureGroups = [
   '**/auth/**',
@@ -79,14 +108,15 @@ export default tseslint.config(
       ],
     },
   },
-  // Paths retired by the refactors, so they do not creep back.
+  // Paths retired by the refactors and internal provider adapters.
   {
     files: ['src/**/*.ts'],
+    ignores: ['src/ai/providers/**'],
     rules: {
       'no-restricted-imports': [
         'error',
         {
-          patterns: [...retiredPathPatterns],
+          patterns: [...retiredPathPatterns, ...providerInternalPatterns],
         },
       ],
     },
@@ -95,6 +125,48 @@ export default tseslint.config(
   // never the other way round.
   {
     files: ['src/ai/**/*.ts'],
+    ignores: ['src/ai/providers/**'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            ...retiredPathPatterns,
+            ...providerInternalPatterns,
+            {
+              group: aiSharedLayerGroup,
+              message:
+                'src/ai is shared infrastructure; features depend on it, not the other way round.',
+            },
+          ],
+        },
+      ],
+    },
+  },
+  {
+    files: [
+      'src/ai/providers/ai-provider.interface.ts',
+      'src/ai/providers/provider-shared.ts',
+    ],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            ...retiredPathPatterns,
+            ...providerInternalPatterns,
+            {
+              group: aiSharedLayerGroup,
+              message:
+                'src/ai is shared infrastructure; features depend on it, not the other way round.',
+            },
+          ],
+        },
+      ],
+    },
+  },
+  {
+    files: ['src/ai/providers/provider-registry.ts'],
     rules: {
       'no-restricted-imports': [
         'error',
@@ -102,26 +174,53 @@ export default tseslint.config(
           patterns: [
             ...retiredPathPatterns,
             {
-              group: [
-                '**/auth/**',
-                '**/users/**',
-                '**/profiles/**',
-                '**/posts/**',
-                '**/media/**',
-                '**/recipes/**',
-                '**/meal-plan/**',
-                '**/nutrition-chat/**',
-                '**/payments/**',
-                '**/notifications/**',
-                '**/verification/**',
-                '**/admin-dashboard/**',
-                '**/storage/**',
-                '**/knowledge/**',
-                '**/cloudinary/**',
-                '**/mail/**',
-                '**/qdrant/**',
-                '**/database/**',
-              ],
+              group: aiSharedLayerGroup,
+              message:
+                'src/ai is shared infrastructure; features depend on it, not the other way round.',
+            },
+          ],
+        },
+      ],
+    },
+  },
+  {
+    files: ['src/ai/providers/gateway/**/*.ts'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            ...retiredPathPatterns,
+            {
+              group: ['**/providers/openrouter/**', '../openrouter/**'],
+              message:
+                'Gateway adapter must stay completely independent of OpenRouter.',
+            },
+            {
+              group: aiSharedLayerGroup,
+              message:
+                'src/ai is shared infrastructure; features depend on it, not the other way round.',
+            },
+          ],
+        },
+      ],
+    },
+  },
+  {
+    files: ['src/ai/providers/openrouter/**/*.ts'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            ...retiredPathPatterns,
+            {
+              group: ['**/providers/gateway/**', '../gateway/**'],
+              message:
+                'OpenRouter adapter must stay completely independent of Gateway.',
+            },
+            {
+              group: aiSharedLayerGroup,
               message:
                 'src/ai is shared infrastructure; features depend on it, not the other way round.',
             },
@@ -140,6 +239,7 @@ export default tseslint.config(
         {
           patterns: [
             ...retiredPathPatterns,
+            ...providerInternalPatterns,
             {
               group: [
                 '**/auth/**',
@@ -184,6 +284,7 @@ export default tseslint.config(
         {
           patterns: [
             ...retiredPathPatterns,
+            ...providerInternalPatterns,
             {
               group: featureGroups,
               message:

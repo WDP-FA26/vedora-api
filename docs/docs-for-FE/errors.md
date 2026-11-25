@@ -123,7 +123,7 @@ Nhắn tin có thêm `MESSAGE_ID_CONFLICT`: `clientMessageId` đã được dùn
 | HTTP | `code` | Ý nghĩa | `details` |
 | --- | --- | --- | --- |
 | 500 | `INTERNAL_ERROR` | Lỗi không mong đợi phía server | — |
-| 502 | `EXTERNAL_SERVICE_FAILED` | Dịch vụ bên thứ ba (OpenRouter, Qdrant, Cloudinary) lỗi | `service: "openrouter" \| "qdrant" \| "cloudinary"` |
+| 502 | `EXTERNAL_SERVICE_FAILED` | Dịch vụ bên thứ ba (Vercel AI Gateway, OpenRouter, Qdrant, Cloudinary) lỗi | `service: "ai-gateway" \| "openrouter" \| "qdrant" \| "cloudinary"` |
 | 503 | `SERVICE_UNAVAILABLE` | Tính năng tạm thời không sẵn sàng | — |
 | 503 | `PAYMENTS_DISABLED` | Thanh toán SePay chưa bật | — |
 | 503 | `PAYMENT_CODE_UNAVAILABLE` | Không cấp được mã thanh toán; thử lại với cùng `Idempotency-Key` | — |

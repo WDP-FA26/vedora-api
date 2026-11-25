@@ -4,13 +4,14 @@ import { AiModule as NestAiModule } from '@nestjs/ai';
 import { MODERATION_MODEL } from './guardrails/guardrail.js';
 import {
   DEFAULT_CHAT_MODEL,
-  DEFAULT_CHAT_PROVIDER_ORDER,
   DEFAULT_EMBEDDING_MODEL,
   DEFAULT_MODERATION_MODEL,
-  DEFAULT_MODERATION_PROVIDER_ORDER,
-  providerOrderFrom,
-} from './openrouter.js';
-import { aiModels } from './provider.js';
+} from './models.js';
+import {
+  aiModels,
+  chatProviderOrder,
+  moderationProviderOrder,
+} from './providers/provider-registry.js';
 import type { ReasoningEffort } from './reasoning.js';
 import { AiTelemetryModule } from './telemetry/ai-telemetry.module.js';
 import { AiCostTransportService } from './telemetry/ai-cost-transport.service.js';
@@ -29,23 +30,18 @@ import { runtimeConfig } from '../config/runtime-config.js';
       useFactory: (config: ConfigService, costs: AiCostTransportService) => {
         const models = aiModels(config);
         const defaultModelId = config.get<string>(
-          'OPENROUTER_MODEL',
+          'AI_CHAT_MODEL',
           DEFAULT_CHAT_MODEL,
         );
         const reasoningEffort = config.get<ReasoningEffort>(
-          'OPENROUTER_REASONING_EFFORT',
+          'AI_REASONING_EFFORT',
           'low',
         );
-        const providerOrder = providerOrderFrom(
-          config.get<string>(
-            'OPENROUTER_PROVIDER_ORDER',
-            DEFAULT_CHAT_PROVIDER_ORDER,
-          ),
-        );
+        const providerOrder = chatProviderOrder(config);
         const blogModelId =
           config.get<string>('BLOG_AI_MODEL') || defaultModelId;
         const knowledgeEmbeddingModelId = config.get<string>(
-          'OPENROUTER_EMBEDDING_MODEL',
+          'AI_EMBEDDING_MODEL',
           DEFAULT_EMBEDDING_MODEL,
         );
         const postsEmbeddingModelId = config.get<string>(
@@ -94,18 +90,13 @@ import { runtimeConfig } from '../config/runtime-config.js';
       inject: [ConfigService, AiCostTransportService],
       useFactory: (config: ConfigService, costs: AiCostTransportService) => {
         const modelId = config.get<string>(
-          'OPENROUTER_MODERATION_MODEL',
+          'AI_MODERATION_MODEL',
           DEFAULT_MODERATION_MODEL,
         );
         // The request's cost context (chat or blog assistant) names the feature.
         return aiModels(config).chat(modelId, {
           effort: 'low',
-          providerOrder: providerOrderFrom(
-            config.get<string>(
-              'OPENROUTER_MODERATION_PROVIDER_ORDER',
-              DEFAULT_MODERATION_PROVIDER_ORDER,
-            ),
-          ),
+          providerOrder: moderationProviderOrder(config),
           fetch: costs.forModel(modelId, 'SYSTEM', 'MODERATION'),
         });
       },

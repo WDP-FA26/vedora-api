@@ -12,12 +12,14 @@ import { convertReadableStreamToArray, MockLanguageModelV4 } from 'ai/test';
 import { type DeepMockProxy, mockDeep } from 'vitest-mock-extended';
 import { AiModule } from '@src/ai/ai.module.js';
 import {
-  DEFAULT_CHAT_PROVIDER_ORDER,
-  DEFAULT_MODERATION_PROVIDER_ORDER,
-  DEFAULT_OPENROUTER_APP_TITLE,
-  DEFAULT_OPENROUTER_APP_URL,
+  DEFAULT_OPENROUTER_CHAT_PROVIDER_ORDER,
+  DEFAULT_OPENROUTER_MODERATION_PROVIDER_ORDER,
+} from '@src/ai/providers/provider-registry.js';
+import {
+  DEFAULT_AI_APP_TITLE,
+  DEFAULT_AI_APP_URL,
   providerOrderFrom,
-} from '@src/ai/openrouter.js';
+} from '@src/ai/providers/provider-shared.js';
 import { AiCostTransportService } from '@src/ai/telemetry/ai-cost-transport.service.js';
 import { ModerationSettingsService } from '@src/moderation/moderation-settings.service.js';
 import { NUTRITION_POLICY } from '@src/ai/guardrails/policies/nutrition.js';
@@ -119,7 +121,7 @@ async function createService() {
         load: [
           () => ({
             OPENROUTER_API_KEY: 'key',
-            OPENROUTER_MODEL: 'test/model',
+            AI_CHAT_MODEL: 'test/model',
           }),
         ],
       }),
@@ -175,13 +177,13 @@ describe('NutritionChatService', () => {
       apiKey: 'key',
       baseURL: 'https://openrouter.ai/api/v1',
       fetch,
-      appName: DEFAULT_OPENROUTER_APP_TITLE,
-      appUrl: DEFAULT_OPENROUTER_APP_URL,
+      appName: DEFAULT_AI_APP_TITLE,
+      appUrl: DEFAULT_AI_APP_URL,
     });
     expect(languageModel).toHaveBeenCalledWith('test/model', {
       reasoning: { effort: 'low', exclude: true },
       provider: {
-        order: providerOrderFrom(DEFAULT_CHAT_PROVIDER_ORDER),
+        order: providerOrderFrom(DEFAULT_OPENROUTER_CHAT_PROVIDER_ORDER),
         allow_fallbacks: true,
       },
     });
@@ -209,7 +211,7 @@ describe('NutritionChatService', () => {
     expect(languageModel).toHaveBeenCalledWith(MODERATION_MODEL_ID, {
       reasoning: { effort: 'low', exclude: true },
       provider: {
-        order: providerOrderFrom(DEFAULT_MODERATION_PROVIDER_ORDER),
+        order: providerOrderFrom(DEFAULT_OPENROUTER_MODERATION_PROVIDER_ORDER),
         allow_fallbacks: true,
       },
     });

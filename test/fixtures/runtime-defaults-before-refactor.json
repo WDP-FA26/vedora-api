@@ -1238,14 +1238,6 @@
     "upstreamOriginal": 600000
   },
   {
-    "file": "knowledge/retrieval/knowledge-models.service.ts",
-    "constant": "OCR_CARRIER_MODEL",
-    "env": "KNOWLEDGE_OCR_CARRIER_MODEL",
-    "original": "google/gemini-3.1-flash-lite",
-    "default": "google/gemini-3.1-flash-lite",
-    "multiplier": 1
-  },
-  {
     "file": "qdrant/qdrant.service.ts",
     "constant": "STARTUP_TIMEOUT_MS",
     "env": "QDRANT_STARTUP_TIMEOUT_MS",

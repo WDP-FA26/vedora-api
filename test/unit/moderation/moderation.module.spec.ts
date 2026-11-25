@@ -46,7 +46,7 @@ describe('ModerationModule', () => {
   it('wires controller, services, and the reviewer model from config', async () => {
     const moduleRef = await compileWithEnv({
       OPENROUTER_API_KEY: 'test-openrouter-key',
-      OPENROUTER_CONTENT_MODERATION_MODEL: 'anthropic/claude-haiku-4.5',
+      AI_CONTENT_MODERATION_MODEL: 'anthropic/claude-haiku-4.5',
     });
 
     expect(moduleRef.get(AdminModerationController)).toBeInstanceOf(

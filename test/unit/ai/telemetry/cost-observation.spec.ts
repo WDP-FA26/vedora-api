@@ -1,3 +1,4 @@
+import { parseOpenRouterPayload } from '@src/ai/providers/openrouter/openrouter.cost.js';
 import {
   CostObservation,
   CostResponseParser,
@@ -8,29 +9,32 @@ import { requestCostContext } from '@src/ai/telemetry/ai-cost-context.js';
 describe('provider billing metadata', () => {
   it('distinguishes a reported zero from an unavailable or invalid charge', () => {
     const observation = new CostObservation();
-    observation.accept({ usage: {} });
+    parseOpenRouterPayload({ usage: {} }, observation);
     expect(observation.costUsd).toBeNull();
-    observation.accept({ usage: { cost: 0 } });
+    parseOpenRouterPayload({ usage: { cost: 0 } }, observation);
     expect(observation.costUsd).toBe('0');
     for (const invalid of [-1, Infinity, NaN, '', 'NaN', '-1', null])
       expect(costValue(invalid)).toBeNull();
   });
   it('reads response API usage without double-counting reasoning or cache', () => {
     const observation = new CostObservation();
-    observation.accept({
-      type: 'response.completed',
-      response: {
-        id: 'gen-1',
-        model: 'actual/model',
-        usage: {
-          cost: 0.03,
-          input_tokens: 100,
-          output_tokens: 50,
-          output_tokens_details: { reasoning_tokens: 20 },
-          input_tokens_details: { cached_tokens: 70, cache_write_tokens: 15 },
+    parseOpenRouterPayload(
+      {
+        type: 'response.completed',
+        response: {
+          id: 'gen-1',
+          model: 'actual/model',
+          usage: {
+            cost: 0.03,
+            input_tokens: 100,
+            output_tokens: 50,
+            output_tokens_details: { reasoning_tokens: 20 },
+            input_tokens_details: { cached_tokens: 70, cache_write_tokens: 15 },
+          },
         },
       },
-    });
+      observation,
+    );
     expect(observation).toMatchObject({
       generationId: 'gen-1',
       costUsd: '0.03',
@@ -42,7 +46,7 @@ describe('provider billing metadata', () => {
     });
   });
   it('handles arbitrary UTF8 and SSE chunk boundaries and terminal usage', () => {
-    const parser = new CostResponseParser(true);
+    const parser = new CostResponseParser(true, parseOpenRouterPayload);
     const bytes = new TextEncoder().encode(
       'data: {"id":"gen-2","choices":[{"delta":{"content":"Món chay"}}]}\r\n\r\ndata: {"usage":{"cost":0.000123,"prompt_tokens":8,"completion_tokens":2}}\n\ndata: [DONE]\n\n',
     );
@@ -57,7 +61,7 @@ describe('provider billing metadata', () => {
     expect(JSON.stringify(parser.observation)).not.toContain('Món chay');
   });
   it('skips an oversized SSE line but still reads subsequent usage', () => {
-    const parser = new CostResponseParser(true);
+    const parser = new CostResponseParser(true, parseOpenRouterPayload);
     parser.write(
       new TextEncoder().encode('data: ' + 'x'.repeat(1024 * 1024 + 1)),
     );
@@ -68,7 +72,7 @@ describe('provider billing metadata', () => {
     expect(parser.observation.costUsd).toBe('0.01');
   });
   it('marks response errors while retaining billed usage', () => {
-    const parser = new CostResponseParser(false);
+    const parser = new CostResponseParser(false, parseOpenRouterPayload);
     parser.write(
       new TextEncoder().encode(
         JSON.stringify({

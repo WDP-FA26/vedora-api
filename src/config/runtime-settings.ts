@@ -87,10 +87,6 @@ export function parseRuntimeSettings(
         const supported = new Set(['1:1', '4:3', '3:4', '16:9']);
         if (value.split(',').some((ratio) => !supported.has(ratio.trim())))
           throw new Error('unsupported aspect ratio');
-      } else if (key === 'KNOWLEDGE_OCR_ENGINE' && value !== 'mistral-ocr') {
-        throw new Error(
-          'only mistral-ocr is supported by this response parser',
-        );
       }
       values[key] = value;
     } catch {

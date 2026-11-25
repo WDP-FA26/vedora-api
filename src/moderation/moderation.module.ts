@@ -1,11 +1,10 @@
 import { Global, Module } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { DEFAULT_CONTENT_MODERATION_MODEL } from '../ai/models.js';
 import {
-  DEFAULT_CONTENT_MODERATION_MODEL,
-  DEFAULT_MODERATION_PROVIDER_ORDER,
-  providerOrderFrom,
-} from '../ai/openrouter.js';
-import { aiModels } from '../ai/provider.js';
+  aiModels,
+  moderationProviderOrder,
+} from '../ai/providers/provider-registry.js';
 import { AdminModerationController } from './admin-moderation.controller.js';
 import {
   CONTENT_MODERATION_MODEL,
@@ -29,19 +28,14 @@ import { AiCostTransportService } from '../ai/telemetry/ai-cost-transport.servic
         costs: AiCostTransportService,
       ): ModerationModel => {
         const id = config.get<string>(
-          'OPENROUTER_CONTENT_MODERATION_MODEL',
+          'AI_CONTENT_MODERATION_MODEL',
           DEFAULT_CONTENT_MODERATION_MODEL,
         );
         const model = aiModels(config).chat(id, {
           // Haiku 5.5's default: judging a policy with disguised words and
           // quoting evidence gains from more thinking than the chat guardrail.
           effort: 'medium',
-          providerOrder: providerOrderFrom(
-            config.get<string>(
-              'OPENROUTER_MODERATION_PROVIDER_ORDER',
-              DEFAULT_MODERATION_PROVIDER_ORDER,
-            ),
-          ),
+          providerOrder: moderationProviderOrder(config),
           fetch: costs.forModel(id, 'CONTENT_MODERATION', 'MODERATION'),
         });
         return { id, model };

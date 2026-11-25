@@ -3,9 +3,9 @@ import { ConfigService } from '@nestjs/config';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AiCostTransportService } from '@src/ai/telemetry/ai-cost-transport.service.js';
 import {
-  DEFAULT_OPENROUTER_APP_TITLE,
-  DEFAULT_OPENROUTER_APP_URL,
-} from '@src/ai/openrouter.js';
+  DEFAULT_AI_APP_TITLE,
+  DEFAULT_AI_APP_URL,
+} from '@src/ai/providers/provider-shared.js';
 import { ExternalServiceException } from '@src/common/exceptions/external-service.exception.js';
 import {
   TranscriptionService,
@@ -29,7 +29,10 @@ describe('TranscriptionService', () => {
     service = new TranscriptionService(
       config,
       { generateObject } as unknown as AiService,
-      { fetch: fetchSpy } as unknown as AiCostTransportService,
+      {
+        fetch: fetchSpy,
+        forModel: () => fetchSpy,
+      } as unknown as AiCostTransportService,
     );
   });
 
@@ -91,11 +94,9 @@ describe('TranscriptionService', () => {
         'https://openrouter.ai/api/v1/audio/transcriptions',
       );
       expect(request.headers.get('Authorization')).toBe('Bearer or-key');
-      expect(request.headers.get('HTTP-Referer')).toBe(
-        DEFAULT_OPENROUTER_APP_URL,
-      );
+      expect(request.headers.get('HTTP-Referer')).toBe(DEFAULT_AI_APP_URL);
       expect(request.headers.get('X-OpenRouter-Title')).toBe(
-        DEFAULT_OPENROUTER_APP_TITLE,
+        DEFAULT_AI_APP_TITLE,
       );
       expect(await request.json()).toMatchObject({
         model: 'openai/whisper-large-v3',
@@ -115,45 +116,16 @@ describe('TranscriptionService', () => {
       expect(transcript.cues[2]?.end).toBeCloseTo(29.5);
     });
 
-    it('falls back to segments and filters high no_speech_prob and low avg_logprob', async () => {
+    it('builds cues from segments when the model gives no words, and filters hallucinations', async () => {
       fetchSpy.mockResolvedValue(
         Response.json(
           {
             text: 'fallback',
             language: 'en-US',
             segments: [
-              {
-                id: 0,
-                start: 0,
-                end: 2,
-                text: '  Stir   the   soup  ',
-                no_speech_prob: 0.1,
-                avg_logprob: -0.3,
-              },
-              {
-                id: 1,
-                start: 2,
-                end: 4,
-                text: 'Silence noise',
-                no_speech_prob: 0.7,
-                avg_logprob: -0.2,
-              },
-              {
-                id: 2,
-                start: 4,
-                end: 6,
-                text: 'Garbled audio',
-                no_speech_prob: 0.1,
-                avg_logprob: -1.5,
-              },
-              {
-                id: 3,
-                start: 6,
-                end: 8,
-                text: 'Thanks for watching!',
-                no_speech_prob: 0.0,
-                avg_logprob: -0.1,
-              },
+              { id: 0, start: 0, end: 2, text: '  Stir   the   soup  ' },
+              { id: 1, start: 2, end: 4, text: 'and season it.' },
+              { id: 2, start: 4.5, end: 6, text: 'Thanks for watching!' },
             ],
           },
           { status: 200 },
@@ -167,7 +139,7 @@ describe('TranscriptionService', () => {
 
       expect(transcript).toEqual({
         language: 'en',
-        cues: [{ start: 2, end: 4, text: 'Stir the soup' }],
+        cues: [{ start: 2, end: 6, text: 'Stir the soup and season it.' }],
       });
     });
 

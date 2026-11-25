@@ -2,7 +2,7 @@ import { runtimeConfig } from '../config/runtime-config.js';
 import { createHash, randomUUID } from 'node:crypto';
 import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import type { Model } from 'mongoose';
+import type { ClientSession, Model } from 'mongoose';
 import { AiFeature, AiRequest, User, UserRole } from '../mongo/models.js';
 import { MongoService } from '../mongo/mongo.service.js';
 import { lockDocument } from '../mongo/document-lock.js';
@@ -75,6 +75,32 @@ export class AiUsageService {
   ): Promise<AiUsageSummary> {
     const period = await this.subscriptions.period(userId, now);
     return this.summaryForPeriod(userId, feature, period, now);
+  }
+
+  /**
+   * Whether `userId` may start another `feature` request now, by the same rule
+   * as `consume`: admins are never limited, everyone else needs a request left.
+   * Reads only; nothing is reserved.
+   */
+  async hasAllowance(
+    userId: string,
+    feature: AiFeature,
+    now = new Date(),
+  ): Promise<boolean> {
+    if (await this.isAdmin(userId)) return true;
+    const quota = await this.summary(userId, feature, now);
+    return quota.remaining > 0;
+  }
+
+  private async isAdmin(
+    userId: string,
+    session: ClientSession | null = null,
+  ): Promise<boolean> {
+    const found = await this.users
+      .exists({ _id: userId, role: UserRole.ADMIN })
+      .session(session)
+      .exec();
+    return found !== null;
   }
 
   async summaryForPeriod(
@@ -163,11 +189,7 @@ export class AiUsageService {
             );
           }
           if (!row?.charged) {
-            const isAdmin =
-              (await this.users
-                .exists({ _id: userId, role: UserRole.ADMIN })
-                .session(session)
-                .exec()) !== null;
+            const isAdmin = await this.isAdmin(userId, session);
             if (!isAdmin) {
               const limit =
                 feature === AiFeature.BLOG_IMAGE

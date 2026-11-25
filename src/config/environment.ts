@@ -16,13 +16,22 @@ import {
   validateSync,
 } from 'class-validator';
 import {
-  DEFAULT_CHAT_PROVIDER_ORDER,
   DEFAULT_CONTENT_MODERATION_MODEL,
   DEFAULT_MODERATION_MODEL,
-  DEFAULT_MODERATION_PROVIDER_ORDER,
-  DEFAULT_OPENROUTER_APP_TITLE,
-  DEFAULT_OPENROUTER_APP_URL,
-} from '../ai/openrouter.js';
+} from '../ai/models.js';
+import {
+  AI_PROVIDERS,
+  type AiProvider,
+} from '../ai/providers/ai-provider.interface.js';
+import {
+  DEFAULT_GATEWAY_PROVIDER_ORDER,
+  DEFAULT_OPENROUTER_CHAT_PROVIDER_ORDER,
+  DEFAULT_OPENROUTER_MODERATION_PROVIDER_ORDER,
+} from '../ai/providers/provider-registry.js';
+import {
+  DEFAULT_AI_APP_TITLE,
+  DEFAULT_AI_APP_URL,
+} from '../ai/providers/provider-shared.js';
 import { REASONING_EFFORTS } from '../ai/reasoning.js';
 import {
   parseRuntimeSettings,
@@ -142,14 +151,26 @@ export class EnvironmentVariables {
   OPENROUTER_API_KEY!: string;
 
   @IsString()
-  OPENROUTER_MODEL = 'anthropic/claude-haiku-5.5';
+  AI_CHAT_MODEL = 'anthropic/claude-haiku-5.5';
 
   @IsIn(REASONING_EFFORTS)
-  OPENROUTER_REASONING_EFFORT = 'low';
+  AI_REASONING_EFFORT = 'low';
 
-  /** Vercel AI Gateway key for the meal planner voice agent; blank turns voice off. */
+  /**
+   * The provider every AI SDK call goes to: `gateway` (Vercel AI Gateway) or
+   * `openrouter`. Switch to `openrouter` when the Gateway is down.
+   */
+  @IsIn(AI_PROVIDERS)
+  AI_PROVIDER: AiProvider = 'gateway';
+
+  /** Vercel AI Gateway key: required at startup (alongside OPENROUTER_API_KEY) for Gateway calls and meal planner voice. */
   @IsString()
-  AI_GATEWAY_API_KEY = '';
+  @IsNotEmpty()
+  AI_GATEWAY_API_KEY!: string;
+
+  /** Comma-separated Gateway provider slugs the chat models try first; empty lets the Gateway route. */
+  @IsString()
+  AI_GATEWAY_PROVIDER_ORDER = DEFAULT_GATEWAY_PROVIDER_ORDER;
 
   /** Realtime voice model on AI Gateway, e.g. openai/gpt-live-1.1 or spacexai/grok-voice-3.0. */
   @IsString()
@@ -205,7 +226,7 @@ export class EnvironmentVariables {
   QDRANT_COLLECTION = 'vedora_knowledge';
 
   @IsString()
-  OPENROUTER_EMBEDDING_MODEL = 'google/gemini-embedding-2';
+  AI_EMBEDDING_MODEL = 'google/gemini-embedding-2';
 
   @Type(() => Number)
   @IsInt()
@@ -213,27 +234,28 @@ export class EnvironmentVariables {
   KNOWLEDGE_EMBEDDING_DIMENSIONS = 1536;
 
   @IsString()
-  OPENROUTER_MODERATION_MODEL = DEFAULT_MODERATION_MODEL;
+  AI_MODERATION_MODEL = DEFAULT_MODERATION_MODEL;
 
   @IsString()
-  OPENROUTER_CONTENT_MODERATION_MODEL = DEFAULT_CONTENT_MODERATION_MODEL;
+  AI_CONTENT_MODERATION_MODEL = DEFAULT_CONTENT_MODERATION_MODEL;
 
   /** Comma-separated OpenRouter provider slugs for the chat models; empty lets OpenRouter route. */
   @IsString()
-  OPENROUTER_PROVIDER_ORDER = DEFAULT_CHAT_PROVIDER_ORDER;
+  OPENROUTER_PROVIDER_ORDER = DEFAULT_OPENROUTER_CHAT_PROVIDER_ORDER;
 
   /** Comma-separated OpenRouter provider slugs for both moderation models; empty lets OpenRouter route. */
   @IsString()
-  OPENROUTER_MODERATION_PROVIDER_ORDER = DEFAULT_MODERATION_PROVIDER_ORDER;
+  OPENROUTER_MODERATION_PROVIDER_ORDER =
+    DEFAULT_OPENROUTER_MODERATION_PROVIDER_ORDER;
 
-  /** App URL sent as `HTTP-Referer` so OpenRouter logs attribute requests instead of `Unknown`. */
+  /** App URL sent as `HTTP-Referer` so AI providers attribute requests instead of `Unknown`. */
   @IsUrl({ require_tld: false })
-  OPENROUTER_APP_URL = DEFAULT_OPENROUTER_APP_URL;
+  AI_APP_URL = DEFAULT_AI_APP_URL;
 
-  /** App display name sent as `X-OpenRouter-Title` to OpenRouter. */
+  /** App display name sent as `X-Title` / `X-OpenRouter-Title` to AI providers. */
   @IsString()
   @IsNotEmpty()
-  OPENROUTER_APP_TITLE = DEFAULT_OPENROUTER_APP_TITLE;
+  AI_APP_TITLE = DEFAULT_AI_APP_TITLE;
 
   @ValidateIf((env: EnvironmentVariables) => env.NODE_ENV === 'production')
   @IsString()
@@ -281,14 +303,37 @@ export class EnvironmentVariables {
   @Max(1)
   POST_SEARCH_MIN_SCORE = 0.65;
 
+  /** Rerank knowledge search results; false skips the reranker. */
+  @Transform(toBoolean)
+  @IsBoolean()
+  KNOWLEDGE_RERANK_ENABLED = true;
+
+  /** Knowledge reranker with `AI_PROVIDER=openrouter`; blank uses qwen/qwen3-reranker-8b. */
   @IsString()
-  OPENROUTER_RERANK_MODEL = 'cohere/rerank-v3.5';
+  OPENROUTER_RERANK_MODEL = '';
+
+  /** Knowledge reranker on AI Gateway; blank uses cohere/rerank-v5-fast. */
+  @IsString()
+  AI_GATEWAY_RERANK_MODEL = '';
 
   @IsString()
   BLOG_AI_MODEL = '';
 
+  /** Blog image model with `AI_PROVIDER=openrouter`; blank uses the adapter default. */
   @IsString()
-  OPENROUTER_IMAGE_MODEL = 'qwen/qwen-image-2.1-turbo';
+  OPENROUTER_IMAGE_MODEL = '';
+
+  /** Blog image model on AI Gateway; blank uses microsoft/mai-image-2.7-flash. */
+  @IsString()
+  AI_GATEWAY_IMAGE_MODEL = '';
+
+  /** Knowledge base PDF OCR model with `AI_PROVIDER=openrouter`; blank uses mistralai/mistral-small-2603. */
+  @IsString()
+  OPENROUTER_OCR_MODEL = '';
+
+  /** Knowledge base PDF OCR model on AI Gateway; blank uses mistral/mistral-small. */
+  @IsString()
+  AI_GATEWAY_OCR_MODEL = '';
 
   @ValidateIf((env: EnvironmentVariables) => env.PAYMENT_REDIS_URL !== '')
   @IsUrl({

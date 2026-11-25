@@ -3,6 +3,7 @@ import type { INestApplication } from '@nestjs/common';
 import { getModelToken } from '@nestjs/mongoose';
 import { Test } from '@nestjs/testing';
 import type { Model } from 'mongoose';
+import { parseOpenRouterPayload } from '@src/ai/providers/openrouter/openrouter.cost.js';
 import { aiCostContext } from '@src/ai/telemetry/ai-cost-context.js';
 import { AiCostTransportService } from '@src/ai/telemetry/ai-cost-transport.service.js';
 import { CostObservation } from '@src/ai/telemetry/cost-observation.js';
@@ -288,7 +289,7 @@ describe('AiCostTransportService', () => {
 
   it('deduplicates repeated generationId charges and rethrows non-unique errors in settleCharge', async () => {
     const obs = new CostObservation();
-    obs.accept({ id: 'gen-dup-1', usage: { cost: 0.01 } });
+    parseOpenRouterPayload({ id: 'gen-dup-1', usage: { cost: 0.01 } }, obs);
 
     const first = await callsModel.create({
       _id: randomUUID(),
@@ -307,8 +308,8 @@ describe('AiCostTransportService', () => {
       requestedModel: 'm',
     });
 
-    await transport.settleCharge(first.id, obs, 'RESPONSE');
-    await transport.settleCharge(second.id, obs, 'RESPONSE');
+    await transport.settleCharge(first.id, 'openrouter', obs, 'RESPONSE');
+    await transport.settleCharge(second.id, 'openrouter', obs, 'RESPONSE');
 
     const secondDoc = await callsModel.findById(second.id).exec();
     expect(secondDoc).toMatchObject({
@@ -322,7 +323,122 @@ describe('AiCostTransportService', () => {
       exec: vi.fn().mockRejectedValue(new Error('non-unique failure')),
     } as unknown as ReturnType<Model<AiCostCall>['updateOne']>);
     await expect(
-      transport.settleCharge(first.id, obs, 'RESPONSE'),
+      transport.settleCharge(first.id, 'openrouter', obs, 'RESPONSE'),
     ).rejects.toThrow('non-unique failure');
+  });
+
+  const gatewayMetadata = {
+    gateway: {
+      cost: '0.0015',
+      generationId: 'gen_01GATEWAY',
+      routing: {
+        canonicalSlug: 'anthropic/claude-haiku-5.5',
+        finalProvider: 'anthropic',
+      },
+    },
+  };
+
+  it('records an AI Gateway generate call from providerMetadata.gateway and AI SDK usage', async () => {
+    const res = await transport.observe(
+      new URL('https://ai-gateway.vercel.sh/v4/ai/language-model'),
+      { body: '{"prompt":[]}' },
+      vi.fn<typeof fetch>().mockResolvedValue(
+        Response.json({
+          content: [{ type: 'text', text: 'ok' }],
+          usage: {
+            inputTokens: { total: 120, cacheRead: 100, cacheWrite: 10 },
+            outputTokens: { total: 7, reasoning: 2 },
+          },
+          providerMetadata: gatewayMetadata,
+        }),
+      ),
+      'anthropic/claude-haiku-5.5',
+    );
+    await res.text();
+
+    const row = await onlyRow();
+    expect(row).toMatchObject({
+      operation: 'CHAT',
+      billedBy: 'gateway',
+      status: 'SUCCEEDED',
+      requestedModel: 'anthropic/claude-haiku-5.5',
+      resolvedModel: 'anthropic/claude-haiku-5.5',
+      provider: 'anthropic',
+      generationId: 'gen_01GATEWAY',
+      chargeKey: 'gateway:gen_01GATEWAY',
+      inputTokens: 120,
+      outputTokens: 7,
+      reasoningTokens: 2,
+      cachedTokens: 100,
+      cacheWriteTokens: 10,
+    });
+    expect(row.costUsd?.toString()).toBe('0.0015');
+  });
+
+  it('reads a Gateway stream finish part and an embedding result', async () => {
+    const stream = [
+      'data: {"type":"response-metadata","id":"msg_1","modelId":"claude-haiku-5-5"}',
+      'data: {"type":"text-delta","id":"t","delta":"hi"}',
+      `data: ${JSON.stringify({ type: 'finish', usage: { inputTokens: { total: 5 }, outputTokens: { total: 1 } }, providerMetadata: gatewayMetadata })}`,
+      '',
+    ].join('\n\n');
+    const streamed = await transport.observe(
+      new URL('https://ai-gateway.vercel.sh/v4/ai/language-model'),
+      { body: '{}' },
+      vi.fn<typeof fetch>().mockResolvedValue(
+        new Response(stream, {
+          headers: { 'content-type': 'text/event-stream' },
+        }),
+      ),
+      'anthropic/claude-haiku-5.5',
+    );
+    await streamed.text();
+    const chat = await onlyRow();
+    expect(chat).toMatchObject({
+      billedBy: 'gateway',
+      generationId: 'gen_01GATEWAY',
+      inputTokens: 5,
+      outputTokens: 1,
+    });
+    expect(chat.costUsd?.toString()).toBe('0.0015');
+
+    await callsModel.deleteMany({}).exec();
+    const embedded = await transport.observe(
+      new URL('https://ai-gateway.vercel.sh/v4/ai/embedding-model'),
+      { body: '{}' },
+      vi.fn<typeof fetch>().mockResolvedValue(
+        Response.json({
+          embeddings: [[0.1]],
+          usage: { tokens: 3 },
+          providerMetadata: {
+            gateway: { cost: '0.0000006', generationId: 'gen_01EMBED' },
+          },
+        }),
+      ),
+      'google/gemini-embedding-2',
+      'KNOWLEDGE',
+    );
+    await embedded.text();
+    const embedding = await onlyRow();
+    expect(embedding).toMatchObject({
+      operation: 'EMBEDDING',
+      billedBy: 'gateway',
+      inputTokens: 3,
+      chargeKey: 'gateway:gen_01EMBED',
+    });
+  });
+
+  it('marks a Gateway stream error part as FAILED', async () => {
+    const res = await transport.observe(
+      new URL('https://ai-gateway.vercel.sh/v4/ai/language-model'),
+      { body: '{}' },
+      vi.fn<typeof fetch>().mockResolvedValue(
+        new Response('data: {"type":"error","error":"boom"}\n\n', {
+          headers: { 'content-type': 'text/event-stream' },
+        }),
+      ),
+    );
+    await res.text();
+    expect(await onlyRow()).toMatchObject({ status: 'FAILED' });
   });
 });

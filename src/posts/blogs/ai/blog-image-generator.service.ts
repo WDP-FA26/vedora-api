@@ -6,8 +6,7 @@ import { generateImage, type ImageModel } from 'ai';
 import { randomUUID } from 'node:crypto';
 import { MODERATION_MODEL } from '@src/ai/guardrails/guardrail.js';
 import { decide, type DecisionModel } from '@src/common/decision/decision.js';
-import { DEFAULT_IMAGE_MODEL } from '@src/ai/openrouter.js';
-import { aiModels } from '@src/ai/provider.js';
+import { aiModels, modelIdFor } from '@src/ai/providers/provider-registry.js';
 import { AiUsageService } from '@src/subscriptions/ai-usage.service.js';
 import { AiCostTransportService } from '@src/ai/telemetry/ai-cost-transport.service.js';
 import { StorageService, StorageTarget } from '@src/storage/storage.service.js';
@@ -55,10 +54,7 @@ export class BlogImageGeneratorService {
     private readonly usage: AiUsageService,
     costs: AiCostTransportService,
   ) {
-    const modelId = configService.get<string>(
-      'OPENROUTER_IMAGE_MODEL',
-      DEFAULT_IMAGE_MODEL,
-    );
+    const modelId = modelIdFor(configService, 'image');
     this.imageModel = aiModels(configService).image(modelId, {
       fetch: costs.forModel(modelId),
     });

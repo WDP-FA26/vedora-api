@@ -26,7 +26,7 @@ describe('backend operational environment settings', () => {
       multiplier: number;
     }[];
     const defaults = parseRuntimeSettings({});
-    expect(audit).toHaveLength(155);
+    expect(audit).toHaveLength(154);
     for (const entry of audit) {
       const value = defaults[entry.env];
       expect(
@@ -74,7 +74,6 @@ describe('backend operational environment settings', () => {
     ['OPENROUTER_API_BASE_URL', 'file:///tmp'],
     ['TURNSTILE_VERIFY_URL', 'https://user:secret@example.test'],
     ['AI_IMAGE_ALLOWED_ASPECT_RATIOS', '1:1,unsupported'],
-    ['KNOWLEDGE_OCR_ENGINE', 'unsupported-engine'],
     ['AI_IMAGE_DEFAULT_ASPECT_RATIO', '2:1'],
     ['OPENROUTER_API_BASE_URL', 'https://example.test/api/v1?key=secret'],
   ])('rejects invalid %s=%s at startup', (key, value) => {
@@ -97,6 +96,7 @@ describe('backend operational environment settings', () => {
       DATABASE_URL: 'mongodb://localhost:27017/fixture',
       JWT_SECRET: 'x'.repeat(32),
       OPENROUTER_API_KEY: 'fixture',
+      AI_GATEWAY_API_KEY: 'fixture',
       QDRANT_URL: 'http://localhost:6333',
       RESEND_API_KEY: 'fixture',
     };

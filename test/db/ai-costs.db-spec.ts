@@ -5,7 +5,7 @@ import { ConfigService } from '@nestjs/config';
 import { JwtModule, JwtService } from '@nestjs/jwt';
 import { Test } from '@nestjs/testing';
 import { Types } from 'mongoose';
-import { openRouterModels } from '@src/ai/openrouter.js';
+import { openRouterModels } from '@src/ai/providers/openrouter/openrouter.adapter.js';
 import { decide } from '@src/common/decision/decision.js';
 import request from 'supertest';
 import type { App } from 'supertest/types.js';

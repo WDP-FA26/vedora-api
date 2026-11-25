@@ -3,7 +3,7 @@ import { runtimeConfig } from '../../config/runtime-config.js';
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import type { Model } from 'mongoose';
-import { openRouterFailure } from '../../ai/openrouter-client.js';
+import { aiFailure } from '../../ai/provider-failure.js';
 import { aiCostContext } from '../../ai/telemetry/ai-cost-context.js';
 import { InvalidInputException } from '../../common/exceptions/invalid-input.exception.js';
 import { ResourceNotFoundException } from '../../common/exceptions/resource-not-found.exception.js';
@@ -107,7 +107,7 @@ export class RecipeDraftsService {
         this.generator.generate(source.parts, catalog),
       );
     } catch (error: unknown) {
-      throw openRouterFailure('Recipe draft', error);
+      throw aiFailure('Recipe draft', error);
     }
   }
 

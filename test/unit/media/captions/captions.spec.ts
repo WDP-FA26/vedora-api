@@ -126,9 +126,9 @@ describe('languages', () => {
 
 describe('cues from word timings', () => {
   const word = (text: string, start: number, end: number) => ({
-    word: text,
-    start,
-    end,
+    text,
+    startSecond: start,
+    endSecond: end,
   });
 
   it('ends a cue at sentence-ending punctuation', () => {
