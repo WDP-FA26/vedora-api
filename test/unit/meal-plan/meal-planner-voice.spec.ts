@@ -1,5 +1,4 @@
 import { ConfigService } from '@nestjs/config';
-import { FakeModel, providerError } from '@nestjs/ai/testing';
 import { asSchema, simulateReadableStream, type UIMessageChunk } from 'ai';
 import { type DeepMockProxy, mockDeep } from 'vitest-mock-extended';
 import { FeatureUnavailableException } from '@src/common/exceptions/feature-unavailable.exception.js';
@@ -45,27 +44,15 @@ function emptyStream() {
 describe('MealPlannerVoiceService', () => {
   let chat: DeepMockProxy<MealPlannerChatService>;
   let usage: DeepMockProxy<AiUsageService>;
-  let consent = 'approve';
-  let failConsent = false;
-  const decisionModel = new FakeModel(() =>
-    failConsent ? providerError(500) : { object: { choice: consent } },
-  );
 
   beforeEach(() => {
     chat = mockDeep<MealPlannerChatService>();
     chat.stream.mockResolvedValue(emptyStream());
     usage = mockDeep<AiUsageService>();
-    consent = 'approve';
-    failConsent = false;
   });
 
   const service = (config: Record<string, string> = {}) =>
-    new MealPlannerVoiceService(
-      new ConfigService(config),
-      chat,
-      decisionModel,
-      usage,
-    );
+    new MealPlannerVoiceService(new ConfigService(config), chat, usage);
 
   it('refuses a session when no gateway key is configured', async () => {
     await expect(service().createSession(USER_ID)).rejects.toThrow(
@@ -125,26 +112,8 @@ describe('MealPlannerVoiceService', () => {
     });
   });
 
-  it('reads words spoken during a running turn', async () => {
-    consent = 'progress';
-
-    const action = await service().interruption(
-      { running: 'cập nhật cân nặng 69 ký', utterance: 'xong chưa' },
-      new AbortController().signal,
-    );
-
-    expect(action).toBe('progress');
-  });
-
-  it('supersedes the running turn when the check fails', async () => {
-    failConsent = true;
-
-    const action = await service().interruption(
-      { running: 'đổi món trưa thứ sáu', utterance: 'à không, thứ bảy' },
-      new AbortController().signal,
-    );
-
-    expect(action).toBe('supersede');
+  it('immediately supersedes the running turn without a decision call', () => {
+    expect(service().interruption()).toBe('supersede');
   });
 });
 

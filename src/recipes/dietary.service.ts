@@ -124,48 +124,59 @@ export class DietaryService {
     const [user, logs] = await Promise.all([
       this.users
         .findOne({ _id: userId })
-        .select(
-          'heightCm weightKg targetWeightKg birthYear biologicalSex activityLevel nutritionGoal',
-        )
+        .select([...NUTRITION_FIELDS])
+        .lean<UserNutritionFields>()
         .exec(),
-      this.metricLogs
-        ? this.metricLogs
-            .find({ userId })
-            .sort({ date: -1 })
-            .limit(MAX_METRIC_HISTORY)
-            .exec()
-        : Promise.resolve([]),
+      this.recentMetricLogs(userId),
     ]);
+    return buildNutritionProfile(user, logs);
+  }
 
-    const profile = {
-      heightCm: user?.heightCm ?? null,
-      weightKg: user?.weightKg ?? null,
-      targetWeightKg: user?.targetWeightKg ?? null,
-      birthYear: user?.birthYear ?? null,
-      biologicalSex: user?.biologicalSex ?? null,
-      activityLevel: user?.activityLevel ?? null,
-      nutritionGoal: user?.nutritionGoal ?? null,
-    };
-    const today = todayDateInZone(runtimeConfig.APP_TIMEZONE);
-    const currentYear = Number(today.slice(0, 4));
-    const metrics = computeNutritionMetrics(profile, currentYear);
-
-    const history = [...logs].reverse().map((log) => ({
-      id: log.id,
-      date: log.date,
-      weightKg: log.weightKg,
-      heightCm: log.heightCm,
-      bmi: log.bmi,
-      feeling: log.feeling ?? null,
-      note: log.note ?? null,
-      updatedAt: log.updatedAt,
-    }));
-
+  /**
+   * Loads dietary memory and nutrition profile together in a single `User`
+   * query plus parallel metric history read, for the AI planner hot path.
+   */
+  async findPlannerContext(userId: string): Promise<{
+    memory: DietaryMemoryDto;
+    nutrition: NutritionProfileDto;
+  }> {
+    const [user, logs] = await Promise.all([
+      this.users
+        .findOne({ _id: userId })
+        .select([
+          'allergies',
+          'foodPreferences',
+          ...LEGACY_FIELDS,
+          ...NUTRITION_FIELDS,
+        ])
+        .lean<LegacyDietaryFields & UserNutritionFields>()
+        .exec(),
+      this.recentMetricLogs(userId),
+    ]);
+    let memory: DietaryMemoryDto;
+    if (!user) {
+      memory = { allergies: [], preferences: [] };
+    } else if (LEGACY_FIELDS.some((key) => user[key] !== undefined)) {
+      memory = await this.migrateLegacy(user);
+    } else {
+      memory = {
+        allergies: user.allergies ?? [],
+        preferences: user.foodPreferences ?? [],
+      };
+    }
     return {
-      ...profile,
-      ...metrics,
-      history,
+      memory,
+      nutrition: buildNutritionProfile(user, logs),
     };
+  }
+
+  private recentMetricLogs(userId: string): Promise<BodyMetricLog[]> {
+    if (!this.metricLogs) return Promise.resolve([]);
+    return this.metricLogs
+      .find({ userId })
+      .sort({ date: -1 })
+      .limit(MAX_METRIC_HISTORY)
+      .exec();
   }
 
   async saveNutrition(
@@ -407,6 +418,61 @@ export class DietaryService {
     ];
     return names.sort();
   }
+}
+
+const NUTRITION_FIELDS = [
+  'heightCm',
+  'weightKg',
+  'targetWeightKg',
+  'birthYear',
+  'biologicalSex',
+  'activityLevel',
+  'nutritionGoal',
+] as const;
+
+interface UserNutritionFields {
+  heightCm?: number | null;
+  weightKg?: number | null;
+  targetWeightKg?: number | null;
+  birthYear?: number | null;
+  biologicalSex?: User['biologicalSex'];
+  activityLevel?: User['activityLevel'];
+  nutritionGoal?: User['nutritionGoal'];
+}
+
+function buildNutritionProfile(
+  user: UserNutritionFields | null | undefined,
+  logs: readonly BodyMetricLog[],
+): NutritionProfileDto {
+  const profile = {
+    heightCm: user?.heightCm ?? null,
+    weightKg: user?.weightKg ?? null,
+    targetWeightKg: user?.targetWeightKg ?? null,
+    birthYear: user?.birthYear ?? null,
+    biologicalSex: user?.biologicalSex ?? null,
+    activityLevel: user?.activityLevel ?? null,
+    nutritionGoal: user?.nutritionGoal ?? null,
+  };
+  const today = todayDateInZone(runtimeConfig.APP_TIMEZONE);
+  const currentYear = Number(today.slice(0, 4));
+  const metrics = computeNutritionMetrics(profile, currentYear);
+
+  const history = [...logs].reverse().map((log) => ({
+    id: log.id,
+    date: log.date,
+    weightKg: log.weightKg,
+    heightCm: log.heightCm,
+    bmi: log.bmi,
+    feeling: log.feeling ?? null,
+    note: log.note ?? null,
+    updatedAt: log.updatedAt,
+  }));
+
+  return {
+    ...profile,
+    ...metrics,
+    history,
+  };
 }
 
 const LEGACY_FIELDS = [

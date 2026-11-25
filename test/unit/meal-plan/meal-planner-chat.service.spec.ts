@@ -143,8 +143,33 @@ describe('MealPlannerChatService', () => {
     history.loadContextMessages.mockResolvedValue([]);
     history.recordAssistantMessage.mockResolvedValue(undefined);
 
-    dietary.find.mockResolvedValue({ allergies: [], preferences: [] });
-    mealPlan.find.mockResolvedValue({
+    const emptyNutrition = {
+      heightCm: null,
+      weightKg: null,
+      targetWeightKg: null,
+      birthYear: null,
+      biologicalSex: null,
+      activityLevel: null,
+      nutritionGoal: null,
+      bmi: null,
+      bmiCategory: null,
+      suggestedGoal: null,
+      effectiveGoal: null,
+      idealWeightMinKg: null,
+      idealWeightMaxKg: null,
+      bmr: null,
+      tdee: null,
+      dailyCalorieTarget: null,
+      dailyCalorieMin: null,
+      dailyCalorieMax: null,
+      safetyNote: null,
+      history: [],
+    };
+    dietary.findPlannerContext.mockResolvedValue({
+      memory: { allergies: [], preferences: [] },
+      nutrition: emptyNutrition,
+    });
+    mealPlan.findForPrompt.mockResolvedValue({
       weekStart: WEEK,
       currentWeekStart: WEEK,
       today: WEEK,
@@ -306,8 +331,8 @@ describe('MealPlannerChatService', () => {
     expect(moderator.lastCall?.lastUserMessage).toBe(
       'Message:\n<message>Lên thực đơn ngày thứ Hai</message>',
     );
-    expect(dietary.find).toHaveBeenCalledWith(USER_ID);
-    expect(mealPlan.find).toHaveBeenCalledWith(USER_ID, WEEK);
+    expect(dietary.findPlannerContext).toHaveBeenCalledWith(USER_ID);
+    expect(mealPlan.findForPrompt).toHaveBeenCalledWith(USER_ID, WEEK);
     expect(replyText(chunks)).toBe('Mình đã gợi ý thực đơn.');
     expect(model.doStreamCalls[0].tools?.map((t) => t.name)).toEqual([
       'searchKnowledge',
@@ -359,7 +384,7 @@ describe('MealPlannerChatService', () => {
     expect(tools.some((t) => t.type === 'provider')).toBe(false);
     const [system] = model.doStreamCalls[0].prompt;
     expect(system.role === 'system' && system.content).toContain(
-      'người dùng chưa cho phép bạn tìm trên web',
+      'the user has not yet granted permission to search the web',
     );
   });
 
@@ -397,7 +422,7 @@ describe('MealPlannerChatService', () => {
     );
     const [system] = model.doStreamCalls[0].prompt;
     expect(system.role === 'system' && system.content).toContain(
-      'bạn được tìm trên web (webSearch)',
+      'you are allowed to search the web (webSearch)',
     );
   });
 
@@ -430,9 +455,7 @@ describe('MealPlannerChatService', () => {
       ]),
     );
     const [system] = model.doStreamCalls[0].prompt;
-    expect(system.role === 'system' && system.content).toContain(
-      'Chế độ giọng nói',
-    );
+    expect(system.role === 'system' && system.content).toContain('Voice mode');
   });
 
   it('stops after step 1 in voice mode for endCall and setScreen(done: true)', async () => {
@@ -546,8 +569,8 @@ describe('MealPlannerChatService', () => {
       expect.any(String),
       expect.any(Number),
     );
-    expect(dietary.find).toHaveBeenCalledWith(USER_ID);
-    expect(mealPlan.find).toHaveBeenCalledWith(USER_ID, WEEK);
+    expect(dietary.findPlannerContext).toHaveBeenCalledWith(USER_ID);
+    expect(mealPlan.findForPrompt).toHaveBeenCalledWith(USER_ID, WEEK);
     expect(mealPlan.recipeInstructions).toHaveBeenCalledWith(
       USER_ID,
       'recipe-1',
@@ -593,7 +616,7 @@ describe('MealPlannerChatService', () => {
   });
 
   it('refunds the ticket when downstream setup throws after moderation', async () => {
-    dietary.find.mockRejectedValueOnce(new Error('DB down'));
+    dietary.findPlannerContext.mockRejectedValueOnce(new Error('DB down'));
     const service = await createService();
 
     await expect(
@@ -627,9 +650,9 @@ describe('MealPlannerChatService', () => {
     const lastCall = model.doStreamCalls[maxSteps - 1];
     expect(lastCall.toolChoice).toEqual({ type: 'none' });
     expect(lastCall.prompt[0]).toEqual(model.doStreamCalls[0].prompt[0]);
-    expect(JSON.stringify(lastCall.prompt)).toContain('bước cuối của lượt này');
+    expect(JSON.stringify(lastCall.prompt)).toContain('final step of this turn');
     expect(JSON.stringify(model.doStreamCalls[0].prompt)).not.toContain(
-      'bước cuối của lượt này',
+      'final step of this turn',
     );
   });
 
@@ -972,9 +995,33 @@ describe('MealPlannerChatService', () => {
   });
 
   it('calls RestaurantMenuService when the planner invokes searchRestaurantDishes', async () => {
-    dietary.find.mockResolvedValue({
-      allergies: ['Dị ứng đậu phộng'],
-      preferences: [],
+    dietary.findPlannerContext.mockResolvedValue({
+      memory: {
+        allergies: ['Dị ứng đậu phộng'],
+        preferences: [],
+      },
+      nutrition: {
+        heightCm: null,
+        weightKg: null,
+        targetWeightKg: null,
+        birthYear: null,
+        biologicalSex: null,
+        activityLevel: null,
+        nutritionGoal: null,
+        bmi: null,
+        bmiCategory: null,
+        suggestedGoal: null,
+        effectiveGoal: null,
+        idealWeightMinKg: null,
+        idealWeightMaxKg: null,
+        bmr: null,
+        tdee: null,
+        dailyCalorieTarget: null,
+        dailyCalorieMin: null,
+        dailyCalorieMax: null,
+        safetyNote: null,
+        history: [],
+      },
     });
     restaurantMenu.suggestForPlanner.mockResolvedValue([
       {

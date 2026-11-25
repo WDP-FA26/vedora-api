@@ -1,16 +1,13 @@
 import { randomUUID } from 'node:crypto';
-import { Inject, Injectable, Logger } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { type UIMessageChunk } from 'ai';
-import { MODERATION_MODEL } from '../../ai/guardrails/guardrail.js';
 import { createGatewayRealtimeClient } from '../../ai/providers/provider-registry.js';
-import { decide, type DecisionModel } from '../../common/decision/decision.js';
 import { FeatureUnavailableException } from '../../common/exceptions/feature-unavailable.exception.js';
 import { QuotaReachedException } from '../../common/exceptions/quota-reached.exception.js';
 import { AiFeature } from '../../mongo/models.js';
 import { AiUsageService } from '../../subscriptions/ai-usage.service.js';
 import type {
-  MealPlanVoiceInterruptionRequestDto,
   MealPlanVoiceSessionDto,
   MealPlanVoiceTurnRequestDto,
   VoiceInterruption,
@@ -19,7 +16,6 @@ import {
   MealPlannerChatService,
   type PlannerChatOptions,
 } from '../meal-planner-chat.service.js';
-import { VOICE_INTERRUPTION_POLICY } from './voice-interruption.js';
 
 /** Long enough to open the WebSocket; an open session keeps going after it. */
 const TOKEN_TTL_SECONDS = 60;
@@ -34,14 +30,12 @@ type Gateway = ReturnType<typeof createGatewayRealtimeClient>;
  */
 @Injectable()
 export class MealPlannerVoiceService {
-  private readonly logger = new Logger(MealPlannerVoiceService.name);
   private readonly gateway: Gateway | null;
   private readonly model: string;
 
   constructor(
     config: ConfigService,
     private readonly chat: MealPlannerChatService,
-    @Inject(MODERATION_MODEL) private readonly decisionModel: DecisionModel,
     private readonly usage: AiUsageService,
   ) {
     const apiKey = config.get<string>('AI_GATEWAY_API_KEY', '');
@@ -106,30 +100,11 @@ export class MealPlannerVoiceService {
   }
 
   /**
-   * What the user's new words mean for the turn still running. Without a reading
-   * the running turn is superseded, as before this check existed: a correction
-   * that is ignored saves data the user did not want.
+   * Interruption classification via the decision model is disabled for voice
+   * latency: any new delegated utterance immediately supersedes the in-flight
+   * turn, and anything already saved stays saved.
    */
-  async interruption(
-    dto: MealPlanVoiceInterruptionRequestDto,
-    abortSignal: AbortSignal,
-  ): Promise<VoiceInterruption> {
-    try {
-      const { choice } = await decide(
-        this.decisionModel,
-        [
-          { role: 'user', text: dto.running },
-          { role: 'assistant', text: 'Mình đang làm, bạn đợi mình chút nhé.' },
-          { role: 'user', text: dto.utterance },
-        ],
-        abortSignal,
-        VOICE_INTERRUPTION_POLICY,
-      );
-      return choice;
-    } catch (error) {
-      if (abortSignal.aborted) throw error;
-      this.logger.warn(`Voice interruption check failed: ${String(error)}`);
-      return 'supersede';
-    }
+  interruption(): VoiceInterruption {
+    return 'supersede';
   }
 }

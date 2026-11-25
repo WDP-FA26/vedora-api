@@ -70,18 +70,13 @@ export class MealPlannerVoiceController {
   @ApiOperation({
     summary: 'Read words spoken while a voice turn is still running',
     description:
-      'The user spoke again while `POST /meal-plan/voice/turns` is still streaming. Answers whether the new words only check on the work (`progress`: keep the turn running), change or stop it (`supersede`: abort it and send the words as the next turn), or ask for something separate (`queue`: send them after the turn ends). Falls back to `supersede` when the check fails. Does not use the chat quota.',
+      'Decision-model classification is disabled for voice latency; always returns `supersede` immediately so the client can abort the in-flight turn and run the new utterance without an extra LLM round-trip. Does not use the chat quota.',
   })
   @ApiOkResponse({ type: MealPlanVoiceInterruptionDto })
-  async interruption(
-    @Body() dto: MealPlanVoiceInterruptionRequestDto,
-  ): Promise<MealPlanVoiceInterruptionDto> {
-    // A short decision call with its own timeout; nothing to stop when the client leaves.
-    const action = await this.voice.interruption(
-      dto,
-      new AbortController().signal,
-    );
-    return { action };
+  interruption(
+    @Body() _dto: MealPlanVoiceInterruptionRequestDto,
+  ): MealPlanVoiceInterruptionDto {
+    return { action: this.voice.interruption() };
   }
 
   @Post('turns')

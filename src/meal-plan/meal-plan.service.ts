@@ -231,6 +231,29 @@ export class MealPlanService {
     return this.toPlan(userId, week, await this.saved(userId, week.weekStart));
   }
 
+  /**
+   * Lightweight week load for the AI planner prompt: skips `minWeekStart` and
+   * `problems`, neither of which is read when formatting planner context.
+   */
+  async findForPrompt(
+    userId: string,
+    weekStart?: string,
+  ): Promise<MealPlanDto> {
+    const week = currentMealWeek(weekStart);
+    assertWithinHorizon(week);
+    const saved = await this.saved(userId, week.weekStart);
+    return {
+      weekStart: week.weekStart,
+      currentWeekStart: week.currentWeekStart,
+      today: week.today,
+      maxWeekStart: week.maxWeekStart,
+      minWeekStart: week.currentWeekStart,
+      editable: week.editableDays.length > 0,
+      days: this.toDays(week, saved),
+      problems: [],
+    };
+  }
+
   /** The earliest week to browse back to: the first one with a dish, or the current week. */
   private async minWeekStart(userId: string, week: MealWeek): Promise<string> {
     const first = await this.entries
@@ -243,36 +266,44 @@ export class MealPlanService {
     return first.weekStart;
   }
 
+  private toDays(week: MealWeek, saved: Week): MealPlanDto['days'] {
+    return WEEKDAYS.map((day) => {
+      const sections = saved.get(day) ?? emptyDay();
+      return {
+        day,
+        date: week.dates[day],
+        editable: week.editableDays.includes(day),
+        sections: MEAL_SECTIONS.map((section) => ({
+          section,
+          recipes: sections[section].map(toRecipeDto),
+        })),
+      };
+    });
+  }
+
   private async toPlan(
     userId: string,
     week: MealWeek,
     saved: Week,
   ): Promise<MealPlanDto> {
-    return {
-      weekStart: week.weekStart,
-      currentWeekStart: week.currentWeekStart,
-      today: week.today,
-      maxWeekStart: week.maxWeekStart,
-      minWeekStart: await this.minWeekStart(userId, week),
-      editable: week.editableDays.length > 0,
-      days: WEEKDAYS.map((day) => {
-        const sections = saved.get(day) ?? emptyDay();
-        return {
-          day,
-          date: week.dates[day],
-          editable: week.editableDays.includes(day),
-          sections: MEAL_SECTIONS.map((section) => ({
-            section,
-            recipes: sections[section].map(toRecipeDto),
-          })),
-        };
-      }),
-      problems: await this.problems(userId, saved, {
+    const [minWeekStart, problems] = await Promise.all([
+      this.minWeekStart(userId, week),
+      this.problems(userId, saved, {
         avoidedDays: week.editableDays,
         conflictSlots: allSlots().filter(({ day }) =>
           week.editableDays.includes(day),
         ),
       }),
+    ]);
+    return {
+      weekStart: week.weekStart,
+      currentWeekStart: week.currentWeekStart,
+      today: week.today,
+      maxWeekStart: week.maxWeekStart,
+      minWeekStart,
+      editable: week.editableDays.length > 0,
+      days: this.toDays(week, saved),
+      problems,
     };
   }
 

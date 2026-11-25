@@ -85,7 +85,7 @@ const SEARCH_TIMEOUT_MS = runtimeConfig.AI_KNOWLEDGE_TOOL_TIMEOUT_MS;
 /** Added on the last step, when tools are off, so the turn ends with a handover instead of a cut. */
 const LAST_STEP_NOTE = `
 
-Đây là bước cuối của lượt này nên bạn không gọi được công cụ nữa. Tóm tắt ngắn những gì đã làm và đã lưu, nói rõ phần nào chưa xong, rồi hỏi người dùng có muốn bạn làm tiếp không.`;
+This is the final step of this turn, so you can no longer call tools. Briefly summarize in Vietnamese what has been completed and saved, state clearly what remains unfinished, and ask the user whether they want you to continue.`;
 
 export interface PlannerChatOptions {
   /** The user allowed web search in this chat. */
@@ -94,8 +94,8 @@ export interface PlannerChatOptions {
   toolOutput?: PlannerToolOutputDto;
   /**
    * The turn comes from the voice agent: short spoken replies, no `askUser`,
-   * plus the screen tools, the diary/body-metrics writers and undo. The voice
-   * service turns web search on, as the text chat does by default.
+   * plus the screen tools, the diary/body-metrics writers and undo. Voice
+   * turns keep web search off to reduce latency.
    */
   voice?: boolean;
   /** Voice only: what the page shows while the user speaks. */
@@ -380,7 +380,8 @@ export class MealPlannerChatService {
         role: 'user',
         parts: [{ type: 'text', text: cleanUserText }],
       };
-      const loadHistory = async () => {
+      let pendingUserRecord: Promise<void> | undefined;
+      const loadHistory = async (awaitUserWrite: boolean) => {
         if (toolOutput) {
           await this.history?.recordToolOutput(
             userId,
@@ -388,19 +389,31 @@ export class MealPlannerChatService {
             toolOutput,
           );
         }
-        const [, loaded] = await Promise.all([
-          this.history?.recordUserMessage(
-            userId,
-            activeThreadId,
-            message,
-            userMessageId,
-          ),
-          this.history?.loadContextMessages(
-            userId,
-            activeThreadId,
-            runtimeConfig.PLANNER_CHAT_MAX_MESSAGES,
-          ),
-        ]);
+        const recordUser = this.history?.recordUserMessage(
+          userId,
+          activeThreadId,
+          message,
+          userMessageId,
+        );
+        const loadMessages = this.history?.loadContextMessages(
+          userId,
+          activeThreadId,
+          runtimeConfig.PLANNER_CHAT_MAX_MESSAGES,
+        );
+        let loaded: StoredChatMessage[] | undefined;
+        if (awaitUserWrite) {
+          [, loaded] = await Promise.all([recordUser, loadMessages]);
+        } else {
+          // Voice turns let the user message write finish in the background
+          // while reads complete and the model starts; `onEnd` awaits it before
+          // saving the assistant reply so thread order stays intact.
+          pendingUserRecord = recordUser?.catch((error: unknown) => {
+            this.logger.warn(
+              `Failed to save user chat message: ${String(error)}`,
+            );
+          });
+          loaded = await loadMessages;
+        }
         const existing = loaded ?? [];
         return existing.some((item) => item.id === userMessageId)
           ? [...existing]
@@ -408,11 +421,8 @@ export class MealPlannerChatService {
       };
       const loadContext = () =>
         Promise.all([
-          this.dietary.find(userId),
-          this.mealPlan.find(userId, weekStart),
-          Promise.resolve(this.dietary.findNutrition(userId)).then(
-            (value) => value ?? null,
-          ),
+          this.dietary.findPlannerContext(userId),
+          this.mealPlan.findForPrompt(userId, weekStart),
           voice && screen
             ? this.screenContext(userId, screen)
             : Promise.resolve(null),
@@ -422,13 +432,13 @@ export class MealPlannerChatService {
       let context: Awaited<ReturnType<typeof loadContext>>;
       if (voice) {
         // Voice turns skip the extra moderation round-trip, so context queries
-        // can run alongside thread persistence without adding latency.
+        // can run alongside history loading without adding latency.
         [storedMessages, context] = await Promise.all([
-          loadHistory(),
+          loadHistory(false),
           loadContext(),
         ]);
       } else {
-        storedMessages = await loadHistory();
+        storedMessages = await loadHistory(true);
         const { choice: verdict } = await decide(
           this.moderator,
           conversationModerationState(toModerationTurns(storedMessages)),
@@ -457,7 +467,7 @@ export class MealPlannerChatService {
         context = await loadContext();
       }
 
-      const [memory, plan, nutrition, screenText] = context;
+      const [{ memory, nutrition }, plan, screenText] = context;
 
       // A week that has fully passed is read-only, so tools default to this week.
       const toolWeek =
@@ -623,6 +633,7 @@ export class MealPlannerChatService {
           generateMessageId: () => assistantMessageId,
           onEnd: async ({ responseMessage }) => {
             try {
+              await pendingUserRecord;
               await this.history?.recordAssistantMessage(
                 userId,
                 activeThreadId,

@@ -70,13 +70,7 @@ Phần `text` của tin nhắn cuối là câu trả lời ngắn để GPT-Live
 
 ## POST /meal-plan/voice/interruptions
 
-Gọi khi người dùng nói tiếp trong lúc một lượt `/turns` còn đang chạy. Body `{ running, utterance }` (yêu cầu đang làm và lời mới), trả `{ action }`:
-
-- `progress`: chỉ hỏi tiến độ hay đồng ý ("xong chưa", "ừ"). Giữ lượt đang chạy, báo GPT-Live là đang làm (`commentary` cho delegation mới).
-- `supersede`: sửa hoặc dừng yêu cầu ("à không, thứ bảy chứ", "thôi dừng"). Hủy lượt đang chạy rồi gửi lời mới thành lượt kế tiếp.
-- `queue`: yêu cầu khác, không đổi việc đang làm. Gửi sau khi lượt đang chạy xong.
-
-Lỗi khi phân loại thì trả `supersede`. Không tính vào quota chat.
+Bước phân loại bằng decision model đã được tắt để giảm độ trễ ở chế độ voice; endpoint hiện trả ngay `{ "action": "supersede" }` (không gọi LLM, không tính vào quota chat). Phía FE cũng bỏ qua bước gọi endpoint này và hủy trực tiếp lượt đang chạy khi có delegation mới.
 
 **Hủy:** đóng request (abort) khi người dùng nói tiếp hoặc kết thúc cuộc gọi; agent dừng, những gì đã lưu vẫn giữ. FE báo cho GPT-Live bằng `context-append` kênh `thinking` cho delegation cũ.
 
