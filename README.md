@@ -219,14 +219,14 @@ trong API:
 1. Tải file gốc về thư mục tạm, ffmpeg (`ffmpeg-static`, hoặc `FFMPEG_PATH`) tách âm
    thanh và tìm đoạn im lặng (`silencedetect`, dưới -35 dB, dài từ 0,6 giây).
 2. Cắt bỏ im lặng, chỉ gửi phần có tiếng (mono 16 kHz MP3) cho model ghi lời
-   (`TRANSCRIPTION_MODEL`, mặc định `elevenlabs/scribe-v2` qua OpenRouter
+   (`TRANSCRIPTION_MODEL`, mặc định `elevenlabs/scribe-v2` qua provider của `AI_PROVIDER`
    `/audio/transcriptions`, lấy mốc thời gian theo từng từ). Video im lặng hoàn
    toàn không gọi model và nhận `NO_SPEECH`, nên model không "bịa" câu cho đoạn im lặng.
 3. Mốc thời gian được ánh xạ ngược về video gốc, nên phụ đề vẫn khớp hình.
 4. Ngay khi có transcript, kiểm duyệt đọc nó cùng khung hình trước khi bài được
    xuất bản (xem `docs/docs-for-FE/content-moderation.md`). Tắt `CAPTIONS_ENABLED`
    cũng tắt bước chấm transcript.
-4. `OPENROUTER_MODEL` dịch từng dòng: tiếng Việt sang tiếng Anh, ngôn ngữ khác sang tiếng
+4. `AI_CHAT_MODEL` dịch từng dòng: tiếng Việt sang tiếng Anh, ngôn ngữ khác sang tiếng
    Việt. Dịch lỗi thì vẫn giữ phụ đề gốc.
 5. Mỗi ngôn ngữ là một file WebVTT trên Cloudinary (`<folder>/captions/<mediaId>/<lang>.vtt`),
    lưu trong mảng nhúng `media_assets.captions` và trả về ở `media.captions` (ngôn ngữ nói trước).
@@ -537,7 +537,10 @@ Cấu hình được kiểm tra khi API khởi động: thiếu biến bắt bu�
 | `API_PREFIX` | Không | `api/v1` | Global API prefix |
 | `CORS_ORIGIN` | Không | `*` | Một hoặc nhiều origin, phân tách bằng dấu phẩy |
 | `JWT_SECRET` | Có | — | Secret ký và xác thực access token, tối thiểu 32 ký tự |
-| `OPENROUTER_API_KEY` | Có | — | Key OpenRouter cho trợ lý dinh dưỡng và knowledge base; API không khởi động nếu để trống |
+| `AI_PROVIDER` | Không | `gateway` | Provider cho mọi call AI (chat, embedding, rerank, phụ đề, OCR, tạo ảnh) qua AI SDK: `gateway` (Vercel AI Gateway) hoặc `openrouter` (dự phòng). Khi Gateway gặp sự cố, đổi sang `openrouter` rồi khởi động lại |
+| `AI_GATEWAY_API_KEY` | Có | — | Key Vercel AI Gateway; voice agent của meal planner cũng dùng key này; API không khởi động nếu để trống |
+| `AI_GATEWAY_PROVIDER_ORDER` | Không | `anthropic` | Các provider trên Gateway được thử trước, phân tách bằng dấu phẩy |
+| `OPENROUTER_API_KEY` | Có | — | Key OpenRouter, provider dự phòng khi đổi `AI_PROVIDER`; API không khởi động nếu để trống |
 | `QDRANT_URL` | Có | — | URL Qdrant; API kiểm tra kết nối lúc khởi động và dừng nếu không truy cập được trong 5 giây |
 | `JWT_ACCESS_TTL` | Không | `3600` | Thời hạn access token, tính bằng giây |
 | `REFRESH_TOKEN_TTL` | Không | `2592000` | Thời hạn refresh token, tính bằng giây |
@@ -550,7 +553,7 @@ Cấu hình được kiểm tra khi API khởi động: thiếu biến bắt bu�
 | `CLOUDINARY_FOLDER` | Không | `vedora` | Thư mục gốc của video và phụ đề |
 | `CLOUDINARY_WEBHOOKS_ENABLED` | Production | `false` | `true` khi Console đã trỏ webhook Upload/Eager về API; `false` thì tự hỏi Admin API khi đọc |
 | `CAPTIONS_ENABLED` | Không | `true` | Ghi lời và dịch phụ đề cho video; transcript được kiểm duyệt trước khi đăng |
-| `TRANSCRIPTION_MODEL` | Không | `elevenlabs/scribe-v2` | Model ghi lời trên OpenRouter |
+| `TRANSCRIPTION_MODEL` | Không | `elevenlabs/scribe-v2` | Model ghi lời (cùng id trên Gateway và OpenRouter) |
 | `FFMPEG_PATH` | Không | ffmpeg của `ffmpeg-static` | ffmpeg dùng để tách âm thanh; image Docker dùng `/usr/bin/ffmpeg` |
 | `FRONTEND_URL` | Không | `http://localhost:3000` | Origin của frontend |
 | `MAX_VIDEO_DURATION_SEC` | Không | `180` | Video dài hơn bị đánh dấu `FAILED` và xoá khỏi Cloudinary |

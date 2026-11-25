@@ -4,7 +4,7 @@ import { ConfigService } from '@nestjs/config';
 import { InjectModel } from '@nestjs/ai';
 import { generateText, type LanguageModel, Output } from 'ai';
 import { z } from 'zod';
-import { DEFAULT_CHAT_MODEL } from '../../ai/openrouter.js';
+import { DEFAULT_CHAT_MODEL } from '../../ai/models.js';
 import { PromptCache } from '../../ai/prompt-cache.js';
 import { RecipeTag } from '../../mongo/models.js';
 import type { PostSourcePart } from './post-source.js';
@@ -51,7 +51,7 @@ export class PostSummaryGenerator {
     config: ConfigService,
     @InjectModel() private readonly model: LanguageModel,
   ) {
-    this.modelId = config.get<string>('OPENROUTER_MODEL', DEFAULT_CHAT_MODEL);
+    this.modelId = config.get<string>('AI_CHAT_MODEL', DEFAULT_CHAT_MODEL);
   }
 
   async generate(parts: SummarySourcePart[]): Promise<SummaryOutput> {

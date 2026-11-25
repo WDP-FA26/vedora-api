@@ -104,7 +104,8 @@ Values below are defaults matched to the original source. All values are read at
 | `KNOWLEDGE_MIN_IMAGE_PX` | `100` |
 | `KNOWLEDGE_MIN_OCR_COVERAGE` | `0.9` |
 | `KNOWLEDGE_MIN_RELEVANCE` | `0.08` |
-| `KNOWLEDGE_OCR_CARRIER_MAX_TOKENS` | `16` |
+| `KNOWLEDGE_OCR_CONCURRENCY` | `4` |
+| `KNOWLEDGE_OCR_MAX_OUTPUT_TOKENS` | `8192` |
 | `KNOWLEDGE_OCR_TIMEOUT_MS` | `600000` |
 | `KNOWLEDGE_PREFETCH_LIMIT` | `40` |
 | `KNOWLEDGE_RERANK_TIMEOUT_MS` | `1600` |
@@ -245,8 +246,6 @@ Values below are defaults matched to the original source. All values are read at
 | `CLOUDINARY_STREAM_TRANSFORMATION` | `sp_auto/m3u8` |
 | `GUEST_QUOTA_TIMEZONE` | `UTC` |
 | `KNOWLEDGE_MAINTENANCE_CRON` | `0 */10 * * * *` |
-| `KNOWLEDGE_OCR_CARRIER_MODEL` | `google/gemini-3.1-flash-lite` |
-| `KNOWLEDGE_OCR_ENGINE` | `mistral-ocr` |
 | `MEDIA_CAPTION_ADVANCE_CRON` | `0 */10 * * * *` |
 | `MEDIA_MODERATION_RETRY_CRON` | `0 */5 * * * *` |
 | `MEDIA_ORPHAN_CLEANUP_CRON` | `0 0 * * * *` |

@@ -15,7 +15,7 @@ npm run seed                              # catalog + admin user `vedora.admin` 
 npm run start:dev                         # http://localhost:4000/api/v1, Swagger at /docs
 ```
 
-Requires `OPENROUTER_API_KEY` and a reachable Qdrant. Without `RESEND_API_KEY`, email verification/reset codes print in the API log; without Cloudinary, Google, or Turnstile credentials those features return `503` or use test behavior.
+Requires `OPENROUTER_API_KEY`, `AI_GATEWAY_API_KEY` and a reachable Qdrant. Without `RESEND_API_KEY`, email verification/reset codes print in the API log; without Cloudinary, Google, or Turnstile credentials those features return `503` or use test behavior.
 
 ## Commands
 
@@ -36,7 +36,8 @@ npm run seed
 - **Auth:** access token (1h) and an opaque rotated refresh token (30d; reuse revokes the family). The frontend stores both in httpOnly cookies and refreshes them in its `proxy.ts`.
 - **Google login** returns to the frontend (`/auth/google`), which calls `POST /auth/google` with `code` + PKCE `codeVerifier`.
 - **Video:** the browser uploads straight to Cloudinary with signed fields from `POST /media/uploads` (chunked above `chunkSize`); an eager job builds an adaptive HLS stream (`sp_auto`), and posts stay `PROCESSING` until webhooks (`/webhooks/cloudinary`) or Admin API polling publish them. Locally the webhook needs a public URL (a `cloudflared` quick tunnel, whose URL changes on every restart, updated in Cloudinary Console → Settings → Webhook Notifications) unless polling is enough.
-- **Captions:** a published video's original is downloaded, ffmpeg extracts and de-silences the audio, ElevenLabs Scribe v2 (`elevenlabs/scribe-v2` on OpenRouter, set by `TRANSCRIPTION_MODEL`) transcribes it, word timestamps become cues and map back onto the video, and `OPENROUTER_MODEL` translates vi↔en. Tracks are WebVTT files on Cloudinary.
+- **Captions:** a published video's original is downloaded, ffmpeg extracts and de-silences the audio, ElevenLabs Scribe v2 (`elevenlabs/scribe-v2`, set by `TRANSCRIPTION_MODEL`) transcribes it through AI SDK `transcribe()`, word timestamps become cues and map back onto the video, and `AI_CHAT_MODEL` translates vi↔en. Tracks are WebVTT files on Cloudinary.
+- **AI providers:** every AI call goes through the Vercel AI SDK to one provider picked by `AI_PROVIDER`: `gateway` (Vercel AI Gateway, default) or `openrouter`, the manual switch when the Gateway is down (no automatic failover). Each adapter (`src/ai/providers/gateway/gateway.adapter.ts`, `src/ai/providers/openrouter/openrouter.adapter.ts`) implements `AiProviderAdapter` from `src/ai/providers/ai-provider.interface.ts` and is registered in `src/ai/providers/provider-registry.ts`; OpenRouter's rerank, transcription and multimodal embeddings are AI SDK model implementations over `@openrouter/sdk` (`src/ai/providers/openrouter/openrouter.sdk-models.ts`). Features call AI SDK functions (`generateText`, `embedMany`, `rerank`, `transcribe`, `generateImage`) with models from `aiModels()`, `modelIdFor()` (image, OCR and rerank ids differ per provider), `PromptCache` and `webSearchTool()`, and never spell provider options. PDF images are embedded with Gemini's `providerOptions.google.content`. Unit and e2e tests run with `AI_PROVIDER=openrouter`; `test/unit/ai/gateway.spec.ts` covers the Gateway.
 - **Files:** presigned uploads to RustFS (S3-compatible).
 - **Payments:** SePay bank-transfer QR with server-owned prices/durations; Redis fans out payment SSE events (blank `PAYMENT_REDIS_URL` disables realtime but not `GET`).
 - **CORS:** `CORS_ORIGIN` and `FRONTEND_URL` must match the frontend origin.

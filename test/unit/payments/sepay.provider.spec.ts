@@ -60,6 +60,7 @@ describe('SePay provider boundary', () => {
       JWT_SECRET: 'sepay-test-jwt-secret-of-sufficient-length',
       FRONTEND_URL: 'https://vedora.test',
       OPENROUTER_API_KEY: 'sepay-test-openrouter-key',
+      AI_GATEWAY_API_KEY: 'sepay-test-gateway-key',
       QDRANT_URL: 'https://qdrant.vedora.test',
       ...config,
     };

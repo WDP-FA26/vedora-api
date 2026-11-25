@@ -28,12 +28,6 @@ async function requestBody(call = 0): Promise<Record<string, unknown>> {
   return (await input.clone().json()) as Record<string, unknown>;
 }
 
-function requestUrl(call = 0): string {
-  const [input] = fetchMock.mock.calls[call];
-  if (typeof input === 'string') return input;
-  return input instanceof Request ? input.url : input.toString();
-}
-
 describe('KnowledgeModelsService', () => {
   beforeEach(() => {
     fetchMock.mockReset();
@@ -66,56 +60,32 @@ describe('KnowledgeModelsService', () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it('embeds multimodal inputs at the configured size, in input order', async () => {
-    fetchMock.mockResolvedValue(
-      Response.json({
-        object: 'list',
-        model: 'google/gemini-embedding-2',
-        data: [
-          { object: 'embedding', index: 1, embedding: [2] },
-          { object: 'embedding', index: 0, embedding: [1] },
+  it('embeds images as Gemini multimodal parts, one request per batch of eight', async () => {
+    ai.embedMany.mockImplementation(({ values }) =>
+      Promise.resolve({
+        embeddings: values.map((_, index) => [index]),
+      } as never),
+    );
+    const image = { image: new Uint8Array([0xff, 0xd8]) };
+    const inputs = ['đậu phụ', ...Array.from({ length: 8 }, () => image)];
+
+    const vectors = await createService().embed(inputs);
+
+    expect(vectors).toHaveLength(9);
+    expect(ai.embedMany).toHaveBeenCalledTimes(2);
+    const first = ai.embedMany.mock.calls[0][0];
+    expect(first.values).toEqual(['đậu phụ', ...Array<string>(7).fill('')]);
+    expect(first.providerOptions).toEqual({
+      google: {
+        content: [
+          null,
+          ...Array.from({ length: 7 }, () => [
+            { inlineData: { mimeType: 'image/jpeg', data: '/9g=' } },
+          ]),
         ],
-      }),
-    );
-
-    const vectors = await createService({
-      KNOWLEDGE_EMBEDDING_DIMENSIONS: 768,
-    }).embed(['đậu phụ', { image: new Uint8Array([0xff, 0xd8]) }]);
-
-    expect(vectors).toEqual([[1], [2]]);
-    expect(requestUrl()).toBe('https://openrouter.ai/api/v1/embeddings');
-    expect(await requestBody()).toEqual({
-      model: 'google/gemini-embedding-2',
-      dimensions: 768,
-      encoding_format: 'float',
-      input: [
-        { content: [{ type: 'text', text: 'đậu phụ' }] },
-        {
-          content: [
-            {
-              type: 'image_url',
-              image_url: { url: 'data:image/jpeg;base64,/9g=' },
-            },
-          ],
-        },
-      ],
+      },
     });
-  });
-
-  it('keeps OpenRouter error details out of the public message', async () => {
-    fetchMock.mockResolvedValue(
-      Response.json(
-        { error: { code: 402, message: 'Insufficient credits' } },
-        { status: 402 },
-      ),
-    );
-
-    await expect(
-      createService().embed([{ image: new Uint8Array([0xff, 0xd8]) }]),
-    ).rejects.toMatchObject({
-      message: 'openrouter request failed',
-      reason: 'Embeddings failed (402): Insufficient credits',
-    });
+    expect(ai.embedMany.mock.calls[1][0].values).toEqual(['']);
   });
 
   it('reranks best first', async () => {
@@ -169,73 +139,69 @@ describe('KnowledgeModelsService', () => {
 
   it('skips reranking without a rerank model', async () => {
     expect(
-      await createService().rerank('q', ['a'], 6, new AbortController().signal),
+      await createService({ KNOWLEDGE_RERANK_ENABLED: false }).rerank(
+        'q',
+        ['a'],
+        6,
+        new AbortController().signal,
+      ),
     ).toBeNull();
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
   describe('ocrPdf', () => {
-    type ParsedPart =
-      | { type: 'text'; text: string }
-      | { type: 'image_url'; image_url: { url: string } };
-    const parse = (content: ParsedPart[]) => [
-      { type: 'file', file: { hash: 'h', content } },
-    ];
+    /** A PDF with one line of text per page. */
+    async function pdfOf(...pages: string[]): Promise<Uint8Array> {
+      const mupdf = await import('mupdf');
+      const document = new mupdf.PDFDocument();
+      const font = document.addSimpleFont(new mupdf.Font('Helvetica'));
+      for (const text of pages) {
+        const resources = document.addObject({ Font: { F1: font } });
+        const page = document.addPage(
+          [0, 0, 300, 200],
+          0,
+          resources,
+          `BT /F1 12 Tf 20 150 Td (${text}) Tj ET`,
+        );
+        document.insertPage(-1, page);
+      }
+      return document.saveToBuffer('compress').asUint8Array();
+    }
 
-    it('returns the Markdown of each page from the file annotation', async () => {
-      fetchMock.mockResolvedValue(
-        Response.json({
-          choices: [
-            {
-              message: {
-                annotations: parse([
-                  { type: 'text', text: '<file name="document.pdf">' },
-                  {
-                    type: 'text',
-                    text: '# Trang 1\n\n![img-0.jpeg](img-0.jpeg)\n\nĐạm',
-                  },
-                  {
-                    type: 'image_url',
-                    image_url: { url: 'data:image/jpeg;base64,x' },
-                  },
-                  { type: 'text', text: '| Đậu | 8 |' },
-                  { type: 'text', text: '</file>' },
-                ]),
-              },
-            },
-          ],
-        }),
-      );
-
-      const pages = await createService().ocrPdf(new Uint8Array([1]));
-
-      expect(pages).toEqual(['# Trang 1\n\n\n\nĐạm', '| Đậu | 8 |']);
-      expect(await requestBody()).toMatchObject({
-        plugins: [{ id: 'file-parser', pdf: { engine: 'mistral-ocr' } }],
-      });
-    });
-
-    it('uses the parse even when the carrier model failed', async () => {
-      fetchMock.mockResolvedValue(
-        Response.json(
+    function answer(text: string): Response {
+      return Response.json({
+        id: 'gen-ocr',
+        model: 'mistralai/mistral-small-2603',
+        choices: [
           {
-            error: {
-              message: 'Provider returned error',
-              metadata: {
-                file_annotations: parse([{ type: 'text', text: 'Trang 1' }]),
-              },
-            },
+            index: 0,
+            message: { role: 'assistant', content: text },
+            finish_reason: 'stop',
           },
-          { status: 502 },
-        ),
+        ],
+        usage: { prompt_tokens: 80, completion_tokens: 10, total_tokens: 90 },
+      });
+    }
+
+    it('reads each page on its own with the OCR model, in page order', async () => {
+      fetchMock
+        .mockResolvedValueOnce(
+          answer('```markdown\n# Trang 1\n![x](x.jpg)\nĐạm\n```'),
+        )
+        .mockResolvedValueOnce(answer('| Đậu | 8 |'));
+
+      const pages = await createService().ocrPdf(
+        await pdfOf('Page one', 'Page two'),
       );
 
-      expect(await createService().ocrPdf(new Uint8Array([1]))).toEqual([
-        'Trang 1',
-      ]);
+      expect(pages).toEqual(['# Trang 1\n\nĐạm', '| Đậu | 8 |']);
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+      const body = await requestBody(0);
+      expect(body.model).toBe('mistralai/mistral-small-2603');
+      expect(JSON.stringify(body.messages)).toContain('application/pdf');
     });
 
-    it('throws when OpenRouter returns no parse', async () => {
+    it('reports a failed page as an external service failure', async () => {
       fetchMock.mockResolvedValue(
         Response.json(
           { error: { code: 402, message: 'Insufficient credits' } },
@@ -244,21 +210,10 @@ describe('KnowledgeModelsService', () => {
       );
 
       await expect(
-        createService().ocrPdf(new Uint8Array([1])),
+        createService().ocrPdf(await pdfOf('Page one')),
       ).rejects.toMatchObject({
-        message: 'openrouter request failed',
-        reason: 'OCR returned no parse (402): Insufficient credits',
-      });
-    });
-
-    it('falls back to "no annotations" when neither annotations nor error message exist', async () => {
-      fetchMock.mockResolvedValue(Response.json({}, { status: 200 }));
-
-      await expect(
-        createService().ocrPdf(new Uint8Array([1])),
-      ).rejects.toMatchObject({
-        message: 'openrouter request failed',
-        reason: 'OCR returned no parse (200): no annotations',
+        service: 'openrouter',
+        reason: expect.stringMatching(/^OCR failed \(402\)/) as string,
       });
     });
   });
@@ -267,69 +222,6 @@ describe('KnowledgeModelsService', () => {
     await expect(createService().embed([])).resolves.toEqual([]);
     expect(ai.embedMany).not.toHaveBeenCalled();
     expect(fetchMock).not.toHaveBeenCalled();
-  });
-
-  it('rejects stream responses from multimodal embeddings and rerank', async () => {
-    fetchMock.mockResolvedValueOnce(
-      new Response('data: {}\n\n', {
-        status: 200,
-        headers: { 'content-type': 'text/event-stream' },
-      }),
-    );
-    await expect(
-      createService().embed([{ image: new Uint8Array([1]) }]),
-    ).rejects.toMatchObject({
-      message: 'openrouter request failed',
-      reason: 'Embeddings returned a stream instead of vectors',
-    });
-
-    fetchMock.mockResolvedValueOnce(
-      new Response('data: {}\n\n', {
-        status: 200,
-        headers: { 'content-type': 'text/event-stream' },
-      }),
-    );
-    await expect(
-      createService({
-        OPENROUTER_RERANK_MODEL: 'cohere/rerank-v3.5',
-      }).rerank('q', ['a'], 1, new AbortController().signal),
-    ).rejects.toMatchObject({
-      message: 'openrouter request failed',
-      reason: 'Rerank returned a stream instead of results',
-    });
-  });
-
-  it('rejects base64 embeddings and falls back to position when index is missing', async () => {
-    fetchMock.mockResolvedValueOnce(
-      Response.json({
-        object: 'list',
-        model: 'google/gemini-embedding-2',
-        data: [{ object: 'embedding', index: 0, embedding: 'AAAA' }],
-      }),
-    );
-    await expect(
-      createService().embed([{ image: new Uint8Array([1]) }]),
-    ).rejects.toMatchObject({
-      message: 'openrouter request failed',
-      reason: 'Embeddings returned base64 although floats were requested',
-    });
-
-    fetchMock.mockResolvedValueOnce(
-      Response.json({
-        object: 'list',
-        model: 'google/gemini-embedding-2',
-        data: [
-          { object: 'embedding', embedding: [0.4] },
-          { object: 'embedding', embedding: [0.5] },
-        ],
-      }),
-    );
-    await expect(
-      createService().embed([
-        { image: new Uint8Array([1]) },
-        { image: new Uint8Array([2]) },
-      ]),
-    ).resolves.toEqual([[0.4], [0.5]]);
   });
 
   it('formats document text with title and body', () => {

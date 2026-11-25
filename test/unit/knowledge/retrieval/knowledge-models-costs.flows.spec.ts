@@ -2,7 +2,9 @@ import type { INestApplication } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { AiService } from '@nestjs/ai';
 import { Test } from '@nestjs/testing';
+import { embedMany } from 'ai';
 import { mockDeep } from 'vitest-mock-extended';
+import { openRouterModels } from '@src/ai/providers/openrouter/openrouter.adapter.js';
 import { aiCostContext } from '@src/ai/telemetry/ai-cost-context.js';
 import { AiCostTransportService } from '@src/ai/telemetry/ai-cost-transport.service.js';
 import { ExternalServiceException } from '@src/common/exceptions/external-service.exception.js';
@@ -17,10 +19,10 @@ import {
 } from '@test/support/mongo-test-db.js';
 
 /**
- * ai-cost-tracking.md: every HTTP attempt to OpenRouter through an integrated
- * client — including the knowledge REST embedding/OCR/rerank calls moved to
- * @openrouter/sdk — leaves one `ai_cost_calls` row with its operation, the
- * requested model, status and reported USD, and never the payload.
+ * ai-cost-tracking.md: every HTTP attempt the knowledge base makes through an
+ * AI SDK model (rerank, multimodal embeddings, OCR) leaves one
+ * `ai_cost_calls` row with its operation, the requested model, status and
+ * reported USD, and never the payload. These run with AI_PROVIDER=openrouter.
  */
 
 const RERANK_MODEL = 'cohere/rerank-4-pro';
@@ -46,8 +48,24 @@ describe('Knowledge model calls are cost-tracked', () => {
   };
   const rerank = (signal = AbortSignal.timeout(5000)) =>
     service.rerank(SECRET_QUERY, ['đậu phụ', 'rau cải'], 2, signal);
-  const embedImage = () =>
-    service.embed([{ image: new Uint8Array([0xff, 0xd8, 0xff]) }]);
+  /** Embeds images the way the knowledge base does, through the OpenRouter adapter. */
+  const embedImages = (count = 1) => {
+    const transport = app.get(AiCostTransportService);
+    const model = openRouterModels('test-key').embedding(EMBEDDING_MODEL, {
+      dimensions: 3,
+      fetch: transport.forModel(EMBEDDING_MODEL, 'KNOWLEDGE'),
+    });
+    const image = [{ inlineData: { mimeType: 'image/jpeg', data: '/9j/' } }];
+    return embedMany({
+      model,
+      values: Array<string>(count).fill(''),
+      providerOptions: {
+        google: { content: Array.from({ length: count }, () => image) },
+      },
+      maxRetries: 0,
+    });
+  };
+  const embedImage = () => embedImages(1);
 
   beforeAll(async () => {
     const moduleRef = await Test.createTestingModule({
@@ -61,7 +79,7 @@ describe('Knowledge model calls are cost-tracked', () => {
           useValue: new ConfigService({
             OPENROUTER_API_KEY: 'test-key',
             OPENROUTER_RERANK_MODEL: RERANK_MODEL,
-            OPENROUTER_EMBEDDING_MODEL: EMBEDDING_MODEL,
+            AI_EMBEDDING_MODEL: EMBEDDING_MODEL,
             KNOWLEDGE_EMBEDDING_DIMENSIONS: 3,
           }),
         },
@@ -217,58 +235,96 @@ describe('Knowledge model calls are cost-tracked', () => {
       expect(JSON.stringify(row)).not.toContain('base64');
     });
 
-    it('records one attempt per batch of eight images', async () => {
-      fetchMock.mockImplementation(() =>
-        Promise.resolve(
-          json({
-            ...embedded,
-            data: Array.from({ length: 8 }, (_, index) => ({
-              object: 'embedding',
-              index,
-              embedding: [0.1, 0.2, 0.3],
-            })),
-          }),
-        ),
+    it('puts the images on the wire as image parts, never in the cost row', async () => {
+      fetchMock.mockResolvedValue(json(embedded));
+
+      await embedImage();
+
+      const [input, init] = fetchMock.mock.calls[0];
+      const body =
+        typeof init?.body === 'string'
+          ? init.body
+          : await (input as Request).clone().text();
+      expect(JSON.parse(body)).toMatchObject({
+        model: EMBEDDING_MODEL,
+        dimensions: 3,
+        input: [
+          {
+            content: [
+              {
+                type: 'image_url',
+                image_url: { url: 'data:image/jpeg;base64,/9j/' },
+              },
+            ],
+          },
+        ],
+      });
+    });
+
+    it('rejects base64 vectors and puts vectors back in input order', async () => {
+      fetchMock.mockResolvedValueOnce(
+        json({
+          ...embedded,
+          data: [{ object: 'embedding', index: 0, embedding: 'AAAA' }],
+        }),
       );
-      const images = Array.from({ length: 9 }, () => ({
-        image: new Uint8Array([1]),
-      }));
+      await expect(embedImage()).rejects.toThrow(/base64/);
 
-      await service.embed(images).catch(() => undefined);
-
-      expect(await calls().countDocuments({ operation: 'EMBEDDING' })).toBe(2);
+      fetchMock.mockResolvedValueOnce(
+        json({
+          ...embedded,
+          data: [
+            { object: 'embedding', index: 1, embedding: [2, 2, 2] },
+            { object: 'embedding', index: 0, embedding: [1, 1, 1] },
+          ],
+        }),
+      );
+      const { embeddings } = await embedImages(2);
+      expect(embeddings).toEqual([
+        [1, 1, 1],
+        [2, 2, 2],
+      ]);
     });
   });
 
   describe('OCR', () => {
-    it('records the OCR request as a CHAT attempt of the carrier model', async () => {
+    it('records each page as a CHAT attempt of the OCR model', async () => {
+      const mupdf = await import('mupdf');
+      const document = new mupdf.PDFDocument();
+      document.insertPage(
+        -1,
+        document.addPage([0, 0, 300, 200], 0, document.addObject({}), ''),
+      );
+      const pdf = document.saveToBuffer('compress').asUint8Array();
       fetchMock.mockResolvedValue(
         json({
           id: 'gen-ocr-1',
-          model: 'google/gemini-3.1-flash-lite',
+          model: 'mistralai/mistral-small-2603',
           choices: [
             {
-              message: {
-                annotations: [
-                  {
-                    type: 'file',
-                    file: { content: [{ type: 'text', text: '# Trang 1' }] },
-                  },
-                ],
-              },
+              index: 0,
+              message: { role: 'assistant', content: '# Trang 1' },
+              finish_reason: 'stop',
             },
           ],
-          usage: { prompt_tokens: 10, completion_tokens: 1, cost: 0.01 },
+          usage: {
+            prompt_tokens: 80,
+            completion_tokens: 3,
+            total_tokens: 83,
+            cost: 0.00003,
+          },
         }),
       );
 
-      await service.ocrPdf(new Uint8Array([0x25, 0x50, 0x44, 0x46]));
+      await expect(service.ocrPdf(pdf)).resolves.toEqual(['# Trang 1']);
 
-      expect(await onlyCall()).toMatchObject({
+      const row = await onlyCall();
+      expect(row).toMatchObject({
         operation: 'CHAT',
-        requestedModel: 'google/gemini-3.1-flash-lite',
+        requestedModel: 'mistralai/mistral-small-2603',
         status: 'SUCCEEDED',
       });
+      expect(row.costUsd?.toString()).toBe('0.00003');
     });
   });
 

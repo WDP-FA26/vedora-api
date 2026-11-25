@@ -32,7 +32,7 @@ PAYMENT_EVENTS_CHANNEL=vedora:payments:production:v1
 
 27 biến dưới đây không bắt buộc phải thêm hết: BE có mặc định. Có thể khai báo để cấu hình production minh bạch hơn. Giá trị đều theo mặc định code, ngoại trừ `FRONTEND_URL` điền theo domain FE bạn cung cấp.
 
-`FRONTEND_URL` hiện mới được khai báo trong schema env, chưa được service nghiệp vụ sử dụng; không phải điều kiện sửa đăng nhập hiện tại. `BLOG_AI_MODEL` để rỗng sẽ dùng `OPENROUTER_MODEL` bạn đã có. `SEPAY_QR_TRANSFER_PREFIX` để rỗng; tiền tố mã thanh toán `SEPAY_PAYMENT_CODE_PREFIX` của bạn vẫn giữ nguyên.
+`FRONTEND_URL` hiện mới được khai báo trong schema env, chưa được service nghiệp vụ sử dụng; không phải điều kiện sửa đăng nhập hiện tại. `BLOG_AI_MODEL` để rỗng sẽ dùng `AI_CHAT_MODEL` (trước đây là `OPENROUTER_MODEL`). `SEPAY_QR_TRANSFER_PREFIX` để rỗng; tiền tố mã thanh toán `SEPAY_PAYMENT_CODE_PREFIX` của bạn vẫn giữ nguyên.
 
 Giữ nguyên collection/model/số chiều embedding đang dùng nếu Qdrant đã có dữ liệu; không đổi chúng để thử cấu hình, vì model hoặc số chiều khác có thể yêu cầu collection mới và index lại. Các giá trị dưới đây là mặc định của code, không phải kết quả đọc cấu hình Qdrant production.
 
@@ -45,20 +45,20 @@ CAPTIONS_ENABLED=true
 TRANSCRIPTION_MODEL=elevenlabs/scribe-v2
 POST_SUMMARIES_ENABLED=true
 OPENROUTER_PROVIDER_ORDER=anthropic,google-vertex/global,azure/global
-OPENROUTER_REASONING_EFFORT=low
+AI_REASONING_EFFORT=low
 STORAGE_REGION=us-east-1
 STORAGE_KNOWLEDGE_BUCKET=vedora-knowledge
 STORAGE_PROFILES_BUCKET=vedora-profiles
 STORAGE_BLOGS_BUCKET=vedora-blogs
 STORAGE_VERIFICATIONS_BUCKET=vedora-verifications
 QDRANT_COLLECTION=vedora_knowledge
-OPENROUTER_EMBEDDING_MODEL=google/gemini-embedding-2
+AI_EMBEDDING_MODEL=google/gemini-embedding-2
 KNOWLEDGE_EMBEDDING_DIMENSIONS=1536
-OPENROUTER_MODERATION_MODEL=anthropic/claude-haiku-5.5
-OPENROUTER_CONTENT_MODERATION_MODEL=anthropic/claude-haiku-5.5
+AI_MODERATION_MODEL=anthropic/claude-haiku-5.5
+AI_CONTENT_MODERATION_MODEL=anthropic/claude-haiku-5.5
 OPENROUTER_MODERATION_PROVIDER_ORDER=anthropic,google-vertex/global,azure/global
-OPENROUTER_APP_URL=https://vedora-opal.vercel.app
-OPENROUTER_APP_TITLE=Vedora Platform
+AI_APP_URL=https://vedora-opal.vercel.app
+AI_APP_TITLE=Vedora Platform
 GUEST_DAILY_MESSAGES=5
 GUEST_DAILY_MESSAGES_PER_IP=20
 GUEST_DAILY_BUDGET=500
@@ -67,7 +67,6 @@ POST_SEARCH_EMBEDDING_MODEL=google/gemini-embedding-2
 POST_SEARCH_EMBEDDING_DIMENSIONS=768
 POST_SEARCH_MIN_SCORE=0.65
 BLOG_AI_MODEL=
-OPENROUTER_IMAGE_MODEL=qwen/qwen-image-2.1-turbo
 SEPAY_QR_TRANSFER_PREFIX=
 ```
 
@@ -206,9 +205,8 @@ KNOWLEDGE_MIN_IMAGE_PT=48
 KNOWLEDGE_MIN_IMAGE_PX=100
 KNOWLEDGE_MIN_OCR_COVERAGE=0.9
 KNOWLEDGE_MIN_RELEVANCE=0.08
-KNOWLEDGE_OCR_CARRIER_MAX_TOKENS=16
-KNOWLEDGE_OCR_CARRIER_MODEL=google/gemini-3.1-flash-lite
-KNOWLEDGE_OCR_ENGINE=mistral-ocr
+KNOWLEDGE_OCR_CONCURRENCY=4
+KNOWLEDGE_OCR_MAX_OUTPUT_TOKENS=8192
 KNOWLEDGE_OCR_TIMEOUT_MS=600000
 KNOWLEDGE_PAGE_MAX_LENGTH=100000
 KNOWLEDGE_PREFETCH_LIMIT=40
@@ -368,3 +366,30 @@ Tổng cộng có **290 tên biến được BE hỗ trợ nhưng chưa xuất h
 Các secret đã được gửi nguyên văn trong cuộc trò chuyện nên được đổi/thu hồi tại nhà cung cấp hoặc nơi quản lý tương ứng. File này chỉ chứa cấu hình không bí mật; không sao chép giá trị credential đã gửi vào Git hoặc ClickUp.
 
 Nguồn đối chiếu: [schema env](../src/config/environment.ts), [mặc định vận hành](../src/config/runtime-defaults.ts), [catalogue thanh toán](../src/payments/payments.service.ts), [Redis payment events](../src/payments/payment-events.service.ts), [Docker Compose](../docker-compose.yml), [bảng env đầy đủ](BE_ENV_REFERENCE.md).
+
+## Chuyển AI sang Vercel AI Gateway + AI SDK (2026-11-25)
+
+Mọi call AI (chat, moderation, embedding, rerank, phụ đề, OCR, tạo ảnh) đi qua Vercel AI SDK tới provider do `AI_PROVIDER` chọn. Mặc định là Vercel AI Gateway; OpenRouter là phương án dự phòng. Không có fallback tự động: khi Gateway gặp sự cố, đổi `AI_PROVIDER=openrouter` rồi khởi động lại.
+
+```dotenv
+AI_PROVIDER=gateway
+AI_GATEWAY_API_KEY=<key Vercel AI Gateway>   # bắt buộc cùng OPENROUTER_API_KEY khi khởi động
+AI_GATEWAY_PROVIDER_ORDER=anthropic
+KNOWLEDGE_RERANK_ENABLED=true
+```
+
+Xoá khỏi production: `KNOWLEDGE_OCR_CARRIER_MAX_TOKENS`, `KNOWLEDGE_OCR_CARRIER_MODEL`, `KNOWLEDGE_OCR_ENGINE` (không còn dùng). Đổi tên các biến dùng chung: `OPENROUTER_MODEL` → `AI_CHAT_MODEL`, `OPENROUTER_REASONING_EFFORT` → `AI_REASONING_EFFORT`, `OPENROUTER_MODERATION_MODEL` → `AI_MODERATION_MODEL`, `OPENROUTER_CONTENT_MODERATION_MODEL` → `AI_CONTENT_MODERATION_MODEL`, `OPENROUTER_EMBEDDING_MODEL` → `AI_EMBEDDING_MODEL`, `OPENROUTER_APP_URL` → `AI_APP_URL`, `OPENROUTER_APP_TITLE` → `AI_APP_TITLE`. Nếu production đang đặt `OPENROUTER_IMAGE_MODEL` hoặc `OPENROUTER_RERANK_MODEL`, giá trị đó chỉ áp dụng khi chạy OpenRouter; có thể xoá để dùng mặc định.
+
+| Việc | Gateway (mặc định) | OpenRouter (dự phòng) | Env ghi đè |
+| --- | --- | --- | --- |
+| Chat, moderation | `anthropic/claude-haiku-5.5` | như Gateway | `AI_CHAT_MODEL`, `AI_*MODERATION_MODEL` |
+| Embedding (text + ảnh PDF) | `google/gemini-embedding-2` | như Gateway | `AI_EMBEDDING_MODEL`, `POST_SEARCH_EMBEDDING_MODEL` |
+| Phụ đề | `elevenlabs/scribe-v2` | như Gateway | `TRANSCRIPTION_MODEL` |
+| Rerank knowledge | `cohere/rerank-v5-fast` | `qwen/qwen3-reranker-8b` | `AI_GATEWAY_RERANK_MODEL` / `OPENROUTER_RERANK_MODEL` |
+| OCR PDF (từng trang) | `mistral/mistral-small` | `mistralai/mistral-small-2603` + parser `mistral-ocr` | `AI_GATEWAY_OCR_MODEL` / `OPENROUTER_OCR_MODEL` |
+| Tạo/sửa ảnh blog | `microsoft/mai-image-2.7-flash` | `qwen/qwen-image-2.1-turbo` | `AI_GATEWAY_IMAGE_MODEL` / `OPENROUTER_IMAGE_MODEL` |
+| Web search | Parallel `fast` | Parallel `fast` (server tool OpenRouter) | — |
+
+- Không cần reindex Qdrant: `google/gemini-embedding-2` qua Gateway cho vector trùng với OpenRouter, cả text lẫn ảnh (cosine 1.0, đo 2026-11-25).
+- Bảng chi phí AI ghi cả call qua Gateway (`billedBy: gateway`, cost lấy từ `providerMetadata.gateway`).
+- Lỗi provider trả `EXTERNAL_SERVICE_FAILED` với `service: "ai-gateway"` khi chạy Gateway.

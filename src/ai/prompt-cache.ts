@@ -2,9 +2,10 @@ import { createHash } from 'node:crypto';
 import type { ModelMessage, SystemModelMessage } from 'ai';
 import {
   type CacheTtl,
+  type CallOptions,
   type ProviderOptions,
-  providerDialect,
-} from './provider.js';
+} from './providers/ai-provider.interface.js';
+import { providerDialect } from './providers/provider-registry.js';
 import type { ReasoningEffort } from './reasoning.js';
 
 const MAX_SESSION_ID_LENGTH = 256;
@@ -37,16 +38,16 @@ export class PromptCache {
     prefix: string,
     ...scope: readonly (string | null | undefined)[]
   ): ProviderOptions {
-    return providerDialect.callOptions({
+    return providerDialect().callOptions({
       sessionId: PromptCache.sessionId(prefix, ...scope),
-    });
+    }).providerOptions;
   }
 
   static system(content: string, ttl: CacheTtl = '1h'): SystemModelMessage {
     return {
       role: 'system',
       content,
-      providerOptions: providerDialect.cacheBreakpoint(ttl),
+      providerOptions: providerDialect().cacheBreakpoint(ttl),
     };
   }
 
@@ -57,7 +58,7 @@ export class PromptCache {
     return {
       type: 'text',
       text,
-      providerOptions: providerDialect.cacheBreakpoint(ttl),
+      providerOptions: providerDialect().cacheBreakpoint(ttl),
     };
   }
 
@@ -92,15 +93,12 @@ export class PromptCache {
     enabled?: boolean;
     /** Overrides the model's effort for this task; omit to keep the model's. */
     effort?: ReasoningEffort;
-  }): {
-    instructions: string | SystemModelMessage;
-    providerOptions: ProviderOptions;
-  } {
+  }): CallOptions & { instructions: string | SystemModelMessage } {
     return {
       instructions: enabled
         ? PromptCache.system(instructions, ttl)
         : instructions,
-      providerOptions: providerDialect.callOptions({
+      ...providerDialect().callOptions({
         sessionId: PromptCache.sessionId(session, ...scope),
         effort,
       }),
@@ -125,13 +123,10 @@ export class PromptCache {
      * the model's. Keep it fixed per agent: changing it restarts the cache.
      */
     effort?: ReasoningEffort;
-  }): {
-    instructions: SystemModelMessage;
-    providerOptions: ProviderOptions;
-  } {
+  }): CallOptions & { instructions: SystemModelMessage } {
     return {
       instructions: PromptCache.system(instructions, systemTtl),
-      providerOptions: providerDialect.callOptions({
+      ...providerDialect().callOptions({
         sessionId: PromptCache.sessionId(session, ...scope),
         cacheTtl: historyTtl,
         effort,

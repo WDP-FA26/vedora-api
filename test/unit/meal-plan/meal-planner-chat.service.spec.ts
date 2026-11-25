@@ -10,10 +10,8 @@ import { APICallError, simulateReadableStream, type UIMessageChunk } from 'ai';
 import { convertReadableStreamToArray, MockLanguageModelV4 } from 'ai/test';
 import { type DeepMockProxy, mockDeep } from 'vitest-mock-extended';
 import { AiModule } from '@src/ai/ai.module.js';
-import {
-  DEFAULT_MODERATION_PROVIDER_ORDER,
-  providerOrderFrom,
-} from '@src/ai/openrouter.js';
+import { DEFAULT_OPENROUTER_MODERATION_PROVIDER_ORDER } from '@src/ai/providers/provider-registry.js';
+import { providerOrderFrom } from '@src/ai/providers/provider-shared.js';
 import { NUTRITION_POLICY } from '@src/ai/guardrails/policies/nutrition.js';
 import { AiCostTransportService } from '@src/ai/telemetry/ai-cost-transport.service.js';
 import { FeatureUnavailableException } from '@src/common/exceptions/feature-unavailable.exception.js';
@@ -187,7 +185,7 @@ describe('MealPlannerChatService', () => {
           load: [
             () => ({
               OPENROUTER_API_KEY: 'key',
-              OPENROUTER_MODEL: 'test/model',
+              AI_CHAT_MODEL: 'test/model',
             }),
           ],
         }),
@@ -301,7 +299,7 @@ describe('MealPlannerChatService', () => {
     expect(languageModel).toHaveBeenCalledWith(MODERATION_MODEL_ID, {
       reasoning: { effort: 'low', exclude: true },
       provider: {
-        order: providerOrderFrom(DEFAULT_MODERATION_PROVIDER_ORDER),
+        order: providerOrderFrom(DEFAULT_OPENROUTER_MODERATION_PROVIDER_ORDER),
         allow_fallbacks: true,
       },
     });

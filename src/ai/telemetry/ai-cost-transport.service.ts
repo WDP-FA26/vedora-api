@@ -1,10 +1,13 @@
 import { randomUUID } from 'node:crypto';
-import { runtimeConfig } from '../../config/runtime-config.js';
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Types, type Model } from 'mongoose';
 import { AiCostCall } from '../../mongo/models.js';
 import { isUniqueViolation } from '../../mongo/errors.js';
+import {
+  ALL_PROVIDER_ADAPTERS,
+  providerAdapter,
+} from '../providers/provider-registry.js';
 import { aiCostContext } from './ai-cost-context.js';
 import {
   CostObservation,
@@ -30,13 +33,33 @@ function urlOf(input: Parameters<typeof fetch>[0]): URL {
   );
 }
 
-/** What a call is for, from the OpenRouter endpoint it goes to. */
+export type AiBiller = AiCostCall['billedBy'];
+
+/** The provider API a URL belongs to; null for any other host or path. */
+function billerOf(target: URL): AiBiller | null {
+  for (const adapter of ALL_PROVIDER_ADAPTERS) {
+    const base = new URL(adapter.cost.baseUrl);
+    const apiPath = base.pathname.replace(/\/$/, '');
+    if (
+      target.origin === base.origin &&
+      target.pathname.startsWith(`${apiPath}/`)
+    )
+      return adapter.id;
+  }
+  return null;
+}
+
+/** What a call is for, from the OpenRouter or AI Gateway endpoint it goes to. */
 function operationOf(target: URL): AiCostOperation {
   const path = target.pathname;
-  if (path.endsWith('/embeddings')) return 'EMBEDDING';
-  if (path.endsWith('/rerank')) return 'RERANK';
-  if (/\/images(?:\/|$)/.test(path)) return 'IMAGE';
-  if (path.endsWith('/transcriptions')) return 'TRANSCRIPTION';
+  if (path.endsWith('/embeddings') || path.endsWith('/embedding-model'))
+    return 'EMBEDDING';
+  if (path.endsWith('/rerank') || path.endsWith('/reranking-model'))
+    return 'RERANK';
+  if (/\/images(?:\/|$)/.test(path) || path.endsWith('/image-model'))
+    return 'IMAGE';
+  if (path.endsWith('/transcriptions') || path.endsWith('/transcription-model'))
+    return 'TRANSCRIPTION';
   return 'CHAT';
 }
 
@@ -72,15 +95,9 @@ export class AiCostTransportService {
     feature = 'SYSTEM',
     operation: AiCostOperation = operationOf(urlOf(input)),
   ): Promise<Response> {
-    const target = urlOf(input);
-    const provider = new URL(runtimeConfig.OPENROUTER_API_BASE_URL);
-    const apiPath = provider.pathname.replace(/\/$/, '');
     // A provider's fetch hook can serve other hosts; never record credentials or arbitrary URLs.
-    if (
-      target.origin !== provider.origin ||
-      !target.pathname.startsWith(`${apiPath}/`)
-    )
-      return underlying(input, init);
+    const billedBy = billerOf(urlOf(input));
+    if (!billedBy) return underlying(input, init);
     const scope = aiCostContext.getStore();
     // The OpenRouter SDK passes a Request with no init; fetch callers pass both.
     const signal =
@@ -100,6 +117,7 @@ export class AiCostTransportService {
       userId: scope?.userId ?? null,
       feature: scope?.feature ?? feature,
       operation,
+      billedBy,
       requestedModel:
         metadataText(bodyModel) ?? metadataText(model) ?? 'unknown',
     };
@@ -119,15 +137,18 @@ export class AiCostTransportService {
       await this.finish(
         id,
         recorded,
+        billedBy,
         new CostObservation(),
         signal?.aborted ? 'ABORTED' : 'FAILED',
         null,
       );
       throw error;
     }
+    const costAdapter = providerAdapter(billedBy).cost;
     const parser = new CostResponseParser(
       response.headers.get('content-type')?.includes('text/event-stream') ??
         false,
+      (payload, observation) => costAdapter.parsePayload(payload, observation),
     );
     let settled = false;
     const settle = async (status: AiCostCall['status']) => {
@@ -137,6 +158,7 @@ export class AiCostTransportService {
       await this.finish(
         id,
         recorded,
+        billedBy,
         parser.observation,
         parser.observation.failed || !response.ok ? 'FAILED' : status,
         response.status,
@@ -177,6 +199,7 @@ export class AiCostTransportService {
 
   async settleCharge(
     id: string,
+    billedBy: AiBiller,
     observation: CostObservation,
     source: 'RESPONSE' | 'GENERATION',
     extra: Record<string, unknown> = {},
@@ -194,7 +217,7 @@ export class AiCostTransportService {
     // chargeKey is assigned only with a reported cost; a later attempt can supply missing cost.
     const chargeKey =
       observation.costUsd !== null && generationId
-        ? `openrouter:${generationId}`
+        ? `${billedBy}:${generationId}`
         : undefined;
     const values = {
       generationId,
@@ -238,13 +261,14 @@ export class AiCostTransportService {
   private async finish(
     id: string,
     recorded: boolean,
+    billedBy: AiBiller,
     observation: CostObservation,
     status: AiCostCall['status'],
     httpStatus: number | null,
   ) {
     if (!recorded) return;
     try {
-      await this.settleCharge(id, observation, 'RESPONSE', {
+      await this.settleCharge(id, billedBy, observation, 'RESPONSE', {
         status,
         httpStatus,
         finishedAt: new Date(),

@@ -9,10 +9,8 @@ import { ResourceNotFoundException } from '../common/exceptions/resource-not-fou
 import { InvalidInputException } from '../common/exceptions/invalid-input.exception.js';
 import { FeatureUnavailableException } from '../common/exceptions/feature-unavailable.exception.js';
 import { StateConflictException } from '../common/exceptions/state-conflict.exception.js';
-import type { GenerationResponseData } from '@openrouter/sdk/models';
-import { createOpenRouterClient } from '../ai/openrouter-client.js';
+import { providerAdapter } from '../ai/providers/provider-registry.js';
 import { AiCostTransportService } from '../ai/telemetry/ai-cost-transport.service.js';
-import { CostObservation } from '../ai/telemetry/cost-observation.js';
 import type {
   AiCostCallsQueryDto,
   AiCostQueryDto,
@@ -397,57 +395,30 @@ export class AdminAiCostsService {
         'CONFLICT',
         'This attempt may still be running',
       );
-    // No cost fetch here: the lookup itself must not create a cost row.
-    const openrouter = createOpenRouterClient(
-      this.config.getOrThrow<string>('OPENROUTER_API_KEY'),
-    );
-    let data: GenerationResponseData;
-    try {
-      ({ data } = await openrouter.generations.getGeneration(
-        { id: row.generationId },
-        {
-          signal: AbortSignal.timeout(
-            runtimeConfig.AI_COST_RECONCILE_TIMEOUT_MS,
-          ),
-        },
-      ));
-    } catch {
-      throw new FeatureUnavailableException(
-        'SERVICE_UNAVAILABLE',
-        'Provider generation lookup unavailable; retry later',
-      );
-    }
-    if (data.id !== row.generationId)
-      throw new FeatureUnavailableException(
-        'SERVICE_UNAVAILABLE',
-        'Provider returned mismatched generation ID',
-      );
-    const observation = new CostObservation();
-    observation.accept({
-      id: row.generationId,
-      model: data.model ?? row.resolvedModel,
-      provider: data.providerName ?? row.provider,
-      usage: {
-        cost: data.totalCost,
-        prompt_tokens: data.nativeTokensPrompt,
-        completion_tokens: data.nativeTokensCompletion,
-        completion_tokens_details: {
-          reasoning_tokens: data.nativeTokensReasoning,
-        },
-        prompt_tokens_details: {
-          cached_tokens: data.nativeTokensCached ?? row.cachedTokens,
-          cache_write_tokens: row.cacheWriteTokens,
-        },
+    const observation = await providerAdapter(row.billedBy).cost.lookupGeneration(
+      this.config,
+      row.generationId,
+      {
+        resolvedModel: row.resolvedModel,
+        provider: row.provider,
+        cachedTokens: row.cachedTokens,
+        cacheWriteTokens: row.cacheWriteTokens,
       },
-    });
+    );
     if (observation.costUsd === null)
       throw new FeatureUnavailableException(
         'SERVICE_UNAVAILABLE',
         'Provider has not reported a final cost',
       );
-    await this.transport.settleCharge(row.id, observation, 'GENERATION', {
-      reconciledAt: new Date(),
-    });
+    await this.transport.settleCharge(
+      row.id,
+      row.billedBy,
+      observation,
+      'GENERATION',
+      {
+        reconciledAt: new Date(),
+      },
+    );
     return this.row((await this.calls.findById(id).exec())!);
   }
 }

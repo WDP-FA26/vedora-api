@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import type { Model } from 'mongoose';
-import { openRouterFailure } from '../../ai/openrouter-client.js';
+import { aiFailure } from '../../ai/provider-failure.js';
 import { aiCostContext } from '../../ai/telemetry/ai-cost-context.js';
 import { StateConflictException } from '../../common/exceptions/state-conflict.exception.js';
 import { InvalidInputException } from '../../common/exceptions/invalid-input.exception.js';
@@ -374,7 +374,7 @@ export class MealLogService {
       return estimate;
     } catch (error: unknown) {
       await this.usage.refund(ticket);
-      throw openRouterFailure('Calorie estimate', error);
+      throw aiFailure('Calorie estimate', error);
     }
   }
 

@@ -2,13 +2,11 @@ import { runtimeConfig } from '../../config/runtime-config.js';
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { AiService } from '@nestjs/ai';
-import type { OpenRouter } from '@openrouter/sdk';
-import type { STTWord } from '@openrouter/sdk/models';
+import type { TranscriptionModelV4 } from '@ai-sdk/provider';
+import { transcribe } from 'ai';
 import { PromptCache } from '../../ai/prompt-cache.js';
-import {
-  createOpenRouterClient,
-  openRouterFailure,
-} from '../../ai/openrouter-client.js';
+import { aiModels } from '../../ai/providers/provider-registry.js';
+import { aiFailure, aiService } from '../../ai/provider-failure.js';
 import { AiCostTransportService } from '../../ai/telemetry/ai-cost-transport.service.js';
 import { z } from 'zod';
 import { ExternalServiceException } from '../../common/exceptions/external-service.exception.js';
@@ -17,12 +15,8 @@ import type { Cue } from './vtt.js';
 
 const TRANSCRIBE_TIMEOUT_MS = runtimeConfig.TRANSCRIPTION_TIMEOUT_MS;
 
-const CAPTION_PROMPT =
-  'Vedora, tàu hủ, đậu hũ, chao, nấm mèo, bún tàu, hạt nêm, dầu điều, nước tương, mắm chay, tempeh, seitan.';
 const NEVER_TRANSLATE = ['Vedora'];
 
-const MAX_NO_SPEECH_PROB = runtimeConfig.TRANSCRIPTION_MAX_NO_SPEECH_PROB;
-const MIN_AVG_LOGPROB = runtimeConfig.TRANSCRIPTION_MIN_AVG_LOGPROB;
 const HALLUCINATIONS = [
   /ghiền mì gõ/i,
   /đăng ký kênh/i,
@@ -59,9 +53,11 @@ const LANGUAGE_CODES: Record<string, string> = {
 
 const translationOutput = z.object({ lines: z.array(z.string()) });
 
-interface TimedText extends Cue {
-  noSpeechProb?: number;
-  avgLogprob?: number;
+/** A timed word or segment, as the AI SDK's `transcribe()` returns it. */
+export interface TimedWord {
+  text: string;
+  startSecond: number;
+  endSecond: number;
 }
 
 export interface Transcript {
@@ -71,55 +67,47 @@ export interface Transcript {
 
 @Injectable()
 export class TranscriptionService {
-  private readonly openrouter: OpenRouter;
-  private readonly transcriptionModel: string;
+  private readonly model: TranscriptionModelV4;
 
   constructor(
     configService: ConfigService,
     private readonly ai: AiService,
     costs: AiCostTransportService,
   ) {
-    this.openrouter = createOpenRouterClient(
-      configService.getOrThrow<string>('OPENROUTER_API_KEY'),
-      costs.fetch,
-    );
-    this.transcriptionModel = configService.get<string>(
+    const modelId = configService.get<string>(
       'TRANSCRIPTION_MODEL',
       'elevenlabs/scribe-v2',
     );
+    this.model = aiModels(configService).transcription(modelId, {
+      fetch: costs.forModel(modelId, 'SYSTEM', 'TRANSCRIPTION'),
+    });
   }
 
   async transcribe({ audio, speech }: SpeechAudio): Promise<Transcript> {
-    const result = await this.openrouter.stt
-      .createTranscription(
-        {
-          sttRequest: {
-            model: this.transcriptionModel,
-            inputAudio: { data: audio.toString('base64'), format: 'mp3' },
-            responseFormat: 'verbose_json',
-            timestampGranularities: ['word'],
-            prompt: CAPTION_PROMPT,
-            temperature: 0,
-          },
-        },
-        { signal: AbortSignal.timeout(TRANSCRIBE_TIMEOUT_MS) },
-      )
-      .catch((error: unknown) => {
-        throw openRouterFailure('Transcription', error);
-      });
+    const result = await transcribe({
+      model: this.model,
+      audio: new Uint8Array(audio),
+      abortSignal: AbortSignal.timeout(TRANSCRIBE_TIMEOUT_MS),
+      maxRetries: 0,
+    }).catch((error: unknown) => {
+      throw aiFailure('Transcription', error);
+    });
     const audioEnd = speech.reduce(
       (sum, { start, end }) => sum + end - start,
       0,
     );
-    const timed: TimedText[] = result.words?.length
-      ? cuesFromWords(result.words)
-      : (result.segments ?? [{ start: 0, end: audioEnd, text: result.text }]);
+    // Scribe answers word by word (with spacing entries) in `segments`.
+    const words = spokenWords(
+      result.words?.length ? result.words : result.segments,
+    );
+    const timed: Cue[] =
+      words.length > 0
+        ? cuesFromWords(words)
+        : [{ start: 0, end: audioEnd, text: result.text }];
 
     const cues = timed
       .filter(
         (segment) =>
-          (segment.noSpeechProb ?? 0) <= MAX_NO_SPEECH_PROB &&
-          (segment.avgLogprob ?? 0) >= MIN_AVG_LOGPROB &&
           !HALLUCINATIONS.some((pattern) => pattern.test(segment.text)),
       )
       .map((segment) => ({
@@ -143,7 +131,7 @@ export class TranscriptionService {
     });
     if (object.lines.length !== cues.length) {
       throw new ExternalServiceException(
-        'openrouter',
+        aiService(),
         `Translation returned ${object.lines.length} lines for ${cues.length} cues`,
       );
     }
@@ -154,17 +142,22 @@ export class TranscriptionService {
   }
 }
 
-export function cuesFromWords(words: STTWord[]): Cue[] {
+/** The words of a transcript, without the spacing entries some models return. */
+export function spokenWords(words: readonly TimedWord[]): TimedWord[] {
+  return words.filter(({ text }) => text.trim().length > 0);
+}
+
+export function cuesFromWords(words: TimedWord[]): Cue[] {
   const cues: Cue[] = [];
-  let current: STTWord[] = [];
+  let current: TimedWord[] = [];
   const flush = () => {
     const first = current[0];
     const last = current.at(-1);
     if (first && last) {
       cues.push({
-        start: first.start,
-        end: last.end,
-        text: current.map(({ word }) => word).join(' '),
+        start: first.startSecond,
+        end: last.endSecond,
+        text: current.map(({ text }) => text.trim()).join(' '),
       });
     }
     current = [];
@@ -172,12 +165,14 @@ export function cuesFromWords(words: STTWord[]): Cue[] {
   for (const word of words) {
     const previous = current.at(-1);
     const paused =
-      previous !== undefined && word.start - previous.end > CUE_GAP_SEC;
+      previous !== undefined &&
+      word.startSecond - previous.endSecond > CUE_GAP_SEC;
     const tooLong =
-      current[0] !== undefined && word.end - current[0].start > MAX_CUE_SEC;
+      current[0] !== undefined &&
+      word.endSecond - current[0].startSecond > MAX_CUE_SEC;
     if (paused || tooLong) flush();
     current.push(word);
-    if (/[.!?…]$/.test(word.word)) flush();
+    if (/[.!?…]$/.test(word.text.trim())) flush();
   }
   flush();
   return cues;

@@ -32,6 +32,8 @@ export default defineConfig({
       POST_SUMMARIES_ENABLED: 'false',
       RESEND_API_KEY: '',
       OPENROUTER_API_KEY: 'e2e-openrouter-key',
+      AI_GATEWAY_API_KEY: 'e2e-gateway-key',
+      AI_PROVIDER: 'openrouter',
       QDRANT_URL: 'http://localhost:6333',
       STORAGE_ENDPOINT: 'http://localhost:9000',
       STORAGE_PUBLIC_URL: 'http://localhost:9000',
