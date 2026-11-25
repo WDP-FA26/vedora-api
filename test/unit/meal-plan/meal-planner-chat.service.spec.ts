@@ -1157,4 +1157,44 @@ describe('MealPlannerChatService', () => {
     );
     expect(replyText(chunks)).toBe('Mình đã gợi ý thực đơn.');
   });
+
+  it('keeps the full history window in voice mode and refunds quota if thread access fails', async () => {
+    const service = await createService();
+
+    await convertReadableStreamToArray(
+      await service.stream(
+        USER_ID,
+        'Mở thực đơn hôm nay',
+        new AbortController().signal,
+        WEEK,
+        'req-voice-1',
+        'thread-voice-1',
+        { voice: true },
+      ),
+    );
+
+    expect(history.loadContextMessages).toHaveBeenCalledWith(
+      USER_ID,
+      'thread-voice-1',
+      runtimeConfig.PLANNER_CHAT_MAX_MESSAGES,
+    );
+
+    aiUsage.refund.mockClear();
+    history.recordUserMessage.mockClear();
+    history.assertThreadAccess.mockRejectedValueOnce(new Error('not owner'));
+
+    await expect(
+      service.stream(
+        USER_ID,
+        'Mở thực đơn hôm nay',
+        new AbortController().signal,
+        WEEK,
+        'req-voice-2',
+        'thread-foreign',
+        { voice: true },
+      ),
+    ).rejects.toThrow('not owner');
+    expect(aiUsage.refund).toHaveBeenCalledWith(TICKET);
+    expect(history.recordUserMessage).not.toHaveBeenCalled();
+  });
 });

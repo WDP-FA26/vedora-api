@@ -299,6 +299,7 @@ export class MealPlannerChatHistoryService {
     const existing = await this.threads
       .findById(threadId)
       .select('userId')
+      .lean()
       .exec();
     if (existing && existing.userId !== userId) {
       throw new ResourceNotFoundException('NOT_FOUND', 'Chat thread not found');
@@ -515,10 +516,11 @@ export class MealPlannerChatHistoryService {
       .find({ threadId, userId })
       .sort({ sequence: -1, _id: -1 })
       .limit(fetchLimit)
+      .lean()
       .exec();
     const chronological = recentDesc.reverse();
 
-    const nonRefused: MealPlanChatMessage[] = [];
+    const nonRefused: typeof chronological = [];
     for (let index = 0; index < chronological.length; index++) {
       const current = chronological[index];
       const next = chronological[index + 1];

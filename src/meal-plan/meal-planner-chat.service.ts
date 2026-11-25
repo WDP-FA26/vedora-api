@@ -520,10 +520,8 @@ export class MealPlannerChatService {
     if (toolOutput) {
       validatePlannerToolOutput(toolOutput);
     }
-    if (threadId) {
-      await this.history?.assertThreadAccess(userId, threadId);
-    }
     const activeThreadId = threadId ?? randomUUID();
+    const maxHistoryMessages = runtimeConfig.PLANNER_CHAT_MAX_MESSAGES;
     const turnTimeoutMs = voice
       ? Math.min(runtimeConfig.AI_CHAT_TIMEOUT_MS, VOICE_CHAT_TIMEOUT_MS)
       : runtimeConfig.AI_CHAT_TIMEOUT_MS;
@@ -531,29 +529,125 @@ export class MealPlannerChatService {
       abortSignal,
       AbortSignal.timeout(turnTimeoutMs),
     ]);
-    const ticket = await this.usage.consume(userId, AiFeature.MEAL_PLAN_CHAT, {
-      requestId,
-      input: {
-        threadId: threadId ?? null,
-        message,
-        ...(toolOutput ? { toolOutput } : {}),
-      },
-      prompt: message,
-    });
-    if (!ticket)
-      throw new QuotaReachedException(
-        'AI_QUOTA_EXCEEDED',
-        'Your shared AI text allowance is exhausted',
-      );
-    try {
-      const userMessageId = requestId ?? randomUUID();
-      const currentMessage: StoredChatMessage = {
-        id: userMessageId,
-        role: 'user',
-        parts: [{ type: 'text', text: cleanUserText }],
+    const consumeTicket = () =>
+      this.usage.consume(userId, AiFeature.MEAL_PLAN_CHAT, {
+        requestId,
+        input: {
+          threadId: threadId ?? null,
+          message,
+          ...(toolOutput ? { toolOutput } : {}),
+        },
+        prompt: message,
+      });
+    const loadContext = () =>
+      Promise.all([
+        this.dietary.findPlannerContext(userId),
+        this.mealPlan.findForPrompt(userId, weekStart),
+        voice && screen
+          ? this.screenContext(userId, screen)
+          : Promise.resolve(null),
+      ]);
+
+    const userMessageId = requestId ?? randomUUID();
+    const currentMessage: StoredChatMessage = {
+      id: userMessageId,
+      role: 'user',
+      parts: [{ type: 'text', text: cleanUserText }],
+    };
+
+    let ticket: NonNullable<Awaited<ReturnType<AiUsageService['consume']>>>;
+    let voicePrepared: {
+      storedMessages: StoredChatMessage[];
+      context: Awaited<ReturnType<typeof loadContext>>;
+      pendingUserRecord: Promise<void> | undefined;
+    } | null = null;
+
+    if (voice) {
+      // Voice turns run thread access, quota reservation, history read, and
+      // context queries in one parallel round-trip; if any check fails after
+      // quota was reserved, the ticket is refunded before rethrowing.
+      const [accessResult, ticketResult, historyResult, contextResult] =
+        await Promise.allSettled([
+          threadId
+            ? (this.history?.assertThreadAccess(userId, threadId) ??
+              Promise.resolve())
+            : Promise.resolve(),
+          consumeTicket(),
+          this.history?.loadContextMessages(
+            userId,
+            activeThreadId,
+            maxHistoryMessages,
+          ) ?? Promise.resolve<StoredChatMessage[]>([]),
+          loadContext(),
+        ]);
+
+      const reservedTicket =
+        ticketResult.status === 'fulfilled' ? ticketResult.value : null;
+      const refundReserved = async () => {
+        if (reservedTicket) await this.usage.refund(reservedTicket);
       };
+
+      if (accessResult.status === 'rejected') {
+        await refundReserved();
+        throw accessResult.reason;
+      }
+      if (ticketResult.status === 'rejected') {
+        throw ticketResult.reason;
+      }
+      if (!reservedTicket) {
+        throw new QuotaReachedException(
+          'AI_QUOTA_EXCEEDED',
+          'Your shared AI text allowance is exhausted',
+        );
+      }
+      if (historyResult.status === 'rejected') {
+        await refundReserved();
+        throw historyResult.reason;
+      }
+      if (contextResult.status === 'rejected') {
+        await refundReserved();
+        throw contextResult.reason;
+      }
+
+      ticket = reservedTicket;
+      const existing = historyResult.value ?? [];
+      // Write the user message in the background once access + quota passed;
+      // `onEnd` awaits it before saving the assistant reply so order holds.
+      const pendingUserRecord = this.history
+        ?.recordUserMessage(userId, activeThreadId, message, userMessageId)
+        .catch((error: unknown) => {
+          this.logger.warn(
+            `Failed to save user chat message: ${String(error)}`,
+          );
+        });
+      voicePrepared = {
+        storedMessages: existing.some((item) => item.id === userMessageId)
+          ? [...existing]
+          : [...existing, currentMessage],
+        context: contextResult.value,
+        pendingUserRecord,
+      };
+    } else {
+      if (threadId) {
+        await this.history?.assertThreadAccess(userId, threadId);
+      }
+      const reservedTicket = await consumeTicket();
+      if (!reservedTicket) {
+        throw new QuotaReachedException(
+          'AI_QUOTA_EXCEEDED',
+          'Your shared AI text allowance is exhausted',
+        );
+      }
+      ticket = reservedTicket;
+    }
+
+    try {
+      let storedMessages: StoredChatMessage[];
+      let context: Awaited<ReturnType<typeof loadContext>>;
       let pendingUserRecord: Promise<void> | undefined;
-      const loadHistory = async (awaitUserWrite: boolean) => {
+      if (voicePrepared !== null) {
+        ({ storedMessages, context, pendingUserRecord } = voicePrepared);
+      } else {
         if (toolOutput) {
           await this.history?.recordToolOutput(
             userId,
@@ -561,56 +655,24 @@ export class MealPlannerChatService {
             toolOutput,
           );
         }
-        const recordUser = this.history?.recordUserMessage(
-          userId,
-          activeThreadId,
-          message,
-          userMessageId,
-        );
-        const loadMessages = this.history?.loadContextMessages(
-          userId,
-          activeThreadId,
-          runtimeConfig.PLANNER_CHAT_MAX_MESSAGES,
-        );
-        let loaded: StoredChatMessage[] | undefined;
-        if (awaitUserWrite) {
-          [, loaded] = await Promise.all([recordUser, loadMessages]);
-        } else {
-          // Voice turns let the user message write finish in the background
-          // while reads complete and the model starts; `onEnd` awaits it before
-          // saving the assistant reply so thread order stays intact.
-          pendingUserRecord = recordUser?.catch((error: unknown) => {
-            this.logger.warn(
-              `Failed to save user chat message: ${String(error)}`,
-            );
-          });
-          loaded = await loadMessages;
-        }
+        const [, loaded] = await Promise.all([
+          this.history?.recordUserMessage(
+            userId,
+            activeThreadId,
+            message,
+            userMessageId,
+          ),
+          this.history?.loadContextMessages(
+            userId,
+            activeThreadId,
+            maxHistoryMessages,
+          ),
+        ]);
         const existing = loaded ?? [];
-        return existing.some((item) => item.id === userMessageId)
+        storedMessages = existing.some((item) => item.id === userMessageId)
           ? [...existing]
           : [...existing, currentMessage];
-      };
-      const loadContext = () =>
-        Promise.all([
-          this.dietary.findPlannerContext(userId),
-          this.mealPlan.findForPrompt(userId, weekStart),
-          voice && screen
-            ? this.screenContext(userId, screen)
-            : Promise.resolve(null),
-        ]);
 
-      let storedMessages: StoredChatMessage[];
-      let context: Awaited<ReturnType<typeof loadContext>>;
-      if (voice) {
-        // Voice turns skip the extra moderation round-trip, so context queries
-        // can run alongside history loading without adding latency.
-        [storedMessages, context] = await Promise.all([
-          loadHistory(false),
-          loadContext(),
-        ]);
-      } else {
-        storedMessages = await loadHistory(true);
         const { choice: verdict } = await decide(
           this.moderator,
           conversationModerationState(toModerationTurns(storedMessages)),

@@ -3,6 +3,8 @@ import type { MealPlanDto } from '@src/meal-plan/dto/meal-plan.dto.js';
 import {
   DAY_NAMES,
   plannerInstructions,
+  plannerStaticInstructions,
+  plannerVoiceInstructions,
   SECTION_NAMES,
 } from '@src/meal-plan/meal-planner.prompt.js';
 import { PLANNER_REFUSALS } from '@src/meal-plan/meal-planner.refusals.js';
@@ -229,5 +231,16 @@ describe('meal-planner prompt & refusals', () => {
     expect(output).toContain('BMI ~24.2');
     expect(output).toContain('~1470 kcal/ngày');
     expect(output).toContain('giảm 1 kg');
+  });
+
+  it('keeps text-only UI rules out of voice instructions', () => {
+    const textPrompt = plannerStaticInstructions(false);
+    const voicePrompt = plannerVoiceInstructions();
+
+    expect(textPrompt).toContain('Compact Markdown');
+    expect(textPrompt).toContain('clickable choices via askUser');
+    expect(voicePrompt).not.toContain('Compact Markdown');
+    expect(voicePrompt).not.toContain('clickable choices via askUser');
+    expect(voicePrompt).toContain('Voice mode');
   });
 });
