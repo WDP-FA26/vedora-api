@@ -14,8 +14,10 @@ import { undoLastChangeTool } from '@src/meal-plan/tools/undo-last-change.tool.j
 import { updateBodyMetricsTool } from '@src/meal-plan/tools/update-body-metrics.tool.js';
 import {
   bodyMetricsText,
+  setScreenTool,
   showRecipeTool,
 } from '@src/meal-plan/tools/voice-screen.tools.js';
+import { voiceScreenContext } from '@src/meal-plan/meal-planner.prompt.js';
 import { MealPlannerVoiceService } from '@src/meal-plan/voice/meal-planner-voice.service.js';
 import type { DietaryService } from '@src/recipes/dietary.service.js';
 import {
@@ -182,6 +184,40 @@ describe('MealPlannerVoiceService', () => {
     expect(chat.stream.mock.calls[0][6]).toEqual({ voice: true });
     expect(chat.stream.mock.calls[1][6]).toEqual({ voice: true });
   });
+
+  it('passes what the page shows to the planner', async () => {
+    const screen = { weekStart: WEEK, panel: 'bodyMetrics' as const };
+
+    await service().turn(
+      USER_ID,
+      { weekStart: WEEK, threadId: THREAD_ID, message: 'đóng lại đi', screen },
+      new AbortController().signal,
+    );
+
+    expect(chat.stream.mock.calls[0][6]).toEqual({ voice: true, screen });
+  });
+
+  it('reads words spoken during a running turn', async () => {
+    consent = 'progress';
+
+    const action = await service().interruption(
+      { running: 'cập nhật cân nặng 69 ký', utterance: 'xong chưa' },
+      new AbortController().signal,
+    );
+
+    expect(action).toBe('progress');
+  });
+
+  it('supersedes the running turn when the check fails', async () => {
+    failConsent = true;
+
+    const action = await service().interruption(
+      { running: 'đổi món trưa thứ sáu', utterance: 'à không, thứ bảy' },
+      new AbortController().signal,
+    );
+
+    expect(action).toBe('supersede');
+  });
 });
 
 describe('voice tools', () => {
@@ -192,7 +228,120 @@ describe('voice tools', () => {
 
     const output = await toolDef.execute?.({ recipeId: 'nope' }, execOptions);
 
-    expect(output).toEqual({ shown: false, recipeId: 'nope', title: null });
+    expect(output).toEqual({
+      shown: false,
+      recipeId: 'nope',
+      title: null,
+      section: null,
+    });
+  });
+
+  it('setScreen opens a recipe at the section asked for', async () => {
+    const mealPlan = mockDeep<MealPlanService>();
+    mealPlan.recipeInstructions.mockResolvedValue({
+      title: 'Cơm gạo lứt muối mè',
+    } as Awaited<ReturnType<MealPlanService['recipeInstructions']>>);
+    const toolDef = setScreenTool(
+      mealPlan,
+      mockDeep<DietaryService>(),
+      USER_ID,
+      WEEK,
+    );
+
+    const output = await toolDef.execute?.(
+      { view: 'recipe', recipeId: RECIPE_ID, section: 'steps' },
+      execOptions,
+    );
+
+    expect(output).toMatchObject({
+      applied: true,
+      view: 'recipe',
+      recipeId: RECIPE_ID,
+      title: 'Cơm gạo lứt muối mè',
+      section: 'steps',
+    });
+  });
+
+  it('setScreen scrolls the recipe on screen when no id is given', async () => {
+    const mealPlan = mockDeep<MealPlanService>();
+    mealPlan.recipeInstructions.mockResolvedValue({
+      title: 'Cơm gạo lứt muối mè',
+    } as Awaited<ReturnType<MealPlanService['recipeInstructions']>>);
+    const toolDef = setScreenTool(
+      mealPlan,
+      mockDeep<DietaryService>(),
+      USER_ID,
+      WEEK,
+      {
+        weekStart: WEEK,
+        panel: 'recipe',
+        recipeId: RECIPE_ID,
+      },
+    );
+
+    const output = await toolDef.execute?.(
+      { view: 'recipe', section: 'ingredients' },
+      execOptions,
+    );
+
+    expect(mealPlan.recipeInstructions).toHaveBeenCalledWith(
+      USER_ID,
+      RECIPE_ID,
+    );
+    expect(output).toMatchObject({ applied: true, section: 'ingredients' });
+  });
+
+  it('setScreen says what to fix instead of opening a recipe without an id', async () => {
+    const toolDef = setScreenTool(
+      mockDeep<MealPlanService>(),
+      mockDeep<DietaryService>(),
+      USER_ID,
+      WEEK,
+    );
+
+    const output = await toolDef.execute?.({ view: 'recipe' }, execOptions);
+
+    expect(output).toMatchObject({ applied: false, view: 'recipe' });
+    expect(output?.problem).toContain('recipeId');
+  });
+
+  it('setScreen goes back to the calendar on the week shown', async () => {
+    const toolDef = setScreenTool(
+      mockDeep<MealPlanService>(),
+      mockDeep<DietaryService>(),
+      USER_ID,
+      WEEK,
+      { weekStart: '2026-11-30', panel: 'eatingLog' },
+    );
+
+    const output = await toolDef.execute?.(
+      { view: 'calendar', day: Weekday.WED },
+      execOptions,
+    );
+
+    expect(output).toMatchObject({
+      applied: true,
+      view: 'calendar',
+      weekStart: '2026-11-30',
+      day: Weekday.WED,
+    });
+  });
+
+  it('voiceScreenContext names the open recipe and the part shown', () => {
+    const text = voiceScreenContext(
+      {
+        weekStart: WEEK,
+        day: Weekday.FRI,
+        panel: 'recipe',
+        recipeId: RECIPE_ID,
+        recipeSection: 'steps',
+      },
+      'Cơm gạo lứt muối mè',
+    );
+
+    expect(text).toContain('Thứ Sáu');
+    expect(text).toContain('"Cơm gạo lứt muối mè"');
+    expect(text).toContain('phần cách làm');
   });
 
   it('logMeal writes a catalog dish through the meal log service', async () => {

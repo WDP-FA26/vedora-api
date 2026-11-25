@@ -47,7 +47,9 @@ onDelete(MealPlanChatThreadSchema, async (db, ids, session) => {
     .deleteMany({ threadId: { $in: ids } }, { session });
 });
 
-@Schema(collectionSchema('meal_plan_chat_messages'))
+// `minimize: false` keeps empty objects: a tool called without arguments stores
+// `input: {}`, and the AI SDK rejects a history whose tool parts lack `input`.
+@Schema({ ...collectionSchema('meal_plan_chat_messages'), minimize: false })
 export class MealPlanChatMessage extends Identified {
   @Prop({ type: String, default: () => randomUUID() })
   _id!: string;

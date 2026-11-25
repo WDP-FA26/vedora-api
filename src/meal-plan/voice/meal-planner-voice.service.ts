@@ -10,9 +10,11 @@ import { QuotaReachedException } from '../../common/exceptions/quota-reached.exc
 import { AiFeature } from '../../mongo/models.js';
 import { AiUsageService } from '../../subscriptions/ai-usage.service.js';
 import type {
+  MealPlanVoiceInterruptionRequestDto,
   MealPlanVoiceSessionDto,
   MealPlanVoiceTurnRequestDto,
   MealPlanVoiceWebSearchRequestDto,
+  VoiceInterruption,
 } from '../dto/meal-plan-voice.dto.js';
 import {
   MealPlannerChatService,
@@ -22,6 +24,7 @@ import {
   WEB_SEARCH_CONSENT_POLICY,
   type WebSearchConsent,
 } from './web-search-consent.js';
+import { VOICE_INTERRUPTION_POLICY } from './voice-interruption.js';
 
 /** Long enough to open the WebSocket; an open session keeps going after it. */
 const TOKEN_TTL_SECONDS = 60;
@@ -91,6 +94,7 @@ export class MealPlannerVoiceService {
     abortSignal: AbortSignal,
   ): Promise<ReadableStream<UIMessageChunk>> {
     const options: PlannerChatOptions = { voice: true };
+    if (dto.screen) options.screen = dto.screen;
     if (dto.webSearchRequest) {
       const consent = await this.webSearchConsent(
         dto.webSearchRequest,
@@ -116,6 +120,34 @@ export class MealPlannerVoiceService {
       dto.threadId ?? randomUUID(),
       options,
     );
+  }
+
+  /**
+   * What the user's new words mean for the turn still running. Without a reading
+   * the running turn is superseded, as before this check existed: a correction
+   * that is ignored saves data the user did not want.
+   */
+  async interruption(
+    dto: MealPlanVoiceInterruptionRequestDto,
+    abortSignal: AbortSignal,
+  ): Promise<VoiceInterruption> {
+    try {
+      const { choice } = await decide(
+        this.decisionModel,
+        [
+          { role: 'user', text: dto.running },
+          { role: 'assistant', text: 'Mình đang làm, bạn đợi mình chút nhé.' },
+          { role: 'user', text: dto.utterance },
+        ],
+        abortSignal,
+        VOICE_INTERRUPTION_POLICY,
+      );
+      return choice;
+    } catch (error) {
+      if (abortSignal.aborted) throw error;
+      this.logger.warn(`Voice interruption check failed: ${String(error)}`);
+      return 'supersede';
+    }
   }
 
   private async webSearchConsent(

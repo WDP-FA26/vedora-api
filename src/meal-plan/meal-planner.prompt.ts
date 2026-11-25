@@ -3,6 +3,7 @@ import type {
   NutritionProfileDto,
 } from '../recipes/dto/dietary.dto.js';
 import type { MealPlanDto } from './dto/meal-plan.dto.js';
+import type { MealPlanVoiceScreenDto } from './dto/meal-plan-voice.dto.js';
 import { addDays } from './meal-week.js';
 import {
   BmiCategory,
@@ -220,17 +221,75 @@ export function plannerStaticInstructions(allowWebSearch = false): string {
 }
 
 const VOICE_RULES = `Chế độ giọng nói
-Lượt này đến từ trợ lý giọng nói của Vedora. Người dùng đang nói chuyện trực tiếp với một mô hình giọng nói; mô hình đó chuyển yêu cầu cho bạn rồi đọc kết quả của bạn cho người dùng nghe bằng lời của nó. Vì vậy:
-- Tin nhắn của người dùng là bản chép lời nói, có thể sai chính tả, thiếu dấu, câu dở dang hoặc tự sửa ở cuối câu. Hiểu theo ý mới nhất. Khi thiếu một chi tiết cần thiết (bữa nào, ngày nào, món nào), hỏi đúng chi tiết đó để người dùng trả lời ở lượt sau, vì đoán sai sẽ lưu nhầm dữ liệu của họ.
-- Trong cuộc gọi không có nút để bấm, nên bạn không có askUser. Khi cần người dùng chọn, nêu tối đa ba lựa chọn ngắn bằng lời. Xin phép tìm web vẫn bằng requestWebSearch như trong chat; trợ lý giọng nói sẽ hỏi người dùng, và câu trả lời của họ đến ở lượt sau.
-- Người dùng vừa nghe vừa nhìn màn hình. Gọi showRecipe khi nói về một món cụ thể, openEatingLog khi nói về nhật ký ăn uống, showBodyMetrics khi nói về BMI, cân nặng hay định mức kcal, để họ thấy chi tiết mà bạn không phải đọc hết ra.
-- Khi người dùng kể đã ăn gì, ghi bằng logMeal (ngày hôm nay nếu họ không nói ngày khác), rồi openEatingLog.
-- Khi người dùng cho chiều cao, cân nặng, cân nặng mục tiêu, mức vận động hoặc mục tiêu mới, lưu bằng updateBodyMetrics. Một giá trị khác hẳn số đang lưu có thể do chép lời sai, nên hỏi lại trước khi lưu.
-- Khi người dùng muốn hoàn tác hay quay lại thực đơn như trước, gọi undoLastChange; mỗi lần gọi đưa về trước một lần thay đổi.
-- Người dùng có thể ngắt bạn giữa chừng: khi họ nói tiếp, việc bạn đang làm dở bị dừng và những gì đã lưu vẫn giữ nguyên. Nếu lượt trước trong cuộc trò chuyện không có câu trả lời, đọc lại thực đơn (getPlan) trước khi nói phần nào đã lưu.
+Lượt này đến từ một cuộc gọi thoại. Người dùng nói chuyện với một mô hình giọng nói; mô hình đó chuyển lời họ cho bạn và đọc kết quả của bạn bằng giọng của nó. Trong lúc gọi họ thường bận tay (đang nấu, đứng xa điện thoại), nên ngoài việc lên thực đơn, bạn còn là người thao tác màn hình thay họ.
+
+Hiểu lời người dùng
+- Tin nhắn là bản chép lời nói: có thể thiếu dấu, sai chữ, lặp từ, câu dở dang hoặc tự sửa ở cuối câu. Hiểu theo ý sau cùng của họ.
+- Khi thiếu một chi tiết mà đoán sai sẽ lưu nhầm dữ liệu của họ (bữa nào, ngày nào, món nào), hỏi đúng chi tiết đó; họ trả lời ở lượt sau. Một con số khác hẳn số đang lưu, như chiều cao hay cân nặng, có thể do chép lời sai, nên xác nhận lại trước khi lưu.
+- Cuộc gọi không có nút bấm nên bạn không có askUser. Khi cần họ chọn, nêu tối đa ba lựa chọn ngắn bằng lời. Xin phép tìm web vẫn dùng requestWebSearch như trong chat; câu trả lời của họ đến ở lượt sau.
+- Người dùng có thể nói chen khi bạn đang làm. Nếu lời mới sửa hoặc hủy việc đang làm, lượt trước bị dừng giữa chừng và những gì đã lưu vẫn giữ. Khi lượt trước trong lịch sử không có câu trả lời, xem lại dữ liệu (getPlan, getEatingLog) trước khi nói phần nào đã xong.
+
+Màn hình
+- Mục "Màn hình của người dùng" trong ngữ cảnh cho biết họ đang thấy gì lúc nói. Dựa vào đó để hiểu những lời như "món này", "cái đó", "đóng nó đi", "bước tiếp theo".
+- setScreen đưa màn hình về đúng thứ bạn muốn họ thấy. Dùng nó khi điều bạn nói gắn với một thứ nhìn được: công thức đang bàn, ngày hay tuần họ muốn xem, nhật ký sau khi ghi món, bảng chỉ số khi nói về BMI hay cân nặng. Họ đọc chi tiết trên màn hình, nên bạn chỉ cần nói ý chính.
+- Khi họ muốn đóng, tắt hay quay lại mà không nói sang cái gì, đưa về view calendar, vì lịch là màn hình chính của trang.
+- Thay đổi thực đơn tự hiện ngày vừa sửa trên lịch, nên không cần gọi setScreen sau khi sửa thực đơn.
+
+Lưu dữ liệu trong cuộc gọi
+- Món đã ăn: ghi bằng logMeal (hôm nay nếu họ không nói ngày khác), rồi mở nhật ký để họ thấy món vừa ghi.
+- Chiều cao, cân nặng, cân nặng mục tiêu, mức vận động hay mục tiêu mới: lưu bằng updateBodyMetrics.
+- Khi họ muốn hoàn tác hay quay lại thực đơn như trước: undoLastChange; mỗi lần gọi lùi một lần thay đổi.
+
+Kết thúc cuộc gọi
+- Khi người dùng chào tạm biệt hoặc rõ ràng muốn dừng nói chuyện, gọi endCall và trả lời bằng một câu chào ngắn, ấm áp; cuộc gọi tự đóng sau câu đó nên họ không phải bấm nút. Một lời cảm ơn hay một khoảng lặng giữa chừng chưa phải là tạm biệt, nên giữ cuộc gọi khi họ vẫn đang nhờ việc hoặc còn chờ kết quả.
 
 Cách viết kết quả
-Kết quả của bạn sẽ được đọc to, nên viết như lời nói: tiếng Việt, câu văn liền mạch, tối đa ba câu, số làm tròn ("khoảng 450 kcal"). Nêu điều người dùng cần biết, việc đã làm hay chưa làm, và bước tiếp theo nếu có. Ký hiệu, gạch đầu dòng, mã định danh và đường link không đọc thành lời được, nên diễn đạt bằng chữ thay cho chúng. Chỉ nói một việc đã xong khi công cụ đã báo thành công; nếu công cụ lỗi hoặc kết quả chưa rõ, nói thật điều đó và việc người dùng có thể làm tiếp. Những gì đã hiện trên màn hình thì chỉ cần nhắc ý chính.`;
+Kết quả của bạn sẽ được đọc to, nên viết như lời nói: tiếng Việt, câu văn liền mạch, tối đa ba câu, số làm tròn ("khoảng 450 kcal"). Nêu điều người dùng cần biết và việc đã làm hay chưa làm. Chỉ hỏi lại khi thật sự cần họ quyết định; khi việc đã xong thì dừng ở kết quả, không thêm lời mời hay câu hỏi xã giao, vì trong cuộc gọi họ sẽ tự nói tiếp khi cần. Ký hiệu, gạch đầu dòng, mã định danh và đường link không đọc thành lời được, nên diễn đạt bằng chữ thay cho chúng. Chỉ nói một việc đã xong khi công cụ đã báo thành công; nếu công cụ lỗi hoặc kết quả chưa rõ, nói thật điều đó và việc người dùng có thể làm tiếp. Những gì đã hiện trên màn hình thì chỉ cần nhắc ý chính.`;
+
+const SCREEN_PANEL_TEXT = {
+  eatingLog: 'nhật ký ăn uống',
+  bodyMetrics: 'bảng chỉ số cơ thể (BMI, cân nặng, định mức kcal)',
+} as const;
+
+const RECIPE_SECTION_TEXT = {
+  top: 'đầu công thức',
+  ingredients: 'phần nguyên liệu',
+  steps: 'phần cách làm',
+} as const;
+
+/**
+ * What the user sees while speaking, for a voice turn's dynamic context. The
+ * recipe title comes from the catalog, not the browser, so page text never
+ * reaches the prompt.
+ */
+export function voiceScreenContext(
+  screen: MealPlanVoiceScreenDto,
+  recipeTitle: string | null,
+): string {
+  const day = screen.day ? `, đang chọn ${DAY_NAMES[screen.day]}` : '';
+  const lines = [
+    'Màn hình của người dùng lúc họ nói:',
+    `- Lịch đang hiện tuần bắt đầu ${screen.weekStart}${day}.`,
+  ];
+  if (screen.panel === 'recipe' && screen.recipeId) {
+    const title =
+      recipeTitle === null ? 'không còn trong danh mục' : `"${recipeTitle}"`;
+    const section = screen.recipeSection
+      ? `, đang ở ${RECIPE_SECTION_TEXT[screen.recipeSection]}`
+      : '';
+    lines.push(
+      `- Đang mở công thức ${title} (id ${screen.recipeId})${section}.`,
+    );
+  } else if (screen.panel === 'eatingLog') {
+    const date = screen.eatingLogDate ? ` ngày ${screen.eatingLogDate}` : '';
+    lines.push(`- Đang mở ${SCREEN_PANEL_TEXT.eatingLog}${date}.`);
+  } else if (screen.panel === 'bodyMetrics') {
+    lines.push(`- Đang mở ${SCREEN_PANEL_TEXT.bodyMetrics}.`);
+  } else {
+    lines.push('- Không có bảng nào mở, người dùng đang xem lịch.');
+  }
+  return lines.join('\n');
+}
 
 /**
  * Planner rules for a voice turn: the static rules (without web search), then

@@ -48,24 +48,36 @@ Chạy planner ở chế độ voice cho một lượt nói (một delegation c�
 - `message`: lời người dùng đã chép từ transcript (`transcript-fragment` của speaker `user` từ sau delegation trước). Tối đa bằng giới hạn tin nhắn chat.
 - `threadId`: thread chat để lưu lượt này. FE gửi thread đang mở trong khung chat, rồi tải lại thread đó (`GET /meal-plan/chat/threads/:threadId`) để lượt nói hiện ngay trong khung chat. Bỏ trống thì API tạo thread mới.
 - `requestId`: nên dùng delegation id để quota không bị trừ hai lần khi gửi lại.
+- `screen` (tùy chọn, nên gửi): trạng thái trang lúc người dùng nói, để agent hiểu "món này", "đóng nó đi", "bước tiếp theo". `{ weekStart, day?, panel: "none" | "recipe" | "eatingLog" | "bodyMetrics", recipeId?, recipeSection?: "top" | "ingredients" | "steps", eatingLogDate? }`. API tự lấy tên món từ danh mục theo `recipeId`.
 - `webSearchRequest` (tùy chọn): gửi khi lượt trước kết thúc ở `requestWebSearch` (phần tool ở trạng thái `input-available`). API đọc `message` như câu trả lời bằng lời (đồng ý / từ chối / chưa rõ); đồng ý thì lượt này được tìm web, chưa rõ thì `message` được xử lý như một yêu cầu mới.
 
 Đọc stream bằng `parseJsonEventStream` + `readUIMessageStream` của `ai`. Mỗi phần tool chuyển sang `output-available` là một việc đã xong, FE phản chiếu ngay lên màn hình:
 
 | tool | output | FE làm gì |
 | --- | --- | --- |
-| `showRecipe` | `{ shown, recipeId, title }` | mở công thức (trên lịch nếu món có trong tuần, không thì mở sheet riêng) |
-| `openEatingLog` | `{ opened, date }` | mở nhật ký ở ngày `date` (null = hôm nay) |
-| `showBodyMetrics` | `{ shown, heightCm, weightKg, targetWeightKg, bmi, bmiCategory, dailyCalorieTarget }` | mở tab BMI |
+| `endCall` | `{ ended: true }` | người dùng tạm biệt: gửi câu trả lời như mọi lượt, đợi GPT-Live nói xong rồi đóng cuộc gọi |
+| `setScreen` | `{ applied, view, recipeId, title, section, weekStart, day, date, metrics, problem }` | `applied: false` thì không làm gì (`problem` là lý do cho agent). `view: recipe`: mở công thức `recipeId` (trên lịch nếu món có trong tuần, không thì sheet riêng), không hiện ảnh, cuộn tới `section` (`top`, `ingredients`, `steps`). `view: calendar`: đóng mọi panel, chuyển tới tuần `weekStart` và chọn `day` nếu có. `view: eatingLog`: mở nhật ký ở `date` (null = hôm nay). `view: bodyMetrics`: mở tab BMI |
 | `logMeal` | `{ entry }` (như `POST /meal-plan/log`) | làm mới nhật ký, mở ngày `entry.date` |
 | `updateBodyMetrics` | `{ heightCm, weightKg, targetWeightKg, bmi, bmiCategory, dailyCalorieTarget }` | làm mới `/dietary/nutrition`, mở tab BMI |
 | `undoLastChange` | `{ messageId, weeks: [{ weekStart, restored, skipped, droppedDishes }] }` | làm mới thực đơn, chuyển tới ngày vừa khôi phục |
 | `fillSlots`, `editPlan`, `autoBalancePlan`, `verifyMealPlanAllergies` | như chat chữ | làm mới thực đơn |
 | `updatePreferences`, `updateAllergyNote` | như chat chữ | làm mới `/dietary/me` |
 
+Mở một panel (công thức, nhật ký, chỉ số cơ thể) thì FE đóng các panel khác đang mở. Các tool `showRecipe`, `showPlanDay`, `closeScreen`, `openEatingLog`, `showBodyMetrics` của các lượt cũ chỉ còn để đọc lịch sử; lượt mới không gọi chúng nữa.
+
 Phần `text` của tin nhắn cuối là câu trả lời ngắn để GPT-Live diễn đạt lại: gửi bằng `context-append` với `delegationId` của lượt và `providerOptions.openai.channel = "commentary"` (tối đa 500 token mỗi lần). Lượt chạy lâu (trên 6 giây) có thể gửi thêm một câu `commentary` ngắn cho mỗi thay đổi đã lưu.
 
 `undoLastChange` đưa thực đơn về như trước lần thay đổi gần nhất chưa hoàn tác trong thread, không xóa tin nhắn (nút "Quay lại" của chat vẫn dùng được). Chế độ voice không có `askUser`: khi cần người dùng chọn, planner hỏi bằng lời.
+
+## POST /meal-plan/voice/interruptions
+
+Gọi khi người dùng nói tiếp trong lúc một lượt `/turns` còn đang chạy. Body `{ running, utterance }` (yêu cầu đang làm và lời mới), trả `{ action }`:
+
+- `progress`: chỉ hỏi tiến độ hay đồng ý ("xong chưa", "ừ"). Giữ lượt đang chạy, báo GPT-Live là đang làm (`commentary` cho delegation mới).
+- `supersede`: sửa hoặc dừng yêu cầu ("à không, thứ bảy chứ", "thôi dừng"). Hủy lượt đang chạy rồi gửi lời mới thành lượt kế tiếp.
+- `queue`: yêu cầu khác, không đổi việc đang làm. Gửi sau khi lượt đang chạy xong.
+
+Lỗi khi phân loại thì trả `supersede`. Không tính vào quota chat.
 
 **Hủy:** đóng request (abort) khi người dùng nói tiếp hoặc kết thúc cuộc gọi; agent dừng, những gì đã lưu vẫn giữ. FE báo cho GPT-Live bằng `context-append` kênh `thinking` cho delegation cũ.
 

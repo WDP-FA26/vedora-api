@@ -30,6 +30,7 @@ import { searchKnowledgeTool } from '../knowledge/tools/search-knowledge.tool.js
 import { KnowledgeSearchService } from '../knowledge/retrieval/knowledge-search.service.js';
 import { DietaryService } from '../recipes/dietary.service.js';
 import type { PlannerToolOutputDto } from './dto/meal-plan.dto.js';
+import type { MealPlanVoiceScreenDto } from './dto/meal-plan-voice.dto.js';
 import { MealLogService } from './meal-log/meal-log.service.js';
 import { MealPlanService } from './meal-plan.service.js';
 import {
@@ -41,8 +42,12 @@ import {
   plannerDynamicContext,
   plannerStaticInstructions,
   plannerVoiceInstructions,
+  voiceScreenContext,
 } from './meal-planner.prompt.js';
-import { PLANNER_REFUSALS } from './meal-planner.refusals.js';
+import {
+  PLANNER_REFUSALS,
+  VOICE_PLANNER_REFUSALS,
+} from './meal-planner.refusals.js';
 import { editPlanTool } from './tools/edit-plan.tool.js';
 import { verifyMealPlanAllergiesTool } from './tools/allergy-verifier-subagent.tool.js';
 import { askUserTool } from './tools/ask-user.tool.js';
@@ -60,11 +65,11 @@ import { consultNutritionSubagentTool } from './tools/nutrition-subagent.tool.js
 import { searchRecipesTool } from './tools/search-recipes.tool.js';
 import { searchRestaurantDishesTool } from './tools/search-restaurant-dishes.tool.js';
 import { undoLastChangeTool } from './tools/undo-last-change.tool.js';
+import { endCallTool } from './tools/end-call.tool.js';
 import { updateBodyMetricsTool } from './tools/update-body-metrics.tool.js';
 import {
-  openEatingLogTool,
-  showBodyMetricsTool,
-  showRecipeTool,
+  legacyVoiceScreenTools,
+  setScreenTool,
 } from './tools/voice-screen.tools.js';
 import {
   requestWebSearchTool,
@@ -97,6 +102,34 @@ export interface PlannerChatOptions {
    * consent works as in the text chat, through `requestWebSearch`.
    */
   voice?: boolean;
+  /** Voice only: what the page shows while the user speaks. */
+  screen?: MealPlanVoiceScreenDto;
+}
+
+/** Tool states in which the AI SDK requires the call's `input`. */
+const STATES_WITH_INPUT = new Set([
+  'input-available',
+  'output-available',
+  'output-error',
+]);
+
+/**
+ * Restores `input: {}` on tool calls made without arguments. Messages saved before
+ * the schema kept empty objects lost it, and validation then dropped the whole
+ * history for every later turn of the thread.
+ */
+function withToolInputs(message: StoredChatMessage): StoredChatMessage {
+  const parts = message.parts.map((part) => {
+    if (typeof part.type !== 'string' || !part.type.startsWith('tool-')) {
+      return part;
+    }
+    if (part.input !== undefined) return part;
+    if (typeof part.state !== 'string' || !STATES_WITH_INPUT.has(part.state)) {
+      return part;
+    }
+    return { ...part, input: {} };
+  });
+  return { ...message, parts };
 }
 
 function stripPlannerTags(text: string): string {
@@ -209,17 +242,42 @@ export class MealPlannerChatService {
    * Tools only voice turns get. Text turns still know their definitions, so a
    * thread that mixed voice and text validates against either.
    */
-  private voiceTools(userId: string, threadId: string): ToolSet {
+  private voiceTools(
+    userId: string,
+    threadId: string,
+    toolWeek: string,
+    screen?: MealPlanVoiceScreenDto,
+  ): ToolSet {
     return {
-      showRecipe: showRecipeTool(this.mealPlan, userId),
-      openEatingLog: openEatingLogTool(),
-      showBodyMetrics: showBodyMetricsTool(this.dietary, userId),
+      setScreen: setScreenTool(
+        this.mealPlan,
+        this.dietary,
+        userId,
+        toolWeek,
+        screen,
+      ),
+      endCall: endCallTool(),
       updateBodyMetrics: updateBodyMetricsTool(this.dietary, userId),
       ...(this.mealLog ? { logMeal: logMealTool(this.mealLog, userId) } : {}),
       ...(this.history
         ? { undoLastChange: undoLastChangeTool(this.history, userId, threadId) }
         : {}),
     };
+  }
+
+  /** The screen section of a voice turn's context, with the open recipe's catalog title. */
+  private async screenContext(
+    userId: string,
+    screen: MealPlanVoiceScreenDto,
+  ): Promise<string> {
+    if (screen.panel !== 'recipe' || !screen.recipeId) {
+      return voiceScreenContext(screen, null);
+    }
+    const recipe = await this.mealPlan.recipeInstructions(
+      userId,
+      screen.recipeId,
+    );
+    return voiceScreenContext(screen, recipe?.title ?? null);
   }
 
   /**
@@ -233,7 +291,10 @@ export class MealPlannerChatService {
     tools: ToolSet,
   ): Promise<UIMessage[]> {
     try {
-      return await validateUIMessages({ messages, tools });
+      return await validateUIMessages({
+        messages: messages.map(withToolInputs),
+        tools,
+      });
     } catch (error) {
       if (!TypeValidationError.isInstance(error)) throw error;
       this.logger.warn(
@@ -254,6 +315,7 @@ export class MealPlannerChatService {
       allowWebSearch = false,
       toolOutput,
       voice = false,
+      screen,
     }: PlannerChatOptions = {},
   ) {
     const cleanUserText = stripPlannerTags(message);
@@ -342,7 +404,11 @@ export class MealPlannerChatService {
           metadata: { refused: true },
         });
         await this.usage.refund(ticket);
-        return cannedReply(PLANNER_REFUSALS[verdict], assistantMessageId);
+        // The chat keeps the user-facing refusal; a voice turn hands GPT-Live the fact instead.
+        const spoken = voice
+          ? (VOICE_PLANNER_REFUSALS[verdict] ?? PLANNER_REFUSALS[verdict])
+          : PLANNER_REFUSALS[verdict];
+        return cannedReply(spoken, assistantMessageId);
       }
 
       const [restrictions, plan, nutrition] = await Promise.all([
@@ -372,11 +438,15 @@ export class MealPlannerChatService {
         if (index >= 0) avoidedTerms.splice(index, 1);
         if (note) avoidedTerms.push(note);
       };
-      const dynamicContext = plannerDynamicContext(
+      const plannerContext = plannerDynamicContext(
         restrictions,
         plan,
         nutrition,
       );
+      const dynamicContext =
+        voice && screen
+          ? `${plannerContext}\n\n${await this.screenContext(userId, screen)}`
+          : plannerContext;
       const agentTools: ToolSet = {
         searchKnowledge: searchKnowledgeTool(this.knowledge),
         searchRecipes: searchRecipesTool(this.mealPlan, userId),
@@ -425,7 +495,10 @@ export class MealPlannerChatService {
       if (voice) {
         // Nobody can tap an option mid-call, so choices are asked out loud.
         delete agentTools.askUser;
-        Object.assign(agentTools, this.voiceTools(userId, activeThreadId));
+        Object.assign(
+          agentTools,
+          this.voiceTools(userId, activeThreadId, toolWeek, screen),
+        );
       }
       const agent = new ToolLoopAgent({
         model: this.model,
@@ -450,7 +523,13 @@ export class MealPlannerChatService {
       });
 
       const conversionTools = safeConversionTools({
-        ...this.voiceTools(userId, activeThreadId),
+        ...legacyVoiceScreenTools(
+          this.mealPlan,
+          this.dietary,
+          userId,
+          toolWeek,
+        ),
+        ...this.voiceTools(userId, activeThreadId, toolWeek, screen),
         ...agentTools,
         askUser: askUserTool(),
         requestWebSearch: requestWebSearchTool(),

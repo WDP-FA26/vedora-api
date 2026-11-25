@@ -427,9 +427,8 @@ describe('MealPlannerChatService', () => {
       expect.arrayContaining([
         'searchRecipes',
         'fillSlots',
-        'showRecipe',
-        'openEatingLog',
-        'showBodyMetrics',
+        'setScreen',
+        'endCall',
         'updateBodyMetrics',
         'undoLastChange',
       ]),
