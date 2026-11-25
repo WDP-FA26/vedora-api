@@ -16,8 +16,18 @@ export function undoLastChangeTool(
   return tool({
     description:
       'Undo the newest change you saved to the plan in this conversation (dishes filled, swapped, balanced or removed), putting those days back as they were. Each call undoes one earlier change. Use it when the user asks to undo, go back, or cancel a change already made. It does not touch the food diary or body metrics.',
-    inputSchema: z.object({}),
-    execute: () => history.undoLatestChange(userId, threadId),
+    inputSchema: z.object({
+      done: z
+        .boolean()
+        .optional()
+        .describe(
+          'Set to true when the user only asked to undo and needs no further advice',
+        ),
+    }),
+    execute: async (input) => {
+      const result = await history.undoLatestChange(userId, threadId);
+      return input.done === true ? { ...result, done: true } : result;
+    },
     toModelOutput: ({ output }) => {
       if (output.messageId === null || output.weeks.length === 0) {
         return {

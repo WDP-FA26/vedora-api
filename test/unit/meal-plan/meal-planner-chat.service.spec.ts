@@ -525,6 +525,58 @@ describe('MealPlannerChatService', () => {
       ),
     );
     expect(model.doStreamCalls).toHaveLength(1);
+
+    model.doStreamCalls.length = 0;
+    dietary.saveNutrition.mockResolvedValue({
+      heightCm: 165,
+      weightKg: 60,
+      targetWeightKg: null,
+      birthYear: null,
+      biologicalSex: null,
+      activityLevel: null,
+      nutritionGoal: null,
+      bmi: 22,
+      bmiCategory: null,
+      suggestedGoal: null,
+      effectiveGoal: null,
+      idealWeightMinKg: null,
+      idealWeightMaxKg: null,
+      bmr: null,
+      tdee: null,
+      dailyCalorieTarget: 1800,
+      dailyCalorieMin: null,
+      dailyCalorieMax: null,
+      safetyNote: null,
+      history: [],
+    });
+    steps = [
+      [
+        {
+          type: 'tool-call',
+          toolCallId: 'call-metrics',
+          toolName: 'updateBodyMetrics',
+          input: JSON.stringify({ weightKg: 60, done: true }),
+        },
+        {
+          type: 'finish',
+          finishReason: { unified: 'tool-calls', raw: undefined },
+          usage,
+        },
+      ],
+    ];
+
+    await convertReadableStreamToArray(
+      await service.stream(
+        USER_ID,
+        'Cân nặng mới của mình là 60 ký',
+        new AbortController().signal,
+        WEEK,
+        undefined,
+        undefined,
+        { voice: true },
+      ),
+    );
+    expect(model.doStreamCalls).toHaveLength(1);
   });
 
   it('skips the moderation decision check in voice mode', async () => {

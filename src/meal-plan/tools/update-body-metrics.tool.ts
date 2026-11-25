@@ -20,9 +20,20 @@ export function updateBodyMetricsTool(dietary: DietaryService, userId: string) {
         targetWeightKg: z.number().min(25).max(300).optional(),
         activityLevel: z.enum(ActivityLevel).optional(),
         nutritionGoal: z.enum(NutritionGoal).optional(),
+        done: z
+          .boolean()
+          .optional()
+          .describe(
+            'Set to true when the user only asked to save these metrics and needs no further advice',
+          ),
       })
       .refine(
-        (input) => Object.values(input).some((value) => value !== undefined),
+        (input) =>
+          input.heightCm !== undefined ||
+          input.weightKg !== undefined ||
+          input.targetWeightKg !== undefined ||
+          input.activityLevel !== undefined ||
+          input.nutritionGoal !== undefined,
         {
           message: 'Send at least one field',
         },
@@ -42,6 +53,7 @@ export function updateBodyMetricsTool(dietary: DietaryService, userId: string) {
         bmi: profile.bmi,
         bmiCategory: profile.bmiCategory,
         dailyCalorieTarget: profile.dailyCalorieTarget,
+        ...(input.done === true ? { done: true } : {}),
       };
     },
     toModelOutput: ({ output }) => ({

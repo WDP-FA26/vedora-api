@@ -139,31 +139,51 @@ function stripPlannerTags(text: string): string {
   return text.replace(/<\/?(?:planner_context|system-reminder)\b[^>]*>?/gi, '');
 }
 
-function isQuickSetScreenResult(output: unknown): boolean {
+const QUICK_WRITE_TOOLS = new Set([
+  'logMeal',
+  'updateBodyMetrics',
+  'undoLastChange',
+]);
+
+function hasDoneFlag(output: unknown): boolean {
   return (
     typeof output === 'object' &&
     output !== null &&
-    'applied' in output &&
-    output.applied === true &&
     'done' in output &&
     output.done === true
   );
 }
 
-/** Ends a voice turn right after step 1 for `endCall` or a pure `setScreen(done: true)`. */
+function isQuickSetScreenResult(output: unknown): boolean {
+  return (
+    hasDoneFlag(output) &&
+    typeof output === 'object' &&
+    output !== null &&
+    'applied' in output &&
+    output.applied === true
+  );
+}
+
+function isQuickVoiceToolResult(toolName: string, output: unknown): boolean {
+  if (toolName === 'endCall') return true;
+  if (toolName === 'setScreen') return isQuickSetScreenResult(output);
+  if (QUICK_WRITE_TOOLS.has(toolName)) return hasDoneFlag(output);
+  return false;
+}
+
+/**
+ * Ends a voice turn right after step 1 when it only ran `endCall` or quick
+ * screen/write tools marked `done: true` (the frontend speaks the factual summary).
+ */
 const voiceQuickStop: StopCondition<ToolSet> = ({ steps }) => {
   const latest = steps[steps.length - 1];
   if (!latest || latest.toolResults.length === 0) return false;
   if (latest.toolResults.some((item) => item.toolName === 'endCall')) {
     return true;
   }
-  if (latest.toolResults.length === 1) {
-    const [only] = latest.toolResults;
-    return (
-      only.toolName === 'setScreen' && isQuickSetScreenResult(only.output)
-    );
-  }
-  return false;
+  return latest.toolResults.every((item) =>
+    isQuickVoiceToolResult(item.toolName, item.output),
+  );
 };
 
 /**

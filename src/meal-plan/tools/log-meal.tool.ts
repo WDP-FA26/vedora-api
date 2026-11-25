@@ -49,6 +49,12 @@ export function logMealTool(mealLog: MealLogService, userId: string) {
           .max(MEAL_LOG_MAX_CALORIES_PER_SERVING)
           .optional()
           .describe('kcal per serving, only when the user said it'),
+        done: z
+          .boolean()
+          .optional()
+          .describe(
+            'Set to true when the user only asked to log this meal and needs no further advice',
+          ),
       })
       .refine(
         (input) =>
@@ -65,7 +71,7 @@ export function logMealTool(mealLog: MealLogService, userId: string) {
         caloriesPerServing: input.caloriesPerServing,
       };
       const entry = await mealLog.create(userId, dto);
-      return { entry };
+      return input.done === true ? { entry, done: true } : { entry };
     },
     toModelOutput: ({ output }) => {
       const { entry } = output;
