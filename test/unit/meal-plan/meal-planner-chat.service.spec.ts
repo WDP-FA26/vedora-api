@@ -73,6 +73,13 @@ let rateLimitModeration = false;
 let streamError: Error | null = null;
 
 const model = new MockLanguageModelV4({
+  doGenerate: () =>
+    Promise.resolve({
+      content: [{ type: 'text', text: 'OK' }],
+      finishReason: { unified: 'stop', raw: undefined },
+      usage,
+      warnings: [],
+    }),
   doStream: () =>
     Promise.resolve({
       stream: simulateReadableStream({
@@ -537,6 +544,27 @@ describe('MealPlannerChatService', () => {
     );
     expect(chunks.some((chunk) => chunk.type === 'text-delta')).toBe(true);
     expect(model.doStreamCalls).toHaveLength(1);
+  });
+
+  it('warms the 1h voice prompt cache once per cooldown window with no tool execution', async () => {
+    model.doGenerateCalls.length = 0;
+    const service = await createService();
+
+    await service.warmVoiceCache(USER_ID, 'thread-warm');
+    await service.warmVoiceCache(USER_ID, 'thread-warm');
+
+    expect(model.doGenerateCalls).toHaveLength(1);
+    const call = model.doGenerateCalls[0];
+    expect(call.toolChoice).toEqual({ type: 'none' });
+    const [system] = call.prompt;
+    expect(system).toMatchObject({ role: 'system' });
+    expect(system.providerOptions?.openrouter?.cacheControl).toEqual({
+      type: 'ephemeral',
+      ttl: '1h',
+    });
+    expect(call.tools?.map((tool) => tool.name)).toEqual(
+      expect.arrayContaining(['searchRecipes', 'setScreen', 'endCall']),
+    );
   });
 
   it('loads voice context concurrently with history recording', async () => {

@@ -4,6 +4,7 @@ import { runtimeConfig } from '../config/runtime-config.js';
 import { InjectModel } from '@nestjs/ai';
 import {
   convertToModelMessages,
+  generateText,
   isStepCount,
   isTextUIPart,
   type LanguageModel,
@@ -35,6 +36,7 @@ import type { PlannerToolOutputDto } from './dto/meal-plan.dto.js';
 import type { MealPlanVoiceScreenDto } from './dto/meal-plan-voice.dto.js';
 import { MealLogService } from './meal-log/meal-log.service.js';
 import { MealPlanService } from './meal-plan.service.js';
+import { currentMealWeek } from './meal-week.js';
 import {
   MealPlannerChatHistoryService,
   type StoredChatMessage,
@@ -81,6 +83,9 @@ import { RestaurantMenuService } from '../workspaces/restaurant-menu.service.js'
 
 const MAX_STEPS = runtimeConfig.PLANNER_CHAT_MAX_STEPS;
 const SEARCH_TIMEOUT_MS = runtimeConfig.AI_KNOWLEDGE_TOOL_TIMEOUT_MS;
+const VOICE_CACHE_WARMUP_COOLDOWN_MS = 2 * 60 * 1000;
+const VOICE_CACHE_WARMUP_TIMEOUT_MS = 10_000;
+const VOICE_CACHE_WARMUP_MAX_ENTRIES = 1_000;
 
 /** Added on the last step, when tools are off, so the turn ends with a handover instead of a cut. */
 const LAST_STEP_NOTE = `
@@ -247,6 +252,7 @@ function safeConversionTools(tools: ToolSet): ToolSet {
 @Injectable()
 export class MealPlannerChatService {
   private readonly logger = new Logger(MealPlannerChatService.name);
+  private readonly warmedVoiceSessions = new Map<string, number>();
 
   constructor(
     @Inject(MODERATION_MODEL)
@@ -260,6 +266,147 @@ export class MealPlannerChatService {
     @Optional() private readonly restaurantMenu?: RestaurantMenuService,
     @Optional() private readonly mealLog?: MealLogService,
   ) {}
+
+  /**
+   * Builds the exact tool set for a planner turn (shared between live turns and
+   * voice prompt-cache warm-up so the tool prefix matches byte-for-byte).
+   */
+  private buildAgentTools({
+    userId,
+    threadId,
+    toolWeek,
+    voice,
+    allowWebSearch,
+    screen,
+    memory,
+    nutrition,
+    allergyLines,
+    allergyKeywords,
+    onAllergiesSaved,
+  }: {
+    userId: string;
+    threadId: string;
+    toolWeek: string;
+    voice: boolean;
+    allowWebSearch: boolean;
+    screen?: MealPlanVoiceScreenDto;
+    memory: { allergies: string[]; preferences: string[] };
+    nutrition: Awaited<ReturnType<DietaryService['findNutrition']>> | null;
+    allergyLines: string[];
+    allergyKeywords: string[];
+    onAllergiesSaved: (allergies: string[]) => void;
+  }): ToolSet {
+    const agentTools: ToolSet = {
+      searchKnowledge: searchKnowledgeTool(this.knowledge),
+      searchRecipes: searchRecipesTool(this.mealPlan, userId),
+      getRecipe: getRecipeTool(this.mealPlan, userId),
+      getPlan: getPlanTool(this.mealPlan, userId, toolWeek),
+      fillSlots: fillSlotsTool(this.mealPlan, userId, toolWeek),
+      autoBalancePlan: autoBalancePlanTool(this.mealPlan, userId, toolWeek),
+      editPlan: editPlanTool(this.mealPlan, userId, toolWeek),
+      askUser: askUserTool(),
+      updateMemory: updateMemoryTool(this.dietary, userId, onAllergiesSaved),
+      consultNutritionSubagent: consultNutritionSubagentTool(
+        this.model,
+        this.mealPlan,
+        this.knowledge,
+        userId,
+        nutrition,
+        allergyLines,
+      ),
+      verifyMealPlanAllergies: verifyMealPlanAllergiesTool(
+        this.model,
+        this.mealPlan,
+        userId,
+        toolWeek,
+        memory,
+      ),
+      ...(this.restaurantMenu
+        ? {
+            searchRestaurantDishes: searchRestaurantDishesTool(
+              this.restaurantMenu,
+              allergyKeywords,
+            ),
+          }
+        : {}),
+      ...(this.mealLog
+        ? {
+            getEatingLog: getEatingLogTool(this.mealLog, userId, toolWeek),
+          }
+        : {}),
+      ...(voice ? {} : webTools(allowWebSearch)),
+    };
+    if (voice) {
+      // Nobody can tap an option mid-call, so choices are asked out loud.
+      delete agentTools.askUser;
+      Object.assign(
+        agentTools,
+        this.voiceTools(userId, threadId, toolWeek, screen),
+      );
+    }
+    return agentTools;
+  }
+
+  /**
+   * Fires a tiny no-tool call with the exact voice tools + system prompt while
+   * the browser acquires the mic and GPT-Live greets the user, so the first
+   * spoken turn hits a warm 1h prompt cache and sticky session route.
+   */
+  async warmVoiceCache(userId: string, threadId?: string): Promise<void> {
+    const key = PromptCache.sessionId('vedora-planner', userId, threadId);
+    const now = Date.now();
+    const lastWarmed = this.warmedVoiceSessions.get(key);
+    if (
+      lastWarmed !== undefined &&
+      now - lastWarmed < VOICE_CACHE_WARMUP_COOLDOWN_MS
+    ) {
+      return;
+    }
+    if (this.warmedVoiceSessions.size >= VOICE_CACHE_WARMUP_MAX_ENTRIES) {
+      this.warmedVoiceSessions.clear();
+    }
+    this.warmedVoiceSessions.set(key, now);
+
+    const tools = this.buildAgentTools({
+      userId,
+      threadId: threadId ?? 'warmup',
+      toolWeek: currentMealWeek().weekStart,
+      voice: true,
+      allowWebSearch: false,
+      memory: { allergies: [], preferences: [] },
+      nutrition: null,
+      allergyLines: [],
+      allergyKeywords: [],
+      onAllergiesSaved: () => undefined,
+    });
+    const { instructions, ...callOptions } = PromptCache.agent({
+      session: 'vedora-planner',
+      scope: [userId, threadId],
+      instructions: plannerVoiceInstructions(),
+      effort: 'medium',
+      systemTtl: '1h',
+    });
+
+    try {
+      await generateText({
+        model: this.model,
+        system: instructions,
+        ...callOptions,
+        tools,
+        toolChoice: 'none',
+        maxOutputTokens: 64,
+        messages: [{ role: 'user', content: 'ping' }],
+        abortSignal: AbortSignal.timeout(VOICE_CACHE_WARMUP_TIMEOUT_MS),
+      });
+    } catch (error) {
+      this.warmedVoiceSessions.delete(key);
+      this.logger.warn(
+        `Voice prompt cache warm-up failed: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+    }
+  }
 
   /**
    * Tools only voice turns get. Text turns still know their definitions, so a
@@ -495,54 +642,19 @@ export class MealPlannerChatService {
       const dynamicContext = screenText
         ? `${plannerContext}\n\n${screenText}`
         : plannerContext;
-      const agentTools: ToolSet = {
-        searchKnowledge: searchKnowledgeTool(this.knowledge),
-        searchRecipes: searchRecipesTool(this.mealPlan, userId),
-        getRecipe: getRecipeTool(this.mealPlan, userId),
-        getPlan: getPlanTool(this.mealPlan, userId, toolWeek),
-        fillSlots: fillSlotsTool(this.mealPlan, userId, toolWeek),
-        autoBalancePlan: autoBalancePlanTool(this.mealPlan, userId, toolWeek),
-        editPlan: editPlanTool(this.mealPlan, userId, toolWeek),
-        askUser: askUserTool(),
-        updateMemory: updateMemoryTool(this.dietary, userId, onAllergiesSaved),
-        consultNutritionSubagent: consultNutritionSubagentTool(
-          this.model,
-          this.mealPlan,
-          this.knowledge,
-          userId,
-          nutrition,
-          allergyLines,
-        ),
-        verifyMealPlanAllergies: verifyMealPlanAllergiesTool(
-          this.model,
-          this.mealPlan,
-          userId,
-          toolWeek,
-          memory,
-        ),
-        ...(this.restaurantMenu
-          ? {
-              searchRestaurantDishes: searchRestaurantDishesTool(
-                this.restaurantMenu,
-                allergyKeywords,
-              ),
-            }
-          : {}),
-        ...(this.mealLog
-          ? {
-              getEatingLog: getEatingLogTool(this.mealLog, userId, toolWeek),
-            }
-          : {}),
-        ...(voice ? {} : webTools(allowWebSearch)),
-      };
-      if (voice) {
-        // Nobody can tap an option mid-call, so choices are asked out loud.
-        delete agentTools.askUser;
-        Object.assign(
-          agentTools,
-          this.voiceTools(userId, activeThreadId, toolWeek, screen),
-        );
-      }
+      const agentTools = this.buildAgentTools({
+        userId,
+        threadId: activeThreadId,
+        toolWeek,
+        voice,
+        allowWebSearch,
+        screen,
+        memory,
+        nutrition,
+        allergyLines,
+        allergyKeywords,
+        onAllergiesSaved,
+      });
       const agent = new ToolLoopAgent({
         model: this.model,
         ...PromptCache.agent({

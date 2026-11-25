@@ -16,7 +16,7 @@ Cấu hình API: `AI_GATEWAY_API_KEY` (để trống thì `/session` trả 503) 
 
 ## POST /meal-plan/voice/session
 
-Cấp token ngắn hạn (`vcst_…`, 60 giây để mở WebSocket; phiên đã mở không bị cắt khi token hết hạn). Cần Bearer token, có rate limit theo user.
+Cấp token ngắn hạn (`vcst_…`, 60 giây để mở WebSocket; phiên đã mở không bị cắt khi token hết hạn). Cần Bearer token, có rate limit theo user. Body tùy chọn `{ "threadId": "…" }` để API bắn ngầm warm-up prompt cache (1h TTL + sticky session) cho planner trong lúc trình duyệt mở mic và GPT-Live chào người dùng.
 
 ```json
 {

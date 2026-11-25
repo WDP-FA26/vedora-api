@@ -51,7 +51,10 @@ export class MealPlannerVoiceService {
    * left gets no session: the call would connect and then fail on every turn.
    * Admins are never limited, as in the text chat.
    */
-  async createSession(userId: string): Promise<MealPlanVoiceSessionDto> {
+  async createSession(
+    userId: string,
+    threadId?: string,
+  ): Promise<MealPlanVoiceSessionDto> {
     if (!this.gateway) {
       throw new FeatureUnavailableException(
         'SERVICE_UNAVAILABLE',
@@ -68,6 +71,9 @@ export class MealPlannerVoiceService {
         'Your shared AI text allowance is exhausted',
       );
     }
+    // Warm the planner's static voice prefix in the background while the
+    // token is minted and GPT-Live connects & greets the user.
+    void this.chat.warmVoiceCache(userId, threadId);
     const { token, url, expiresAt } =
       await this.gateway.experimental_realtime.getToken({
         model: this.model,

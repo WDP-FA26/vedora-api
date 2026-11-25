@@ -27,6 +27,7 @@ import {
   MealPlanVoiceInterruptionDto,
   MealPlanVoiceInterruptionRequestDto,
   MealPlanVoiceSessionDto,
+  MealPlanVoiceSessionRequestDto,
   MealPlanVoiceTurnRequestDto,
 } from '../dto/meal-plan-voice.dto.js';
 import { MealPlannerVoiceService } from './meal-planner-voice.service.js';
@@ -61,8 +62,9 @@ export class MealPlannerVoiceController {
   })
   createSession(
     @Req() request: AuthenticatedRequest,
+    @Body() dto?: MealPlanVoiceSessionRequestDto,
   ): Promise<MealPlanVoiceSessionDto> {
-    return this.voice.createSession(request.user.sub);
+    return this.voice.createSession(request.user.sub, dto?.threadId);
   }
 
   @Post('interruptions')

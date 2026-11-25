@@ -14,6 +14,17 @@ import { Weekday } from '../../mongo/models.js';
 import { MAX_PLANNER_MESSAGE_LENGTH, WEEKDAYS } from './meal-plan.dto.js';
 import { WeekStart } from './week-start.js';
 
+export class MealPlanVoiceSessionRequestDto {
+  @ApiPropertyOptional({
+    format: 'uuid',
+    description:
+      'Chat thread that upcoming voice turns will use; passed to sticky prompt-cache warm-up.',
+  })
+  @IsOptional()
+  @IsUUID('4')
+  threadId?: string;
+}
+
 export class MealPlanVoiceSessionDto {
   @ApiProperty({
     description:
