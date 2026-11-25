@@ -27,7 +27,7 @@ const OCR_CONCURRENCY = runtimeConfig.KNOWLEDGE_OCR_CONCURRENCY;
 const OCR_MAX_OUTPUT_TOKENS = runtimeConfig.KNOWLEDGE_OCR_MAX_OUTPUT_TOKENS;
 
 const OCR_INSTRUCTIONS =
-  'Transcribe every piece of text on this PDF page exactly as written, in reading order, as Markdown: headings as headings, lists as lists, tables as Markdown tables. Do not translate, summarize, correct or describe pictures. Output only the page text; output nothing if the page has no text.';
+  'Transcribe every piece of text on this PDF page exactly as written, in reading order, as Markdown: headings as headings, lists as lists, tables as Markdown tables. Use plain Unicode symbols (e.g. ≥, ≤, μg, α) instead of LaTeX math wrappers. Do not translate, summarize, correct, describe images/figures/charts/logos/blank areas, or emit image placeholders (such as ![...] or [Image: ...]); keep only actual printed text and captions. Output only the page text; output nothing if the page has no text.';
 
 @Injectable()
 export class KnowledgeModelsService {
