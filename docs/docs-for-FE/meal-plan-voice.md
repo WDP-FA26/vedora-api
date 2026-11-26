@@ -48,31 +48,25 @@ Chạy planner ở chế độ voice cho một lượt nói (một delegation c�
 - `threadId`: thread chat để lưu lượt này. FE gửi thread đang mở trong khung chat, rồi tải lại thread đó (`GET /meal-plan/chat/threads/:threadId`) để lượt nói hiện ngay trong khung chat. Bỏ trống thì API tạo thread mới.
 - `requestId`: nên dùng delegation id để quota không bị trừ hai lần khi gửi lại.
 - `screen` (tùy chọn, nên gửi): trạng thái trang lúc người dùng nói, để agent hiểu "món này", "đóng nó đi", "bước tiếp theo", "cuộn xuống nữa". `{ weekStart, day?, panel: "none" | "recipe" | "eatingLog" | "bodyMetrics", recipeId?, recipeSection?: "top" | "ingredients" | "steps", recipeStep?: number, eatingLogDate?, scrollState?: { percent: number, atTop: boolean, atBottom: boolean } }`. API tự lấy tên món từ danh mục theo `recipeId`.
-- Tìm web: tắt ở chế độ voice để giữ độ trễ thấp (không gọi `webSearch` hay `requestWebSearch`). `webSearchRequest` cũ vẫn được nhận nhưng bị bỏ qua.
+- Tìm web: tắt ở chế độ voice để giữ độ trễ thấp (không gọi `webSearch` hay `requestWebSearch`).
 
-Đọc stream bằng `parseJsonEventStream` + `readUIMessageStream` của `ai`. Mỗi phần tool chuyển sang `output-available` là một việc đã xong, FE phản chiếu ngay lên màn hình:
+Đọc stream bằng `parseJsonEventStream` của `ai` (`uiMessageChunkSchema`). Ngoài các chunk tiêu chuẩn (`text-delta`, `finish`, `error`), API phát kèm các data part transient (`transient: true`, không lưu vào lịch sử chat) ngay khi tool chạy xong để FE không phải mirror schema output của tool:
 
-| tool | output | FE làm gì |
+| data chunk | payload | FE làm gì |
 | --- | --- | --- |
-| `endCall` | `{ ended: true }` | người dùng tạm biệt: agent có thể dừng ngay sau bước tool (nếu `text` rỗng FE tự tạo lời nhắc chào tạm biệt), đợi GPT-Live nói xong rồi đóng cuộc gọi |
-| `setScreen` | `{ applied, view, recipeId, title, section, step, scroll, weekStart, day, date, metrics, problem, done? }` | `applied: false` thì không làm gì (`problem` là lý do cho agent). `view: recipe`: mở công thức `recipeId` (hoặc tra trực tiếp bằng `query`), không hiện ảnh, cuộn tới `step` (bước 1-based, có highlight) hoặc `section` (`top`, `ingredients`, `steps`). `view: calendar`: đóng mọi panel, chuyển tới tuần `weekStart` và chọn `day` nếu có. `view: eatingLog`: mở nhật ký ở `date` (null = hôm nay). `view: bodyMetrics`: mở tab BMI. `scroll` (`up`, `down`, `top`, `bottom`): cuộn mượt nội dung của view đang active. Khi `done: true` agent có thể dừng sau bước tool và FE tự tóm tắt ngắn từ `output` nếu `text` rỗng |
-| `logMeal` | `{ entry }` (như `POST /meal-plan/log`) | làm mới nhật ký, mở ngày `entry.date` |
-| `updateBodyMetrics` | `{ heightCm, weightKg, targetWeightKg, bmi, bmiCategory, dailyCalorieTarget }` | làm mới `/dietary/nutrition`, mở tab BMI |
-| `undoLastChange` | `{ messageId, weeks: [{ weekStart, restored, skipped, droppedDishes }] }` | làm mới thực đơn, chuyển tới ngày vừa khôi phục |
-| `fillSlots`, `editPlan`, `autoBalancePlan`, `verifyMealPlanAllergies` | như chat chữ | làm mới thực đơn |
-| `updateMemory` | như chat chữ | làm mới `/dietary/me` |
+| `data-screen` | `{ focus, close, scroll? }` | Mở/đóng panel (`recipe`, `eatingLog`, `bodyMetrics`, `planDay`), cuộn mượt (`up`, `down`, `top`, `bottom`) |
+| `data-refresh` | `{ plan?, log?, nutrition?, dietary? }` | Mutate các SWR cache tương ứng |
+| `data-progress` | `{ text }` | Gửi kênh `thinking` (và nói qua `commentary` nếu lượt chạy quá 6 giây) |
+| `data-end-call` | `{}` | Đánh dấu cuộc gọi kết thúc sau khi GPT-Live đọc lời chào tạm biệt |
+| `data-summary` | `{ text }` | Câu tóm tắt tiếng Việt ngắn (chỉ phát trước `finish` khi tool nhanh kết thúc mà không sinh `text`) |
 
-Mở một panel (công thức, nhật ký, chỉ số cơ thể) thì FE đóng các panel khác đang mở. Các tool `showRecipe`, `showPlanDay`, `closeScreen`, `openEatingLog`, `showBodyMetrics` của các lượt cũ chỉ còn để đọc lịch sử; lượt mới không gọi chúng nữa.
+Mở một panel (công thức, nhật ký, chỉ số cơ thể) thì FE đóng các panel khác đang mở.
 
-Phần `text` của tin nhắn cuối là câu trả lời ngắn để GPT-Live diễn đạt lại: gửi bằng `context-append` với `delegationId` của lượt và `providerOptions.openai.channel = "commentary"` (tối đa 500 token mỗi lần). Lượt chạy lâu (trên 6 giây) có thể gửi thêm một câu `commentary` ngắn cho mỗi thay đổi đã lưu.
+Phần `text` của tin nhắn cuối (hoặc `data-summary` nếu `text` rỗng) là câu trả lời ngắn để GPT-Live diễn đạt lại: gửi ngay khi nhận `finish` bằng `context-append` với `delegationId` của lượt và `providerOptions.openai.channel = "commentary"` (tối đa 500 token mỗi lần). Lượt chạy lâu (trên 6 giây) có thể gửi thêm một câu `commentary` ngắn từ `data-progress`.
 
 `undoLastChange` đưa thực đơn về như trước lần thay đổi gần nhất chưa hoàn tác trong thread, không xóa tin nhắn (nút "Quay lại" của chat vẫn dùng được). Chế độ voice không có `askUser`: khi cần người dùng chọn, planner hỏi bằng lời.
 
-## POST /meal-plan/voice/interruptions
-
-Bước phân loại bằng decision model đã được tắt để giảm độ trễ ở chế độ voice; endpoint hiện trả ngay `{ "action": "supersede" }` (không gọi LLM, không tính vào quota chat). Phía FE cũng bỏ qua bước gọi endpoint này và hủy trực tiếp lượt đang chạy khi có delegation mới.
-
-**Hủy:** đóng request (abort) khi người dùng nói tiếp hoặc kết thúc cuộc gọi; agent dừng, những gì đã lưu vẫn giữ. FE báo cho GPT-Live bằng `context-append` kênh `thinking` cho delegation cũ.
+**Hủy:** đóng request (abort) khi người dùng nói tiếp hoặc kết thúc cuộc gọi; agent dừng, những gì đã lưu vẫn giữ. FE báo cho GPT-Live bằng `context-append` kênh `thinking` cho delegation cũ và làm mới lại các cache.
 
 Lỗi (trước khi stream bắt đầu, dạng JSON như mọi endpoint): `429 AI_QUOTA_EXCEEDED` hết lượt AI, `429` gọi quá nhanh, `503` model lỗi, `404` thread không thuộc người dùng. Lỗi giữa stream đến dưới dạng phần `error`. Khi lỗi, FE vẫn gửi một câu `commentary` nói thật là chưa làm xong để GPT-Live không đoán kết quả.
 

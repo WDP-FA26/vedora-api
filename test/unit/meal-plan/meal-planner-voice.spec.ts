@@ -11,11 +11,15 @@ import { MealPlannerChatService } from '@src/meal-plan/meal-planner-chat.service
 import { logMealTool } from '@src/meal-plan/tools/log-meal.tool.js';
 import { undoLastChangeTool } from '@src/meal-plan/tools/undo-last-change.tool.js';
 import { updateBodyMetricsTool } from '@src/meal-plan/tools/update-body-metrics.tool.js';
+import { convertReadableStreamToArray } from 'ai/test';
 import {
   bodyMetricsText,
   setScreenTool,
-  showRecipeTool,
 } from '@src/meal-plan/tools/voice-screen.tools.js';
+import {
+  deriveVoiceToolEffects,
+  withVoiceStreamEffects,
+} from '@src/meal-plan/voice/voice-stream-effects.js';
 import { voiceScreenContext } from '@src/meal-plan/meal-planner.prompt.js';
 import { MealPlannerVoiceService } from '@src/meal-plan/voice/meal-planner-voice.service.js';
 import type { DietaryService } from '@src/recipes/dietary.service.js';
@@ -111,28 +115,9 @@ describe('MealPlannerVoiceService', () => {
       screen,
     });
   });
-
-  it('immediately supersedes the running turn without a decision call', () => {
-    expect(service().interruption()).toBe('supersede');
-  });
 });
 
 describe('voice tools', () => {
-  it('showRecipe reports a missing recipe instead of showing it', async () => {
-    const mealPlan = mockDeep<MealPlanService>();
-    mealPlan.recipeInstructions.mockResolvedValue(null);
-    const toolDef = showRecipeTool(mealPlan, USER_ID);
-
-    const output = await toolDef.execute?.({ recipeId: 'nope' }, execOptions);
-
-    expect(output).toEqual({
-      shown: false,
-      recipeId: 'nope',
-      title: null,
-      section: null,
-    });
-  });
-
   it('setScreen opens a recipe at the section asked for', async () => {
     const mealPlan = mockDeep<MealPlanService>();
     mealPlan.recipeInstructions.mockResolvedValue({
@@ -420,5 +405,186 @@ describe('voice tools', () => {
         dailyCalorieTarget: null,
       }),
     ).toBe('Người dùng chưa nhập chiều cao và cân nặng.');
+  });
+});
+
+describe('voice stream effects', () => {
+  it('derives screen, refresh, progress, and summary for voice tools', () => {
+    expect(
+      deriveVoiceToolEffects('editPlan', {
+        weekStart: WEEK,
+        applied: true,
+        days: [{ day: Weekday.MON }, { day: Weekday.SUN }],
+      }),
+    ).toEqual({
+      refresh: { plan: true },
+      screen: {
+        focus: { kind: 'planDay', weekStart: WEEK, day: Weekday.MON },
+        close: null,
+      },
+      progress: 'Đã lưu thay đổi thực đơn cho Thứ Hai, Chủ nhật, đang làm tiếp.',
+    });
+
+    expect(
+      deriveVoiceToolEffects('setScreen', {
+        applied: true,
+        view: 'recipe',
+        recipeId: RECIPE_ID,
+        title: 'Phở chay',
+        section: 'steps',
+        step: 3,
+        scroll: null,
+        weekStart: null,
+        day: null,
+        date: null,
+        metrics: null,
+        problem: null,
+      }),
+    ).toEqual({
+      screen: {
+        focus: {
+          kind: 'recipe',
+          recipeId: RECIPE_ID,
+          title: 'Phở chay',
+          section: 'steps',
+          step: 3,
+        },
+        close: null,
+      },
+      screenSummary: 'Đã mở công thức "Phở chay" trên màn hình, ở bước 3.',
+    });
+
+    expect(deriveVoiceToolEffects('endCall', { ended: true })).toEqual({
+      endCall: true,
+      actionSummary:
+        'Người dùng muốn kết thúc cuộc gọi, hãy chào tạm biệt ngắn gọn.',
+    });
+  });
+
+  it('emits transient data parts and prioritizes write-tool summary over setScreen when no text is streamed', async () => {
+    const input = simulateReadableStream<UIMessageChunk>({
+      initialDelayInMs: null,
+      chunkDelayInMs: null,
+      chunks: [
+        { type: 'start', messageId: 'm1' },
+        {
+          type: 'tool-input-available',
+          toolCallId: 'c1',
+          toolName: 'logMeal',
+          input: {},
+        },
+        {
+          type: 'tool-output-available',
+          toolCallId: 'c1',
+          output: {
+            entry: {
+              date: '2026-11-25',
+              section: MealSection.LUNCH,
+              name: 'Phở chay',
+              calories: 420,
+            },
+          },
+        },
+        {
+          type: 'tool-input-available',
+          toolCallId: 'c2',
+          toolName: 'setScreen',
+          input: {},
+        },
+        {
+          type: 'tool-output-available',
+          toolCallId: 'c2',
+          output: {
+            applied: true,
+            view: 'eatingLog',
+            recipeId: null,
+            title: null,
+            section: null,
+            step: null,
+            scroll: null,
+            weekStart: null,
+            day: null,
+            date: '2026-11-25',
+            metrics: null,
+            problem: null,
+          },
+        },
+        { type: 'finish' },
+      ],
+    });
+
+    const out = await convertReadableStreamToArray(
+      withVoiceStreamEffects(input),
+    );
+    const dataParts = out.filter((chunk) => chunk.type.startsWith('data-'));
+
+    expect(dataParts).toContainEqual({
+      type: 'data-refresh',
+      data: { log: true },
+      transient: true,
+    });
+    expect(dataParts).toContainEqual({
+      type: 'data-screen',
+      data: {
+        focus: { kind: 'eatingLog', date: '2026-11-25' },
+        close: null,
+      },
+      transient: true,
+    });
+    expect(dataParts).toContainEqual({
+      type: 'data-progress',
+      data: { text: 'Đã ghi món vào nhật ký, đang làm tiếp.' },
+      transient: true,
+    });
+    expect(dataParts).toContainEqual({
+      type: 'data-summary',
+      data: {
+        text: 'Đã ghi món "Phở chay" vào nhật ký bữa trưa ngày 2026-11-25, khoảng 420 kcal.',
+      },
+      transient: true,
+    });
+  });
+
+  it('omits data-summary when the assistant streams text', async () => {
+    const input = simulateReadableStream<UIMessageChunk>({
+      initialDelayInMs: null,
+      chunkDelayInMs: null,
+      chunks: [
+        { type: 'start', messageId: 'm1' },
+        {
+          type: 'tool-input-available',
+          toolCallId: 'c1',
+          toolName: 'setScreen',
+          input: {},
+        },
+        {
+          type: 'tool-output-available',
+          toolCallId: 'c1',
+          output: {
+            applied: true,
+            view: 'bodyMetrics',
+            recipeId: null,
+            title: null,
+            section: null,
+            step: null,
+            scroll: null,
+            weekStart: null,
+            day: null,
+            date: null,
+            metrics: null,
+            problem: null,
+          },
+        },
+        { type: 'text-start', id: 't1' },
+        { type: 'text-delta', id: 't1', delta: 'Đây là bảng chỉ số.' },
+        { type: 'text-end', id: 't1' },
+        { type: 'finish' },
+      ],
+    });
+
+    const out = await convertReadableStreamToArray(
+      withVoiceStreamEffects(input),
+    );
+    expect(out.some((chunk) => chunk.type === 'data-summary')).toBe(false);
   });
 });

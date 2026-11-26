@@ -53,26 +53,6 @@ export class MealPlanVoiceSessionDto {
   model!: string;
 }
 
-export class MealPlanVoiceWebSearchRequestDto {
-  @ApiProperty({
-    maxLength: 100,
-    description: 'The `toolCallId` of the pending `requestWebSearch` call',
-  })
-  @IsString()
-  @MinLength(1)
-  @MaxLength(100)
-  toolCallId!: string;
-
-  @ApiProperty({
-    maxLength: 200,
-    description: 'Its `reason`, the question the user is answering',
-  })
-  @IsString()
-  @MinLength(1)
-  @MaxLength(200)
-  reason!: string;
-}
-
 /** Panels of the planner page that cover the calendar; `none` is the calendar alone. */
 export const VOICE_SCREEN_PANELS = [
   'none',
@@ -207,16 +187,6 @@ export class MealPlanVoiceTurnRequestDto {
   requestId?: string;
 
   @ApiPropertyOptional({
-    type: MealPlanVoiceWebSearchRequestDto,
-    description:
-      'Ignored: voice turns do not search the web. Still accepted so older clients validate.',
-  })
-  @IsOptional()
-  @ValidateNested()
-  @Type(() => MealPlanVoiceWebSearchRequestDto)
-  webSearchRequest?: MealPlanVoiceWebSearchRequestDto;
-
-  @ApiPropertyOptional({
     type: MealPlanVoiceScreenDto,
     description:
       'What the page shows as the user speaks; the agent reads it to understand "this recipe" or "close it"',
@@ -234,37 +204,4 @@ export class MealPlanVoiceTurnRequestDto {
   @MinLength(1)
   @MaxLength(MAX_PLANNER_MESSAGE_LENGTH)
   message!: string;
-}
-
-/** What new words mean for the voice turn still running. */
-export const VOICE_INTERRUPTIONS = ['progress', 'supersede', 'queue'] as const;
-export type VoiceInterruption = (typeof VOICE_INTERRUPTIONS)[number];
-
-export class MealPlanVoiceInterruptionRequestDto {
-  @ApiProperty({
-    maxLength: MAX_PLANNER_MESSAGE_LENGTH,
-    description: 'The request the agent is still working on',
-  })
-  @IsString()
-  @MinLength(1)
-  @MaxLength(MAX_PLANNER_MESSAGE_LENGTH)
-  running!: string;
-
-  @ApiProperty({
-    maxLength: MAX_PLANNER_MESSAGE_LENGTH,
-    description: 'What the user said meanwhile, as transcribed',
-  })
-  @IsString()
-  @MinLength(1)
-  @MaxLength(MAX_PLANNER_MESSAGE_LENGTH)
-  utterance!: string;
-}
-
-export class MealPlanVoiceInterruptionDto {
-  @ApiProperty({
-    enum: VOICE_INTERRUPTIONS,
-    description:
-      '`progress`: the user only checks on the work, keep it running; `supersede`: the user changed or stopped it, cancel it and send the new words as the next turn; `queue`: a separate request, send it after the running turn ends',
-  })
-  action!: VoiceInterruption;
 }

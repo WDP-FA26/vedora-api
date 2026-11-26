@@ -10,7 +10,6 @@ import { AiUsageService } from '../../subscriptions/ai-usage.service.js';
 import type {
   MealPlanVoiceSessionDto,
   MealPlanVoiceTurnRequestDto,
-  VoiceInterruption,
 } from '../dto/meal-plan-voice.dto.js';
 import {
   MealPlannerChatService,
@@ -103,14 +102,5 @@ export class MealPlannerVoiceService {
       dto.threadId ?? randomUUID(),
       options,
     );
-  }
-
-  /**
-   * Interruption classification via the decision model is disabled for voice
-   * latency: any new delegated utterance immediately supersedes the in-flight
-   * turn, and anything already saved stays saved.
-   */
-  interruption(): VoiceInterruption {
-    return 'supersede';
   }
 }

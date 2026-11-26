@@ -5,6 +5,7 @@ import { InjectModel } from '@nestjs/ai';
 import {
   convertToModelMessages,
   generateText,
+  hasToolCall,
   isStepCount,
   isTextUIPart,
   type LanguageModel,
@@ -15,6 +16,7 @@ import {
   toUIMessageStream,
   TypeValidationError,
   type UIMessage,
+  type UIMessageChunk,
   validateUIMessages,
 } from 'ai';
 import { PromptCache } from '../ai/prompt-cache.js';
@@ -65,10 +67,8 @@ import { searchRestaurantDishesTool } from './tools/search-restaurant-dishes.too
 import { undoLastChangeTool } from './tools/undo-last-change.tool.js';
 import { endCallTool } from './tools/end-call.tool.js';
 import { updateBodyMetricsTool } from './tools/update-body-metrics.tool.js';
-import {
-  legacyVoiceScreenTools,
-  setScreenTool,
-} from './tools/voice-screen.tools.js';
+import { setScreenTool } from './tools/voice-screen.tools.js';
+import { withVoiceStreamEffects } from './voice/voice-stream-effects.js';
 import {
   requestWebSearchTool,
   webSearchTool,
@@ -165,26 +165,59 @@ function isQuickSetScreenResult(output: unknown): boolean {
 }
 
 function isQuickVoiceToolResult(toolName: string, output: unknown): boolean {
-  if (toolName === 'endCall') return true;
   if (toolName === 'setScreen') return isQuickSetScreenResult(output);
   if (QUICK_WRITE_TOOLS.has(toolName)) return hasDoneFlag(output);
   return false;
 }
 
 /**
- * Ends a voice turn right after step 1 when it only ran `endCall` or quick
- * screen/write tools marked `done: true` (the frontend speaks the factual summary).
+ * Ends a voice turn right after a step when every tool was a quick
+ * screen/write tool marked `done: true` (the backend emits a `data-summary`
+ * chunk for GPT-Live to speak). `endCall` is handled by `hasToolCall('endCall')`.
  */
 const voiceQuickStop: StopCondition<ToolSet> = ({ steps }) => {
   const latest = steps[steps.length - 1];
   if (!latest || latest.toolResults.length === 0) return false;
-  if (latest.toolResults.some((item) => item.toolName === 'endCall')) {
-    return true;
-  }
   return latest.toolResults.every((item) =>
     isQuickVoiceToolResult(item.toolName, item.output),
   );
 };
+
+function plannerModeConfig(voice: boolean, allowWebSearch: boolean) {
+  if (voice) {
+    return {
+      instructions: plannerVoiceInstructions(),
+      // Voice turns are bounded by a 5-minute call with pauses; 1h keeps the
+      // prefix hot across long thinking/speaking gaps.
+      systemTtl: '1h' as const,
+      turnTimeoutMs: Math.min(
+        runtimeConfig.AI_CHAT_TIMEOUT_MS,
+        VOICE_CHAT_TIMEOUT_MS,
+      ),
+      stopWhen: [
+        isStepCount(MAX_STEPS),
+        hasToolCall('endCall'),
+        voiceQuickStop,
+      ],
+      toolTimeouts: {
+        searchKnowledgeMs: SEARCH_TIMEOUT_MS,
+        searchRestaurantDishesMs: SEARCH_TIMEOUT_MS,
+        consultNutritionSubagentMs: VOICE_SUBAGENT_TIMEOUT_MS,
+        verifyMealPlanAllergiesMs: VOICE_SUBAGENT_TIMEOUT_MS,
+      },
+    };
+  }
+  return {
+    instructions: plannerStaticInstructions(allowWebSearch),
+    systemTtl: '5m' as const,
+    turnTimeoutMs: runtimeConfig.AI_CHAT_TIMEOUT_MS,
+    stopWhen: isStepCount(MAX_STEPS),
+    toolTimeouts: {
+      searchKnowledgeMs: SEARCH_TIMEOUT_MS,
+      searchRestaurantDishesMs: SEARCH_TIMEOUT_MS,
+    },
+  };
+}
 
 /**
  * Web search is the user's choice: without consent the planner only gets the
@@ -496,6 +529,201 @@ export class MealPlannerChatService {
     }
   }
 
+  private loadTurnContext(
+    userId: string,
+    weekStart: string,
+    voice: boolean,
+    screen?: MealPlanVoiceScreenDto,
+  ) {
+    return Promise.all([
+      this.dietary.findPlannerContext(userId),
+      this.mealPlan.findForPrompt(userId, weekStart),
+      voice && screen
+        ? this.screenContext(userId, screen)
+        : Promise.resolve(null),
+    ]);
+  }
+
+  private async prepareVoiceTurn({
+    userId,
+    threadId,
+    activeThreadId,
+    message,
+    userMessageId,
+    currentMessage,
+    weekStart,
+    screen,
+    maxHistoryMessages,
+    consumeTicket,
+  }: {
+    userId: string;
+    threadId?: string;
+    activeThreadId: string;
+    message: string;
+    userMessageId: string;
+    currentMessage: StoredChatMessage;
+    weekStart: string;
+    screen?: MealPlanVoiceScreenDto;
+    maxHistoryMessages: number;
+    consumeTicket: () => ReturnType<AiUsageService['consume']>;
+  }) {
+    // Voice turns run thread access, quota reservation, history read, and
+    // context queries in one parallel round-trip; if any check fails after
+    // quota was reserved, the ticket is refunded before rethrowing.
+    const [accessResult, ticketResult, historyResult, contextResult] =
+      await Promise.allSettled([
+        threadId
+          ? (this.history?.assertThreadAccess(userId, threadId) ??
+            Promise.resolve())
+          : Promise.resolve(),
+        consumeTicket(),
+        this.history?.loadContextMessages(
+          userId,
+          activeThreadId,
+          maxHistoryMessages,
+        ) ?? Promise.resolve<StoredChatMessage[]>([]),
+        this.loadTurnContext(userId, weekStart, true, screen),
+      ]);
+
+    const ticket =
+      ticketResult.status === 'fulfilled' ? ticketResult.value : null;
+    try {
+      if (accessResult.status === 'rejected') throw accessResult.reason;
+      if (ticketResult.status === 'rejected') throw ticketResult.reason;
+      if (!ticket) {
+        throw new QuotaReachedException(
+          'AI_QUOTA_EXCEEDED',
+          'Your shared AI text allowance is exhausted',
+        );
+      }
+      if (historyResult.status === 'rejected') throw historyResult.reason;
+      if (contextResult.status === 'rejected') throw contextResult.reason;
+
+      const existing = historyResult.value ?? [];
+      // Write the user message in the background once access + quota passed;
+      // `onEnd` awaits it before saving the assistant reply so order holds.
+      const pendingUserRecord = this.history
+        ?.recordUserMessage(userId, activeThreadId, message, userMessageId)
+        .catch((error: unknown) => {
+          this.logger.warn(
+            `Failed to save user chat message: ${String(error)}`,
+          );
+        });
+      return {
+        ticket,
+        storedMessages: existing.some((item) => item.id === userMessageId)
+          ? [...existing]
+          : [...existing, currentMessage],
+        context: contextResult.value,
+        pendingUserRecord,
+      };
+    } catch (error) {
+      if (ticket) await this.usage.refund(ticket);
+      throw error;
+    }
+  }
+
+  private async prepareTextTurn({
+    userId,
+    threadId,
+    activeThreadId,
+    message,
+    userMessageId,
+    currentMessage,
+    weekStart,
+    toolOutput,
+    maxHistoryMessages,
+    abortSignal,
+    consumeTicket,
+  }: {
+    userId: string;
+    threadId?: string;
+    activeThreadId: string;
+    message: string;
+    userMessageId: string;
+    currentMessage: StoredChatMessage;
+    weekStart: string;
+    toolOutput?: PlannerToolOutputDto;
+    maxHistoryMessages: number;
+    abortSignal: AbortSignal;
+    consumeTicket: () => ReturnType<AiUsageService['consume']>;
+  }) {
+    if (threadId) {
+      await this.history?.assertThreadAccess(userId, threadId);
+    }
+    const ticket = await consumeTicket();
+    if (!ticket) {
+      throw new QuotaReachedException(
+        'AI_QUOTA_EXCEEDED',
+        'Your shared AI text allowance is exhausted',
+      );
+    }
+    try {
+      if (toolOutput) {
+        await this.history?.recordToolOutput(
+          userId,
+          activeThreadId,
+          toolOutput,
+        );
+      }
+      const [, loaded] = await Promise.all([
+        this.history?.recordUserMessage(
+          userId,
+          activeThreadId,
+          message,
+          userMessageId,
+        ),
+        this.history?.loadContextMessages(
+          userId,
+          activeThreadId,
+          maxHistoryMessages,
+        ),
+      ]);
+      const existing = loaded ?? [];
+      const storedMessages = existing.some((item) => item.id === userMessageId)
+        ? [...existing]
+        : [...existing, currentMessage];
+
+      const { choice: verdict } = await decide(
+        this.moderator,
+        conversationModerationState(toModerationTurns(storedMessages)),
+        abortSignal,
+        NUTRITION_POLICY,
+      ).catch((error: unknown) => {
+        if (abortSignal.aborted) throw error;
+        this.logger.error(`Moderation failed: ${String(error)}`);
+        throw new FeatureUnavailableException(
+          'SERVICE_UNAVAILABLE',
+          'Moderation is unavailable',
+        );
+      });
+      if (verdict !== 'allow') {
+        this.logger.warn(`Moderation answered ${verdict}`);
+        const assistantMessageId = randomUUID();
+        await this.history?.recordAssistantMessage(userId, activeThreadId, {
+          id: assistantMessageId,
+          role: 'assistant',
+          parts: [{ type: 'text', text: PLANNER_REFUSALS[verdict] }],
+          metadata: { refused: true },
+        });
+        await this.usage.refund(ticket);
+        return {
+          refused: cannedReply(PLANNER_REFUSALS[verdict], assistantMessageId),
+        };
+      }
+      const context = await this.loadTurnContext(userId, weekStart, false);
+      return {
+        ticket,
+        storedMessages,
+        context,
+        pendingUserRecord: undefined as Promise<void> | undefined,
+      };
+    } catch (error) {
+      await this.usage.refund(ticket);
+      throw error;
+    }
+  }
+
   async stream(
     userId: string,
     message: string,
@@ -520,14 +748,12 @@ export class MealPlannerChatService {
     if (toolOutput) {
       validatePlannerToolOutput(toolOutput);
     }
+    const mode = plannerModeConfig(voice, allowWebSearch);
     const activeThreadId = threadId ?? randomUUID();
     const maxHistoryMessages = runtimeConfig.PLANNER_CHAT_MAX_MESSAGES;
-    const turnTimeoutMs = voice
-      ? Math.min(runtimeConfig.AI_CHAT_TIMEOUT_MS, VOICE_CHAT_TIMEOUT_MS)
-      : runtimeConfig.AI_CHAT_TIMEOUT_MS;
     abortSignal = AbortSignal.any([
       abortSignal,
-      AbortSignal.timeout(turnTimeoutMs),
+      AbortSignal.timeout(mode.turnTimeoutMs),
     ]);
     const consumeTicket = () =>
       this.usage.consume(userId, AiFeature.MEAL_PLAN_CHAT, {
@@ -539,14 +765,6 @@ export class MealPlannerChatService {
         },
         prompt: message,
       });
-    const loadContext = () =>
-      Promise.all([
-        this.dietary.findPlannerContext(userId),
-        this.mealPlan.findForPrompt(userId, weekStart),
-        voice && screen
-          ? this.screenContext(userId, screen)
-          : Promise.resolve(null),
-      ]);
 
     const userMessageId = requestId ?? randomUUID();
     const currentMessage: StoredChatMessage = {
@@ -555,152 +773,36 @@ export class MealPlannerChatService {
       parts: [{ type: 'text', text: cleanUserText }],
     };
 
-    let ticket: NonNullable<Awaited<ReturnType<AiUsageService['consume']>>>;
-    let voicePrepared: {
-      storedMessages: StoredChatMessage[];
-      context: Awaited<ReturnType<typeof loadContext>>;
-      pendingUserRecord: Promise<void> | undefined;
-    } | null = null;
-
-    if (voice) {
-      // Voice turns run thread access, quota reservation, history read, and
-      // context queries in one parallel round-trip; if any check fails after
-      // quota was reserved, the ticket is refunded before rethrowing.
-      const [accessResult, ticketResult, historyResult, contextResult] =
-        await Promise.allSettled([
-          threadId
-            ? (this.history?.assertThreadAccess(userId, threadId) ??
-              Promise.resolve())
-            : Promise.resolve(),
-          consumeTicket(),
-          this.history?.loadContextMessages(
-            userId,
-            activeThreadId,
-            maxHistoryMessages,
-          ) ?? Promise.resolve<StoredChatMessage[]>([]),
-          loadContext(),
-        ]);
-
-      const reservedTicket =
-        ticketResult.status === 'fulfilled' ? ticketResult.value : null;
-      const refundReserved = async () => {
-        if (reservedTicket) await this.usage.refund(reservedTicket);
-      };
-
-      if (accessResult.status === 'rejected') {
-        await refundReserved();
-        throw accessResult.reason;
-      }
-      if (ticketResult.status === 'rejected') {
-        throw ticketResult.reason;
-      }
-      if (!reservedTicket) {
-        throw new QuotaReachedException(
-          'AI_QUOTA_EXCEEDED',
-          'Your shared AI text allowance is exhausted',
-        );
-      }
-      if (historyResult.status === 'rejected') {
-        await refundReserved();
-        throw historyResult.reason;
-      }
-      if (contextResult.status === 'rejected') {
-        await refundReserved();
-        throw contextResult.reason;
-      }
-
-      ticket = reservedTicket;
-      const existing = historyResult.value ?? [];
-      // Write the user message in the background once access + quota passed;
-      // `onEnd` awaits it before saving the assistant reply so order holds.
-      const pendingUserRecord = this.history
-        ?.recordUserMessage(userId, activeThreadId, message, userMessageId)
-        .catch((error: unknown) => {
-          this.logger.warn(
-            `Failed to save user chat message: ${String(error)}`,
-          );
-        });
-      voicePrepared = {
-        storedMessages: existing.some((item) => item.id === userMessageId)
-          ? [...existing]
-          : [...existing, currentMessage],
-        context: contextResult.value,
-        pendingUserRecord,
-      };
-    } else {
-      if (threadId) {
-        await this.history?.assertThreadAccess(userId, threadId);
-      }
-      const reservedTicket = await consumeTicket();
-      if (!reservedTicket) {
-        throw new QuotaReachedException(
-          'AI_QUOTA_EXCEEDED',
-          'Your shared AI text allowance is exhausted',
-        );
-      }
-      ticket = reservedTicket;
-    }
-
-    try {
-      let storedMessages: StoredChatMessage[];
-      let context: Awaited<ReturnType<typeof loadContext>>;
-      let pendingUserRecord: Promise<void> | undefined;
-      if (voicePrepared !== null) {
-        ({ storedMessages, context, pendingUserRecord } = voicePrepared);
-      } else {
-        if (toolOutput) {
-          await this.history?.recordToolOutput(
-            userId,
-            activeThreadId,
-            toolOutput,
-          );
-        }
-        const [, loaded] = await Promise.all([
-          this.history?.recordUserMessage(
-            userId,
-            activeThreadId,
-            message,
-            userMessageId,
-          ),
-          this.history?.loadContextMessages(
-            userId,
-            activeThreadId,
-            maxHistoryMessages,
-          ),
-        ]);
-        const existing = loaded ?? [];
-        storedMessages = existing.some((item) => item.id === userMessageId)
-          ? [...existing]
-          : [...existing, currentMessage];
-
-        const { choice: verdict } = await decide(
-          this.moderator,
-          conversationModerationState(toModerationTurns(storedMessages)),
+    const prepared = voice
+      ? await this.prepareVoiceTurn({
+          userId,
+          threadId,
+          activeThreadId,
+          message,
+          userMessageId,
+          currentMessage,
+          weekStart,
+          screen,
+          maxHistoryMessages,
+          consumeTicket,
+        })
+      : await this.prepareTextTurn({
+          userId,
+          threadId,
+          activeThreadId,
+          message,
+          userMessageId,
+          currentMessage,
+          weekStart,
+          toolOutput,
+          maxHistoryMessages,
           abortSignal,
-          NUTRITION_POLICY,
-        ).catch((error: unknown) => {
-          if (abortSignal.aborted) throw error;
-          this.logger.error(`Moderation failed: ${String(error)}`);
-          throw new FeatureUnavailableException(
-            'SERVICE_UNAVAILABLE',
-            'Moderation is unavailable',
-          );
+          consumeTicket,
         });
-        if (verdict !== 'allow') {
-          this.logger.warn(`Moderation answered ${verdict}`);
-          const assistantMessageId = randomUUID();
-          await this.history?.recordAssistantMessage(userId, activeThreadId, {
-            id: assistantMessageId,
-            role: 'assistant',
-            parts: [{ type: 'text', text: PLANNER_REFUSALS[verdict] }],
-            metadata: { refused: true },
-          });
-          await this.usage.refund(ticket);
-          return cannedReply(PLANNER_REFUSALS[verdict], assistantMessageId);
-        }
-        context = await loadContext();
-      }
+    if ('refused' in prepared) return prepared.refused;
 
+    const { ticket, storedMessages, context, pendingUserRecord } = prepared;
+    try {
       const [{ memory, nutrition }, plan, screenText] = context;
 
       // A week that has fully passed is read-only, so tools default to this week.
@@ -747,31 +849,19 @@ export class MealPlannerChatService {
         ...PromptCache.agent({
           session: 'vedora-planner',
           scope: [userId, activeThreadId],
-          instructions: voice
-            ? plannerVoiceInstructions()
-            : plannerStaticInstructions(allowWebSearch),
+          instructions: mode.instructions,
           // Long prompt, many tools, up to 20 steps: at low effort Haiku 5.5
           // is more likely to skip a lookup or a check.
           effort: 'medium',
-          // Voice turns are bounded by a 5-minute call with pauses; 1h keeps the
-          // prefix hot across long thinking/speaking gaps.
-          systemTtl: voice ? '1h' : '5m',
+          systemTtl: mode.systemTtl,
         }),
         maxOutputTokens: runtimeConfig.PLANNER_CHAT_MAX_OUTPUT_TOKENS,
         tools: agentTools,
-        stopWhen: voice
-          ? [isStepCount(MAX_STEPS), voiceQuickStop]
-          : isStepCount(MAX_STEPS),
+        stopWhen: mode.stopWhen,
         prepareStep: PromptCache.finalStepGuard(MAX_STEPS, LAST_STEP_NOTE),
       });
 
       const conversionTools = safeConversionTools({
-        ...legacyVoiceScreenTools(
-          this.mealPlan,
-          this.dietary,
-          userId,
-          toolWeek,
-        ),
         ...this.voiceTools(userId, activeThreadId, toolWeek, screen),
         ...agentTools,
         askUser: askUserTool(),
@@ -814,54 +904,45 @@ export class MealPlannerChatService {
         ),
         abortSignal,
         timeout: {
-          tools: {
-            searchKnowledgeMs: SEARCH_TIMEOUT_MS,
-            searchRestaurantDishesMs: SEARCH_TIMEOUT_MS,
-            ...(voice
-              ? {
-                  consultNutritionSubagentMs: VOICE_SUBAGENT_TIMEOUT_MS,
-                  verifyMealPlanAllergiesMs: VOICE_SUBAGENT_TIMEOUT_MS,
-                }
-              : {}),
-          },
+          tools: mode.toolTimeouts,
         },
         experimental_transform: replyFilter(),
       });
       const assistantMessageId = randomUUID();
-      return quotaStream(
-        toUIMessageStream({
-          stream: result.stream,
-          tools: agent.tools,
-          sendSources: true,
-          // Reasoning is excluded from the model, but some routes (web search) still stream it.
-          sendReasoning: false,
-          generateMessageId: () => assistantMessageId,
-          onEnd: async ({ responseMessage }) => {
-            try {
-              await pendingUserRecord;
-              await this.history?.recordAssistantMessage(
-                userId,
-                activeThreadId,
-                responseMessage,
-              );
-            } catch (error) {
-              this.logger.warn(
-                `Failed to save assistant chat message: ${String(error)}`,
-              );
-            }
-          },
-          onError: (error) => {
-            this.logger.error(
-              `Meal planner stream failed: ${
-                error instanceof Error ? error.message : String(error)
-              }`,
+      const uiStream = toUIMessageStream({
+        stream: result.stream,
+        tools: agent.tools,
+        sendSources: true,
+        // Reasoning is excluded from the model, but some routes (web search) still stream it.
+        sendReasoning: false,
+        generateMessageId: () => assistantMessageId,
+        onEnd: async ({ responseMessage }) => {
+          try {
+            await pendingUserRecord;
+            await this.history?.recordAssistantMessage(
+              userId,
+              activeThreadId,
+              responseMessage,
             );
-            return chatErrorCode(error);
-          },
-        }),
-        this.usage,
-        ticket,
-      );
+          } catch (error) {
+            this.logger.warn(
+              `Failed to save assistant chat message: ${String(error)}`,
+            );
+          }
+        },
+        onError: (error) => {
+          this.logger.error(
+            `Meal planner stream failed: ${
+              error instanceof Error ? error.message : String(error)
+            }`,
+          );
+          return chatErrorCode(error);
+        },
+      });
+      const outputStream: ReadableStream<UIMessageChunk> = voice
+        ? withVoiceStreamEffects(uiStream)
+        : uiStream;
+      return quotaStream(outputStream, this.usage, ticket);
     } catch (error) {
       await this.usage.refund(ticket);
       throw error;
