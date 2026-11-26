@@ -56,7 +56,6 @@ describe('Admin recipe categories (e2e)', () => {
         name: '  Chè  ',
         baseTag: 'DESSERT',
         icon: 'CAKE',
-        sortOrder: 75,
       })
       .expect(201);
     const category = created.body as { id: string; name: string };
@@ -65,7 +64,7 @@ describe('Admin recipe categories (e2e)', () => {
       description: null,
       baseTag: 'DESSERT',
       icon: 'CAKE',
-      sortOrder: 75,
+      sortOrder: 100,
       hidden: false,
     });
 
@@ -84,7 +83,7 @@ describe('Admin recipe categories (e2e)', () => {
           name: 'Chè, sương sáo',
           description: 'Món ngọt mát',
           icon: 'UTENSILS',
-          sortOrder: 0,
+          sortOrder: 100,
           hidden: true,
         });
       });
@@ -106,6 +105,44 @@ describe('Admin recipe categories (e2e)', () => {
       .delete(`${URL}/${category.id}`)
       .set('Authorization', `Bearer ${adminToken}`)
       .expect(404);
+  });
+
+  it('reorders every category and rejects an incomplete list', async () => {
+    const listOrder = async () => {
+      const response = await request(server())
+        .get(URL)
+        .query({ limit: 50 })
+        .set('Authorization', `Bearer ${adminToken}`)
+        .expect(200);
+      const body = response.body as {
+        items: { id: string; name: string; sortOrder: number }[];
+      };
+      return body.items;
+    };
+    const before = await listOrder();
+    const ids = before.map(({ id }) => id);
+    const swapped = [ids[1], ids[0], ...ids.slice(2)];
+
+    await request(server())
+      .put(`${URL}/order`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ ids: swapped })
+      .expect(204);
+
+    const after = await listOrder();
+    expect(after.map(({ id }) => id)).toEqual(swapped);
+    expect(after.map(({ sortOrder }) => sortOrder)).toEqual(
+      swapped.map((_, index) => (index + 1) * 10),
+    );
+
+    await request(server())
+      .put(`${URL}/order`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ ids: swapped.slice(1) })
+      .expect(400)
+      .expect((response) => {
+        expect(response.body).toMatchObject({ code: 'ORDER_MISMATCH' });
+      });
   });
 
   it('rejects an unknown base tag or icon', async () => {

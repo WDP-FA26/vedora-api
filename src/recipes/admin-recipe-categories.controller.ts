@@ -34,6 +34,7 @@ import {
 import { ErrorBodyDto } from '../common/exceptions/error-body.dto.js';
 import {
   RecipeCategoryDto,
+  ReorderRecipeCategoriesDto,
   SaveRecipeCategoryDto,
 } from './dto/recipe-category.dto.js';
 import { RecipeCategoriesService } from './recipe-categories.service.js';
@@ -69,6 +70,19 @@ export class AdminRecipeCategoriesController {
   @ApiConflictResponse({ type: ErrorBodyDto, description: '`NAME_TAKEN`' })
   create(@Body() dto: SaveRecipeCategoryDto): Promise<RecipeCategoryDto> {
     return this.categories.create(dto);
+  }
+
+  // Declared before `:id` so `order` is not read as an id.
+  @Put('order')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiOperation({
+    summary: 'Set the order of every recipe category',
+    description:
+      'Send all ids, first to last. Answers 400 `ORDER_MISMATCH` when the list is not exactly the current categories.',
+  })
+  @ApiNoContentResponse()
+  reorder(@Body() dto: ReorderRecipeCategoriesDto): Promise<void> {
+    return this.categories.reorder(dto);
   }
 
   @Put(':id')

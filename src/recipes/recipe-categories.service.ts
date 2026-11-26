@@ -8,9 +8,11 @@ import {
   PaginatedResponseDto,
   PaginationQueryDto,
 } from '../common/pagination/index.js';
+import { InvalidInputException } from '../common/exceptions/invalid-input.exception.js';
 import { ResourceNotFoundException } from '../common/exceptions/resource-not-found.exception.js';
 import { StateConflictException } from '../common/exceptions/state-conflict.exception.js';
 import { isUniqueViolation } from '../mongo/errors.js';
+import { MongoService } from '../mongo/mongo.service.js';
 import {
   RecipeCategory,
   RecipeCategoryIcon,
@@ -18,8 +20,12 @@ import {
 } from '../mongo/models.js';
 import {
   RecipeCategoryDto,
+  ReorderRecipeCategoriesDto,
   SaveRecipeCategoryDto,
 } from './dto/recipe-category.dto.js';
+
+/** Gap between neighbours, so the order stays readable in the database. */
+const SORT_STEP = 10;
 
 type DefaultCategory = Pick<
   RecipeCategory,
@@ -89,6 +95,7 @@ export class RecipeCategoriesService implements OnApplicationBootstrap {
   constructor(
     @InjectModel(RecipeCategory.name)
     private readonly categories: Model<RecipeCategory>,
+    private readonly mongo: MongoService,
   ) {}
 
   async onApplicationBootstrap(): Promise<void> {
@@ -129,12 +136,46 @@ export class RecipeCategoriesService implements OnApplicationBootstrap {
     return createPaginatedResponse(rows.map(toDto), totalItems, query);
   }
 
+  /** A new category goes to the end of the list. */
   async create(dto: SaveRecipeCategoryDto): Promise<RecipeCategoryDto> {
     const id = randomUUID();
+    const last = await this.categories
+      .findOne()
+      .sort({ sortOrder: -1, _id: -1 })
+      .select('sortOrder')
+      .exec();
+    const sortOrder = (last?.sortOrder ?? 0) + SORT_STEP;
     await this.write(async () => {
-      await this.categories.create({ _id: id, ...toFields(dto) });
+      await this.categories.create({ _id: id, sortOrder, ...toFields(dto) });
     });
     return this.findOne(id);
+  }
+
+  /** `ids` is every category, in the new order; they are renumbered 10, 20, 30… */
+  async reorder(dto: ReorderRecipeCategoriesDto): Promise<void> {
+    await this.mongo.withTransaction(async (session) => {
+      const rows = await this.categories
+        .find()
+        .select('_id')
+        .session(session)
+        .exec();
+      const known = new Set(rows.map(({ id }) => id));
+      const sameSet =
+        dto.ids.length === known.size && dto.ids.every((id) => known.has(id));
+      if (!sameSet) {
+        throw new InvalidInputException(
+          'ORDER_MISMATCH',
+          'ids must list every recipe category exactly once',
+        );
+      }
+      const updates = dto.ids.map((id, index) => ({
+        updateOne: {
+          filter: { _id: id },
+          update: { $set: { sortOrder: (index + 1) * SORT_STEP } },
+        },
+      }));
+      await this.categories.bulkWrite(updates, { session });
+    });
   }
 
   async update(
@@ -182,7 +223,6 @@ function toFields(dto: SaveRecipeCategoryDto) {
     description: dto.description || null,
     baseTag: dto.baseTag,
     icon: dto.icon ?? RecipeCategoryIcon.UTENSILS,
-    sortOrder: dto.sortOrder ?? 0,
     hidden: dto.hidden ?? false,
   };
 }

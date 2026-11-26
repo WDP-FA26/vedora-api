@@ -18,7 +18,8 @@ nó không tự tạo lại.
 | Method   | Endpoint                          | Thành công                    |
 | -------- | --------------------------------- | ----------------------------- |
 | `GET`    | `/admin/recipe-categories`        | 200 `{ items, meta }`, theo `sortOrder` tăng dần |
-| `POST`   | `/admin/recipe-categories`        | 201 `RecipeCategory`          |
+| `POST`   | `/admin/recipe-categories`        | 201 `RecipeCategory`, xếp cuối danh sách |
+| `PUT`    | `/admin/recipe-categories/order`  | 204, đặt lại thứ tự toàn bộ    |
 | `PUT`    | `/admin/recipe-categories/:id`    | 200 `RecipeCategory` (thay toàn bộ) |
 | `DELETE` | `/admin/recipe-categories/:id`    | 204                           |
 
@@ -32,10 +33,21 @@ nó không tự tạo lại.
 | `description` | string | Không | Chuỗi rỗng lưu thành `null` |
 | `baseTag`     | `SOUP` \| `SALAD` \| `RICE` \| `NOODLES` \| `STIR_FRY` \| `BREAD` \| `DESSERT` \| `DRINK` \| `SNACK` | Có | Nhóm chuẩn cho meal planner |
 | `icon`        | `SOUP` \| `SALAD` \| `POT` \| `WHEAT` \| `FLAME` \| `SANDWICH` \| `CAKE` \| `COFFEE` \| `COOKIE` \| `UTENSILS` | Không | Mặc định `UTENSILS` |
-| `sortOrder`   | integer 0–9999 | Không | Nhỏ đứng trước, mặc định `0` |
 | `hidden`      | boolean | Không | Ẩn khỏi người dùng nhưng không xóa, mặc định `false` |
 
-`PUT` thay toàn bộ: trường không gửi sẽ về giá trị mặc định.
+`PUT /:id` thay toàn bộ: trường không gửi sẽ về giá trị mặc định. Thứ tự (`sortOrder`)
+không sửa ở đây mà qua `PUT /order`.
+
+### Sắp xếp: `PUT /admin/recipe-categories/order`
+
+```json
+{ "ids": ["<id đứng đầu>", "<id thứ hai>", "…"] }
+```
+
+Gửi **tất cả** id danh mục theo thứ tự mới. BE đánh lại `sortOrder` thành 10, 20, 30…
+trong một transaction. Thiếu, thừa hoặc lặp id thì trả `400 ORDER_MISMATCH` (hoặc
+`VALIDATION_FAILED` nếu lặp id). Nút mũi tên lên/xuống ở FE chỉ cần đổi chỗ hai id kề
+nhau rồi gửi cả danh sách.
 
 ### `RecipeCategory`
 
@@ -56,7 +68,8 @@ nó không tự tạo lại.
 
 | HTTP | `code` | Khi nào |
 | ---- | ------ | ------- |
-| 400  | `VALIDATION_FAILED` | Thiếu `name`/`baseTag`, `baseTag` hoặc `icon` không hợp lệ, có trường lạ |
+| 400  | `VALIDATION_FAILED` | Thiếu `name`/`baseTag`, `baseTag` hoặc `icon` không hợp lệ, có trường lạ (kể cả `sortOrder`) |
+| 400  | `ORDER_MISMATCH` | `PUT /order` không liệt kê đúng toàn bộ danh mục |
 | 401  | | Chưa đăng nhập |
 | 403  | | Không phải admin |
 | 404  | `NOT_FOUND` | Không có danh mục với `id` đó |

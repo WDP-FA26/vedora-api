@@ -1,20 +1,22 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Transform } from 'class-transformer';
 import {
+  ArrayMaxSize,
+  ArrayMinSize,
+  ArrayUnique,
+  IsArray,
   IsBoolean,
   IsEnum,
-  IsInt,
   IsOptional,
   IsString,
-  Max,
+  IsUUID,
   MaxLength,
-  Min,
   MinLength,
 } from 'class-validator';
 import { RecipeCategoryIcon, RecipeTag } from '../../mongo/models.js';
 import { MAX_NAME_LENGTH, MAX_TEXT_LENGTH } from './ingredient.dto.js';
 
-export const MAX_CATEGORY_SORT_ORDER = 9999;
+export const MAX_RECIPE_CATEGORIES = 200;
 
 const trim = ({ value }: { value: unknown }): unknown =>
   typeof value === 'string' ? value.trim() : value;
@@ -51,18 +53,6 @@ export class SaveRecipeCategoryDto {
   icon?: RecipeCategoryIcon;
 
   @ApiPropertyOptional({
-    minimum: 0,
-    maximum: MAX_CATEGORY_SORT_ORDER,
-    default: 0,
-    description: 'Lower comes first',
-  })
-  @IsOptional()
-  @IsInt()
-  @Min(0)
-  @Max(MAX_CATEGORY_SORT_ORDER)
-  sortOrder?: number;
-
-  @ApiPropertyOptional({
     default: false,
     description: 'Hide the category from users without deleting it',
   })
@@ -71,13 +61,27 @@ export class SaveRecipeCategoryDto {
   hidden?: boolean;
 }
 
+export class ReorderRecipeCategoriesDto {
+  @ApiProperty({
+    type: [String],
+    format: 'uuid',
+    description: 'Every category id, first to last',
+  })
+  @IsArray()
+  @ArrayMinSize(1)
+  @ArrayMaxSize(MAX_RECIPE_CATEGORIES)
+  @ArrayUnique()
+  @IsUUID('4', { each: true })
+  ids!: string[];
+}
+
 export class RecipeCategoryDto {
   @ApiProperty({ format: 'uuid' }) id!: string;
   @ApiProperty() name!: string;
   @ApiProperty({ nullable: true, type: String }) description!: string | null;
   @ApiProperty({ enum: RecipeTag }) baseTag!: RecipeTag;
   @ApiProperty({ enum: RecipeCategoryIcon }) icon!: RecipeCategoryIcon;
-  @ApiProperty() sortOrder!: number;
+  @ApiProperty({ description: 'Lower comes first' }) sortOrder!: number;
   @ApiProperty() hidden!: boolean;
   @ApiProperty() createdAt!: Date;
 }
