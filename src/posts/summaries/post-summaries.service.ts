@@ -23,7 +23,6 @@ import {
   type SummaryRecipe,
   User,
 } from '../../mongo/models.js';
-import { MAX_COMMENT_BODY_LENGTH } from '../dto/comment.dto.js';
 import {
   SYSTEM_ACCOUNT,
   SYSTEM_ACCOUNT_ID,
@@ -37,6 +36,7 @@ import { formatSummaryComment } from './summary-comment.js';
 import { readPostSource, type PostSource } from './post-source.js';
 
 const BATCH_SIZE = runtimeConfig.POST_SUMMARY_BATCH_SIZE;
+const MAX_COMMENT_LENGTH = runtimeConfig.POST_SUMMARY_COMMENT_MAX_LENGTH;
 const MAX_ATTEMPTS = runtimeConfig.POST_SUMMARY_MAX_ATTEMPTS;
 const MIN_TEXT_LENGTH = runtimeConfig.POST_SUMMARY_MIN_TEXT_LENGTH;
 const STALE_AFTER_MS = runtimeConfig.POST_SUMMARY_STALE_AFTER_SECONDS * 1000;
@@ -426,7 +426,7 @@ export class PostSummariesService {
       recipe: SummaryRecipe | null;
     },
   ): Promise<string | null | undefined> {
-    const body = formatSummaryComment(result, MAX_COMMENT_BODY_LENGTH);
+    const body = formatSummaryComment(result, MAX_COMMENT_LENGTH);
     // Like every member comment, the AI's is moderated: its source is member
     // text that may try to steer the model.
     try {

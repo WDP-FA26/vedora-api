@@ -176,6 +176,7 @@ Values below are defaults matched to the original source. All values are read at
 | `POST_SEARCH_INDEX_BATCH_SIZE` | `64` |
 | `POST_SEARCH_MAX_RESULTS` | `200` |
 | `POST_SUMMARY_BATCH_SIZE` | `10` |
+| `POST_SUMMARY_COMMENT_MAX_LENGTH` | `10000` |
 | `POST_SUMMARY_MAX_ATTEMPTS` | `3` |
 | `POST_SUMMARY_MAX_INPUT_CHARS` | `24000` |
 | `POST_SUMMARY_MIN_TEXT_LENGTH` | `280` |
