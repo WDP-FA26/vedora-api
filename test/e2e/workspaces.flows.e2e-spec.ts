@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import request from 'supertest';
 import { z } from 'zod';
 import {
@@ -12,11 +11,17 @@ import {
   Workspace,
   WorkspaceMember,
   WorkspaceProof,
+  WorkspaceProofKind,
 } from '@src/mongo/models.js';
 import { RefreshTokensService } from '@src/auth/refresh-tokens.service.js';
 import { StorageService } from '@src/storage/storage.service.js';
 import { createE2eApp, type E2eApp } from '@test/support/e2e-app.js';
 import { createUser } from '@test/support/fixtures.js';
+import {
+  APPROVE_REVIEW,
+  PAGE_APPLICATION,
+  uploadedProofs,
+} from '@test/support/workspace-application.js';
 
 /**
  * Black-box flows for restaurant pages (/workspaces): an owner applies with
@@ -46,21 +51,25 @@ const listSchema = z.object({ items: z.array(z.unknown()) });
 
 const adminDetailSchema = z.object({
   pageUserId: z.string().nullable(),
-  proofs: z.array(z.unknown()),
+  proofs: z.array(z.object({ kind: z.string() })),
   owner: z.object({ id: z.string() }),
+  legal: z.object({ taxCode: z.string() }).nullable(),
+  warnings: z.array(
+    z.object({
+      code: z.string(),
+      workspaces: z.array(z.object({ id: z.string() })),
+    }),
+  ),
 });
 
-const APPLICATION = {
-  name: 'Chay An Lạc',
-  username: 'chay.an.lac',
-  bio: 'Quán chay gia đình',
-  address: '12 Hàng Bông, Hoàn Kiếm, Hà Nội',
-  longitude: 105.8482,
-  latitude: 21.0302,
-  phone: '0901 234 567',
-  website: 'https://anlac.example',
-  statement: 'Tôi là chủ quán, đính kèm giấy phép kinh doanh và ảnh mặt tiền.',
-};
+const APPLICATION = PAGE_APPLICATION;
+
+/** What an individual seller sends: no business licence. */
+const IDENTITY_AND_STOREFRONT = [
+  WorkspaceProofKind.ID_FRONT,
+  WorkspaceProofKind.ID_BACK,
+  WorkspaceProofKind.STOREFRONT,
+];
 
 vi.setConfig({ testTimeout: 30_000 });
 
@@ -78,32 +87,18 @@ describe('Restaurant page flows (e2e)', () => {
   const model = <T>(name: string) => e2e.mongo.connection.model<T>(name);
   const users = () => model<User>(User.name);
 
-  const uploadedProof = async (ownerId: string) => {
-    const id = randomUUID();
-    await model<WorkspaceProof>(WorkspaceProof.name).create({
-      _id: id,
-      ownerId,
-      storageKey: `workspaces/${ownerId}/${id}.jpg`,
-    });
-    return id;
-  };
-
-  /** Applies with a fresh uploaded proof and checks the response status. */
+  /** Applies with a fresh set of uploaded proofs and checks the response status. */
   const apply = async (
     token: string,
     applicantId: string,
     status: number,
     body = {},
   ) => {
-    const proofId = await uploadedProof(applicantId);
+    const proofIds = await uploadedProofs(e2e.mongo, applicantId);
     return request(server())
       .post('/api/v1/workspaces')
       .auth(token, { type: 'bearer' })
-      .send({
-        ...APPLICATION,
-        proofIds: [proofId],
-        ...body,
-      })
+      .send({ ...APPLICATION, proofIds, ...body })
       .expect(status);
   };
 
@@ -118,7 +113,7 @@ describe('Restaurant page flows (e2e)', () => {
     const applied = workspaceSchema.parse(
       (await apply(ownerToken, owner.id, 201)).body,
     );
-    await review(applied.id, { decision: 'APPROVED' }).expect(200);
+    await review(applied.id, APPROVE_REVIEW).expect(200);
     const workspace = await model<Workspace>(Workspace.name)
       .findOne({ _id: applied.id })
       .exec();
@@ -212,12 +207,15 @@ describe('Restaurant page flows (e2e)', () => {
         .auth(adminToken, { type: 'bearer' })
         .expect(200);
       const application = adminDetailSchema.parse(detail.body);
-      expect(application.proofs).toHaveLength(1);
+      expect(application.proofs.map(({ kind }) => kind)).toEqual([
+        'ID_FRONT',
+        'ID_BACK',
+        'STOREFRONT',
+        'BUSINESS_LICENSE',
+      ]);
       expect(application.owner.id).toBe(owner.id);
 
-      const approved = await review(applied.id, {
-        decision: 'APPROVED',
-      }).expect(200);
+      const approved = await review(applied.id, APPROVE_REVIEW).expect(200);
       const pageUserId = z
         .string()
         .parse(
@@ -256,25 +254,27 @@ describe('Restaurant page flows (e2e)', () => {
       expect(errorSchema.parse(response.body).code).toBe('FORBIDDEN');
     });
 
-    it('rejects with a note, then accepts a resubmission', async () => {
+    it('rejects with a reason, then accepts a resubmission', async () => {
       const applied = workspaceSchema.parse(
         (await apply(ownerToken, owner.id, 201)).body,
       );
       await review(applied.id, { decision: 'REJECTED' }).expect(400);
       await review(applied.id, {
         decision: 'REJECTED',
+        rejectReason: 'OTHER',
+      }).expect(400);
+      await review(applied.id, {
+        decision: 'REJECTED',
+        rejectReason: 'BLURRY_DOCUMENTS',
         note: 'Ảnh giấy phép bị mờ',
       }).expect(200);
-
-      // Resubmitting still succeeds while another application is PENDING.
-      await apply(ownerToken, owner.id, 201, { username: 'second.pending' });
 
       const resubmitted = await request(server())
         .post(`/api/v1/workspaces/${applied.id}/resubmit`)
         .auth(ownerToken, { type: 'bearer' })
         .send({
           ...APPLICATION,
-          proofIds: [await uploadedProof(owner.id)],
+          proofIds: await uploadedProofs(e2e.mongo, owner.id),
         })
         .expect(200);
       expect(workspaceSchema.parse(resubmitted.body).status).toBe(
@@ -284,26 +284,21 @@ describe('Restaurant page flows (e2e)', () => {
         .get(`/api/v1/admin/workspaces/${applied.id}`)
         .auth(adminToken, { type: 'bearer' })
         .expect(200);
-      expect(adminDetailSchema.parse(detail.body).proofs).toHaveLength(2);
+      const parsed = adminDetailSchema.parse(detail.body);
+      expect(parsed.proofs).toHaveLength(8);
+      expect(parsed.legal?.taxCode).toBe('0123456789');
     });
 
-    it('allows multiple pending applications per person while keeping usernames unique', async () => {
+    it('keeps one pending application per person and usernames unique', async () => {
       const first = workspaceSchema.parse(
         (await apply(ownerToken, owner.id, 201)).body,
       );
-      const second = workspaceSchema.parse(
-        (await apply(ownerToken, owner.id, 201, { username: 'another.page' }))
-          .body,
-      );
       expect(first.status).toBe(VerificationStatus.PENDING);
-      expect(second.status).toBe(VerificationStatus.PENDING);
 
-      const duplicateSecond = await apply(ownerToken, owner.id, 409, {
+      const second = await apply(ownerToken, owner.id, 409, {
         username: 'another.page',
       });
-      expect(errorSchema.parse(duplicateSecond.body).code).toBe(
-        'USERNAME_TAKEN',
-      );
+      expect(errorSchema.parse(second.body).code).toBe('APPLICATION_PENDING');
 
       const clash = await apply(managerToken, manager.id, 409);
       expect(errorSchema.parse(clash.body).code).toBe('USERNAME_TAKEN');
@@ -312,6 +307,148 @@ describe('Restaurant page flows (e2e)', () => {
         username: stranger.username,
       });
       expect(errorSchema.parse(taken.body).code).toBe('USERNAME_TAKEN');
+    });
+
+    it('requires the documents and tax code format of each legal form', async () => {
+      const individual = {
+        username: 'xe.che.chay',
+        legal: {
+          entityType: 'INDIVIDUAL',
+          taxCode: '001203004005',
+          legalAddress: '5 Lý Thường Kiệt, Hà Nội',
+          representativeName: 'Trần Thị Bình',
+          contactEmail: 'binh@example.com',
+        },
+      };
+      // No business licence is needed without a registered business.
+      const proofIds = await uploadedProofs(
+        e2e.mongo,
+        owner.id,
+        IDENTITY_AND_STOREFRONT,
+      );
+      const created = await request(server())
+        .post('/api/v1/workspaces')
+        .auth(ownerToken, { type: 'bearer' })
+        .send({ ...APPLICATION, ...individual, proofIds })
+        .expect(201);
+      expect(workspaceSchema.parse(created.body).status).toBe('PENDING');
+
+      // A household without its licence is turned away.
+      const noLicence = await request(server())
+        .post('/api/v1/workspaces')
+        .auth(managerToken, { type: 'bearer' })
+        .send({
+          ...APPLICATION,
+          proofIds: await uploadedProofs(
+            e2e.mongo,
+            manager.id,
+            IDENTITY_AND_STOREFRONT,
+          ),
+        })
+        .expect(400);
+      expect(errorSchema.parse(noLicence.body).code).toBe('MISSING_PROOF');
+
+      for (const legal of [
+        {
+          ...APPLICATION.legal,
+          entityType: 'COMPANY',
+          taxCode: '001203004005',
+        },
+        { ...individual.legal, taxCode: '0123456789' },
+        { ...APPLICATION.legal, legalName: '' },
+      ])
+        await request(server())
+          .post('/api/v1/workspaces')
+          .auth(managerToken, { type: 'bearer' })
+          .send({
+            ...APPLICATION,
+            legal,
+            proofIds: await uploadedProofs(e2e.mongo, manager.id),
+          })
+          .expect(400);
+
+      for (const missing of [
+        { confirmsAccuracy: false },
+        { consentsToReview: undefined },
+        { phone: '' },
+        { provinceCode: 'ha-tay' },
+      ])
+        await request(server())
+          .post('/api/v1/workspaces')
+          .auth(managerToken, { type: 'bearer' })
+          .send({
+            ...APPLICATION,
+            ...missing,
+            proofIds: await uploadedProofs(e2e.mongo, manager.id),
+          })
+          .expect(400);
+    });
+
+    it('needs a full checklist to approve and warns about look-alike pages', async () => {
+      const { workspaceId } = await approvedPage();
+
+      // The same household opens a second page next door.
+      const second = workspaceSchema.parse(
+        (await apply(ownerToken, owner.id, 201, { username: 'an.lac.2' })).body,
+      );
+      const detail = await request(server())
+        .get(`/api/v1/admin/workspaces/${second.id}`)
+        .auth(adminToken, { type: 'bearer' })
+        .expect(200);
+      const warnings = adminDetailSchema.parse(detail.body).warnings;
+      expect(warnings.map(({ code }) => code).sort()).toEqual([
+        'NEARBY_PAGE',
+        'SAME_TAX_CODE',
+      ]);
+      expect(warnings[0].workspaces[0].id).toBe(workspaceId);
+
+      await review(second.id, { decision: 'APPROVED' }).expect(400);
+      const partial = await review(second.id, {
+        ...APPROVE_REVIEW,
+        checklist: { ...APPROVE_REVIEW.checklist, phoneConfirmed: false },
+      }).expect(400);
+      expect(errorSchema.parse(partial.body).code).toBe('CHECKLIST_INCOMPLETE');
+      await review(second.id, APPROVE_REVIEW).expect(200);
+    });
+
+    it('locks the address and pin of an approved page', async () => {
+      const { workspaceId } = await approvedPage();
+      const details = {
+        address: APPLICATION.address,
+        longitude: APPLICATION.longitude,
+        latitude: APPLICATION.latitude,
+        phone: '0988 000 111',
+        website: null,
+      };
+      await request(server())
+        .patch(`/api/v1/workspaces/${workspaceId}/details`)
+        .auth(ownerToken, { type: 'bearer' })
+        .send(details)
+        .expect(200);
+      const moved = await request(server())
+        .patch(`/api/v1/workspaces/${workspaceId}/details`)
+        .auth(ownerToken, { type: 'bearer' })
+        .send({ ...details, latitude: 10.77 })
+        .expect(409);
+      expect(errorSchema.parse(moved.body).code).toBe('LOCKED_AFTER_APPROVAL');
+    });
+
+    it('shows the legal details to the owner only', async () => {
+      const { workspaceId } = await approvedPage();
+      await addManager(workspaceId);
+      const legalOf = async (token: string) =>
+        z
+          .object({ legal: z.object({ taxCode: z.string() }).nullable() })
+          .parse(
+            (
+              await request(server())
+                .get(`/api/v1/workspaces/${workspaceId}`)
+                .auth(token, { type: 'bearer' })
+                .expect(200)
+            ).body,
+          ).legal;
+      expect(await legalOf(ownerToken)).not.toBeNull();
+      expect(await legalOf(managerToken)).toBeNull();
     });
   });
 

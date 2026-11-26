@@ -30,6 +30,8 @@ export const INVALID_INPUT_CODES = [
   'INVALID_DATE',
   'DIETARY_MEMORY_FULL',
   'ORDER_MISMATCH',
+  'MISSING_PROOF',
+  'CHECKLIST_INCOMPLETE',
 ] as const;
 
 export type InvalidInputCode = (typeof INVALID_INPUT_CODES)[number];

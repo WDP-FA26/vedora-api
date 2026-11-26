@@ -27,6 +27,53 @@ export enum WorkspaceMemberRole {
   MANAGER = 'MANAGER',
 }
 
+/** The legal form a restaurant page applies under; it decides which fields and documents are required. */
+export enum LegalEntityType {
+  COMPANY = 'COMPANY',
+  HOUSEHOLD = 'HOUSEHOLD',
+  /** A small seller exempt from business registration; identified by their citizen ID. */
+  INDIVIDUAL = 'INDIVIDUAL',
+}
+
+/** How the restaurant serves food. */
+export enum BusinessForm {
+  RESTAURANT = 'RESTAURANT',
+  EATERY = 'EATERY',
+  STALL = 'STALL',
+  ONLINE = 'ONLINE',
+}
+
+/** How strictly vegetarian the restaurant is. */
+export enum VegetarianLevel {
+  VEGAN = 'VEGAN',
+  LACTO_OVO = 'LACTO_OVO',
+  /** A mixed restaurant with its own vegetarian menu. */
+  VEGETARIAN_MENU = 'VEGETARIAN_MENU',
+}
+
+/** What a page application's proof image shows. */
+export enum WorkspaceProofKind {
+  ID_FRONT = 'ID_FRONT',
+  ID_BACK = 'ID_BACK',
+  BUSINESS_LICENSE = 'BUSINESS_LICENSE',
+  STOREFRONT = 'STOREFRONT',
+  FOOD_SAFETY = 'FOOD_SAFETY',
+  MENU = 'MENU',
+  OTHER = 'OTHER',
+}
+
+/** Why an admin rejected a page application; `OTHER` needs a note. */
+export enum WorkspaceRejectReason {
+  BLURRY_DOCUMENTS = 'BLURRY_DOCUMENTS',
+  TAX_CODE_MISMATCH = 'TAX_CODE_MISMATCH',
+  IDENTITY_MISMATCH = 'IDENTITY_MISMATCH',
+  STOREFRONT_MISMATCH = 'STOREFRONT_MISMATCH',
+  UNREACHABLE = 'UNREACHABLE',
+  NOT_VEGETARIAN = 'NOT_VEGETARIAN',
+  DUPLICATE = 'DUPLICATE',
+  OTHER = 'OTHER',
+}
+
 export enum AccountStatus {
   PENDING_EMAIL = 'PENDING_EMAIL',
   ACTIVE = 'ACTIVE',

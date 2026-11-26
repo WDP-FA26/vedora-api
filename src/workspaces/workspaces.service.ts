@@ -13,6 +13,7 @@ import { lockDocument } from '../mongo/document-lock.js';
 import {
   AccountStatus,
   AccountType,
+  LegalEntityType,
   User,
   UserRole,
   VerificationStatus,
@@ -42,8 +43,12 @@ import {
   RestaurantDetailsDto,
   RestaurantLocationDto,
   RestaurantPinListDto,
+  REQUIRED_PROOF_KINDS,
   RestaurantsInViewQueryDto,
   ReviewWorkspaceDto,
+  WorkspaceLegalViewDto,
+  WorkspaceWarningCode,
+  WorkspaceWarningDto,
   WorkspaceDetailDto,
   WorkspaceDto,
   WorkspaceMemberDto,
@@ -72,6 +77,12 @@ const PROOF_URL_TTL_SECONDS = runtimeConfig.VERIFICATION_PROOF_URL_TTL_SECONDS;
 /** Page accounts have no mailbox; this reserved domain can never receive mail. */
 const pageEmail = (workspaceId: string) =>
   `page-${workspaceId}@pages.vedora.invalid`;
+
+/** Approved pages pinned this close to an application are flagged for the admin. */
+const NEARBY_PAGE_METERS = 100;
+/** An owner's rejections in this window are flagged on their next application. */
+const RECENT_REJECTION_MS = 30 * 24 * 3600 * 1000;
+const MAX_WARNING_PAGES = 5;
 
 const VIETNAMESE_COLLATOR = new Intl.Collator('vi', { numeric: true });
 
@@ -138,7 +149,12 @@ export class WorkspacesService {
       dto.contentType,
       dto.sizeBytes,
     );
-    await this.proofs.create({ _id: id, ownerId: personId, storageKey: key });
+    await this.proofs.create({
+      _id: id,
+      ownerId: personId,
+      storageKey: key,
+      kind: dto.kind,
+    });
     return { id, upload };
   }
 
@@ -147,10 +163,11 @@ export class WorkspacesService {
     personId: string,
     dto: CreateWorkspaceDto,
   ): Promise<WorkspaceDetailDto> {
-    await this.assertProofsUploaded(personId, dto.proofIds);
+    await this.assertApplicationProofs(personId, dto);
     const workspaceId = randomUUID();
     await this.mongo.withTransaction(async (session) => {
       await lockDocument(this.mongo, session, 'user', personId);
+      await this.assertNoOtherPending(session, personId, null);
       await this.assertUsernameFree(session, dto.username, null);
       await this.workspaces.create(
         [
@@ -158,10 +175,7 @@ export class WorkspacesService {
             _id: workspaceId,
             pageUserId: null,
             ...this.applicationFields(dto),
-            status: VerificationStatus.PENDING,
-            reviewNote: null,
-            reviewedById: null,
-            reviewedAt: null,
+            ...PENDING_REVIEW,
           },
         ],
         { session },
@@ -188,8 +202,9 @@ export class WorkspacesService {
     workspaceId: string,
     dto: CreateWorkspaceDto,
   ): Promise<WorkspaceDetailDto> {
-    await this.assertProofsUploaded(personId, dto.proofIds);
+    await this.assertApplicationProofs(personId, dto);
     await this.mongo.withTransaction(async (session) => {
+      await lockDocument(this.mongo, session, 'user', personId);
       await lockDocument(this.mongo, session, 'workspace', workspaceId);
       const workspace = await this.findWorkspace(session, workspaceId);
       await this.assertOwner(session, workspace.id, personId);
@@ -198,18 +213,11 @@ export class WorkspacesService {
           'WORKSPACE_NOT_REVIEWABLE',
           'Only a rejected page can be sent for review again',
         );
+      await this.assertNoOtherPending(session, personId, workspace.id);
       await this.assertUsernameFree(session, dto.username, workspace.id);
       await this.workspaces.updateOne(
         { _id: workspace.id },
-        {
-          $set: {
-            ...this.applicationFields(dto),
-            status: VerificationStatus.PENDING,
-            reviewNote: null,
-            reviewedById: null,
-            reviewedAt: null,
-          },
-        },
+        { $set: { ...this.applicationFields(dto), ...PENDING_REVIEW } },
         { session },
       );
       await this.claimProofs(session, personId, workspace.id, dto.proofIds);
@@ -263,6 +271,17 @@ export class WorkspacesService {
       .exec();
     if (!membership)
       throw new ResourceNotFoundException('NOT_FOUND', 'Page not found');
+    const current = await this.workspaces.findOne({ _id: workspaceId }).exec();
+    if (!current)
+      throw new ResourceNotFoundException('NOT_FOUND', 'Page not found');
+    if (
+      current.status === VerificationStatus.APPROVED &&
+      movesRestaurant(current, dto)
+    )
+      throw new StateConflictException(
+        'LOCKED_AFTER_APPROVAL',
+        'The address and map pin of an approved page cannot change; contact support',
+      );
     const updated = await this.workspaces
       .findOneAndUpdate(
         { _id: workspaceId },
@@ -401,13 +420,15 @@ export class WorkspacesService {
       .exec();
     if (!workspace)
       throw new ResourceNotFoundException('NOT_FOUND', 'Page not found');
-    const [[dto], proofs] = await Promise.all([
+    const [[dto], proofs, warnings] = await Promise.all([
       this.toAdminDtos([workspace]),
       this.proofs.find({ workspaceId }).sort({ createdAt: 1, _id: 1 }).exec(),
+      this.warnings(workspace),
     ]);
     const signed = await Promise.all(
       proofs.map(async (proof) => ({
         id: proof.id,
+        kind: proof.kind,
         url: await this.storage.presignDownload(
           StorageTarget.Verifications,
           proof.storageKey,
@@ -415,7 +436,7 @@ export class WorkspacesService {
         ),
       })),
     );
-    return { ...dto, proofs: signed };
+    return { ...dto, proofs: signed, warnings };
   }
 
   /**
@@ -437,10 +458,18 @@ export class WorkspacesService {
             'WORKSPACE_NOT_REVIEWABLE',
             'This page was already reviewed',
           );
+        const approving = dto.decision === VerificationStatus.APPROVED;
+        if (approving && workspace.legal && !isChecklistComplete(dto))
+          throw new InvalidInputException(
+            'CHECKLIST_INCOMPLETE',
+            'Tick every checklist item before approving',
+          );
         const now = new Date();
         const decision = {
           status: dto.decision,
           reviewNote: dto.note || null,
+          rejectReason: approving ? null : (dto.rejectReason ?? null),
+          reviewChecklist: dto.checklist ?? null,
           reviewedById: reviewerId,
           reviewedAt: now,
         };
@@ -755,16 +784,33 @@ export class WorkspacesService {
   }
 
   private applicationFields(dto: CreateWorkspaceDto) {
+    const { legal } = dto;
     return {
       username: dto.username,
       name: dto.name,
       bio: dto.bio ?? null,
-      statement: dto.statement,
+      statement: dto.statement ?? null,
       ...this.restaurantFields(dto),
+      provinceCode: dto.provinceCode,
+      ward: dto.ward,
+      businessForm: dto.businessForm,
+      vegetarianLevel: dto.vegetarianLevel,
+      otherPlatformUrls: dto.otherPlatformUrls ?? [],
+      legal: {
+        entityType: legal.entityType,
+        taxCode: legal.taxCode,
+        legalName: needsLegalName(legal.entityType)
+          ? (legal.legalName ?? null)
+          : null,
+        legalAddress: legal.legalAddress,
+        representativeName: legal.representativeName,
+        contactEmail: legal.contactEmail,
+      },
+      committedAt: new Date(),
     };
   }
 
-  private restaurantFields(dto: RestaurantDetailsDto) {
+  private restaurantFields(dto: RestaurantDetailsDto | CreateWorkspaceDto) {
     return {
       address: dto.address,
       location: {
@@ -776,10 +822,54 @@ export class WorkspacesService {
     };
   }
 
+  /** The proofs are uploaded and include every kind the legal form requires. */
+  private async assertApplicationProofs(
+    personId: string,
+    dto: CreateWorkspaceDto,
+  ): Promise<void> {
+    const proofs = await this.assertProofsUploaded(personId, dto.proofIds);
+    const kinds = new Set(proofs.map(({ kind }) => kind));
+    const missing = REQUIRED_PROOF_KINDS[dto.legal.entityType].filter(
+      (kind) => !kinds.has(kind),
+    );
+    if (missing.length > 0)
+      throw new InvalidInputException(
+        'MISSING_PROOF',
+        `Missing proof images: ${missing.join(', ')}`,
+      );
+  }
+
+  /** One application waits for review per person at a time. */
+  private async assertNoOtherPending(
+    session: ClientSession,
+    personId: string,
+    exceptWorkspaceId: string | null,
+  ): Promise<void> {
+    const owned = await this.members
+      .find({ userId: personId, role: WorkspaceMemberRole.OWNER })
+      .select('workspaceId')
+      .session(session)
+      .exec();
+    const otherIds: string[] = [];
+    for (const row of owned) {
+      if (row.workspaceId !== exceptWorkspaceId) otherIds.push(row.workspaceId);
+    }
+    if (otherIds.length === 0) return;
+    const pending = await this.workspaces
+      .exists({ _id: { $in: otherIds }, status: VerificationStatus.PENDING })
+      .session(session)
+      .exec();
+    if (pending)
+      throw new StateConflictException(
+        'APPLICATION_PENDING',
+        'You already have an application waiting for review',
+      );
+  }
+
   private async assertProofsUploaded(
     personId: string,
     proofIds: string[],
-  ): Promise<void> {
+  ): Promise<WorkspaceProof[]> {
     const proofs = await this.proofs
       .find({ ownerId: personId, workspaceId: null, _id: { $in: proofIds } })
       .exec();
@@ -795,6 +885,90 @@ export class WorkspacesService {
         'PROOF_NOT_UPLOADED',
         'A proof image has not finished uploading',
       );
+    return proofs;
+  }
+
+  /** Signs the admin should look at before deciding; they never block a decision. */
+  private async warnings(workspace: Workspace): Promise<WorkspaceWarningDto[]> {
+    const [sameTaxCode, nearby, recentRejections] = await Promise.all([
+      this.sameTaxCodePages(workspace),
+      this.nearbyPages(workspace),
+      this.recentRejections(workspace),
+    ]);
+    const warnings: WorkspaceWarningDto[] = [];
+    const found: Array<[WorkspaceWarningCode, Workspace[]]> = [
+      [WorkspaceWarningCode.SAME_TAX_CODE, sameTaxCode],
+      [WorkspaceWarningCode.NEARBY_PAGE, nearby],
+      [WorkspaceWarningCode.RECENT_REJECTION, recentRejections],
+    ];
+    for (const [code, rows] of found) {
+      if (rows.length === 0) continue;
+      warnings.push({
+        code,
+        workspaces: rows.map((row) => ({
+          id: row.id,
+          name: row.name,
+          status: row.status,
+        })),
+      });
+    }
+    return warnings;
+  }
+
+  private async sameTaxCodePages(workspace: Workspace): Promise<Workspace[]> {
+    if (!workspace.legal) return [];
+    return this.workspaces
+      .find({
+        _id: { $ne: workspace.id },
+        // `$type` lets the planner use the partial index on legal.taxCode.
+        'legal.taxCode': { $eq: workspace.legal.taxCode, $type: 'string' },
+        status: VerificationStatus.APPROVED,
+      })
+      .select('name status')
+      .limit(MAX_WARNING_PAGES)
+      .exec();
+  }
+
+  private async nearbyPages(workspace: Workspace): Promise<Workspace[]> {
+    return this.workspaces
+      .find({
+        _id: { $ne: workspace.id },
+        status: VerificationStatus.APPROVED,
+        location: {
+          $nearSphere: {
+            $geometry: workspace.location,
+            $maxDistance: NEARBY_PAGE_METERS,
+          },
+        },
+      })
+      .select('name status')
+      .limit(MAX_WARNING_PAGES)
+      .exec();
+  }
+
+  private async recentRejections(workspace: Workspace): Promise<Workspace[]> {
+    const owner = await this.members
+      .findOne({ workspaceId: workspace.id, role: WorkspaceMemberRole.OWNER })
+      .exec();
+    if (!owner) return [];
+    const owned = await this.members
+      .find({ userId: owner.userId, role: WorkspaceMemberRole.OWNER })
+      .select('workspaceId')
+      .exec();
+    const otherIds: string[] = [];
+    for (const row of owned) {
+      if (row.workspaceId !== workspace.id) otherIds.push(row.workspaceId);
+    }
+    if (otherIds.length === 0) return [];
+    return this.workspaces
+      .find({
+        _id: { $in: otherIds },
+        status: VerificationStatus.REJECTED,
+        reviewedAt: { $gte: new Date(Date.now() - RECENT_REJECTION_MS) },
+      })
+      .select('name status')
+      .limit(MAX_WARNING_PAGES)
+      .exec();
   }
 
   private async claimProofs(
@@ -923,14 +1097,16 @@ export class WorkspacesService {
         name: page?.fullName ?? workspace.name,
         bio: page ? page.bio : workspace.bio,
         avatarUrl: page?.avatarUrl ?? null,
-        statement: workspace.statement,
         status: workspace.status,
         reviewNote: workspace.reviewNote,
+        rejectReason: workspace.rejectReason,
         reviewedAt: workspace.reviewedAt,
         createdAt: workspace.createdAt,
         proofCount: proofCounts.get(workspace.id) ?? 0,
         role,
-        ...this.locationDto(workspace),
+        // The tax code can be the owner's citizen ID; managers do not see it.
+        legal: role === WorkspaceMemberRole.OWNER ? legalView(workspace) : null,
+        ...this.profileFields(workspace),
       });
     }
     return dtos;
@@ -992,12 +1168,15 @@ export class WorkspacesService {
         username: workspace.username,
         name: workspace.name,
         bio: workspace.bio,
-        statement: workspace.statement,
         status: workspace.status,
         reviewNote: workspace.reviewNote,
+        rejectReason: workspace.rejectReason,
+        reviewChecklist: workspace.reviewChecklist,
         reviewedAt: workspace.reviewedAt,
         createdAt: workspace.createdAt,
+        committedAt: workspace.committedAt,
         proofCount: proofCounts.get(workspace.id) ?? 0,
+        legal: legalView(workspace),
         owner: owner
           ? {
               id: owner.id,
@@ -1007,8 +1186,70 @@ export class WorkspacesService {
               avatarUrl: owner.avatarUrl,
             }
           : null,
-        ...this.locationDto(workspace),
+        ...this.profileFields(workspace),
       };
     });
   }
+
+  private profileFields(workspace: Workspace) {
+    return {
+      ...this.locationDto(workspace),
+      provinceCode: workspace.provinceCode,
+      ward: workspace.ward,
+      businessForm: workspace.businessForm,
+      vegetarianLevel: workspace.vegetarianLevel,
+      otherPlatformUrls: workspace.otherPlatformUrls,
+      statement: workspace.statement,
+    };
+  }
+}
+
+const PENDING_REVIEW = {
+  status: VerificationStatus.PENDING,
+  reviewNote: null,
+  rejectReason: null,
+  reviewChecklist: null,
+  reviewedById: null,
+  reviewedAt: null,
+};
+
+function needsLegalName(entityType: LegalEntityType): boolean {
+  return entityType !== LegalEntityType.INDIVIDUAL;
+}
+
+function legalView(workspace: Workspace): WorkspaceLegalViewDto | null {
+  const { legal } = workspace;
+  if (!legal) return null;
+  return {
+    entityType: legal.entityType,
+    taxCode: legal.taxCode,
+    legalName: legal.legalName,
+    legalAddress: legal.legalAddress,
+    representativeName: legal.representativeName,
+    contactEmail: legal.contactEmail,
+  };
+}
+
+function isChecklistComplete(dto: ReviewWorkspaceDto): boolean {
+  const { checklist } = dto;
+  if (!checklist) return false;
+  return (
+    checklist.identityMatches &&
+    checklist.taxCodeVerified &&
+    checklist.storefrontMatches &&
+    checklist.phoneConfirmed
+  );
+}
+
+/** Whether the update changes the address or moves the map pin. */
+function movesRestaurant(
+  current: Workspace,
+  dto: RestaurantDetailsDto,
+): boolean {
+  const [longitude, latitude] = current.location.coordinates;
+  return (
+    current.address !== dto.address ||
+    longitude !== dto.longitude ||
+    latitude !== dto.latitude
+  );
 }

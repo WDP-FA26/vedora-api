@@ -17,6 +17,11 @@ import { QdrantService } from '@src/qdrant/qdrant.service.js';
 import { StorageService } from '@src/storage/storage.service.js';
 import { MenuSearchIndexService } from '@src/workspaces/search/menu-search-index.service.js';
 import { createE2eApp, type E2eApp } from '@test/support/e2e-app.js';
+import {
+  APPROVE_REVIEW,
+  PAGE_APPLICATION,
+  uploadedProofs,
+} from '@test/support/workspace-application.js';
 import { createUser } from '@test/support/fixtures.js';
 
 const errorSchema = z.object({ statusCode: z.number(), code: z.string() });
@@ -119,26 +124,17 @@ describe('Restaurant proximity, menu search & reviews (e2e)', () => {
     longitude: number;
     latitude: number;
   }) {
-    const proofId = randomUUID();
-    await model<WorkspaceProof>(WorkspaceProof.name).create({
-      _id: proofId,
-      ownerId: owner.id,
-      storageKey: `workspaces/${owner.id}/${proofId}.jpg`,
-    });
+    const proofIds = await uploadedProofs(e2e.mongo, owner.id);
     const created = await request(server())
       .post('/api/v1/workspaces')
       .auth(ownerToken, { type: 'bearer' })
-      .send({
-        ...input,
-        statement: 'Tôi là chủ nhà hàng, gửi đầy đủ giấy tờ minh chứng.',
-        proofIds: [proofId],
-      })
+      .send({ ...PAGE_APPLICATION, ...input, proofIds })
       .expect(201);
     const workspaceId = z.object({ id: z.string() }).parse(created.body).id;
     const reviewed = await request(server())
       .post(`/api/v1/admin/workspaces/${workspaceId}/review`)
       .auth(adminToken, { type: 'bearer' })
-      .send({ decision: 'APPROVED' })
+      .send(APPROVE_REVIEW)
       .expect(200);
     const pageUserId = z
       .object({ pageUserId: z.string() })
