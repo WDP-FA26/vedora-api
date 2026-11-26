@@ -5,6 +5,8 @@ import {
   ArrayMaxSize,
   ArrayMinSize,
   ArrayUnique,
+  IsBoolean,
+  IsEmail,
   IsEnum,
   IsIn,
   IsInt,
@@ -18,16 +20,28 @@ import {
   MaxLength,
   Min,
   MinLength,
+  Validate,
   ValidateIf,
+  ValidateNested,
+  ValidatorConstraint,
+  type ValidationArguments,
+  type ValidatorConstraintInterface,
 } from 'class-validator';
-import { VerificationStatus, WorkspaceMemberRole } from '../../mongo/models.js';
+import {
+  BusinessForm,
+  LegalEntityType,
+  VegetarianLevel,
+  VerificationStatus,
+  WorkspaceMemberRole,
+  WorkspaceProofKind,
+  WorkspaceRejectReason,
+} from '../../mongo/models.js';
+import { VN_PROVINCE_CODES, type VnProvinceCode } from '../vn-provinces.js';
 import { PaginationQueryDto } from '../../common/pagination/index.js';
 import { PresignedUploadDto } from '../../storage/presigned-upload.dto.js';
 import {
-  MAX_PROOFS,
   MAX_REVIEW_NOTE_LENGTH,
   MAX_STATEMENT_LENGTH,
-  MIN_STATEMENT_LENGTH,
   PROOF_IMAGE_TYPES,
   type ReviewDecision,
 } from '../../verification/dto/verification.dto.js';
@@ -35,6 +49,41 @@ import {
 export const MAX_ADDRESS_LENGTH = 300;
 export const MAX_PHONE_LENGTH = 30;
 export const MAX_WEBSITE_LENGTH = 300;
+export const MAX_WARD_LENGTH = 100;
+export const MAX_LEGAL_NAME_LENGTH = 200;
+export const MAX_PERSON_NAME_LENGTH = 100;
+export const MAX_OTHER_PLATFORM_URLS = 5;
+/** One of each document kind fits, with room for a few menu or extra photos. */
+export const MAX_WORKSPACE_PROOFS = 10;
+
+const IDENTITY_AND_STOREFRONT = [
+  WorkspaceProofKind.ID_FRONT,
+  WorkspaceProofKind.ID_BACK,
+  WorkspaceProofKind.STOREFRONT,
+] as const;
+
+/** The proof kinds an application must include, by legal form. */
+export const REQUIRED_PROOF_KINDS: Record<
+  LegalEntityType,
+  readonly WorkspaceProofKind[]
+> = {
+  [LegalEntityType.COMPANY]: [
+    ...IDENTITY_AND_STOREFRONT,
+    WorkspaceProofKind.BUSINESS_LICENSE,
+  ],
+  [LegalEntityType.HOUSEHOLD]: [
+    ...IDENTITY_AND_STOREFRONT,
+    WorkspaceProofKind.BUSINESS_LICENSE,
+  ],
+  [LegalEntityType.INDIVIDUAL]: IDENTITY_AND_STOREFRONT,
+};
+
+/** A company tax code: 10 digits, or 10-3 for a branch. */
+const COMPANY_TAX_CODE = /^\d{10}(-\d{3})?$/;
+/** Since 1 July 2025 households and individuals use the 12-digit citizen ID as their tax code. */
+const CITIZEN_ID = /^\d{12}$/;
+/** A household has either kind. */
+const HOUSEHOLD_TAX_CODE = /^(\d{10}(-\d{3})?|\d{12})$/;
 /** Restaurants returned for one map viewport. */
 export const MAX_RESTAURANTS_IN_VIEW = 200;
 
@@ -45,6 +94,10 @@ const REVIEW_DECISIONS = [
 
 const trim = ({ value }: { value: unknown }): unknown =>
   typeof value === 'string' ? value.trim() : value;
+
+/** Tax codes are often typed with spaces or dots between digit groups. */
+const compactTaxCode = ({ value }: { value: unknown }): unknown =>
+  typeof value === 'string' ? value.replace(/[\s.]/g, '') : value;
 
 const trimLower = ({ value }: { value: unknown }): unknown =>
   typeof value === 'string' ? value.trim().toLowerCase() : value;
@@ -58,6 +111,13 @@ const blankToNull = ({ value }: { value: unknown }): unknown => {
 };
 
 export class CreateWorkspaceProofUploadDto {
+  @ApiProperty({
+    enum: WorkspaceProofKind,
+    description: 'What the image shows; each kind has its own slot in the form',
+  })
+  @IsEnum(WorkspaceProofKind)
+  kind!: WorkspaceProofKind;
+
   @ApiProperty({ enum: PROOF_IMAGE_TYPES })
   @IsIn(PROOF_IMAGE_TYPES)
   contentType!: (typeof PROOF_IMAGE_TYPES)[number];
@@ -77,8 +137,8 @@ export class WorkspaceProofUploadDto {
   upload!: PresignedUploadDto;
 }
 
-/** Where the restaurant is and how to reach it; members can change it later. */
-export class RestaurantDetailsDto {
+/** Where the restaurant is. */
+export class RestaurantPlaceDto {
   @ApiProperty({ maxLength: MAX_ADDRESS_LENGTH })
   @Transform(trim)
   @IsString()
@@ -95,7 +155,13 @@ export class RestaurantDetailsDto {
   @Type(() => Number)
   @IsLatitude()
   latitude!: number;
+}
 
+/**
+ * Where the restaurant is and how to reach it. Once a page is approved the
+ * address and pin are locked; only the phone and website can change.
+ */
+export class RestaurantDetailsDto extends RestaurantPlaceDto {
   @ApiPropertyOptional({
     type: String,
     nullable: true,
@@ -122,7 +188,97 @@ export class RestaurantDetailsDto {
   website?: string | null;
 }
 
-export class CreateWorkspaceDto extends RestaurantDetailsDto {
+/** The tax code format a legal form uses. */
+function taxCodeFormat(entityType: LegalEntityType): RegExp {
+  if (entityType === LegalEntityType.COMPANY) return COMPANY_TAX_CODE;
+  if (entityType === LegalEntityType.INDIVIDUAL) return CITIZEN_ID;
+  return HOUSEHOLD_TAX_CODE;
+}
+
+function isLegalEntityType(value: unknown): value is LegalEntityType {
+  return Object.values(LegalEntityType).some((type) => type === value);
+}
+
+/** `taxCode` must have the format of the sibling `entityType`. */
+@ValidatorConstraint({ name: 'taxCodeForEntity' })
+class TaxCodeForEntity implements ValidatorConstraintInterface {
+  validate(value: unknown, args: ValidationArguments): boolean {
+    if (typeof value !== 'string') return false;
+    const holder: unknown = args.object;
+    if (typeof holder !== 'object' || holder === null) return false;
+    const entityType: unknown = Reflect.get(holder, 'entityType');
+    // An unknown entityType already fails its own check.
+    if (!isLegalEntityType(entityType)) return true;
+    return taxCodeFormat(entityType).test(value);
+  }
+
+  defaultMessage(): string {
+    return 'taxCode must be 10 digits (10-3 for a branch) for a company, the 12-digit citizen ID for an individual, or either for a household';
+  }
+}
+
+const needsLegalName = (dto: WorkspaceLegalDto): boolean =>
+  dto.entityType !== LegalEntityType.INDIVIDUAL;
+
+/** Step 2 of the application: who stands behind the restaurant legally. */
+export class WorkspaceLegalDto {
+  @ApiProperty({ enum: LegalEntityType })
+  @IsEnum(LegalEntityType)
+  entityType!: LegalEntityType;
+
+  @ApiProperty({
+    example: '0312345678',
+    description:
+      'COMPANY: 10 digits, or 10-3 for a branch. HOUSEHOLD: that, or a 12-digit citizen ID. INDIVIDUAL: the 12-digit citizen ID. Spaces and dots are removed.',
+  })
+  @Transform(compactTaxCode)
+  @IsString()
+  @Validate(TaxCodeForEntity)
+  taxCode!: string;
+
+  @ApiPropertyOptional({
+    type: String,
+    nullable: true,
+    maxLength: MAX_LEGAL_NAME_LENGTH,
+    description:
+      'Company or household business name; required unless INDIVIDUAL, ignored for INDIVIDUAL',
+  })
+  @ValidateIf(needsLegalName)
+  @Transform(trim)
+  @IsString()
+  @MinLength(1)
+  @MaxLength(MAX_LEGAL_NAME_LENGTH)
+  legalName?: string | null;
+
+  @ApiProperty({
+    maxLength: MAX_ADDRESS_LENGTH,
+    description:
+      'Registered address, or the permanent address of an individual',
+  })
+  @Transform(trim)
+  @IsString()
+  @MinLength(1)
+  @MaxLength(MAX_ADDRESS_LENGTH)
+  legalAddress!: string;
+
+  @ApiProperty({ maxLength: MAX_PERSON_NAME_LENGTH })
+  @Transform(trim)
+  @IsString()
+  @MinLength(1)
+  @MaxLength(MAX_PERSON_NAME_LENGTH)
+  representativeName!: string;
+
+  @ApiProperty({ format: 'email' })
+  @Transform(trimLower)
+  @IsEmail()
+  contactEmail!: string;
+}
+
+/**
+ * A page application, filled in three steps: the restaurant, its legal
+ * details, then the documents and the applicant's commitments.
+ */
+export class CreateWorkspaceDto extends RestaurantPlaceDto {
   @ApiProperty({ maxLength: runtimeConfig.AUTH_FULL_NAME_MAX_LENGTH })
   @Transform(trim)
   @IsString()
@@ -158,29 +314,113 @@ export class CreateWorkspaceDto extends RestaurantDetailsDto {
   bio?: string | null;
 
   @ApiProperty({
-    minLength: MIN_STATEMENT_LENGTH,
-    maxLength: MAX_STATEMENT_LENGTH,
-    description: 'Who you are at this restaurant and what the proofs show',
+    enum: VN_PROVINCE_CODES,
+    description: 'Province or city code',
+  })
+  @IsIn(VN_PROVINCE_CODES)
+  provinceCode!: VnProvinceCode;
+
+  @ApiProperty({ maxLength: MAX_WARD_LENGTH, description: 'Ward or commune' })
+  @Transform(trim)
+  @IsString()
+  @MinLength(1)
+  @MaxLength(MAX_WARD_LENGTH)
+  ward!: string;
+
+  @ApiProperty({ enum: BusinessForm })
+  @IsEnum(BusinessForm)
+  businessForm!: BusinessForm;
+
+  @ApiProperty({ enum: VegetarianLevel })
+  @IsEnum(VegetarianLevel)
+  vegetarianLevel!: VegetarianLevel;
+
+  @ApiProperty({
+    maxLength: MAX_PHONE_LENGTH,
+    description:
+      'Required; the admin calls this number to confirm the application',
   })
   @Transform(trim)
   @IsString()
-  @MinLength(MIN_STATEMENT_LENGTH)
+  @Matches(/^[0-9+().\s-]+$/, { message: 'phone has invalid characters' })
+  @Matches(/^(\D*\d){8,}\D*$/, { message: 'phone needs at least 8 digits' })
+  @MaxLength(MAX_PHONE_LENGTH)
+  phone!: string;
+
+  @ApiPropertyOptional({
+    type: String,
+    nullable: true,
+    maxLength: MAX_WEBSITE_LENGTH,
+  })
+  @IsOptional()
+  @Transform(blankToNull)
+  @ValidateIf((_dto, value: unknown) => value !== null)
+  @IsUrl({ protocols: ['http', 'https'], require_protocol: true })
+  @MaxLength(MAX_WEBSITE_LENGTH)
+  website?: string | null;
+
+  @ApiPropertyOptional({
+    type: [String],
+    maxItems: MAX_OTHER_PLATFORM_URLS,
+    description:
+      'The restaurant on Google Maps, ShopeeFood, GrabFood, Facebook…',
+  })
+  @IsOptional()
+  @ArrayMaxSize(MAX_OTHER_PLATFORM_URLS)
+  @ArrayUnique()
+  @IsUrl(
+    { protocols: ['http', 'https'], require_protocol: true },
+    { each: true },
+  )
+  @MaxLength(MAX_WEBSITE_LENGTH, { each: true })
+  otherPlatformUrls?: string[];
+
+  @ApiProperty({ type: WorkspaceLegalDto })
+  @ValidateNested()
+  @Type(() => WorkspaceLegalDto)
+  legal!: WorkspaceLegalDto;
+
+  @ApiPropertyOptional({
+    type: String,
+    nullable: true,
+    maxLength: MAX_STATEMENT_LENGTH,
+    description: 'Who you are at this restaurant (owner, manager…)',
+  })
+  @IsOptional()
+  @Transform(blankToNull)
+  @ValidateIf((_dto, value: unknown) => value !== null)
+  @IsString()
   @MaxLength(MAX_STATEMENT_LENGTH)
-  statement!: string;
+  statement?: string | null;
 
   @ApiProperty({
     type: [String],
     format: 'uuid',
     minItems: 1,
-    maxItems: MAX_PROOFS,
+    maxItems: MAX_WORKSPACE_PROOFS,
     description:
-      'Uploaded proof images (business licence, food safety certificate, storefront photo)',
+      'Uploaded proofs. The kinds in REQUIRED_PROOF_KINDS for legal.entityType must all be there.',
   })
   @ArrayMinSize(1)
-  @ArrayMaxSize(MAX_PROOFS)
+  @ArrayMaxSize(MAX_WORKSPACE_PROOFS)
   @ArrayUnique()
   @IsUUID('4', { each: true })
   proofIds!: string[];
+
+  @ApiProperty({
+    enum: [true],
+    description:
+      'The details and documents are true and the applicant represents the restaurant',
+  })
+  @IsIn([true], { message: 'confirmsAccuracy must be true' })
+  confirmsAccuracy!: true;
+
+  @ApiProperty({
+    enum: [true],
+    description: 'Vedora may use the documents only to review this application',
+  })
+  @IsIn([true], { message: 'consentsToReview must be true' })
+  consentsToReview!: true;
 }
 
 export class RestaurantLocationDto {
@@ -189,6 +429,28 @@ export class RestaurantLocationDto {
   @ApiProperty() latitude!: number;
   @ApiProperty({ type: String, nullable: true }) phone!: string | null;
   @ApiProperty({ type: String, nullable: true }) website!: string | null;
+}
+
+/** The 3-step application's restaurant details; null on older applications. */
+export class RestaurantProfileFieldsDto extends RestaurantLocationDto {
+  @ApiProperty({ type: String, nullable: true, enum: VN_PROVINCE_CODES })
+  provinceCode!: string | null;
+  @ApiProperty({ type: String, nullable: true }) ward!: string | null;
+  @ApiProperty({ enum: BusinessForm, nullable: true })
+  businessForm!: BusinessForm | null;
+  @ApiProperty({ enum: VegetarianLevel, nullable: true })
+  vegetarianLevel!: VegetarianLevel | null;
+  @ApiProperty({ type: [String] }) otherPlatformUrls!: string[];
+  @ApiProperty({ type: String, nullable: true }) statement!: string | null;
+}
+
+export class WorkspaceLegalViewDto {
+  @ApiProperty({ enum: LegalEntityType }) entityType!: LegalEntityType;
+  @ApiProperty() taxCode!: string;
+  @ApiProperty({ type: String, nullable: true }) legalName!: string | null;
+  @ApiProperty() legalAddress!: string;
+  @ApiProperty() representativeName!: string;
+  @ApiProperty() contactEmail!: string;
 }
 
 export class WorkspaceMemberDto {
@@ -200,7 +462,7 @@ export class WorkspaceMemberDto {
   @ApiProperty() createdAt!: Date;
 }
 
-export class WorkspaceDto extends RestaurantLocationDto {
+export class WorkspaceDto extends RestaurantProfileFieldsDto {
   @ApiProperty({ format: 'uuid' }) id!: string;
   @ApiProperty({
     type: String,
@@ -216,14 +478,22 @@ export class WorkspaceDto extends RestaurantLocationDto {
   @ApiProperty() name!: string;
   @ApiProperty({ type: String, nullable: true }) bio!: string | null;
   @ApiProperty({ type: String, nullable: true }) avatarUrl!: string | null;
-  @ApiProperty() statement!: string;
   @ApiProperty({ enum: VerificationStatus }) status!: VerificationStatus;
   @ApiProperty({ type: String, nullable: true }) reviewNote!: string | null;
+  @ApiProperty({ enum: WorkspaceRejectReason, nullable: true })
+  rejectReason!: WorkspaceRejectReason | null;
   @ApiProperty({ type: Date, nullable: true }) reviewedAt!: Date | null;
   @ApiProperty() createdAt!: Date;
   @ApiProperty() proofCount!: number;
   @ApiProperty({ enum: WorkspaceMemberRole, description: 'Your role' })
   role!: WorkspaceMemberRole;
+  @ApiProperty({
+    type: WorkspaceLegalViewDto,
+    nullable: true,
+    description:
+      'Shown to the owner only (it can hold their citizen ID); null for managers and older applications',
+  })
+  legal!: WorkspaceLegalViewDto | null;
 }
 
 export class WorkspaceDetailDto extends WorkspaceDto {
@@ -247,19 +517,53 @@ export class AdminWorkspaceApplicantDto {
   @ApiProperty({ type: String, nullable: true }) avatarUrl!: string | null;
 }
 
-export class AdminWorkspaceDto extends RestaurantLocationDto {
+export class WorkspaceReviewChecklistDto {
+  @ApiProperty({
+    description: 'The name on the ID card matches the representative',
+  })
+  @IsBoolean()
+  identityMatches!: boolean;
+
+  @ApiProperty({
+    description: 'The tax code looks up to this legal name and is active',
+  })
+  @IsBoolean()
+  taxCodeVerified!: boolean;
+
+  @ApiProperty({ description: 'The storefront photo matches the address' })
+  @IsBoolean()
+  storefrontMatches!: boolean;
+
+  @ApiProperty({
+    description: 'The admin called the phone number and it was confirmed',
+  })
+  @IsBoolean()
+  phoneConfirmed!: boolean;
+}
+
+export class AdminWorkspaceDto extends RestaurantProfileFieldsDto {
   @ApiProperty({ format: 'uuid' }) id!: string;
   @ApiProperty({ type: String, format: 'uuid', nullable: true })
   pageUserId!: string | null;
   @ApiProperty() username!: string;
   @ApiProperty() name!: string;
   @ApiProperty({ type: String, nullable: true }) bio!: string | null;
-  @ApiProperty() statement!: string;
   @ApiProperty({ enum: VerificationStatus }) status!: VerificationStatus;
   @ApiProperty({ type: String, nullable: true }) reviewNote!: string | null;
+  @ApiProperty({ enum: WorkspaceRejectReason, nullable: true })
+  rejectReason!: WorkspaceRejectReason | null;
+  @ApiProperty({ type: WorkspaceReviewChecklistDto, nullable: true })
+  reviewChecklist!: WorkspaceReviewChecklistDto | null;
   @ApiProperty({ type: Date, nullable: true }) reviewedAt!: Date | null;
   @ApiProperty() createdAt!: Date;
+  @ApiProperty({ type: Date, nullable: true }) committedAt!: Date | null;
   @ApiProperty() proofCount!: number;
+  @ApiProperty({
+    type: WorkspaceLegalViewDto,
+    nullable: true,
+    description: 'Null on applications made before the 3-step form',
+  })
+  legal!: WorkspaceLegalViewDto | null;
   @ApiProperty({
     type: AdminWorkspaceApplicantDto,
     nullable: true,
@@ -270,12 +574,37 @@ export class AdminWorkspaceDto extends RestaurantLocationDto {
 
 export class WorkspaceProofDto {
   @ApiProperty({ format: 'uuid' }) id!: string;
+  @ApiProperty({ enum: WorkspaceProofKind }) kind!: WorkspaceProofKind;
   @ApiProperty({ description: 'Signed read URL, valid for ten minutes' })
   url!: string;
 }
 
+export enum WorkspaceWarningCode {
+  /** Another approved page uses this tax code (fine for branches; worth a look). */
+  SAME_TAX_CODE = 'SAME_TAX_CODE',
+  /** An approved page is pinned within `NEARBY_PAGE_METERS`. */
+  NEARBY_PAGE = 'NEARBY_PAGE',
+  /** The owner had another application rejected recently. */
+  RECENT_REJECTION = 'RECENT_REJECTION',
+}
+
+export class WorkspaceWarningPageDto {
+  @ApiProperty({ format: 'uuid' }) id!: string;
+  @ApiProperty() name!: string;
+  @ApiProperty({ enum: VerificationStatus }) status!: VerificationStatus;
+}
+
+/** Something the reviewing admin should look at; it never blocks a decision. */
+export class WorkspaceWarningDto {
+  @ApiProperty({ enum: WorkspaceWarningCode }) code!: WorkspaceWarningCode;
+  @ApiProperty({ type: [WorkspaceWarningPageDto] })
+  workspaces!: WorkspaceWarningPageDto[];
+}
+
 export class AdminWorkspaceDetailDto extends AdminWorkspaceDto {
   @ApiProperty({ type: [WorkspaceProofDto] }) proofs!: WorkspaceProofDto[];
+  @ApiProperty({ type: [WorkspaceWarningDto] })
+  warnings!: WorkspaceWarningDto[];
 }
 
 export class WorkspacesQueryDto extends PaginationQueryDto {
@@ -285,24 +614,45 @@ export class WorkspacesQueryDto extends PaginationQueryDto {
   status?: VerificationStatus;
 }
 
+const isRejecting = (dto: ReviewWorkspaceDto): boolean =>
+  dto.decision === VerificationStatus.REJECTED;
+
 export class ReviewWorkspaceDto {
   @ApiProperty({ enum: REVIEW_DECISIONS })
   @IsIn(REVIEW_DECISIONS)
   decision!: ReviewDecision;
 
   @ApiPropertyOptional({
+    enum: WorkspaceRejectReason,
+    description: 'Required when rejecting',
+  })
+  @ValidateIf(isRejecting)
+  @IsEnum(WorkspaceRejectReason)
+  rejectReason?: WorkspaceRejectReason;
+
+  @ApiPropertyOptional({
     maxLength: MAX_REVIEW_NOTE_LENGTH,
-    description: 'Shown to the owner; required when rejecting',
+    description: 'Shown to the owner; required when rejectReason is OTHER',
   })
   @Transform(trim)
   @ValidateIf(
     (dto: ReviewWorkspaceDto) =>
-      dto.decision === VerificationStatus.REJECTED || !!dto.note,
+      dto.rejectReason === WorkspaceRejectReason.OTHER || !!dto.note,
   )
   @IsString()
   @MinLength(1)
   @MaxLength(MAX_REVIEW_NOTE_LENGTH)
   note?: string;
+
+  @ApiPropertyOptional({
+    type: WorkspaceReviewChecklistDto,
+    description:
+      'Required, all true, to approve an application made with the 3-step form',
+  })
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => WorkspaceReviewChecklistDto)
+  checklist?: WorkspaceReviewChecklistDto;
 }
 
 const hasBounds = (dto: RestaurantsInViewQueryDto): boolean =>
@@ -365,7 +715,8 @@ export class RestaurantPinDto {
   @ApiProperty({
     type: Number,
     nullable: true,
-    description: 'Distance in meters when user coordinates were sent; else null',
+    description:
+      'Distance in meters when user coordinates were sent; else null',
   })
   distanceMeters!: number | null;
   @ApiProperty({ type: Number, nullable: true })

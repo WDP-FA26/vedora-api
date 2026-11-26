@@ -1,6 +1,6 @@
 # Fanpage nhà hàng (workspace) — hợp đồng API cho frontend
 
-Cập nhật: 21/11/2026. Base URL mặc định khi chạy local:
+Cập nhật: 27/11/2026. Base URL mặc định khi chạy local:
 `http://localhost:4000/api/v1`; frontend lấy từ `NEXT_PUBLIC_API_URL`.
 
 Một **page** là account của nhà hàng (`accountType: "PAGE"`), có profile,
@@ -12,11 +12,11 @@ account `PAGE` bằng ký hiệu `—` và không hiện thao tác sao chép ema
 
 ## Vòng đời
 
-1. Chủ quán upload ảnh minh chứng (giấy phép kinh doanh, chứng nhận ATTP, ảnh
-   mặt tiền), rồi gửi đơn → page ở trạng thái `PENDING`. Lúc này **account page
+1. Chủ quán điền form 3 bước (hồ sơ quán → pháp lý theo loại hình → giấy tờ và
+   cam kết), rồi gửi đơn → page ở trạng thái `PENDING`. Lúc này **account page
    chưa tồn tại**: không có profile, không tìm thấy trong search.
-2. Admin xem đơn và minh chứng ở `/admin/workspaces`, rồi duyệt
-   (`APPROVED`) hoặc từ chối kèm ghi chú (`REJECTED`).
+2. Admin xem đơn, giấy tờ và cảnh báo ở `/admin/workspaces`. Admin duyệt (`APPROVED`)
+   sau khi tick đủ checklist, hoặc từ chối (`REJECTED`) kèm lý do.
 3. Khi duyệt, API tạo account page với `username`, `name`, `bio` trong đơn.
    Từ đây, tên, bio, avatar và ảnh bìa được sửa ở profile của page
    (`PATCH /profiles/me` và các endpoint ảnh trong phiên page), như mọi account
@@ -26,8 +26,9 @@ account `PAGE` bằng ký hiệu `—` và không hiện thao tác sao chép ema
 4. Đơn bị từ chối có thể gửi lại (`POST /workspaces/:id/resubmit`) với thông
    tin và minh chứng mới.
 
-Một người có thể gửi nhiều đơn mở page (kể cả khi đang có đơn `PENDING` khác). Page được duyệt là
-trạng thái cuối, hiện chưa có thao tác thu hồi.
+Mỗi người chỉ có **1 đơn đang chờ duyệt** tại một thời điểm (`409 APPLICATION_PENDING`).
+Đơn đã được duyệt hoặc bị từ chối không tính. Page được duyệt là trạng thái cuối, hiện chưa có
+thao tác thu hồi. Sau khi duyệt, địa chỉ và ghim bản đồ bị khóa.
 
 Huy hiệu đầu bếp (`isProfessional`) là chuyện riêng, không liên quan và không
 chặn việc mở page.
@@ -114,41 +115,102 @@ Tất cả cần `Authorization: Bearer`. Trong phiên page, API dùng người 
 
 ### Upload minh chứng
 
-Giống huy hiệu đầu bếp: `POST /workspaces/proofs/uploads` với
-`{ "contentType": "image/jpeg" | "image/png" | "image/webp", "sizeBytes": 123 }`
+`POST /workspaces/proofs/uploads` với
+`{ "kind": "<loại giấy>", "contentType": "image/jpeg" | "image/png" | "image/webp", "sizeBytes": 123 }`
 → `{ id, upload: { url, method: "PUT", headers, expiresAt } }`. PUT file lên
-`upload.url`, rồi gửi `id` trong `proofIds`. Giới hạn dung lượng và số ảnh
-dùng chung với huy hiệu đầu bếp (`VERIFICATION_*`).
+`upload.url`, rồi gửi `id` trong `proofIds`. Dung lượng mỗi ảnh dùng chung giới hạn
+với huy hiệu đầu bếp (`VERIFICATION_PROOF_MAX_MB`). Mỗi đơn có tối đa 10 ảnh.
 
-### Gửi đơn
+`kind` cho biết ảnh là gì. Mỗi loại là một ô upload riêng trên form:
+
+| `kind` | Ảnh | Doanh nghiệp | Hộ kinh doanh | Cá nhân |
+| ------ | --- | :---: | :---: | :---: |
+| `ID_FRONT` | CCCD người đứng tên, mặt trước | Bắt buộc | Bắt buộc | Bắt buộc |
+| `ID_BACK` | CCCD người đứng tên, mặt sau | Bắt buộc | Bắt buộc | Bắt buộc |
+| `STOREFRONT` | Mặt tiền quán, thấy rõ biển hiệu và số nhà | Bắt buộc | Bắt buộc | Bắt buộc |
+| `BUSINESS_LICENSE` | Giấy chứng nhận đăng ký doanh nghiệp / hộ kinh doanh | Bắt buộc | Bắt buộc | — |
+| `FOOD_SAFETY` | Giấy chứng nhận ATTP | Khuyến khích | Khuyến khích | Khuyến khích |
+| `MENU` | Ảnh thực đơn | Khuyến khích | Khuyến khích | Khuyến khích |
+| `OTHER` | Giấy tờ khác | Tùy chọn | Tùy chọn | Tùy chọn |
+
+Thiếu loại bắt buộc → `400 MISSING_PROOF`.
+
+### Gửi đơn (form 3 bước)
 
 ```json
 POST /workspaces
 {
-  "name": "Chay An Lạc",
+  "name": "Chay An Lạc - Bún Huế - Hàng Bông",
   "username": "chay.an.lac",
   "bio": "Quán chay gia đình",
-  "address": "12 Hàng Bông, Hoàn Kiếm, Hà Nội",
+  "provinceCode": "ha-noi",
+  "ward": "Phường Hoàn Kiếm",
+  "address": "12 Hàng Bông",
   "longitude": 105.8482,
   "latitude": 21.0302,
+  "businessForm": "EATERY",
+  "vegetarianLevel": "VEGAN",
   "phone": "0901 234 567",
   "website": "https://anlac.example",
-  "statement": "Tôi là chủ quán, đính kèm giấy phép kinh doanh…",
-  "proofIds": ["…"]
+  "otherPlatformUrls": ["https://maps.app.goo.gl/…"],
+  "legal": {
+    "entityType": "HOUSEHOLD",
+    "taxCode": "0123456789",
+    "legalName": "Hộ kinh doanh Chay An Lạc",
+    "legalAddress": "12 Hàng Bông, Hoàn Kiếm, Hà Nội",
+    "representativeName": "Nguyễn Văn An",
+    "contactEmail": "an@anlac.example"
+  },
+  "statement": "Tôi là chủ quán.",
+  "proofIds": ["…"],
+  "confirmsAccuracy": true,
+  "consentsToReview": true
 }
 ```
 
-- `username`: cùng quy tắc với đăng ký (3–30 ký tự, `a-z0-9._-`).
-- `bio`, `phone`, `website`: tùy chọn; chuỗi rỗng hoặc `null` thành `null`.
-  `website` phải có `http://` hoặc `https://`.
-- `longitude`, `latitude`: vị trí ghim trên bản đồ (Mapbox).
-- `statement`: độ dài như yêu cầu huy hiệu đầu bếp.
+**Bước 1, hồ sơ quán:**
 
-Lỗi: `409 USERNAME_TAKEN` (username đã có account hoặc đang chờ duyệt),
-`409 PROOF_NOT_UPLOADED`, `400 BAD_REQUEST` (proof không hợp lệ).
+- `username`: cùng quy tắc với đăng ký (3–30 ký tự, `a-z0-9._-`).
+- `provinceCode`: một trong 34 mã tỉnh/thành sau sáp nhập 1/7/2025
+  (`src/workspaces/vn-provinces.ts`, ví dụ `ha-noi`, `ho-chi-minh`, `da-nang`).
+  `ward` là tên phường/xã, tự nhập.
+- `businessForm`: `RESTAURANT` (nhà hàng) · `EATERY` (quán ăn) · `STALL` (xe đẩy, quầy) ·
+  `ONLINE` (chỉ bán mang đi hoặc online).
+- `vegetarianLevel`: `VEGAN` (thuần chay) · `LACTO_OVO` (chay có trứng sữa) ·
+  `VEGETARIAN_MENU` (quán có thực đơn chay riêng).
+- `phone`: **bắt buộc**, có ít nhất 8 chữ số. Admin gọi số này để xác minh.
+- `bio`, `website`, `otherPlatformUrls` (tối đa 5 link `http(s)`), `statement`: tùy chọn.
+
+**Bước 2, pháp lý (`legal`):**
+
+| Trường | `COMPANY` | `HOUSEHOLD` | `INDIVIDUAL` |
+| ------ | --------- | ----------- | ------------ |
+| `taxCode` | 10 số, hoặc `10số-3số` cho chi nhánh | 10 số (hoặc 10-3), hoặc CCCD 12 số | CCCD 12 số |
+| `legalName` | Tên công ty, bắt buộc | Tên hộ kinh doanh, bắt buộc | Bỏ qua (lưu `null`) |
+| `legalAddress` | Địa chỉ công ty | Địa chỉ hộ kinh doanh | Địa chỉ thường trú |
+| `representativeName` | Người đứng tên pháp nhân | Người đứng tên | Chính chủ |
+| `contactEmail` | Bắt buộc | Bắt buộc | Bắt buộc |
+
+`taxCode` được bỏ khoảng trắng và dấu chấm trước khi kiểm tra.
+
+**Bước 3, giấy tờ và cam kết:** `proofIds` phải đủ các loại bắt buộc (xem bảng ở trên).
+`confirmsAccuracy` và `consentsToReview` phải là `true`.
+
+**Lỗi:**
+
+- `409 USERNAME_TAKEN`: username đã có account hoặc đang chờ duyệt.
+- `409 APPLICATION_PENDING`: người này đã có một đơn đang chờ duyệt; mỗi người chỉ có 1 đơn chờ.
+- `409 PROOF_NOT_UPLOADED`.
+- `400 MISSING_PROOF`.
+- `400 BAD_REQUEST`: proof không hợp lệ.
+- `400 VALIDATION_FAILED`: sai định dạng, ví dụ MST không hợp loại hình hoặc chưa tick cam kết.
+
+`POST /workspaces/:id/resubmit` nhận cùng body, và cũng phải gửi lại đủ giấy tờ.
 
 `PATCH /workspaces/:id/details` nhận `address`, `longitude`, `latitude`,
-`phone`, `website` (gửi đủ cả object).
+`phone`, `website` (gửi đủ cả object). **Khi page đã được duyệt**, địa chỉ và ghim bị
+khóa: gửi `address`, `longitude` hoặc `latitude` khác giá trị hiện tại thì nhận
+`409 LOCKED_AFTER_APPROVAL`. SĐT và website vẫn sửa được.
 
 ### Response `WorkspaceDetail`
 
@@ -165,12 +227,20 @@ Lỗi: `409 USERNAME_TAKEN` (username đã có account hoặc đang chờ duyệ
   "latitude": 21.0302,
   "phone": "…" | null,
   "website": "…" | null,
-  "statement": "…",
+  "provinceCode": "ha-noi" | null,
+  "ward": "…" | null,
+  "businessForm": "EATERY" | null,
+  "vegetarianLevel": "VEGAN" | null,
+  "otherPlatformUrls": [],
+  "statement": "…" | null,
+  "legal": { "entityType": "HOUSEHOLD", "taxCode": "…", "legalName": "…" | null,
+             "legalAddress": "…", "representativeName": "…", "contactEmail": "…" } | null,
   "status": "PENDING" | "APPROVED" | "REJECTED",
   "reviewNote": "…" | null,
+  "rejectReason": "BLURRY_DOCUMENTS" | … | null,
   "reviewedAt": "…" | null,
   "createdAt": "…",
-  "proofCount": 2,
+  "proofCount": 4,
   "role": "OWNER" | "MANAGER",
   "members": [
     { "userId": "…", "username": "…", "fullName": "…", "avatarUrl": null,
@@ -178,6 +248,9 @@ Lỗi: `409 USERNAME_TAKEN` (username đã có account hoặc đang chờ duyệ
   ]
 }
 ```
+
+- `legal` chỉ trả cho **owner**, vì MST có thể là số CCCD của họ. Manager nhận `null`.
+- Đơn gửi trước form 3 bước có các trường mới là `null`, và `otherPlatformUrls` là `[]`.
 
 `GET /workspaces/mine` trả mảng các object như trên nhưng không có `members`.
 Sau khi duyệt, `username`, `name`, `bio`, `avatarUrl` lấy từ account page (luôn
@@ -190,16 +263,53 @@ phải account cá nhân đang hoạt động). Người không phải thành vi
 
 ## Admin
 
-| Method | Endpoint                                 | Mô tả                                                    |
-| ------ | ---------------------------------------- | -------------------------------------------------------- |
-| GET    | `/admin/workspaces?status=&page=&limit=` | Danh sách đơn (phân trang page/limit)                    |
-| GET    | `/admin/workspaces/:id`                  | Chi tiết + `proofs: [{ id, url }]` (URL ký, 10 phút)     |
-| POST   | `/admin/workspaces/:id/review`           | `{ "decision": "APPROVED" \| "REJECTED", "note"?: "…" }` |
+| Method | Endpoint                                 | Mô tả                                              |
+| ------ | ---------------------------------------- | -------------------------------------------------- |
+| GET    | `/admin/workspaces?status=&page=&limit=` | Danh sách đơn (phân trang page/limit)              |
+| GET    | `/admin/workspaces/:id`                  | Chi tiết + `proofs` + `warnings`                   |
+| POST   | `/admin/workspaces/:id/review`           | Duyệt hoặc từ chối (body ở dưới)                   |
 
-Item có `owner: { id, username, fullName, email, avatarUrl } | null`. `note` bắt
-buộc khi từ chối. Duyệt lại đơn đã xử lý → `409 WORKSPACE_NOT_REVIEWABLE`. Nếu
-username bị account khác lấy mất trong lúc chờ → `409 USERNAME_TAKEN`; khi đó từ
-chối kèm ghi chú để owner chọn username khác.
+Mỗi item có các trường của `WorkspaceDetail` (gồm cả `legal`), cộng thêm:
+
+- `owner: { id, username, fullName, email, avatarUrl } | null`;
+- `committedAt`: lúc người gửi tick cam kết;
+- `reviewChecklist`: checklist admin đã tick khi duyệt.
+
+`GET /admin/workspaces/:id` trả thêm:
+
+- `proofs: [{ id, kind, url }]`: URL ký, hết hạn sau 10 phút.
+- `warnings: [{ code, workspaces: [{ id, name, status }] }]`. Đây là những điểm admin nên xem kỹ, **không chặn** việc duyệt:
+  - `SAME_TAX_CODE`: đã có page được duyệt dùng cùng MST. Có thể là chi nhánh, nhưng cần xem.
+  - `NEARBY_PAGE`: có page được duyệt ghim cách dưới 100 m.
+  - `RECENT_REJECTION`: owner có đơn khác bị từ chối trong 30 ngày qua.
+
+### Duyệt / từ chối
+
+```json
+POST /admin/workspaces/:id/review
+{ "decision": "APPROVED",
+  "checklist": { "identityMatches": true, "taxCodeVerified": true,
+                 "storefrontMatches": true, "phoneConfirmed": true } }
+
+{ "decision": "REJECTED", "rejectReason": "BLURRY_DOCUMENTS", "note": "Ảnh CCCD bị mờ" }
+```
+
+- **Duyệt** đơn có `legal` thì phải gửi `checklist` với cả 4 ô là `true`. Thiếu hoặc
+  có ô `false` → `400 CHECKLIST_INCOMPLETE`. Đơn kiểu cũ (`legal: null`) không bắt buộc checklist.
+- **Từ chối** thì phải có `rejectReason`:
+  - `BLURRY_DOCUMENTS`: giấy tờ mờ;
+  - `TAX_CODE_MISMATCH`: MST không khớp;
+  - `IDENTITY_MISMATCH`: CCCD không khớp người đứng tên;
+  - `STOREFRONT_MISMATCH`: mặt tiền không khớp địa chỉ;
+  - `UNREACHABLE`: không liên lạc được;
+  - `NOT_VEGETARIAN`: không phải quán chay;
+  - `DUPLICATE`: trùng page đã có;
+  - `OTHER`: lý do khác.
+
+  `note` tùy chọn, nhưng bắt buộc khi lý do là `OTHER`. Owner thấy cả `rejectReason` lẫn `note`.
+- Duyệt lại đơn đã xử lý → `409 WORKSPACE_NOT_REVIEWABLE`.
+- Nếu username bị account khác lấy mất trong lúc chờ → `409 USERNAME_TAKEN`. Khi đó từ
+  chối với `DUPLICATE` hoặc `OTHER` kèm ghi chú, để owner chọn username khác.
 
 ## Profile của page
 
@@ -295,3 +405,7 @@ Chỉ tài khoản cá nhân đã xác minh email và không phải thành viên
 | 409  | `WORKSPACE_NOT_APPROVED`   | Page chưa được duyệt                                    |
 | 409  | `WORKSPACE_NOT_REVIEWABLE` | Đơn không ở trạng thái có thể duyệt/gửi lại             |
 | 409  | `ALREADY_MEMBER`           | Người này đã quản lý page                               |
+| 409  | `APPLICATION_PENDING`      | Đã có một đơn đang chờ duyệt                            |
+| 409  | `LOCKED_AFTER_APPROVAL`    | Page đã duyệt không đổi được địa chỉ/ghim               |
+| 400  | `MISSING_PROOF`            | Thiếu giấy tờ bắt buộc theo loại hình                   |
+| 400  | `CHECKLIST_INCOMPLETE`     | Admin chưa tick đủ checklist khi duyệt                  |
