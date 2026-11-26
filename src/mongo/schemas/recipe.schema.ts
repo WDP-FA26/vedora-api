@@ -53,6 +53,8 @@ export const RecipeCategorySchema =
   SchemaFactory.createForClass(RecipeCategory);
 RecipeCategorySchema.index({ name: 1 }, { unique: true });
 RecipeCategorySchema.index({ sortOrder: 1, _id: 1 });
+// The public list skips hidden categories.
+RecipeCategorySchema.index({ hidden: 1, sortOrder: 1, _id: 1 });
 
 @Schema(collectionSchema('ingredients'))
 export class Ingredient extends Identified {
@@ -232,6 +234,8 @@ export class Recipe extends Identified {
 
 export const RecipeSchema = SchemaFactory.createForClass(Recipe);
 RecipeSchema.index({ postId: 1 });
+// The catalog's `?tag=` filter, newest first like the unfiltered list.
+RecipeSchema.index({ tag: 1, updatedAt: -1, _id: -1 });
 RecipeSchema.index({ 'ingredients.ingredientId': 1 });
 
 cascadeOnDelete(RecipeSchema, [

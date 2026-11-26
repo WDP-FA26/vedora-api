@@ -44,6 +44,7 @@ Authorization: Bearer <accessToken>
 | --------------- | --------- | -------------------------------------------------------------------------------------------------------------------- |
 | `q`             | Không lọc | 1–100 ký tự sau trim; tìm chuỗi con không phân biệt hoa/thường trong tên món, mô tả, tên và tên khác của nguyên liệu |
 | `maxMinutes`    | Không lọc | Số nguyên 0–2880, giới hạn tổng phút chuẩn bị + nấu                                                                  |
+| `tag`           | Không lọc | Một `RecipeTag` (`baseTag` của danh mục, xem `recipe-categories.md`); món chưa có `tag` bị loại |
 | `suitableForMe` | `false`   | Chỉ nhận `true`/`false`; `true` cần đăng nhập và dùng hồ sơ của người gọi                                            |
 | `page`          | `1`       | Số nguyên 1–1000000                                                                                                  |
 | `limit`         | `20`      | Số nguyên 1–50                                                                                                       |

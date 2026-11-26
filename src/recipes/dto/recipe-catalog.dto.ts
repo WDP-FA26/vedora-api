@@ -3,6 +3,7 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Transform } from 'class-transformer';
 import {
   IsBoolean,
+  IsEnum,
   IsInt,
   IsOptional,
   IsString,
@@ -12,6 +13,7 @@ import {
   MinLength,
 } from 'class-validator';
 import { PaginationQueryDto } from '../../common/pagination/index.js';
+import { RecipeTag } from '../../mongo/models.js';
 import { RecipeDetailDto, RecipeDto } from './recipe.dto.js';
 
 export class RecipeCatalogQueryDto extends PaginationQueryDto {
@@ -27,6 +29,15 @@ export class RecipeCatalogQueryDto extends PaginationQueryDto {
   @MinLength(1)
   @MaxLength(runtimeConfig.RECIPE_CATALOG_QUERY_MAX_LENGTH)
   q?: string;
+
+  @ApiPropertyOptional({
+    enum: RecipeTag,
+    description:
+      'Only recipes of this dish type (the `baseTag` of a category); untagged recipes are excluded',
+  })
+  @IsOptional()
+  @IsEnum(RecipeTag)
+  tag?: RecipeTag;
 
   @ApiPropertyOptional({
     minimum: 0,

@@ -97,8 +97,9 @@ export class RecipeCatalogService {
     paging: { skip: number; take: number },
     userId?: string,
   ): Promise<{ rows: Recipe[]; total: number }> {
+    const filter = query.tag === undefined ? {} : { tag: query.tag };
     let matching = await this.recipes
-      .find()
+      .find(filter)
       .select(
         'title description imageUrl tag servings prepMinutes cookMinutes caloriesPerServing nutritionPillars ingredients steps postId updatedAt',
       )
