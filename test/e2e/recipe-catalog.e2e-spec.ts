@@ -11,6 +11,7 @@ import {
   type Post,
   PostStatus,
   type Recipe,
+  RecipeTag,
   type User,
 } from '@src/mongo/models.js';
 import { createE2eApp, type E2eApp } from '@test/support/e2e-app.js';
@@ -146,7 +147,28 @@ describe('Recipe catalog (e2e)', () => {
     ).toBe(0);
   });
 
+  it('filters by dish type and leaves untagged recipes out', async () => {
+    const soup = await createRecipe(e2e.mongo, {
+      title: 'Canh nấm',
+      tag: RecipeTag.SOUP,
+    });
+    await createRecipe(e2e.mongo, { title: 'Chè đậu', tag: RecipeTag.DESSERT });
+    try {
+      const response = await list('tag=SOUP').expect(200);
+      const body = response.body as PaginatedResponseDto<CatalogRecipeDto>;
+      expect(body.items.map(({ id }) => id)).toEqual([soup.id]);
+      expect(body.meta.totalItems).toBe(1);
+    } finally {
+      await e2e.mongo.connection
+        .model<Recipe>('Recipe')
+        .deleteMany({ title: { $in: ['Canh nấm', 'Chè đậu'] } });
+    }
+  });
+
   it.each([
+    'tag=',
+    'tag=HUE',
+    'tag=SOUP&tag=SALAD',
     'q=',
     'q=%20%20',
     'q=a&q=b',
@@ -197,6 +219,7 @@ describe('Recipe catalog (e2e)', () => {
       expect.arrayContaining([
         expect.objectContaining({ name: 'q' }),
         expect.objectContaining({ name: 'maxMinutes' }),
+        expect.objectContaining({ name: 'tag' }),
         expect.objectContaining({ name: 'suitableForMe' }),
       ]),
     );

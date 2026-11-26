@@ -136,6 +136,24 @@ export class RecipeCategoriesService implements OnApplicationBootstrap {
     return createPaginatedResponse(rows.map(toDto), totalItems, query);
   }
 
+  /** What members browse by: categories an admin has not hidden, in admin order. */
+  async findVisible(
+    query: PaginationQueryDto,
+  ): Promise<PaginatedResponseDto<RecipeCategoryDto>> {
+    const { skip, take } = getPaginationArgs(query);
+    const filter = { hidden: false };
+    const [rows, totalItems] = await Promise.all([
+      this.categories
+        .find(filter)
+        .sort({ sortOrder: 1, _id: 1 })
+        .skip(skip)
+        .limit(take)
+        .exec(),
+      this.categories.countDocuments(filter),
+    ]);
+    return createPaginatedResponse(rows.map(toDto), totalItems, query);
+  }
+
   /** A new category goes to the end of the list. */
   async create(dto: SaveRecipeCategoryDto): Promise<RecipeCategoryDto> {
     const id = randomUUID();

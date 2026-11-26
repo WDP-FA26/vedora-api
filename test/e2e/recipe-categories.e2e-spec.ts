@@ -153,6 +153,28 @@ describe('Admin recipe categories (e2e)', () => {
       .expect(400);
   });
 
+  it('lists visible categories publicly, in admin order', async () => {
+    const created = await request(server())
+      .post(URL)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ name: 'Món Tết', baseTag: 'SNACK', hidden: true })
+      .expect(201);
+    const hidden = created.body as { id: string };
+
+    const response = await request(server())
+      .get('/api/v1/recipe-categories')
+      .query({ limit: 50 })
+      .expect(200);
+    const body = response.body as {
+      items: { id: string; sortOrder: number }[];
+      meta: { totalItems: number };
+    };
+    expect(body.meta.totalItems).toBe(9);
+    expect(body.items.map(({ id }) => id)).not.toContain(hidden.id);
+    const orders = body.items.map(({ sortOrder }) => sortOrder);
+    expect(orders).toEqual([...orders].sort((a, b) => a - b));
+  });
+
   it('is for admins only', async () => {
     await request(server()).get(URL).expect(401);
     await request(server())

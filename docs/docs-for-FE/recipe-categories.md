@@ -1,6 +1,7 @@
-# Danh mục công thức (admin)
+# Danh mục công thức
 
-Base URL: `/api/v1`. Chỉ admin. Gửi `Authorization: Bearer <accessToken>`.
+Base URL: `/api/v1`. Các route `/admin/...` chỉ cho admin và cần `Authorization: Bearer <accessToken>`.
+`GET /recipe-categories` công khai, không cần đăng nhập.
 
 Admin tự tạo, sửa, ẩn và xóa danh mục món. Mỗi danh mục gắn với một **nhóm chuẩn**
 (`baseTag`, là một trong 9 loại `RecipeTag` cũ). Meal planner dựa vào nhóm chuẩn để
@@ -10,10 +11,23 @@ Lần đầu BE khởi động với collection rỗng sẽ tự tạo 9 danh m�
 món hiện tại (tên tiếng Việt và icon như FE đang hiển thị). Xóa một danh mục mặc định thì
 nó không tự tạo lại.
 
-> Phần này mới có CRUD cho admin. Công thức vẫn dùng `tag` như cũ; việc gắn công thức
-> vào danh mục và lọc danh mục cho người dùng sẽ làm ở bước sau.
+Công thức không lưu id danh mục. Một công thức thuộc danh mục khi `tag` của nó bằng
+`baseTag` của danh mục. Vì vậy hai danh mục có cùng `baseTag` sẽ hiện cùng một tập công thức.
 
-## API
+## Người dùng duyệt theo danh mục
+
+| Method | Endpoint | Thành công |
+| ------ | -------- | ---------- |
+| `GET`  | `/recipe-categories` | 200 `{ items, meta }`, chỉ danh mục **không ẩn**, theo `sortOrder` tăng dần |
+| `GET`  | `/recipes?tag=<baseTag>` | 200 `{ items, meta }`, chỉ công thức có `tag` đó |
+
+- `GET /recipe-categories` dùng `page`/`limit` (`limit` tối đa 50), trả cùng dạng `RecipeCategory` bên dưới.
+- `tag` của `GET /recipes` dùng chung được với `q`, `maxMinutes` và `suitableForMe`. Công thức
+  chưa có `tag` không hiện khi lọc, nhưng vẫn hiện khi không gửi `tag` (chip "Tất cả").
+  `tag` sai giá trị, rỗng hoặc gửi hai lần thì trả `400 VALIDATION_FAILED`.
+- Chip ở FE: `Tất cả` + một chip cho mỗi danh mục. Bấm chip thì gọi `GET /recipes?tag=<baseTag>`.
+
+## API cho admin
 
 | Method   | Endpoint                          | Thành công                    |
 | -------- | --------------------------------- | ----------------------------- |

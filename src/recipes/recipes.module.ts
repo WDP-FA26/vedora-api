@@ -12,6 +12,7 @@ import { IncompatibilityRulesService } from './incompatibility-rules.service.js'
 import { IngredientsService } from './ingredients.service.js';
 import { RecipesService } from './recipes.service.js';
 import { RecipeCategoriesService } from './recipe-categories.service.js';
+import { RecipeCategoriesController } from './recipe-categories.controller.js';
 import { RecipeCatalogService } from './recipe-catalog.service.js';
 import { RecipeRelationsService } from './recipe-relations.service.js';
 import { RecipesController } from './recipes.controller.js';
@@ -25,6 +26,7 @@ import { RecipeDraftsService } from './drafts/recipe-drafts.service.js';
   controllers: [
     RecipesController,
     RecipeRatingsController,
+    RecipeCategoriesController,
     AdminIngredientsController,
     AdminIngredientGroupsController,
     AdminIncompatibilityRulesController,
