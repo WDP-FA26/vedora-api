@@ -18,6 +18,7 @@ import {
 } from './public-user.js';
 import { rethrowUniqueViolation } from './unique-conflict.js';
 import { ResourceNotFoundException } from '../common/exceptions/resource-not-found.exception.js';
+import { presentString } from '../mongo/partial-match.js';
 
 /** Filter that leaves out the Vedora AI system account. */
 export const HUMAN_ACCOUNT = { status: { $ne: AccountStatus.SYSTEM } } as const;
@@ -56,7 +57,9 @@ export class AccountsService {
   }
 
   async managesPage(userId: string, pageUserId: string): Promise<boolean> {
-    const membership = await this.members.exists({ pageUserId, userId }).exec();
+    const membership = await this.members
+      .exists({ pageUserId: presentString(pageUserId), userId })
+      .exec();
     return membership !== null;
   }
 
@@ -77,7 +80,9 @@ export class AccountsService {
   }
 
   findByGoogleId(googleId: string): Promise<User | null> {
-    return this.users.findOne({ googleId, ...HUMAN_ACCOUNT }).exec();
+    return this.users
+      .findOne({ googleId: presentString(googleId), ...HUMAN_ACCOUNT })
+      .exec();
   }
 
   findByEmail(email: string): Promise<User | null> {

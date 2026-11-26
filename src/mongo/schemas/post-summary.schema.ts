@@ -123,4 +123,4 @@ export class PostSummary extends Identified {
 
 export const PostSummarySchema = SchemaFactory.createForClass(PostSummary);
 PostSummarySchema.index({ postId: 1 }, { unique: true });
-PostSummarySchema.index({ status: 1, claimedAt: 1 });
+PostSummarySchema.index({ status: 1, claimedAt: 1, _id: 1 });

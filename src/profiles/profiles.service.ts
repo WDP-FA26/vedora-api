@@ -52,6 +52,7 @@ import { FileTooLargeException } from '../common/exceptions/file-too-large.excep
 import { InvalidInputException } from '../common/exceptions/invalid-input.exception.js';
 import { ResourceNotFoundException } from '../common/exceptions/resource-not-found.exception.js';
 import { StateConflictException } from '../common/exceptions/state-conflict.exception.js';
+import { presentString } from '../mongo/partial-match.js';
 
 const IMAGE_EXTENSIONS: Record<string, string> = {
   'image/jpeg': 'jpg',
@@ -495,7 +496,10 @@ export class ProfilesService {
     pageUserId: string,
   ): Promise<RestaurantProfileDto | null> {
     const workspace = await this.workspaces
-      .findOne({ pageUserId, status: VerificationStatus.APPROVED })
+      .findOne({
+        pageUserId: presentString(pageUserId),
+        status: VerificationStatus.APPROVED,
+      })
       .exec();
     if (!workspace) return null;
     const [longitude, latitude] = workspace.location.coordinates;

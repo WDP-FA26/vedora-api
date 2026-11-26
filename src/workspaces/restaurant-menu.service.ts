@@ -29,6 +29,7 @@ import {
 import { RestaurantReviewsService } from './restaurant-reviews.service.js';
 import { MenuSearchIndexService } from './search/menu-search-index.service.js';
 import { MenuSearchService } from './search/menu-search.service.js';
+import { presentString } from '../mongo/partial-match.js';
 
 const IMAGE_EXTENSIONS: Record<
   CreateMenuImageUploadDto['contentType'],
@@ -252,7 +253,10 @@ export class RestaurantMenuService {
 
   async listPublic(pageUserId: string): Promise<RestaurantMenuListDto> {
     const workspace = await this.workspaces
-      .findOne({ pageUserId, status: VerificationStatus.APPROVED })
+      .findOne({
+        pageUserId: presentString(pageUserId),
+        status: VerificationStatus.APPROVED,
+      })
       .select('_id')
       .exec();
     const pageUser = await this.users
