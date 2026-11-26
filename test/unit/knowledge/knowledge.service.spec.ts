@@ -101,6 +101,7 @@ describe('KnowledgeService', () => {
     index.removeRun.mockReset().mockResolvedValue(undefined);
     index.removeOtherRuns.mockReset().mockResolvedValue(undefined);
     storage.presignUpload.mockReset();
+    storage.exists.mockReset();
     storage.getBytes.mockReset();
     storage.delete.mockReset();
     uploaderId = (await createUser(db)).id;
@@ -166,13 +167,19 @@ describe('KnowledgeService', () => {
     });
   });
 
-  describe('markUploaded', () => {
-    it('moves a waiting document to PROCESSING and ingests it', async () => {
+  describe('confirmUpload', () => {
+    it('moves a waiting document to PROCESSING and ingests it when the object exists', async () => {
       const waiting = await addDocument(KnowledgeDocumentStatus.WAITING_UPLOAD);
       const ingest = vi.spyOn(service, 'ingest').mockResolvedValue();
+      storage.exists.mockResolvedValue(true);
 
-      await service.markUploaded(waiting.storageKey);
+      const response = await service.confirmUpload(waiting.id);
 
+      expect(storage.exists).toHaveBeenCalledWith(
+        StorageTarget.Knowledge,
+        waiting.storageKey,
+      );
+      expect(response.status).toBe(KnowledgeDocumentStatus.PROCESSING);
       expect((await reload(waiting.id))?.status).toBe(
         KnowledgeDocumentStatus.PROCESSING,
       );
@@ -184,25 +191,48 @@ describe('KnowledgeService', () => {
       );
     });
 
-    it('starts one ingestion when the event is redelivered', async () => {
+    it('rejects confirmation when the object is missing in storage', async () => {
       const waiting = await addDocument(KnowledgeDocumentStatus.WAITING_UPLOAD);
       const ingest = vi.spyOn(service, 'ingest').mockResolvedValue();
+      storage.exists.mockResolvedValue(false);
+
+      await expect(service.confirmUpload(waiting.id)).rejects.toBeInstanceOf(
+        StateConflictException,
+      );
+      expect(ingest).not.toHaveBeenCalled();
+      expect((await reload(waiting.id))?.status).toBe(
+        KnowledgeDocumentStatus.WAITING_UPLOAD,
+      );
+    });
+
+    it('throws NotFound for an unknown document id', async () => {
+      await expect(
+        service.confirmUpload(crypto.randomUUID()),
+      ).rejects.toBeInstanceOf(ResourceNotFoundException);
+    });
+
+    it('starts one ingestion when confirmed concurrently', async () => {
+      const waiting = await addDocument(KnowledgeDocumentStatus.WAITING_UPLOAD);
+      const ingest = vi.spyOn(service, 'ingest').mockResolvedValue();
+      storage.exists.mockResolvedValue(true);
 
       await Promise.all([
-        service.markUploaded(waiting.storageKey),
-        service.markUploaded(waiting.storageKey),
-        service.markUploaded(waiting.storageKey),
+        service.confirmUpload(waiting.id),
+        service.confirmUpload(waiting.id),
+        service.confirmUpload(waiting.id),
       ]);
 
       expect(ingest).toHaveBeenCalledTimes(1);
     });
 
-    it('does nothing when it finds the document already moved on', async () => {
+    it('is idempotent when the document already moved on', async () => {
       const done = await addDocument(KnowledgeDocumentStatus.READY);
       const ingest = vi.spyOn(service, 'ingest');
 
-      await service.markUploaded(done.storageKey);
+      const response = await service.confirmUpload(done.id);
 
+      expect(response.status).toBe(KnowledgeDocumentStatus.READY);
+      expect(storage.exists).not.toHaveBeenCalled();
       expect(ingest).not.toHaveBeenCalled();
       expect((await reload(done.id))?.status).toBe(
         KnowledgeDocumentStatus.READY,

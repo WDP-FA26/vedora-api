@@ -24,6 +24,8 @@
     "seed:prod": "node dist/database/seed-cli.js",
     "fix:blog-covers": "tsx src/database/fix-blog-covers.ts",
     "fix:blog-covers:prod": "node dist/database/fix-blog-covers.js",
+    "rewrite:storage-urls": "tsx src/database/rewrite-storage-urls.ts",
+    "rewrite:storage-urls:prod": "node dist/database/rewrite-storage-urls.js",
     "clean:legacy-moderation": "tsx src/database/clean-legacy-moderation.ts",
     "clean:legacy-moderation:prod": "node dist/database/clean-legacy-moderation.js"
   },

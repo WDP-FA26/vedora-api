@@ -35,6 +35,7 @@ describe('ProfilesService flows', () => {
   const storage = {
     isConfigured: vi.fn(),
     presignUpload: vi.fn(),
+    exists: vi.fn(),
     publicObjectUrl: vi.fn(),
     delete: vi.fn(),
   };

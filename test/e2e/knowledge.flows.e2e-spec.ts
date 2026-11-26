@@ -106,11 +106,11 @@ describe('Knowledge base flows (HTTP + MongoDB + Qdrant)', () => {
     return { id: document.id, storageKey: document.storageKey };
   };
 
-  /** Simulates the RustFS upload event and waits for the OCR step to finish. */
+  /** Confirms the PDF upload and waits for the OCR step to finish. */
   const uploadAndExtract = async (texts: string[] = CALCIUM_PAGES) => {
     extractedPages = texts;
     const document = await startUpload();
-    await knowledge.markUploaded(document.storageKey);
+    await knowledge.confirmUpload(document.id);
     await vi.waitFor(async () =>
       expect(await statusOf(document.id)).toBe(
         KnowledgeDocumentStatus.AWAITING_REVIEW,
@@ -185,6 +185,7 @@ describe('Knowledge base flows (HTTP + MongoDB + Qdrant)', () => {
     vi.spyOn(storage, 'presignDownload').mockImplementation((_target, key) =>
       Promise.resolve(`https://storage.test/${key}?download`),
     );
+    vi.spyOn(storage, 'exists').mockResolvedValue(true);
     vi.spyOn(storage, 'getBytes').mockResolvedValue(new Uint8Array([1, 2, 3]));
     vi.spyOn(storage, 'delete').mockResolvedValue();
     vi.spyOn(pdf, 'extract').mockImplementation(async () => {
@@ -375,8 +376,8 @@ describe('Knowledge base flows (HTTP + MongoDB + Qdrant)', () => {
     it('keeps a document FAILED when its interrupted extraction finishes after the cron failed it', async () => {
       extractGate = deferred<void>();
       const runs = watchBackgroundRuns('ingest');
-      const { id, storageKey } = await startUpload();
-      await knowledge.markUploaded(storageKey);
+      const { id } = await startUpload();
+      await knowledge.confirmUpload(id);
       await backdate(id);
       await maintenance.failIncomplete();
       expect(await statusOf(id)).toBe(KnowledgeDocumentStatus.FAILED);
@@ -820,8 +821,8 @@ describe('Knowledge base flows (HTTP + MongoDB + Qdrant)', () => {
     it('leaves no pages when deleted while the OCR is running', async () => {
       extractGate = deferred<void>();
       const runs = watchBackgroundRuns('ingest');
-      const { id, storageKey } = await startUpload();
-      await knowledge.markUploaded(storageKey);
+      const { id } = await startUpload();
+      await knowledge.confirmUpload(id);
       await vi.waitFor(() => expect(pdf.extract).toHaveBeenCalled());
 
       await remove(id).expect(204);

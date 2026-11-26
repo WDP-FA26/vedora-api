@@ -384,15 +384,6 @@ export class ProfilesService {
     return { id, upload };
   }
 
-  async markImageUploaded(key: string): Promise<void> {
-    const updated = await this.uploads.updateOne(
-      { storageKey: key, status: ProfileImageStatus.WAITING_UPLOAD },
-      { $set: { status: ProfileImageStatus.READY } },
-    );
-    if (updated.matchedCount === 0)
-      this.logger.warn(`No waiting profile image for ${key}`);
-  }
-
   async activateImage(ownerId: string, uploadId: string): Promise<ProfileDto> {
     const image = await this.uploads.findOne({ _id: uploadId, ownerId }).exec();
     if (!image)
@@ -400,10 +391,25 @@ export class ProfilesService {
         'NOT_FOUND',
         'Image upload not found',
       );
-    if (image.status !== ProfileImageStatus.READY)
-      throw new StateConflictException('CONFLICT', 'Image upload is not ready');
     if (image.createdAt.getTime() < Date.now() - ACTIVATE_TTL_MS)
       throw new StateConflictException('CONFLICT', 'Image upload has expired');
+    if (image.status === ProfileImageStatus.WAITING_UPLOAD) {
+      const uploaded = await this.storage.exists(
+        StorageTarget.Profiles,
+        image.storageKey,
+      );
+      if (!uploaded)
+        throw new StateConflictException(
+          'CONFLICT',
+          'Image upload is not ready',
+        );
+      await this.uploads.updateOne(
+        { _id: uploadId, status: ProfileImageStatus.WAITING_UPLOAD },
+        { $set: { status: ProfileImageStatus.READY } },
+      );
+    } else if (image.status !== ProfileImageStatus.READY) {
+      throw new StateConflictException('CONFLICT', 'Image upload is not ready');
+    }
     const url = this.storage.publicObjectUrl(
       StorageTarget.Profiles,
       image.storageKey,

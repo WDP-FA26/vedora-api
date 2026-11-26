@@ -200,22 +200,20 @@ URL upload hết hạn sau 1 giờ. Upload chưa kích hoạt và ảnh cũ đư
 | ------ | ------------------------------------------------------------------- |
 | `400`  | UUID/query/body sai; tự Follow; loại ảnh không hỗ trợ               |
 | `401`  | Thiếu hoặc sai access token trên endpoint cần đăng nhập             |
-| `403`  | (từ RustFS) file gửi lên khác kích thước/loại đã khai báo, hoặc URL hết hạn |
+| `403`  | (từ object storage) file gửi lên khác kích thước/loại đã khai báo, hoặc URL hết hạn |
 | `404`  | Profile không tồn tại/chưa xác minh; upload không thuộc người gọi   |
-| `409`  | Kích hoạt upload chưa được RustFS xác nhận hoặc đã quá 24 giờ       |
+| `409`  | Kích hoạt upload chưa thấy file trên object storage hoặc đã quá 24 giờ |
 | `413`  | Kích thước ảnh vượt giới hạn                                        |
 | `503`  | Backend chưa cấu hình lưu trữ (`STORAGE_*`)                         |
 
 ## Cấu hình
 
-Backend (`docker-compose.yml` chạy sẵn RustFS ở `localhost:9000`; API tự tạo
-bucket, quyền đọc công khai và liên kết sự kiện khi khởi động):
+Backend dùng S3-compatible object storage (ví dụ SeaweedFS): API tự tạo bucket và quyền đọc công khai khi khởi động:
 
-- `STORAGE_ENDPOINT`: API gọi RustFS qua địa chỉ này (Dokploy: `http://rustfs:9000`, đã cố định trong compose).
-- `STORAGE_PUBLIC_URL`: địa chỉ trình duyệt dùng để upload và tải ảnh (Dokploy: domain gán cho service `rustfs`, cổng 9000).
-- `STORAGE_ACCESS_KEY`, `STORAGE_SECRET_KEY`: tài khoản gốc của RustFS; compose truyền cùng giá trị cho RustFS.
-- `STORAGE_WEBHOOK_TOKEN`: bearer token RustFS gửi kèm sự kiện upload tới `/api/v1/webhooks/storage/{knowledge,profiles}`.
-- `CORS_ORIGIN`: RustFS dùng luôn giá trị này để cho phép trình duyệt upload.
+- `STORAGE_ENDPOINT`: API gọi object storage qua địa chỉ này (Dokploy: `http://vedora-blob:8333`).
+- `STORAGE_PUBLIC_URL`: địa chỉ trình duyệt dùng để upload và tải ảnh (Dokploy: `https://blob.quanphung.dev`).
+- `STORAGE_ACCESS_KEY`, `STORAGE_SECRET_KEY`: tài khoản S3 của object storage.
+- `CORS_ORIGIN`: cho phép trình duyệt upload trực tiếp từ frontend.
 
 Frontend: `NEXT_PUBLIC_STORAGE_URL` bằng `STORAGE_PUBLIC_URL` (CSP cho upload
 và ảnh; mặc định `http://localhost:9000`).

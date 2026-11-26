@@ -7,7 +7,6 @@ import {
   HeadObjectCommand,
   NoSuchKey,
   NotFound,
-  PutBucketNotificationConfigurationCommand,
   PutBucketPolicyCommand,
   PutObjectCommand,
   S3Client,
@@ -16,23 +15,17 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { mockClient } from 'aws-sdk-client-mock';
 import { FeatureUnavailableException } from '@src/common/exceptions/feature-unavailable.exception.js';
-import { InvalidInputException } from '@src/common/exceptions/invalid-input.exception.js';
-import {
-  StorageService,
-  StorageTarget,
-  type StorageEvent,
-} from '@src/storage/storage.service.js';
+import { StorageService, StorageTarget } from '@src/storage/storage.service.js';
 
 const s3 = mockClient(S3Client);
 
 function build(env: Record<string, unknown> = {}) {
   return new StorageService(
     new ConfigService({
-      STORAGE_ENDPOINT: 'http://rustfs:9000',
+      STORAGE_ENDPOINT: 'http://seaweedfs:8333',
       STORAGE_PUBLIC_URL: 'https://storage.vedora.vn/',
       STORAGE_ACCESS_KEY: 'access',
       STORAGE_SECRET_KEY: 'secret',
-      STORAGE_WEBHOOK_TOKEN: 'webhook-token',
       STORAGE_REGION: 'us-east-1',
       STORAGE_KNOWLEDGE_BUCKET: 'vedora-knowledge',
       STORAGE_PROFILES_BUCKET: 'vedora-profiles',
@@ -77,7 +70,6 @@ describe('StorageService', () => {
       'STORAGE_PUBLIC_URL',
       'STORAGE_ACCESS_KEY',
       'STORAGE_SECRET_KEY',
-      'STORAGE_WEBHOOK_TOKEN',
     ])('answers 503 without %s', async (name) => {
       const service = build({ [name]: '' });
       expect(service.isConfigured()).toBe(false);
@@ -260,7 +252,7 @@ describe('StorageService', () => {
   });
 
   describe('onModuleInit', () => {
-    it('creates the buckets, binds upload events and opens only profiles and blogs for reading', async () => {
+    it('creates the buckets and opens only profiles and blogs for reading', async () => {
       s3.on(CreateBucketCommand)
         .rejectsOnce(
           new BucketAlreadyOwnedByYou({ message: 'exists', $metadata: {} }),
@@ -269,25 +261,11 @@ describe('StorageService', () => {
           new BucketAlreadyExists({ message: 'exists', $metadata: {} }),
         )
         .resolves({})
-        .on(PutBucketNotificationConfigurationCommand)
-        .resolves({})
         .on(PutBucketPolicyCommand)
         .resolves({});
 
       await build().onModuleInit();
 
-      expect(
-        s3
-          .commandCalls(PutBucketNotificationConfigurationCommand)
-          .map(({ args }) => [
-            args[0].input.Bucket,
-            args[0].input.NotificationConfiguration?.QueueConfigurations?.[0]
-              .QueueArn,
-          ]),
-      ).toEqual([
-        ['vedora-knowledge', 'arn:rustfs:sqs:us-east-1:knowledge:webhook'],
-        ['vedora-profiles', 'arn:rustfs:sqs:us-east-1:profiles:webhook'],
-      ]);
       const policies = s3.commandCalls(PutBucketPolicyCommand);
       expect(policies.map(({ args }) => args[0].input.Bucket).sort()).toEqual([
         'vedora-blogs',
@@ -306,7 +284,7 @@ describe('StorageService', () => {
       });
     });
 
-    it('still starts when RustFS is unreachable', async () => {
+    it('still starts when object storage is unreachable', async () => {
       s3.on(CreateBucketCommand).rejects(new Error('ECONNREFUSED'));
       await expect(build().onModuleInit()).resolves.toBeUndefined();
     });
@@ -316,77 +294,6 @@ describe('StorageService', () => {
         build({ STORAGE_ACCESS_KEY: '' }).onModuleInit(),
       ).resolves.toBeUndefined();
       expect(s3.commandCalls(CreateBucketCommand)).toHaveLength(0);
-    });
-  });
-
-  describe('parseEvent', () => {
-    const event = (
-      bucket: string,
-      key: string,
-      eventName = 's3:ObjectCreated:Put',
-    ) => ({
-      EventName: eventName,
-      Records: [
-        {
-          eventName,
-          s3: {
-            bucket: { name: bucket },
-            object: { key },
-          },
-        },
-      ],
-    });
-
-    it('returns the decoded keys stored in the bucket', () => {
-      expect(
-        build().parseEvent(
-          StorageTarget.Knowledge,
-          event('vedora-knowledge', 'knowledge%2Fmy+file.pdf'),
-        ),
-      ).toEqual(['knowledge/my file.pdf']);
-    });
-
-    it("ignores other buckets' objects, non-create events, and incomplete records", () => {
-      const service = build();
-      expect(
-        service.parseEvent(
-          StorageTarget.Profiles,
-          event('vedora-knowledge', 'knowledge%2Fd.pdf'),
-        ),
-      ).toEqual([]);
-      expect(
-        service.parseEvent(
-          StorageTarget.Knowledge,
-          event(
-            'vedora-knowledge',
-            'knowledge%2Fd.pdf',
-            's3:ObjectRemoved:Delete',
-          ),
-        ),
-      ).toEqual([]);
-      expect(
-        service.parseEvent(StorageTarget.Knowledge, {
-          Records: [
-            {},
-            {
-              eventName: 's3:ObjectCreated:Put',
-              s3: { bucket: { name: 'vedora-knowledge' }, object: {} },
-            },
-          ],
-        }),
-      ).toEqual([]);
-    });
-
-    it('rejects bodies that are not S3 events', () => {
-      expect(() => build().parseEvent(StorageTarget.Knowledge, {})).toThrow(
-        InvalidInputException,
-      );
-      expect(() =>
-        build().parseEvent(
-          StorageTarget.Knowledge,
-          null as unknown as StorageEvent,
-        ),
-      ).toThrow(InvalidInputException);
     });
   });
 });

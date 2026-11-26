@@ -1,10 +1,8 @@
 import { createHash } from 'node:crypto';
 import { MediaStatus, UserRole, type MediaAsset } from '@src/mongo/models.js';
 import request from 'supertest';
-import type { MockInstance } from 'vitest';
 import { GuestQuotaService } from '@src/nutrition-chat/guest/guest-quota.service.js';
 import { GuestSessionService } from '@src/nutrition-chat/guest/guest-session.service.js';
-import { KnowledgeService } from '@src/knowledge/knowledge.service.js';
 import { mediaId, publicId, uploaded } from '@test/support/media.fixtures.js';
 import { createE2eApp, type E2eApp } from '@test/support/e2e-app.js';
 import { createMedia, createUser } from '@test/support/fixtures.js';
@@ -249,72 +247,6 @@ describe('Vedora API (e2e)', () => {
         .set('authorization', `Bearer ${adminToken}`)
         .send({ filename: 'anh-mon-an.jpg', sizeBytes: 1234 })
         .expect(415);
-    });
-  });
-
-  describe('POST /api/v1/webhooks/storage/:target', () => {
-    const key = 'knowledge/0b8f0c1e-3c55-4c1b-9d0e-2f7f3a9f7a10.pdf';
-    const event = (bucket: string, objectKey: string) => ({
-      EventName: 's3:ObjectCreated:Put',
-      Key: `${bucket}/${objectKey}`,
-      Records: [
-        {
-          eventVersion: '2.1',
-          eventSource: 'rustfs:s3',
-          eventName: 's3:ObjectCreated:Put',
-          s3: {
-            bucket: { name: bucket },
-            object: {
-              key: encodeURIComponent(objectKey),
-              size: 19,
-              contentType: 'application/pdf',
-            },
-          },
-        },
-      ],
-    });
-    const token = `Bearer ${process.env.STORAGE_WEBHOOK_TOKEN}`;
-
-    let markUploaded: MockInstance<KnowledgeService['markUploaded']>;
-
-    beforeEach(() => {
-      markUploaded = vi
-        .spyOn(app.get(KnowledgeService), 'markUploaded')
-        .mockResolvedValue();
-    });
-
-    afterEach(() => {
-      markUploaded.mockRestore();
-    });
-
-    it("starts ingestion for RustFS's knowledge events", async () => {
-      await request(app.getHttpServer())
-        .post('/api/v1/webhooks/storage/knowledge')
-        .set('authorization', token)
-        .send(event('vedora-knowledge', key))
-        .expect(204);
-
-      expect(markUploaded).toHaveBeenCalledWith(key);
-    });
-
-    it('rejects events without the shared token', async () => {
-      await request(app.getHttpServer())
-        .post('/api/v1/webhooks/storage/knowledge')
-        .set('authorization', 'Bearer wrong')
-        .send(event('vedora-knowledge', key))
-        .expect(401);
-
-      expect(markUploaded).not.toHaveBeenCalled();
-    });
-
-    it("ignores other buckets' objects on the knowledge endpoint", async () => {
-      await request(app.getHttpServer())
-        .post('/api/v1/webhooks/storage/knowledge')
-        .set('authorization', token)
-        .send(event('vedora-profiles', 'profiles/u/avatar/a.webp'))
-        .expect(204);
-
-      expect(markUploaded).not.toHaveBeenCalled();
     });
   });
 });

@@ -10,7 +10,6 @@ import {
   HeadObjectCommand,
   NoSuchKey,
   NotFound,
-  PutBucketNotificationConfigurationCommand,
   PutBucketPolicyCommand,
   PutObjectCommand,
   S3Client,
@@ -18,7 +17,6 @@ import {
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import type { PresignedUploadDto } from './presigned-upload.dto.js';
 import { FeatureUnavailableException } from '../common/exceptions/feature-unavailable.exception.js';
-import { InvalidInputException } from '../common/exceptions/invalid-input.exception.js';
 
 export enum StorageTarget {
   Knowledge = 'knowledge',
@@ -28,52 +26,13 @@ export enum StorageTarget {
   Support = 'support',
 }
 
-const BUCKET_SETUP: Record<
-  StorageTarget,
-  { webhook: boolean; publicRead: boolean }
-> = {
-  [StorageTarget.Knowledge]: { webhook: true, publicRead: false },
-  [StorageTarget.Profiles]: { webhook: true, publicRead: true },
-  [StorageTarget.Verifications]: { webhook: false, publicRead: false },
-  [StorageTarget.Blogs]: { webhook: false, publicRead: true },
-  [StorageTarget.Support]: { webhook: false, publicRead: false },
+const BUCKET_SETUP: Record<StorageTarget, { publicRead: boolean }> = {
+  [StorageTarget.Knowledge]: { publicRead: false },
+  [StorageTarget.Profiles]: { publicRead: true },
+  [StorageTarget.Verifications]: { publicRead: false },
+  [StorageTarget.Blogs]: { publicRead: true },
+  [StorageTarget.Support]: { publicRead: false },
 };
-
-export const WebhookStorageTarget = {
-  Knowledge: StorageTarget.Knowledge,
-  Profiles: StorageTarget.Profiles,
-} as const;
-export type WebhookStorageTarget =
-  (typeof WebhookStorageTarget)[keyof typeof WebhookStorageTarget];
-
-export interface StorageEvent {
-  Records?: {
-    eventName?: string;
-    s3?: {
-      bucket?: { name?: string };
-      object?: { key?: string };
-    };
-  }[];
-}
-
-type StorageEventRecord = NonNullable<StorageEvent['Records']>[number];
-
-/** Every field of a record is optional, so any object is one; null and scalars are not. */
-function isEventRecord(value: unknown): value is StorageEventRecord {
-  return typeof value === 'object' && value !== null;
-}
-
-/** S3 URL-encodes keys in events, with `+` for spaces. */
-function decodeObjectKey(key: string): string {
-  try {
-    return decodeURIComponent(key.replace(/\+/g, ' '));
-  } catch {
-    throw new InvalidInputException(
-      'BAD_REQUEST',
-      'An S3 event object key is not valid URL encoding',
-    );
-  }
-}
 
 interface StorageClients {
   internal: S3Client;
@@ -89,7 +48,6 @@ export class StorageService implements OnModuleInit {
   private readonly publicUrl: string;
   private readonly region: string;
   private readonly buckets: Record<StorageTarget, string>;
-  readonly webhookToken: string;
 
   constructor(config: ConfigService) {
     const endpoint = config.getOrThrow<string>('STORAGE_ENDPOINT');
@@ -99,7 +57,6 @@ export class StorageService implements OnModuleInit {
       .getOrThrow<string>('STORAGE_PUBLIC_URL')
       .replace(/\/+$/, '');
     this.region = config.getOrThrow<string>('STORAGE_REGION');
-    this.webhookToken = config.getOrThrow<string>('STORAGE_WEBHOOK_TOKEN');
     this.buckets = {
       [StorageTarget.Knowledge]: config.getOrThrow<string>(
         'STORAGE_KNOWLEDGE_BUCKET',
@@ -128,11 +85,7 @@ export class StorageService implements OnModuleInit {
         },
       });
     const configured =
-      endpoint &&
-      accessKeyId &&
-      secretAccessKey &&
-      this.publicUrl &&
-      this.webhookToken;
+      endpoint && accessKeyId && secretAccessKey && this.publicUrl;
     this.clients = configured
       ? { internal: client(endpoint), presigner: client(this.publicUrl) }
       : null;
@@ -256,30 +209,6 @@ export class StorageService implements OnModuleInit {
     );
   }
 
-  parseEvent(target: StorageTarget, body: StorageEvent): string[] {
-    if (!Array.isArray(body?.Records))
-      throw new InvalidInputException('BAD_REQUEST', 'Expected an S3 event');
-    const keys: string[] = [];
-    const records: unknown[] = body.Records;
-    for (const record of records) {
-      if (!isEventRecord(record))
-        throw new InvalidInputException(
-          'BAD_REQUEST',
-          'Each S3 event record must be an object',
-        );
-      const { eventName, s3 } = record;
-      const key = s3?.object?.key;
-      if (
-        !eventName?.startsWith('s3:ObjectCreated:') ||
-        s3?.bucket?.name !== this.buckets[target] ||
-        !key
-      )
-        continue;
-      keys.push(decodeObjectKey(key));
-    }
-    return keys;
-  }
-
   private require(): StorageClients {
     if (!this.clients)
       throw new FeatureUnavailableException(
@@ -303,23 +232,7 @@ export class StorageService implements OnModuleInit {
         )
           throw error;
       });
-    const { webhook, publicRead } = BUCKET_SETUP[target];
-    if (webhook) {
-      await client.send(
-        new PutBucketNotificationConfigurationCommand({
-          Bucket,
-          NotificationConfiguration: {
-            QueueConfigurations: [
-              {
-                Id: `${target}-created`,
-                QueueArn: `arn:rustfs:sqs:${this.region}:${target}:webhook`,
-                Events: ['s3:ObjectCreated:*'],
-              },
-            ],
-          },
-        }),
-      );
-    }
+    const { publicRead } = BUCKET_SETUP[target];
     if (publicRead) {
       await client.send(
         new PutBucketPolicyCommand({

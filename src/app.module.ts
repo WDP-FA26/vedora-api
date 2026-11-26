@@ -15,7 +15,6 @@ import { AiModule } from './ai/ai.module.js';
 import { AuthCoreModule } from './auth-core/auth-core.module.js';
 import { AuthModule } from './auth/auth.module.js';
 import { StorageModule } from './storage/storage.module.js';
-import { StorageWebhookModule } from './webhooks/storage/storage-webhook.module.js';
 import { HealthModule } from './health/health.module.js';
 import { KnowledgeModule } from './knowledge/knowledge.module.js';
 import { CloudinaryModule } from './cloudinary/cloudinary.module.js';
@@ -80,7 +79,6 @@ import { WorkspacesModule } from './workspaces/workspaces.module.js';
     ProfilesModule,
     VerificationModule,
     WorkspacesModule,
-    StorageWebhookModule,
   ],
   controllers: [AppController, PublicConfigController],
   providers: [{ provide: APP_FILTER, useClass: AppExceptionFilter }],

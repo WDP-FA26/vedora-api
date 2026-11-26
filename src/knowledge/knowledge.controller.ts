@@ -50,7 +50,7 @@ export class KnowledgeController {
   @ApiOperation({
     summary: 'Start a knowledge-base file upload',
     description:
-      'Creates the document and returns a presigned URL; the browser PUTs the PDF straight to RustFS.',
+      'Creates the document and returns a presigned URL; the browser PUTs the PDF straight to object storage and calls POST /:id/confirm.',
   })
   @ApiUnsupportedMediaTypeResponse({
     description: 'The file is not a PDF',
@@ -69,6 +69,19 @@ export class KnowledgeController {
       dto.filename,
       dto.sizeBytes,
     );
+  }
+
+  @Post(':id/confirm')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Confirm a PDF upload and start OCR extraction',
+    description:
+      'Verifies the uploaded PDF exists in storage via HeadObject and starts OCR extraction. Idempotent once no longer WAITING_UPLOAD.',
+  })
+  confirmUpload(
+    @Param('id', ParseUUIDPipe) id: string,
+  ): Promise<KnowledgeDocumentResponseDto> {
+    return this.knowledgeService.confirmUpload(id);
   }
 
   @Get()

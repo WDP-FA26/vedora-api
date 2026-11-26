@@ -111,11 +111,25 @@ export class KnowledgeService {
     return { document: toResponse(document), upload };
   }
 
-  async markUploaded(key: string): Promise<void> {
+  async confirmUpload(id: string): Promise<KnowledgeDocumentResponseDto> {
+    const existing = await this.findDocument(id);
+    if (existing.status !== KnowledgeDocumentStatus.WAITING_UPLOAD) {
+      return toResponse(existing);
+    }
+    const uploaded = await this.storage.exists(
+      StorageTarget.Knowledge,
+      existing.storageKey,
+    );
+    if (!uploaded) {
+      throw new StateConflictException(
+        'CONFLICT',
+        'Uploaded file was not found in storage',
+      );
+    }
     const document = await this.documents
       .findOneAndUpdate(
         {
-          storageKey: key,
+          _id: id,
           status: KnowledgeDocumentStatus.WAITING_UPLOAD,
         },
         {
@@ -127,8 +141,11 @@ export class KnowledgeService {
         { returnDocument: 'after' },
       )
       .exec();
-    if (document) void this.ingest(document);
-    else this.logger.warn(`No waiting document for ${key}`);
+    if (document) {
+      void this.ingest(document);
+      return toResponse(document);
+    }
+    return toResponse(await this.findDocument(id));
   }
 
   /** OCRs the file and parks the text for an admin to review. Nothing is indexed yet. */

@@ -32,8 +32,7 @@ describe('KnowledgeController', () => {
     } as unknown as CreateKnowledgeUploadResponseDto;
     service.createUpload.mockResolvedValue(upload);
 
-    await expect(
-      controller.createUpload(request, {
+    await expect(controller.createUpload(request, {
         filename: 'nutrition.pdf',
         sizeBytes: 12345,
       }),
@@ -43,6 +42,14 @@ describe('KnowledgeController', () => {
       'nutrition.pdf',
       12345,
     );
+  });
+
+  it('delegates confirmUpload with document id', async () => {
+    const doc = { id: docId } as unknown as KnowledgeDocumentResponseDto;
+    service.confirmUpload.mockResolvedValue(doc);
+
+    await expect(controller.confirmUpload(docId)).resolves.toBe(doc);
+    expect(service.confirmUpload).toHaveBeenCalledExactlyOnceWith(docId);
   });
 
   it('delegates findAll and findOne', async () => {

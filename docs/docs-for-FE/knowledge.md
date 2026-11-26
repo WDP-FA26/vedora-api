@@ -22,6 +22,7 @@ Mỗi tài liệu có thêm `reviewedById`, `reviewedAt`, `reviewNote` (null khi
 
 ## Endpoint
 
+- `POST /knowledge/documents/:id/confirm` → xác nhận file PDF đã được upload lên object storage (kiểm tra bằng `HeadObject`) và bắt đầu OCR (`WAITING_UPLOAD → PROCESSING`). Idempotent nếu tài liệu đã rời `WAITING_UPLOAD`; trả 409 (`CONFLICT`) nếu chưa thấy file trên storage.
 - `GET /knowledge/documents/:id/pages` → `[{ page, text, flags, edited }]`, theo thứ tự trang (page bắt đầu từ 1).
   - `flags`: `TEXT_LAYER_ADDED` (OCR sót chữ, hệ thống đã nối thêm text layer của PDF) và `PAGE_COUNT_MISMATCH` (OCR trả số trang khác PDF, chữ có thể nằm sai trang). Nên hiện các trang có cờ lên đầu.
 - `PATCH /knowledge/documents/:id/pages/:page` `{ text }` → trang đã sửa (`edited: true`). Chỉ khi `AWAITING_REVIEW`, ngược lại 409 `DOCUMENT_NOT_REVIEWABLE`. Trang không tồn tại 404.

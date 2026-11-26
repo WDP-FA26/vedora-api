@@ -48,6 +48,7 @@ describe('ProfilesService', () => {
   const storage = {
     isConfigured: vi.fn(),
     presignUpload: vi.fn(),
+    exists: vi.fn(),
     publicObjectUrl: vi.fn(),
     delete: vi.fn(),
   };
@@ -246,21 +247,29 @@ describe('ProfilesService', () => {
     ).rejects.toBeInstanceOf(InvalidInputException);
   });
 
-  it('only activates a confirmed upload owned by the caller', async () => {
+  it('only activates an upload owned by the caller once it exists in storage', async () => {
     await createUser(db, { id: userId });
 
     await expect(service.activateImage(userId, imageId)).rejects.toBeInstanceOf(
       ResourceNotFoundException,
     );
     await insertUpload({ status: 'WAITING_UPLOAD' });
+    storage.exists.mockResolvedValueOnce(false);
     await expect(service.activateImage(userId, imageId)).rejects.toBeInstanceOf(
       StateConflictException,
     );
-    await uploads().updateOne({ _id: imageId }, { $set: { status: 'READY' } });
 
+    storage.exists.mockResolvedValueOnce(true);
     const profile = await service.activateImage(userId, imageId);
 
+    expect(storage.exists).toHaveBeenCalledWith(
+      StorageTarget.Profiles,
+      storageKey,
+    );
     expect(profile.avatarUrl).toBe(publicUrl);
+    expect(await uploads().findOne({ _id: imageId })).toMatchObject({
+      status: 'READY',
+    });
     expect(await users().findOne({ _id: userId })).toMatchObject({
       avatarUrl: publicUrl,
     });
@@ -273,21 +282,6 @@ describe('ProfilesService', () => {
     await expect(service.activateImage(userId, imageId)).rejects.toBeInstanceOf(
       StateConflictException,
     );
-  });
-
-  it('marks only a waiting upload with that key ready', async () => {
-    await insertUpload({ status: 'WAITING_UPLOAD' });
-
-    await service.markImageUploaded(storageKey);
-
-    expect(await uploads().findOne({ _id: imageId })).toMatchObject({
-      status: 'READY',
-    });
-    await uploads().updateOne({ _id: imageId }, { $set: { status: 'READY' } });
-    await service.markImageUploaded(storageKey);
-    expect(await uploads().findOne({ _id: imageId })).toMatchObject({
-      status: 'READY',
-    });
   });
 
   it('keeps active images and purges old unused uploads', async () => {
