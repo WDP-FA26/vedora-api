@@ -12,6 +12,7 @@ import { AiCostTransportService } from '@src/ai/telemetry/ai-cost-transport.serv
 import { StorageService, StorageTarget } from '@src/storage/storage.service.js';
 import { BLOG_ASSISTANT_POLICY } from '@src/ai/guardrails/policies/blog-assistant.js';
 import { blogRefusal } from './blog-assistant.moderation.js';
+import { toWebp } from '@src/common/ffmpeg/webp.js';
 
 const SUPPORTED_ASPECT_RATIOS = ['1:1', '4:3', '3:4', '16:9'] as const;
 export type ImageAspectRatio = (typeof SUPPORTED_ASPECT_RATIOS)[number];
@@ -34,6 +35,8 @@ export const IMAGE_ERRORS = [
 ] as const;
 export type ImageError = (typeof IMAGE_ERRORS)[number];
 export type ImageResult = { url: string } | { error: ImageError };
+
+type StoredImage = { bytes: Uint8Array; mediaType: string };
 
 const EXTENSIONS: Record<string, string> = {
   'image/png': 'png',
@@ -121,13 +124,16 @@ export class BlogImageGeneratorService {
         return { error: 'IMAGE_PROMPT_REFUSED' };
       }
       const { image } = await produce();
-      const extension = EXTENSIONS[image.mediaType] ?? 'png';
-      const key = `blogs/${userId}/ai/${randomUUID()}.${extension}`;
+      const stored = await this.compress({
+        bytes: image.uint8Array,
+        mediaType: EXTENSIONS[image.mediaType] ? image.mediaType : 'image/png',
+      });
+      const key = `blogs/${userId}/ai/${randomUUID()}.${EXTENSIONS[stored.mediaType]}`;
       await this.storage.putBytes(
         StorageTarget.Blogs,
         key,
-        image.uint8Array,
-        EXTENSIONS[image.mediaType] ? image.mediaType : 'image/png',
+        stored.bytes,
+        stored.mediaType,
       );
       await this.usage.complete(ticket);
       return { url: this.storage.publicObjectUrl(StorageTarget.Blogs, key) };
@@ -136,5 +142,25 @@ export class BlogImageGeneratorService {
       await this.usage.refund(ticket).catch(() => undefined);
       return { error: 'IMAGE_FAILED' };
     }
+  }
+
+  /**
+   * Models return multi-megabyte PNGs; WebP serves the same picture far smaller
+   * to web and mobile. The image is already paid for, so a failed or larger
+   * conversion keeps the original instead of failing the request.
+   */
+  private async compress(original: StoredImage): Promise<StoredImage> {
+    if (original.mediaType === 'image/webp') return original;
+    let webp: Buffer;
+    try {
+      webp = await toWebp(original.bytes);
+    } catch (error) {
+      this.logger.warn(
+        `WebP conversion failed, keeping original: ${String(error)}`,
+      );
+      return original;
+    }
+    if (webp.byteLength >= original.bytes.byteLength) return original;
+    return { bytes: webp, mediaType: 'image/webp' };
   }
 }
