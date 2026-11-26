@@ -8,7 +8,7 @@ import { z } from 'zod';
 export function endCallTool() {
   return tool({
     description:
-      'End the voice call after your reply is spoken. Use it when the user says goodbye or clearly wants to stop talking, such as "tạm biệt", "thôi nhé, cảm ơn", "cúp máy đi". Your reply is the farewell, so keep it to one warm sentence. When the user still waits for something you are doing, or only pauses or thanks you mid-conversation, keep the call open.',
+      'End the voice call automatically after your farewell is spoken — no confirmation needed. Call it immediately whenever the user says goodbye or expresses any intent to stop, close, or turn off the voice call, conversation, or assistant (for example: "tạm biệt", "tắt cuộc hội thoại", "đóng cuộc trò chuyện", "tắt trợ lý", "dừng nói chuyện", "thôi nhé, cảm ơn", "cúp máy đi", "xong rồi"). Keep the call open only when the user is closing a UI panel (use setScreen with view "calendar" instead), still waiting on a task, or just pausing/thanking you mid-conversation.',
     inputSchema: z.object({}),
     execute: () => ({ ended: true }),
     toModelOutput: () => ({
