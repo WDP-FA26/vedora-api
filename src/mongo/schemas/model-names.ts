@@ -43,6 +43,7 @@ export const MODEL_NAMES = [
   'RestaurantReview',
   'Ingredient',
   'IngredientGroup',
+  'RecipeCategory',
   'IncompatibilityRule',
   'Recipe',
   'RecipeFavorite',

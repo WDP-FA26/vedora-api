@@ -29,6 +29,7 @@ export const INVALID_INPUT_CODES = [
   'HEIGHT_REQUIRED',
   'INVALID_DATE',
   'DIETARY_MEMORY_FULL',
+  'ORDER_MISMATCH',
 ] as const;
 
 export type InvalidInputCode = (typeof INVALID_INPUT_CODES)[number];
