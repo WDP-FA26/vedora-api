@@ -268,6 +268,20 @@ export enum RecipeTag {
   SNACK = 'SNACK',
 }
 
+/** Icon an admin picks for a recipe category; the frontend maps each to a glyph. */
+export enum RecipeCategoryIcon {
+  SOUP = 'SOUP',
+  SALAD = 'SALAD',
+  POT = 'POT',
+  WHEAT = 'WHEAT',
+  FLAME = 'FLAME',
+  SANDWICH = 'SANDWICH',
+  CAKE = 'CAKE',
+  COFFEE = 'COFFEE',
+  COOKIE = 'COOKIE',
+  UTENSILS = 'UTENSILS',
+}
+
 /** Where a meal-log entry came from. */
 export enum MealLogSource {
   /** Ticked off a dish of the saved plan. */

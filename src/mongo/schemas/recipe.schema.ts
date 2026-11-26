@@ -1,8 +1,58 @@
 import { randomUUID } from 'node:crypto';
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
-import { MealSection, NutritionPillar, RecipeTag, Weekday } from '../enums.js';
+import {
+  MealSection,
+  NutritionPillar,
+  RecipeCategoryIcon,
+  RecipeTag,
+  Weekday,
+} from '../enums.js';
 import { cascadeOnDelete, collectionSchema } from './common.js';
 import { Identified } from './identified.js';
+
+/**
+ * An admin-managed dish category. `baseTag` is the fixed kind the meal planner
+ * understands, so a new category still lands in the right meals.
+ */
+@Schema(collectionSchema('recipe_categories'))
+export class RecipeCategory extends Identified {
+  @Prop({ type: String, default: () => randomUUID() })
+  _id!: string;
+
+  @Prop({ type: String, required: true })
+  name!: string;
+
+  @Prop({ type: String, default: null })
+  description!: string | null;
+
+  @Prop({ type: String, enum: Object.values(RecipeTag), required: true })
+  baseTag!: RecipeTag;
+
+  @Prop({
+    type: String,
+    enum: Object.values(RecipeCategoryIcon),
+    required: true,
+    default: RecipeCategoryIcon.UTENSILS,
+  })
+  icon!: RecipeCategoryIcon;
+
+  @Prop({ type: Number, required: true, default: 0 })
+  sortOrder!: number;
+
+  @Prop({ type: Boolean, required: true, default: false })
+  hidden!: boolean;
+
+  @Prop({ type: Date })
+  createdAt!: Date;
+
+  @Prop({ type: Date })
+  updatedAt!: Date;
+}
+
+export const RecipeCategorySchema =
+  SchemaFactory.createForClass(RecipeCategory);
+RecipeCategorySchema.index({ name: 1 }, { unique: true });
+RecipeCategorySchema.index({ sortOrder: 1, _id: 1 });
 
 @Schema(collectionSchema('ingredients'))
 export class Ingredient extends Identified {

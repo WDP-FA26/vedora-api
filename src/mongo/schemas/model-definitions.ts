@@ -45,6 +45,7 @@ import {
 import {
   IngredientGroupSchema,
   IngredientSchema,
+  RecipeCategorySchema,
   IncompatibilityRuleSchema,
   MealPlanEntrySchema,
   RecipeFavoriteSchema,
@@ -124,6 +125,7 @@ export const MODEL_DEFINITIONS = [
   { name: 'RestaurantReview', schema: RestaurantReviewSchema },
   { name: 'Ingredient', schema: IngredientSchema },
   { name: 'IngredientGroup', schema: IngredientGroupSchema },
+  { name: 'RecipeCategory', schema: RecipeCategorySchema },
   { name: 'IncompatibilityRule', schema: IncompatibilityRuleSchema },
   { name: 'Recipe', schema: RecipeSchema },
   { name: 'RecipeFavorite', schema: RecipeFavoriteSchema },

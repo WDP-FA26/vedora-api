@@ -4,12 +4,14 @@ import {
   AdminIngredientGroupsController,
   AdminIngredientsController,
 } from './admin-ingredients.controller.js';
+import { AdminRecipeCategoriesController } from './admin-recipe-categories.controller.js';
 import { AdminRecipesController } from './admin-recipes.controller.js';
 import { DietaryController } from './dietary.controller.js';
 import { DietaryService } from './dietary.service.js';
 import { IncompatibilityRulesService } from './incompatibility-rules.service.js';
 import { IngredientsService } from './ingredients.service.js';
 import { RecipesService } from './recipes.service.js';
+import { RecipeCategoriesService } from './recipe-categories.service.js';
 import { RecipeCatalogService } from './recipe-catalog.service.js';
 import { RecipeRelationsService } from './recipe-relations.service.js';
 import { RecipesController } from './recipes.controller.js';
@@ -26,11 +28,13 @@ import { RecipeDraftsService } from './drafts/recipe-drafts.service.js';
     AdminIngredientsController,
     AdminIngredientGroupsController,
     AdminIncompatibilityRulesController,
+    AdminRecipeCategoriesController,
     AdminRecipesController,
     DietaryController,
   ],
   providers: [
     IngredientsService,
+    RecipeCategoriesService,
     IncompatibilityRulesService,
     RecipesService,
     RecipeRelationsService,
