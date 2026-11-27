@@ -24,10 +24,6 @@ import type {
 } from './dto/meal-plan-voice.dto.js';
 import { addDays } from './meal-week.js';
 
-// ---------------------------------------------------------------------------
-// Vietnamese labels (the first three are shared with the planner tools)
-// ---------------------------------------------------------------------------
-
 export const DAY_NAMES = {
   MON: 'Thứ Hai',
   TUE: 'Thứ Ba',
@@ -99,12 +95,7 @@ const BODY_METRICS_TAB_TEXT: Record<BodyMetricsTab, string> = {
 
 const WEEKDAYS: readonly Weekday[] = Object.values(Weekday);
 
-/** How many weight check-ins the dynamic context lists. */
 const RECENT_HISTORY_LIMIT = 10;
-
-// ---------------------------------------------------------------------------
-// Static rules: identical for every user and turn, so they stay cacheable
-// ---------------------------------------------------------------------------
 
 const SHARED_RULES = `<role>
 You are "Trợ lý Vedora", the plant-based nutrition assistant of Vedora, a social network for vegetarian and plant-based cooking. Help users build and adjust weekly meal plans suited to their body metrics (BMI, calorie targets) and give practical plant-based nutrition advice, including restaurant meals and packaged foods.
@@ -193,28 +184,15 @@ Your reply is spoken aloud, so write one to three concise sentences of flowing, 
 </spoken_output_format>
 </voice_mode>`;
 
-// ---------------------------------------------------------------------------
-// Instruction entry points
-// ---------------------------------------------------------------------------
-
-/**
- * Static planner rules and web-search capability note, safe to cache across
- * users and turns.
- */
 export function plannerStaticInstructions(allowWebSearch = false): string {
   const webSearch = allowWebSearch ? WEB_SEARCH_ALLOWED : WEB_SEARCH_ASK;
   return `${SHARED_RULES}\n\n${TEXT_ONLY_RULES}\n\n${webSearch}`;
 }
 
-/**
- * Planner rules for a voice turn: the shared rules, then what changes when a
- * voice model relays the user's words and speaks the reply.
- */
 export function plannerVoiceInstructions(): string {
   return `${SHARED_RULES}\n\n${VOICE_RULES}`;
 }
 
-/** Static rules followed by the dynamic context, as one string. */
 export function plannerInstructions(
   memory: DietaryMemoryDto,
   plan: MealPlanDto,
@@ -226,10 +204,6 @@ export function plannerInstructions(
   return `${staticPart}\n\n${dynamicPart}`;
 }
 
-/**
- * Per-user and per-week dynamic context placed in the latest user turn so
- * the static system prefix remains cacheable.
- */
 export function plannerDynamicContext(
   memory: DietaryMemoryDto,
   plan: MealPlanDto,
@@ -249,16 +223,10 @@ Thực đơn hiện tại của tuần người dùng đang xem (weekStart ${pla
 ${weekPlanLines(plan)}`;
 }
 
-// ---------------------------------------------------------------------------
-// Dynamic context: calendar
-// ---------------------------------------------------------------------------
-
-/** `2026-11-19` as `19/11`. */
 function dayMonth(date: string): string {
   return `${date.slice(8, 10)}/${date.slice(5, 7)}`;
 }
 
-/** `16/11–22/11` for the week starting `2026-11-16`. */
 function weekRange(weekStart: string): string {
   return `${dayMonth(weekStart)}–${dayMonth(addDays(weekStart, 6))}`;
 }
@@ -269,7 +237,6 @@ function weekLabel(weekStart: string, currentWeekStart: string): string {
   return 'Tuần';
 }
 
-/** Days of the current week before today, e.g. `Thứ Hai 16/11, Thứ Ba 17/11`. */
 function passedDaysText(currentWeekStart: string, todayIndex: number): string {
   const passed: string[] = [];
   for (let index = 0; index < todayIndex; index++) {
@@ -279,13 +246,8 @@ function passedDaysText(currentWeekStart: string, todayIndex: number): string {
   return passed.join(', ');
 }
 
-/**
- * Every week the planner may write to, with real dates, so the model turns
- * "T4", "tuần sau" or "25/11" into one day without guessing.
- */
 export function plannerCalendar(plan: MealPlanDto): string {
   const { today, currentWeekStart, maxWeekStart, weekStart } = plan;
-  // -1 when today is outside the current week; then no day counts as passed.
   const todayIndex = WEEKDAYS.findIndex(
     (_, index) => addDays(currentWeekStart, index) === today,
   );
@@ -322,10 +284,6 @@ Lịch các tuần bạn được lập:
 ${lines.join('\n')}
 Sau ${lastDay} là ngoài giới hạn, không lập được.`;
 }
-
-// ---------------------------------------------------------------------------
-// Dynamic context: body metrics and goal
-// ---------------------------------------------------------------------------
 
 function nutritionSummary(
   nutrition: NutritionProfileDto | null | undefined,
@@ -368,7 +326,6 @@ function nutritionSummary(
   return lines.join('\n');
 }
 
-/** Birth year, sex and activity level, each only when the user set it. */
 function profileBackground(nutrition: NutritionProfileDto): string[] {
   const parts: string[] = [];
   if (nutrition.birthYear !== null) {
@@ -412,11 +369,6 @@ function weightCheckpointsLine(history: readonly BodyMetricLogDto[]): string {
   return `- Các mốc cân nặng gần nhất: ${checkpoints.join('; ')}.`;
 }
 
-// ---------------------------------------------------------------------------
-// Dynamic context: dietary memory
-// ---------------------------------------------------------------------------
-
-/** Removes tags a user could write into memory to fake prompt structure. */
 function stripPlannerContextTags(text: string): string {
   return text.replace(/<\/?(?:planner_context|system-reminder)\b[^>]*>?/gi, '');
 }
@@ -431,10 +383,6 @@ function memoryLines(lines: readonly string[], empty: string): string {
   return shown.join('\n');
 }
 
-// ---------------------------------------------------------------------------
-// Dynamic context: the viewed week's meal plan
-// ---------------------------------------------------------------------------
-
 function weekPlanLines(plan: MealPlanDto): string {
   const lines: string[] = [];
   for (const day of plan.days) {
@@ -443,7 +391,6 @@ function weekPlanLines(plan: MealPlanDto): string {
   return lines.join('\n');
 }
 
-/** `- Thứ Hai: sáng: A (id …, ~200 kcal); trưa: … — ước tính ~… kcal (…)`. */
 function dayPlanLine({ day, sections }: MealDayDto): string {
   const mealTexts: string[] = [];
   const dayRecipes: MealRecipeDto[] = [];
@@ -462,10 +409,6 @@ function recipeLabel({ title, id, caloriesPerServing }: MealRecipeDto): string {
   return `${title} (id ${id}, ~${caloriesPerServing} kcal)`;
 }
 
-/**
- * ` — ước tính ~900 kcal (Đạm TV, Sắt)`: the day's calorie sum and the pillars
- * it covers, or nothing when no recipe that day has a calorie figure.
- */
 function dayNutritionNote(recipes: readonly MealRecipeDto[]): string {
   let calories = 0;
   let hasCalories = false;
@@ -485,15 +428,6 @@ function dayNutritionNote(recipes: readonly MealRecipeDto[]): string {
   return ` — ước tính ~${calories} kcal (${pillarNames.join(', ')})`;
 }
 
-// ---------------------------------------------------------------------------
-// Voice turns: what is on the user's screen
-// ---------------------------------------------------------------------------
-
-/**
- * What the user sees while speaking, for a voice turn's dynamic context. The
- * recipe title comes from the catalog, not the browser, so page text never
- * reaches the prompt.
- */
 export function voiceScreenContext(
   screen: MealPlanVoiceScreenDto,
   recipeTitle: string | null,

@@ -1,10 +1,6 @@
 import { tool } from 'ai';
 import { z } from 'zod';
 
-/**
- * Voice-mode only: ends the call once the voice model has said goodbye. The API
- * only records the decision; the browser hangs up when the farewell finishes.
- */
 export function endCallTool() {
   return tool({
     description:

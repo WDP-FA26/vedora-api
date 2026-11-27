@@ -12,12 +12,6 @@ import { RefreshTokensService } from '@src/auth/refresh-tokens.service.js';
 import { createE2eApp, type E2eApp } from '@test/support/e2e-app.js';
 import { createUser } from '@test/support/fixtures.js';
 
-/**
- * Black-box flows for /users account management: self-service edits,
- * admin CRUD, status/role transitions, last-admin protection under
- * concurrency, and what deleting an account does to its sessions.
- */
-
 const errorSchema = z
   .object({
     statusCode: z.number(),
@@ -110,7 +104,6 @@ describe('Account management flows (e2e)', () => {
   });
 
   describe('PATCH /users/:id', () => {
-    // BUG-4: PATCH /users/:id persists null into required username/email/fullName
     it.each([
       ['email', { email: null }],
       ['fullName', { fullName: null }],

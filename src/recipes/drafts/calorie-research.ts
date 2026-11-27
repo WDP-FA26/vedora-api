@@ -8,9 +8,7 @@ import {
   stripDraftTags,
 } from './recipe-draft.js';
 
-/** How much of the source the calorie check sees: enough to name the dish. */
 const SOURCE_EXCERPT_CHARS = 1500;
-/** Servings assumed when the recipe states none, as the draft prompt does. */
 const DEFAULT_SERVINGS = 2;
 
 const calorieAnswerSchema = z.object({
@@ -33,25 +31,18 @@ const calorieAnswerSchema = z.object({
 
 export type CalorieAnswer = z.infer<typeof calorieAnswerSchema>;
 
-/**
- * The model answers by calling this tool: its input is checked against the
- * schema, which `Output.object` cannot do here because OpenRouter ignores
- * `response_format` on calls with the web search server tool.
- */
 export const submitCalories = tool({
   description:
     'Nộp kết quả kiểm tra kcal. Gọi đúng một lần, sau khi đã tìm kiếm xong.',
   inputSchema: calorieAnswerSchema,
 });
 
-/** What a successful web check changes on the draft. */
 export interface CalorieResearch {
   caloriesPerServing?: number;
   calorieNote?: string;
   calorieSources: DraftSourceLink[];
 }
 
-/** The start of the source, so the check knows which dish the post means. */
 export function sourceExcerpt(parts: readonly PostSourcePart[]): string {
   const sections: string[] = [];
   for (const part of parts) {
@@ -60,7 +51,6 @@ export function sourceExcerpt(parts: readonly PostSourcePart[]): string {
   return sections.join('\n').slice(0, SOURCE_EXCERPT_CHARS);
 }
 
-/** `300 g đậu hũ, 2 quả cà chua, muối`. */
 function ingredientList(recipe: DraftRecipeOutput): string {
   const entries: string[] = [];
   for (const item of recipe.ingredients) {
@@ -73,10 +63,6 @@ function ingredientList(recipe: DraftRecipeOutput): string {
   return entries.join(', ');
 }
 
-/**
- * The user message of the calorie check. The admin's request goes in whole,
- * in its own tag, so a long source or form never cuts it off.
- */
 export function calorieResearchPrompt({
   recipe,
   sourceContext,
@@ -111,10 +97,6 @@ export function calorieResearchPrompt({
   return lines.join('\n');
 }
 
-/**
- * Reads the check's result: the submitted answer plus the pages web search
- * cited. Null when it produced nothing the admin could use.
- */
 export function calorieResearchOutcome(
   citedSources: readonly DraftSourceLink[],
   answer: CalorieAnswer | undefined,
@@ -137,7 +119,6 @@ export function calorieResearchOutcome(
   return { caloriesPerServing, calorieNote, calorieSources };
 }
 
-/** The draft with the checked figures; the draft's own values fill any gap. */
 export function applyCalorieResearch(
   recipe: DraftRecipeOutput,
   research: CalorieResearch,

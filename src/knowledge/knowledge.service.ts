@@ -32,7 +32,6 @@ import { UnsupportedFileTypeException } from '../common/exceptions/unsupported-f
 
 const FILE_URL_TTL_SECONDS = runtimeConfig.KNOWLEDGE_FILE_URL_TTL_SECONDS;
 
-/** One extraction or indexing run, and the filter that matches its document only while the run owns it. */
 interface DocumentRun {
   runId: string;
   filter: {
@@ -47,8 +46,6 @@ function runOf(
   status: KnowledgeDocumentStatus,
 ): DocumentRun {
   return {
-    // A document started before runs existed has no runId; its id tags the
-    // points instead, and the filter matches the missing field.
     runId: document.runId ?? document.id,
     filter: { _id: document.id, status, runId: document.runId ?? null },
   };
@@ -148,7 +145,6 @@ export class KnowledgeService {
     return toResponse(await this.findDocument(id));
   }
 
-  /** OCRs the file and parks the text for an admin to review. Nothing is indexed yet. */
   async ingest(document: KnowledgeDocument): Promise<void> {
     const run = runOf(document, KnowledgeDocumentStatus.PROCESSING);
     let file: Uint8Array;
@@ -166,9 +162,6 @@ export class KnowledgeService {
 
     let saved: boolean;
     try {
-      // The pages are saved together with the status change, and only while
-      // this run still owns a PROCESSING document: a run the cron failed, or
-      // a document deleted meanwhile, leaves no pages behind.
       saved = await this.mongo.withTransaction(async (session) => {
         const claimed = await this.documents
           .updateOne(
@@ -246,7 +239,6 @@ export class KnowledgeService {
     return toPageResponse(updated);
   }
 
-  /** Starts indexing the reviewed text; a second call while indexing gets a 409. */
   async approve(
     adminId: string,
     id: string,
@@ -303,14 +295,12 @@ export class KnowledgeService {
         })
         .exec();
       if (finished.matchedCount !== 1) {
-        // Rejected, deleted, or re-approved meanwhile: drop this run's points.
         await this.index.removeRun(document.id, run.runId);
         this.logger.warn(
           `Discarded indexing of ${document.id}: the document moved on meanwhile`,
         );
         return;
       }
-      // Points of earlier or overlapping runs (or from before runs) go.
       await this.index.removeOtherRuns(document.id, run.runId);
       this.logger.log(
         `Indexed ${document.id} (${sections.length} pages, ${imageCount} images)`,
@@ -331,7 +321,6 @@ export class KnowledgeService {
     }
   }
 
-  /** The reviewed pages are kept, so the admin can approve again. */
   private async returnToReview(
     run: DocumentRun,
     reason: KnowledgeDocumentFailureReason,
@@ -347,7 +336,6 @@ export class KnowledgeService {
     });
   }
 
-  /** Declines the document but keeps its file and pages. `remove` deletes. */
   async reject(
     adminId: string,
     id: string,
@@ -439,7 +427,6 @@ export class KnowledgeService {
     }
   }
 
-  /** Fails the document, unless another run or a person has moved it on. */
   private async failRun(
     run: DocumentRun,
     reason: KnowledgeDocumentFailureReason,

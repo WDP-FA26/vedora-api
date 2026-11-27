@@ -68,7 +68,6 @@ export class DietaryService {
     };
   }
 
-  /** Allergen keywords from the allergy lines, used to keep dishes off the plan. */
   async allergyKeywords(userId: string): Promise<string[]> {
     const { allergies } = await this.find(userId);
     return extractAllergyKeywords(allergies.join('\n'));
@@ -78,7 +77,6 @@ export class DietaryService {
     userId: string,
     dto: SaveDietaryMemoryDto,
   ): Promise<DietaryMemoryDto> {
-    // Read first so a legacy note is folded in before the new lists land.
     await this.find(userId);
     const updateSet: Record<string, string[]> = {};
     if (dto.allergies !== undefined) updateSet.allergies = dto.allergies;
@@ -91,10 +89,6 @@ export class DietaryService {
     return this.find(userId);
   }
 
-  /**
-   * Adds and removes lines in one memory section. Removal matches a saved line
-   * exactly (after trimming); unknown lines are ignored.
-   */
   async updateMemory(
     userId: string,
     section: MemorySection,
@@ -132,10 +126,6 @@ export class DietaryService {
     return buildNutritionProfile(user, logs);
   }
 
-  /**
-   * Loads dietary memory and nutrition profile together in a single `User`
-   * query plus parallel metric history read, for the AI planner hot path.
-   */
   async findPlannerContext(userId: string): Promise<{
     memory: DietaryMemoryDto;
     nutrition: NutritionProfileDto;
@@ -352,11 +342,6 @@ export class DietaryService {
     return this.findNutrition(userId);
   }
 
-  /**
-   * Accounts saved before the memory lists kept free-text notes and avoided
-   * ingredient/group ids. The first read turns them into lines and drops the
-   * old fields.
-   */
   private async migrateLegacy(
     user: LegacyDietaryFields,
   ): Promise<DietaryMemoryDto> {
@@ -380,7 +365,6 @@ export class DietaryService {
     };
     const unset: Record<string, ''> = {};
     for (const key of LEGACY_FIELDS) unset[key] = '';
-    // strict: false, or Mongoose drops the $unset of fields the schema no longer has.
     await this.users
       .updateOne(
         { _id: user._id },
@@ -492,7 +476,6 @@ interface LegacyDietaryFields {
   avoidedGroupIds?: string[];
 }
 
-/** Splits a legacy note into lines, dropping list bullets. */
 function noteLines(note: string | null | undefined): string[] {
   if (!note) return [];
   const lines: string[] = [];

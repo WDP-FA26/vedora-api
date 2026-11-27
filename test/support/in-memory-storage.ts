@@ -7,11 +7,6 @@ import {
   UPLOAD_TTL_SECONDS,
 } from '@src/storage/storage.service.js';
 
-/**
- * Zero-container, in-memory drop-in for `StorageService` in e2e tests.
- * Preserves the exact public URL and key-parsing behavior of `StorageService`
- * without requiring RustFS / SeaweedFS / S3 to be running.
- */
 @Injectable()
 export class InMemoryStorageService {
   private readonly objects = new Map<string, Uint8Array>();
@@ -37,9 +32,7 @@ export class InMemoryStorageService {
     };
   }
 
-  onModuleInit(): void {
-    // No external buckets to provision in memory.
-  }
+  onModuleInit(): void {}
 
   isConfigured(): boolean {
     return true;

@@ -25,10 +25,6 @@ const choice = (key: string): Choice => ({
   description: `Content that is clearly about ${key}.`,
 });
 
-/**
- * Optimistic concurrency and validation edges of the admin moderation policy
- * (docs/docs-for-FE/moderation-settings.md).
- */
 describe('Moderation settings flows (e2e)', () => {
   let e2e: E2eApp;
   let adminToken: string;
@@ -46,8 +42,6 @@ describe('Moderation settings flows (e2e)', () => {
     ]);
   });
   beforeEach(async () => {
-    // A reset keeps the row and its version count, so start each test from
-    // no saved settings at all; the reset then clears the service cache.
     await e2e.connection.collection('moderation_settings').deleteMany({});
     await asAdmin(request(server()).post(`${url}/reset`)).expect(200);
   });
@@ -83,7 +77,6 @@ describe('Moderation settings flows (e2e)', () => {
     });
 
     it('refuses a save from a version loaded before a reset', async () => {
-      // BUG-4: Versions restart at 1 after a reset, so a stale editor silently overwrites a newer policy
       const defaults = await load();
       const firstSave = (
         await save(
@@ -108,7 +101,6 @@ describe('Moderation settings flows (e2e)', () => {
       );
 
       expect(firstSave.version).toBe(1);
-      // Versions keep counting across a reset instead of restarting at 1.
       expect(newerPolicy.version).toBeGreaterThan(firstSave.version);
       expect(stale.status).toBe(409);
       expect((await load()).choices.map(({ key }) => key)).toContain(

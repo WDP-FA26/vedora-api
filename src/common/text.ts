@@ -7,7 +7,6 @@ const INLINE_MARKDOWN_IMAGE = /!\[[^\]]*\]\(\s*<?([^\s)>]+)>?[^)]*\)/g;
 const REF_MARKDOWN_IMAGE = /!\[([^\]]*)\](?:\[([^\]]*)\])?(?!\()/g;
 const REF_DEFINITION = /^\s*\[([^\]]+)\]:\s*<?([^\s>]+)>?(?:\s|$)/;
 
-/** Extracts unique media URLs referenced by Markdown images outside code fences. */
 export function extractMarkdownMediaUrls(markdown: string): string[] {
   const definitions = new Map<string, string>();
   const proseLines: string[] = [];

@@ -142,7 +142,6 @@ export const MODEL_DEFINITIONS = [
   { name: 'AiCostCall', schema: AiCostCallSchema },
 ] as const satisfies readonly { name: MongoModelName; schema: Schema }[];
 
-// Fails to compile when a name in MODEL_NAMES has no definition above.
 type RegisteredModelName = (typeof MODEL_DEFINITIONS)[number]['name'];
 export const _everyModelNameIsRegistered: [MongoModelName] extends [
   RegisteredModelName,

@@ -146,7 +146,6 @@ describe('PostInteractionsService', () => {
         service.listComments(post.id, { limit: 10, cursor: 'missing-cursor' }),
       ).rejects.toBeInstanceOf(InvalidInputException);
 
-      // Update comment: only comment author allowed
       const commenterActor = {
         sub: commenter.id,
         username: commenter.username,
@@ -175,7 +174,6 @@ describe('PostInteractionsService', () => {
       );
       expect(updated.body).toBe('Đã sửa');
 
-      // Delete comment: outsider forbidden; post author, comment author, and admin allowed
       const outsider = await createUser(db, { username: 'outsider' });
       await expect(
         service.removeComment(post.id, c1.id, {

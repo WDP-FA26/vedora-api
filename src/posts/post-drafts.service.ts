@@ -242,7 +242,6 @@ export class PostDraftsService {
     mediaId: string,
   ): Promise<DraftUploadResponseDto> {
     this.cloudinary.require();
-    // A previous tab may have finished sending bytes before it closed. Reconcile before reissuing fields.
     await this.requireDraft(ownerId, id);
     const old = await this.media
       .findOne({ _id: mediaId, ownerId, postId: id, discardedAt: null })
@@ -348,7 +347,7 @@ export class PostDraftsService {
         .exec();
       if (!post)
         throw new ResourceNotFoundException('NOT_FOUND', 'Draft not found');
-      if (post.status !== PostStatus.DRAFT) return false; // Retry an already committed publish, never create a second post.
+      if (post.status !== PostStatus.DRAFT) return false;
       this.version(post, expected);
       const media = await this.media
         .find({ postId: id, ownerId, discardedAt: null })

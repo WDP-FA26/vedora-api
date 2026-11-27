@@ -175,7 +175,6 @@ describe('AiUsageService', () => {
       period: 'DAY',
     });
 
-    // If usage exceeds limit (e.g. legacy/overcount), remaining clamps at 0
     const period = await subscriptions.period(USER_ID, NOW);
     await requests().insertMany(
       Array.from({ length: 5 }, () => ({
@@ -269,7 +268,6 @@ describe('AiUsageService', () => {
       code: 'AI_REQUEST_ALREADY_PROCESSED',
     });
 
-    // Completed request without continuation: true -> AI_REQUEST_EXPIRED
     await expect(
       usage.consume(
         USER_ID,
@@ -305,7 +303,6 @@ describe('AiUsageService', () => {
     expect(retried.id).toBe(first.id);
     expect(retried.token).not.toBe(first.token);
 
-    // Stale ticket cannot complete or refund the active retry
     await usage.complete(first);
     await usage.refund(first);
     const stored = await requests().findById(first.id).exec();
@@ -318,7 +315,6 @@ describe('AiUsageService', () => {
   });
 
   it('supports bounded continuations up to 8 hashes and rejects orphan/cross-period continuations', async () => {
-    // Orphan continuation
     await expect(
       usage.consume(
         USER_ID,
@@ -342,7 +338,6 @@ describe('AiUsageService', () => {
     )) as UsageTicket;
     await usage.complete(initial);
 
-    // Fill remaining 4 free turns so quota is full (5/5), yet continuations still pass
     for (let i = 0; i < 4; i++) {
       const t = (await usage.consume(
         USER_ID,
@@ -368,7 +363,6 @@ describe('AiUsageService', () => {
       await usage.complete(cont);
     }
 
-    // 9th hash exceeds MAX_REQUESTS_PER_TURN (8)
     await expect(
       usage.consume(
         USER_ID,
@@ -383,7 +377,6 @@ describe('AiUsageService', () => {
       ),
     ).rejects.toMatchObject({ code: 'AI_REQUEST_EXPIRED' });
 
-    // Cross-period continuation (e.g. user upgrades cycle) is rejected
     await seedPaid(BillingPlan.PLUS, new Date(NOW.getTime() - 5000));
     const cycleReq = randomUUID();
     const cycleTicket = (await usage.consume(

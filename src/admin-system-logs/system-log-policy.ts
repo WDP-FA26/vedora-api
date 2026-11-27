@@ -97,7 +97,6 @@ export function systemLogTarget(
   return null;
 }
 
-/** Explicit enum allowlists; free text, credentials, content and payloads never enter the log. */
 export function systemLogChanges(body: unknown) {
   const value =
     body && typeof body === 'object' && !Array.isArray(body)

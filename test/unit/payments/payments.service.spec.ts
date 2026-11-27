@@ -265,7 +265,6 @@ describe('PaymentsService', () => {
       expect(empty.usage.text.limit).toBe(5);
       expect(empty.usage.images.limit).toBe(0);
 
-      // Create 21 attempts (20 cancelled + 1 pending) to test limit(20)
       for (let i = 0; i < 20; i++) {
         const created = await service.create(
           user.id,
@@ -343,7 +342,6 @@ describe('PaymentsService', () => {
         ).rejects.toThrow(InvalidInputException);
       }
 
-      // Boundary valid keys (8 and 200 chars with allowed symbols)
       const pMin = await service.create(user.id, BillingPlan.PLUS, 'a._:-123');
       await service.cancel(pMin.id, user.id);
       const pMax = await service.create(
@@ -371,17 +369,14 @@ describe('PaymentsService', () => {
       const key = 'idem-replay-key-1';
       const first = await service.create(user.id, BillingPlan.PLUS, key);
 
-      // Same key + same plan replays existing intent
       expect((await service.create(user.id, BillingPlan.PLUS, key)).id).toBe(
         first.id,
       );
 
-      // Same key + different plan -> IDEMPOTENCY_CONFLICT
       await expect(
         service.create(user.id, BillingPlan.PRO, key),
       ).rejects.toMatchObject({ code: 'IDEMPOTENCY_CONFLICT' });
 
-      // Different key + same matching pending snapshot reuses pending intent
       const reused = await service.create(
         user.id,
         BillingPlan.PLUS,
@@ -389,12 +384,10 @@ describe('PaymentsService', () => {
       );
       expect(reused.id).toBe(first.id);
 
-      // Different key + different plan while pending -> PENDING_PAYMENT_CONFLICT
       await expect(
         service.create(user.id, BillingPlan.PRO, 'idem-diff-plan'),
       ).rejects.toMatchObject({ code: 'PENDING_PAYMENT_CONFLICT' });
 
-      // Snapshot mismatch (price / duration / textLimit / imageLimit changed on config or intent)
       config.set('SUBSCRIPTION_PLUS_PRICE_VND', 55000);
       await expect(
         service.create(user.id, BillingPlan.PLUS, 'idem-diff-price'),
@@ -423,7 +416,6 @@ describe('PaymentsService', () => {
         service.create(user.id, BillingPlan.PLUS, 'idem-diff-image-limit'),
       ).rejects.toMatchObject({ code: 'PENDING_PAYMENT_CONFLICT' });
 
-      // Cancel then replay old idempotency key still returns cancelled intent
       await service.cancel(first.id, user.id);
       const replayedAfterCancel = await service.create(
         user.id,
@@ -433,7 +425,6 @@ describe('PaymentsService', () => {
       expect(replayedAfterCancel.id).toBe(first.id);
       expect(replayedAfterCancel.status).toBe(PaymentStatus.CANCELLED);
 
-      // Orphaned request without intent -> NOT_FOUND
       await requests().create({
         _id: randomUUID(),
         actorId: user.id,
@@ -480,7 +471,6 @@ describe('PaymentsService', () => {
         0,
       );
 
-      // Unrelated unique constraint is not retried
       spy.mockRestore();
       await intents().collection.createIndex(
         { amount: 1 },
@@ -521,18 +511,15 @@ describe('PaymentsService', () => {
         ResourceNotFoundException,
       );
 
-      // First cancel succeeds even though publish rejects
       const cancelled = await service.cancel(pending.id, user.id);
       expect(cancelled.status).toBe(PaymentStatus.CANCELLED);
       expect(cancelled.cancelledAt).not.toBeNull();
       expect(publish).toHaveBeenCalledTimes(1);
 
-      // Second cancel is idempotent and does not publish again
       const again = await service.cancel(pending.id, user.id);
       expect(again.status).toBe(PaymentStatus.CANCELLED);
       expect(publish).toHaveBeenCalledTimes(1);
 
-      // Succeeded intent cannot be cancelled
       const paid = await service.create(
         user.id,
         BillingPlan.PLUS,
@@ -608,7 +595,6 @@ describe('PaymentsService', () => {
         'AMOUNT_MISMATCH',
       );
 
-      // Capture secondPending via subAccount and lowercase gateway
       const usedTxId = ++txCounter;
       await sendAndCheckOutcome(
         webhookPayload(secondPending.paymentCode.toLowerCase(), 49000, {
@@ -620,32 +606,27 @@ describe('PaymentsService', () => {
         'CAPTURED',
       );
 
-      // Duplicate on same intent
       await sendAndCheckOutcome(
         webhookPayload(secondPending.paymentCode, 49000, { id: usedTxId }),
         'DUPLICATE',
       );
 
-      // Same providerTransactionId on a different intent
       await sendAndCheckOutcome(
         webhookPayload(pending.paymentCode, 49000, { id: usedTxId }),
         'TRANSACTION_ALREADY_USED',
       );
 
-      // New transaction on an already-succeeded intent
       await sendAndCheckOutcome(
         webhookPayload(secondPending.paymentCode, 49000),
         'PAYMENT_INTENT_ALREADY_SUCCEEDED',
       );
 
-      // Cancelled intent
       await service.cancel(pending.id, user.id);
       await sendAndCheckOutcome(
         webhookPayload(pending.paymentCode, 49000),
         'PAYMENT_CANCELLED',
       );
 
-      // Unavailable account (deleted user)
       const doomed = await makeUser();
       const doomedPayment = await service.create(
         doomed.id,

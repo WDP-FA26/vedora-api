@@ -93,7 +93,6 @@ import { runtimeConfig } from '../config/runtime-config.js';
           'AI_MODERATION_MODEL',
           DEFAULT_MODERATION_MODEL,
         );
-        // The request's cost context (chat or blog assistant) names the feature.
         return aiModels(config).chat(modelId, {
           effort: 'low',
           providerOrder: moderationProviderOrder(config),

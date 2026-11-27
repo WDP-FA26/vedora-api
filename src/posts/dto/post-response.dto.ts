@@ -11,7 +11,6 @@ import { PostAuthorDto } from '../../common/dto/post-author.dto.js';
 import { PostAppealSummaryDto } from '../../support/dto/post-appeal-summary.dto.js';
 import { BlogSummaryDto } from './blog-summary.dto.js';
 
-/** One part of a rejected post that broke the policy, as the author sees it. */
 export class ModerationFindingDto {
   @ApiProperty({
     enum: EVIDENCE_FIELDS,

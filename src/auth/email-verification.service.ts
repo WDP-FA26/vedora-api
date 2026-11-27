@@ -110,8 +110,6 @@ export class EmailVerificationService {
     }
 
     const redeemed = await this.mongo.withTransaction(async (session) => {
-      // Deleting the code is the redeem: of two parallel requests with the
-      // same code, only the one that deletes it goes on to verify.
       const consumed = await this.codes.deleteOne(
         { ...codeKey(user.id, PURPOSE), codeHash: pending.codeHash },
         { session },

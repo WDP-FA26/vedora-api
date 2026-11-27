@@ -17,7 +17,6 @@ export class Conversation extends Identified {
   @Prop({ type: String, default: () => randomUUID() })
   _id!: string;
 
-  /** Participants are ordered lexically, so one pair has one conversation. */
   @Prop({ type: String, required: true })
   lowId!: string;
 
@@ -30,7 +29,6 @@ export class Conversation extends Identified {
   @Prop({ type: Date, default: null })
   acceptedAt!: Date | null;
 
-  /** Each participant hides only messages at or below their own cutoff. */
   @Prop({ type: Number, default: 0, min: 0 })
   lowDeletedThroughSequence!: number;
 
@@ -99,7 +97,6 @@ export class DirectMessage extends Identified {
   @Prop({ type: String, required: true })
   clientMessageId!: string;
 
-  /** Retain the reference after post deletion, so history can show an unavailable card. */
   @Prop({ type: String, default: null })
   sharedPostId!: string | null;
 
@@ -129,7 +126,6 @@ DirectMessageSchema.index(
 );
 DirectMessageSchema.index({ conversationId: 1, recipientId: 1, sequence: 1 });
 
-/** Transactional outbox. Only committed invalidations are streamed, never message bodies. */
 @Schema(collectionSchema('messaging_events', 'created'))
 export class MessagingEvent extends Identified {
   @Prop({ type: String, default: () => randomUUID() })

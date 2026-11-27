@@ -37,7 +37,6 @@ const HTML_ESCAPES: Record<string, string> = {
   "'": '&#39;',
 };
 
-/** Ticket subjects are user input, so they are escaped before going into HTML. */
 function escapeHtml(value: string): string {
   return value.replace(/[&<>"']/g, (char) => HTML_ESCAPES[char] ?? char);
 }
@@ -64,11 +63,6 @@ export class MailService {
     });
   }
 
-  /**
-   * A support-ticket follow-up (reminder, final warning or auto-close) that
-   * mirrors the in-app notification, Zendesk-style. The thread stays the
-   * source of truth, so the email only links back to it.
-   */
   async sendSupportFollowUp(
     to: string,
     followUp: SupportFollowUpEmail,

@@ -94,38 +94,23 @@ const VOICE_CACHE_WARMUP_COOLDOWN_MS = 2 * 60 * 1000;
 const VOICE_CACHE_WARMUP_TIMEOUT_MS = 10_000;
 const VOICE_CACHE_WARMUP_MAX_ENTRIES = 1_000;
 
-/** Added on the last step, when tools are off, so the turn ends with a handover instead of a cut. */
 const LAST_STEP_NOTE = `
 
 This is the final step of this turn, so you can no longer call tools. Briefly summarize in Vietnamese what has been completed and saved, state clearly what remains unfinished, and ask the user whether they want you to continue.`;
 
 export interface PlannerChatOptions {
-  /** The user allowed web search in this chat. */
   allowWebSearch?: boolean;
-  /** Answer for a pending client-side `askUser` or `requestWebSearch` tool call. */
   toolOutput?: PlannerToolOutputDto;
-  /**
-   * The turn comes from the voice agent: short spoken replies, no `askUser`,
-   * plus the screen tools, the diary/body-metrics writers and undo. Voice
-   * turns keep web search off to reduce latency.
-   */
   voice?: boolean;
-  /** Voice only: what the page shows while the user speaks. */
   screen?: MealPlanVoiceScreenDto;
 }
 
-/** Tool states in which the AI SDK requires the call's `input`. */
 const STATES_WITH_INPUT = new Set([
   'input-available',
   'output-available',
   'output-error',
 ]);
 
-/**
- * Restores `input: {}` on tool calls made without arguments. Messages saved before
- * the schema kept empty objects lost it, and validation then dropped the whole
- * history for every later turn of the thread.
- */
 function withToolInputs(message: StoredChatMessage): StoredChatMessage {
   const parts = message.parts.map((part) => {
     if (typeof part.type !== 'string' || !part.type.startsWith('tool-')) {
@@ -176,11 +161,6 @@ function isQuickVoiceToolResult(toolName: string, output: unknown): boolean {
   return false;
 }
 
-/**
- * Ends a voice turn right after a step when every tool was a quick
- * screen/write tool marked `done: true` (the backend emits a `data-summary`
- * chunk for GPT-Live to speak). `endCall` is handled by `hasToolCall('endCall')`.
- */
 const voiceQuickStop: StopCondition<ToolSet> = ({ steps }) => {
   const latest = steps[steps.length - 1];
   if (!latest || latest.toolResults.length === 0) return false;
@@ -193,8 +173,6 @@ function plannerModeConfig(voice: boolean, allowWebSearch: boolean) {
   if (voice) {
     return {
       instructions: plannerVoiceInstructions(),
-      // Voice turns are bounded by a 5-minute call with pauses; 1h keeps the
-      // prefix hot across long thinking/speaking gaps.
       systemTtl: '1h' as const,
       turnTimeoutMs: Math.min(
         runtimeConfig.AI_CHAT_TIMEOUT_MS,
@@ -225,10 +203,6 @@ function plannerModeConfig(voice: boolean, allowWebSearch: boolean) {
   };
 }
 
-/**
- * Web search is the user's choice: without consent the planner only gets the
- * tool that asks for it, so the prompt alone never decides whether it searches.
- */
 function webTools(allowWebSearch: boolean): ToolSet {
   if (allowWebSearch) return { webSearch: webSearchTool() };
   return { requestWebSearch: requestWebSearchTool() };
@@ -259,7 +233,6 @@ function toModerationTurns(
   return turns;
 }
 
-/** Strips planner tags the user typed, so they can't pose as server context. */
 function stripUserPlannerTags(messages: readonly UIMessage[]): UIMessage[] {
   const prepared: UIMessage[] = [];
   for (const message of messages) {
@@ -329,10 +302,6 @@ export class MealPlannerChatService {
     @Optional() private readonly shoppingList?: ShoppingListService,
   ) {}
 
-  /**
-   * Builds the exact tool set for a planner turn (shared between live turns and
-   * voice prompt-cache warm-up so the tool prefix matches byte-for-byte).
-   */
   private buildAgentTools({
     userId,
     threadId,
@@ -405,18 +374,12 @@ export class MealPlannerChatService {
       ...(voice ? {} : webTools(allowWebSearch)),
     };
     if (voice) {
-      // Nobody can tap an option mid-call, so choices are asked out loud.
       delete agentTools.askUser;
       Object.assign(agentTools, this.voiceTools(userId, toolWeek, screen));
     }
     return agentTools;
   }
 
-  /**
-   * Fires a tiny no-tool call with the exact voice tools + system prompt while
-   * the browser acquires the mic and GPT-Live greets the user, so the first
-   * spoken turn hits a warm 1h prompt cache and sticky session route.
-   */
   async warmVoiceCache(userId: string, threadId?: string): Promise<void> {
     const key = PromptCache.sessionId('vedora-planner', userId, threadId);
     const now = Date.now();
@@ -473,10 +436,6 @@ export class MealPlannerChatService {
     }
   }
 
-  /**
-   * Tools only voice turns get. Text turns still know their definitions, so a
-   * thread that mixed voice and text validates against either.
-   */
   private voiceTools(
     userId: string,
     toolWeek: string,
@@ -495,7 +454,6 @@ export class MealPlannerChatService {
     };
   }
 
-  /** The screen section of a voice turn's context, with the open recipe's catalog title. */
   private async screenContext(
     userId: string,
     screen: MealPlanVoiceScreenDto,
@@ -510,11 +468,6 @@ export class MealPlannerChatService {
     return voiceScreenContext(screen, recipe?.title ?? null);
   }
 
-  /**
-   * Validates the stored history against the current tools, as the AI SDK
-   * persistence guide does. When it no longer matches (a removed tool, a
-   * changed schema), the turn starts over from the user's latest message.
-   */
   private async validateHistory(
     messages: readonly StoredChatMessage[],
     currentMessage: StoredChatMessage,
@@ -572,9 +525,6 @@ export class MealPlannerChatService {
     maxHistoryMessages: number;
     consumeTicket: () => ReturnType<AiUsageService['consume']>;
   }) {
-    // Voice turns run thread access, quota reservation, history read, and
-    // context queries in one parallel round-trip; if any check fails after
-    // quota was reserved, the ticket is refunded before rethrowing.
     const [accessResult, ticketResult, historyResult, contextResult] =
       await Promise.allSettled([
         threadId
@@ -605,8 +555,6 @@ export class MealPlannerChatService {
       if (contextResult.status === 'rejected') throw contextResult.reason;
 
       const existing = historyResult.value ?? [];
-      // Write the user message in the background once access + quota passed;
-      // `onEnd` awaits it before saving the assistant reply so order holds.
       const pendingUserRecord = this.history
         ?.recordUserMessage(userId, activeThreadId, message, userMessageId)
         .catch((error: unknown) => {
@@ -810,19 +758,14 @@ export class MealPlannerChatService {
     try {
       const [{ memory, nutrition }, plan, screenText] = context;
 
-      // A week that has fully passed is read-only, so tools default to this week.
       const toolWeek =
         plan.weekStart < plan.currentWeekStart
           ? plan.currentWeekStart
           : plan.weekStart;
-      // Restaurant dishes are matched on allergen keywords; the nutrition
-      // subagent reads the allergy lines themselves.
       const allergyKeywords = extractAllergyKeywords(
         memory.allergies.join('\n'),
       );
       const allergyLines = [...memory.allergies];
-      // An allergy the user adds mid-chat applies to the rest of this turn too:
-      // the allergy check and the restaurant/consult filters read these arrays.
       const onAllergiesSaved = (allergies: string[]) => {
         memory.allergies = allergies;
         allergyLines.splice(0, allergyLines.length, ...allergies);
@@ -855,8 +798,6 @@ export class MealPlannerChatService {
           session: 'vedora-planner',
           scope: [userId, activeThreadId],
           instructions: mode.instructions,
-          // Long prompt, many tools, up to 20 steps: at low effort Haiku 5.5
-          // is more likely to skip a lookup or a check.
           effort: 'medium',
           systemTtl: mode.systemTtl,
         }),
@@ -878,8 +819,6 @@ export class MealPlannerChatService {
         currentMessage,
         conversionTools,
       );
-      // A client-side tool call the user never answered (`askUser`,
-      // `requestWebSearch`) has no output; `ignoreIncompleteToolCalls` drops it.
       const rawModelMessages = await convertToModelMessages(
         stripUserPlannerTags(validatedMessages),
         {
@@ -927,7 +866,6 @@ export class MealPlannerChatService {
         stream: result.stream,
         tools: agent.tools,
         sendSources: true,
-        // Reasoning is excluded from the model, but some routes (web search) still stream it.
         sendReasoning: false,
         generateMessageId: () => assistantMessageId,
         onEnd: async ({ responseMessage }) => {

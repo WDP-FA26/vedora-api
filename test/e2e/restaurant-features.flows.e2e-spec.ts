@@ -209,9 +209,7 @@ describe('Restaurant proximity, menu search & reviews (e2e)', () => {
       if ((await qdrant.collectionExists(testCollection)).exists) {
         await qdrant.deleteCollection(testCollection);
       }
-    } catch {
-      // Ignore cleanup errors when Qdrant is not reached.
-    }
+    } catch {}
     vi.restoreAllMocks();
     await e2e.close();
   });
@@ -246,7 +244,6 @@ describe('Restaurant proximity, menu search & reviews (e2e)', () => {
       latitude: 10.774,
     });
 
-    // No bounds and no user coords: returns all restaurants across cities sorted A-Z (Vietnamese).
     const alphabeticalRes = await request(server())
       .get('/api/v1/restaurants')
       .expect(200);
@@ -261,7 +258,6 @@ describe('Restaurant proximity, menu search & reviews (e2e)', () => {
       alphabetical.items.every((item) => item.distanceMeters === null),
     ).toBe(true);
 
-    // No bounds with user coords: returns all restaurants sorted nearest-first.
     const nearestAllRes = await request(server())
       .get('/api/v1/restaurants')
       .query({ userLng: 105.791, userLat: 21.035 })
@@ -276,7 +272,6 @@ describe('Restaurant proximity, menu search & reviews (e2e)', () => {
       nearestAll.items.every((item) => typeof item.distanceMeters === 'number'),
     ).toBe(true);
 
-    // Viewport + user coords: filters to Hanoi and sorts nearest-first.
     const sortedRes = await request(server())
       .get('/api/v1/restaurants')
       .query({
@@ -295,7 +290,6 @@ describe('Restaurant proximity, menu search & reviews (e2e)', () => {
     expect(sorted.items[0].distanceMeters).toBeLessThan(1000);
     expect(sorted.items[1].distanceMeters).toBeGreaterThan(5000);
 
-    // Viewport without user coords: distanceMeters is null and sorted A-Z.
     const plainRes = await request(server())
       .get('/api/v1/restaurants')
       .query({ minLng: 105.7, minLat: 20.9, maxLng: 106.0, maxLat: 21.2 })
@@ -309,7 +303,6 @@ describe('Restaurant proximity, menu search & reviews (e2e)', () => {
       true,
     );
 
-    // Partial coordinates fail validation with 400.
     await request(server())
       .get('/api/v1/restaurants')
       .query({
@@ -337,7 +330,6 @@ describe('Restaurant proximity, menu search & reviews (e2e)', () => {
       .send({ username: manager.username })
       .expect(201);
 
-    // External image URL is rejected.
     await request(server())
       .post(`/api/v1/workspaces/${workspaceId}/menu`)
       .auth(ownerToken, { type: 'bearer' })
@@ -347,14 +339,12 @@ describe('Restaurant proximity, menu search & reviews (e2e)', () => {
       })
       .expect(400);
 
-    // Stranger cannot create menu items.
     await request(server())
       .post(`/api/v1/workspaces/${workspaceId}/menu`)
       .auth(diner1Token, { type: 'bearer' })
       .send({ name: 'Món lạ' })
       .expect(404);
 
-    // Upload signature + create dish by owner.
     const uploadRes = await request(server())
       .post(`/api/v1/workspaces/${workspaceId}/menu/image-uploads`)
       .auth(ownerToken, { type: 'bearer' })
@@ -375,7 +365,6 @@ describe('Restaurant proximity, menu search & reviews (e2e)', () => {
       .expect(201);
     const pho = menuItemSchema.parse(createdRes.body);
 
-    // Manager can add a second dish.
     const lauRes = await request(server())
       .post(`/api/v1/workspaces/${workspaceId}/menu`)
       .auth(managerToken, { type: 'bearer' })
@@ -395,10 +384,8 @@ describe('Restaurant proximity, menu search & reviews (e2e)', () => {
         .items,
     ).toHaveLength(2);
 
-    // Drain Qdrant indexer synchronously.
     await e2e.app.get(MenuSearchIndexService).drain();
 
-    // Accentless & accented Vietnamese search both find the dish.
     const searchAccented = menuSearchPageSchema.parse(
       (
         await request(server())
@@ -422,7 +409,6 @@ describe('Restaurant proximity, menu search & reviews (e2e)', () => {
       restaurant: { pageUserId, name: 'Bếp Chay Sen Vàng' },
     });
 
-    // Marking unavailable removes it from Qdrant search.
     await request(server())
       .patch(`/api/v1/workspaces/${workspaceId}/menu/${lau.id}`)
       .auth(ownerToken, { type: 'bearer' })
@@ -439,7 +425,6 @@ describe('Restaurant proximity, menu search & reviews (e2e)', () => {
     );
     expect(afterHide.items.some((item) => item.id === lau.id)).toBe(false);
 
-    // Deleting removes it completely.
     await request(server())
       .delete(`/api/v1/workspaces/${workspaceId}/menu/${pho.id}`)
       .auth(ownerToken, { type: 'bearer' })
@@ -468,7 +453,6 @@ describe('Restaurant proximity, menu search & reviews (e2e)', () => {
       .send({ username: manager.username })
       .expect(201);
 
-    // Owner and manager cannot review their own restaurant.
     const selfOwner = await request(server())
       .put(`/api/v1/restaurants/${pageUserId}/reviews/me`)
       .auth(ownerToken, { type: 'bearer' })
@@ -487,7 +471,6 @@ describe('Restaurant proximity, menu search & reviews (e2e)', () => {
       'SELF_RATING_NOT_ALLOWED',
     );
 
-    // Page session cannot review restaurants either.
     const refreshIssued = await e2e.app
       .get(RefreshTokensService)
       .issue(owner.id);
@@ -512,7 +495,6 @@ describe('Restaurant proximity, menu search & reviews (e2e)', () => {
       'PAGE_SESSION_NOT_ALLOWED',
     );
 
-    // Two diners post reviews.
     await request(server())
       .put(`/api/v1/restaurants/${pageUserId}/reviews/me`)
       .auth(diner1Token, { type: 'bearer' })
@@ -525,7 +507,6 @@ describe('Restaurant proximity, menu search & reviews (e2e)', () => {
       .send({ rating: 3, comment: 'Ổn, hơi đông buổi trưa.' })
       .expect(200);
 
-    // Highest & lowest sorting + myReview + breakdown.
     const highest = reviewPageSchema.parse(
       (
         await request(server())
@@ -555,7 +536,6 @@ describe('Restaurant proximity, menu search & reviews (e2e)', () => {
     expect(lowest.myReview).toBeNull();
     expect(lowest.items[0].rating).toBe(3);
 
-    // Profile and map pins both reflect rating stats.
     const profileRes = await request(server())
       .get(`/api/v1/profiles/${pageUserId}`)
       .expect(200);
@@ -581,7 +561,6 @@ describe('Restaurant proximity, menu search & reviews (e2e)', () => {
       reviewCount: 2,
     });
 
-    // Delete diner1's review updates summary back to 3.0 (1 review).
     const deletedSummary = await request(server())
       .delete(`/api/v1/restaurants/${pageUserId}/reviews/me`)
       .auth(diner1Token, { type: 'bearer' })

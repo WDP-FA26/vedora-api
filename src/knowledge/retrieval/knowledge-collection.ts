@@ -34,7 +34,6 @@ export class KnowledgePointPayload {
   @IsString()
   text!: string;
 
-  /** The indexing run that wrote the point; absent on points written before runs. */
   @IsOptional()
   @IsString()
   runId?: string;

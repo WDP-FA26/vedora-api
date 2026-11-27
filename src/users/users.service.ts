@@ -158,7 +158,6 @@ export class UsersService {
         async (target, session) => {
           this.assertVersion(target, dto.expectedVersion);
           if (target.role === dto.role) return toPublicUser(target);
-          // Every manager acts as the page, so a page must never be an admin.
           if (
             dto.role === UserRole.ADMIN &&
             target.accountType === AccountType.PAGE

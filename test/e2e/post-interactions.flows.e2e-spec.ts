@@ -45,11 +45,6 @@ interface AdminReport {
   reviewedAt: string | null;
 }
 
-/**
- * Black-box flows for thích / repost / bookmark / comment / report, checked
- * against docs/docs-for-FE/post-comments-likes.md, notifications.md and the
- * shared cursor pagination contract.
- */
 describe('Post interaction flows (e2e)', () => {
   let e2e: E2eApp;
   let author: User;
@@ -571,7 +566,6 @@ describe('Post interaction flows (e2e)', () => {
     });
 
     it('keeps paging past a saved post that is now held for review', async () => {
-      // BUG-1: Saved-post pagination stops early when a hidden post sits in the lookahead row
       const { user, token } = await newMember();
       const newest = await publishedPost();
       const hidden = await publishedPost();
@@ -604,7 +598,6 @@ describe('Post interaction flows (e2e)', () => {
     });
 
     it('fills a page with saved posts that are still public', async () => {
-      // BUG-1: Saved-post pagination stops early when a hidden post sits in the lookahead row
       const { user, token } = await newMember();
       const visible: Post[] = [];
       const rows: { postId: string; userId: string; createdAt: Date }[] = [];

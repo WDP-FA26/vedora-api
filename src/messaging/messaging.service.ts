@@ -109,7 +109,6 @@ export class MessagingService {
   ) {}
 
   async unreadCount(userId: string): Promise<MessagingUnreadCountDto> {
-    // Count across every conversation in one query, using the same read/deletion cutoffs as history.
     const [result] = await this.conversations
       .aggregate<{ total: number }>([
         { $match: members(userId) },
@@ -324,8 +323,6 @@ export class MessagingService {
           ],
           { session },
         );
-        // Sequence orders messages even when they share a millisecond timestamp.
-        // Keep the inbox order monotonic if the host clock moves backwards.
         const lastMessageAt = new Date(
           Math.max(
             message.createdAt.getTime(),
@@ -368,7 +365,6 @@ export class MessagingService {
     dto: SendMessageDto,
   ): Promise<SendMessageResponseDto> {
     const conversation = await this.requireConversation(userId, id);
-    // Rechecks membership, account and permission inside the transaction.
     return this.sendToUser(userId, peerIdOf(conversation, userId), dto, id);
   }
 
@@ -401,7 +397,6 @@ export class MessagingService {
     );
   }
 
-  /** Resolve public content on every read; never persist a snapshot of removed content in chat. */
   private async hydrateMessages(
     rows: DirectMessage[],
     session: ClientSession,
@@ -465,7 +460,6 @@ export class MessagingService {
         query.box === MessagingInbox.FRIENDS
           ? { $in: friends }
           : { $nin: friends };
-      // Filter the selected inbox BEFORE limiting, so other categories cannot consume the page.
       const filter: QueryFilter<Conversation> = {
         $and: [
           visibleMembers(userId),
@@ -710,7 +704,6 @@ export class MessagingService {
     id: string,
     throughMessageId: string,
   ): Promise<DeletedMessageRequestDto> {
-    // Hidden requests remain addressable here so a retry cannot erase newer messages.
     const initial = await this.requireConversation(userId, id, undefined, true);
     return withUserLocks(
       this.mongo,
@@ -762,7 +755,6 @@ export class MessagingService {
             { $set: { [field]: cutoff } },
             { session },
           );
-          // Deletion is private to this participant; it is not a read receipt.
           await this.events.record(
             [userId],
             { type: MessagingEventType.REQUEST_DELETED, conversationId: id },
@@ -831,7 +823,6 @@ export class MessagingService {
       })
       .session(session ?? null)
       .exec();
-    // Membership is enforced on every path, including for administrators.
     if (!conversation)
       throw new ResourceNotFoundException(
         'NOT_FOUND',

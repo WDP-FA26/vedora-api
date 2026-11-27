@@ -15,21 +15,17 @@ type EvidenceTextField = Extract<
 >;
 type EvidenceImageField = Extract<EvidenceField, 'frame' | 'image'>;
 
-/** A piece of text the reviewer reads, with where it came from. */
 export interface EvidenceText {
   field: EvidenceTextField;
   mediaId: string | null;
   text: string;
 }
 
-/** An image the reviewer sees: a video frame or a blog image. */
 export interface EvidenceImage {
   field: EvidenceImageField;
-  /** JPEG bytes, already shrunk for the model. */
   jpeg: Buffer;
   mediaId: string | null;
   seconds: number | null;
-  /** Where an admin can open the same picture. */
   url: string;
 }
 
@@ -38,12 +34,6 @@ export interface EvidenceSources {
   images: EvidenceImage[];
 }
 
-/**
- * What the reviewer model answers, with category keys limited to the policy's.
- * Every field is required and absent values are null, so the JSON Schema works
- * with strict structured outputs. Numeric ranges are checked after parsing,
- * since strict schemas do not accept `minimum`/`maximum`.
- */
 export function reviewOutput(categories: [string, ...string[]]) {
   const category = z.enum(categories);
   return z.object({
@@ -70,18 +60,12 @@ const TEXT_LABELS: Record<EvidenceTextField, string> = {
   transcript: 'WHAT THE VIDEO SAYS',
 };
 
-/** A labelled example of how the policy applies. */
 interface ReviewExample {
   text: string;
   riskLevel: number;
-  /** null at risk level 0. */
   category: string | null;
 }
 
-/**
- * Varied, illustrative examples for the boundaries the definitions alone leave
- * unclear. An example whose category the policy no longer has is left out.
- */
 const REVIEW_EXAMPLES: ReviewExample[] = [
   {
     text: 'Công thức đậu hũ sốt nấm, ngon dã man mọi người ơi!',
@@ -141,12 +125,6 @@ function examplesFor(policy: ContentPolicySettings): string[] {
   return lines;
 }
 
-/**
- * The system prompt for Claude Haiku 5.5: the policy (context, categories with
- * their definitions, allowed content), illustrative examples, what each risk
- * level means and does, and the output contract. How much the model reasons
- * is set by the request's effort level, not by the prompt.
- */
 export function reviewInstructions(policy: ContentPolicySettings): string {
   const lines = [
     policy.instructions,
@@ -196,7 +174,6 @@ export function reviewInstructions(policy: ContentPolicySettings): string {
   return lines.join('\n');
 }
 
-/** The labelled text and images, in the order the model will read them. */
 export function reviewMessageParts(
   sources: EvidenceSources,
 ): (
@@ -250,11 +227,6 @@ function findQuote(
   return null;
 }
 
-/**
- * Keeps only evidence that points at the content itself: text quotes that
- * appear in one of its texts (the field is ours, not the model's) and images
- * whose index exists. A high-risk rating without any of it goes to an admin.
- */
 export function verifyEvidence(
   evidence: ReviewEvidence[],
   sources: EvidenceSources,

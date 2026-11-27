@@ -7,13 +7,6 @@ import type { OpenRouter } from '@openrouter/sdk';
 import { asRecord } from '../provider-shared.js';
 import { createOpenRouterClient } from './openrouter.client.js';
 
-/**
- * AI SDK models for what `@openrouter/ai-sdk-provider` does not cover:
- * reranking, transcription and multimodal embeddings. Each implements the AI
- * SDK's own model interface over the OpenRouter SDK, so features call
- * `rerank()`, `transcribe()` and `embedMany()` whichever provider is in use.
- */
-
 type ContentPart =
   | { text: string }
   | { inlineData: { mimeType: string; data: string } }
@@ -35,7 +28,6 @@ function isContentPart(value: unknown): value is ContentPart {
   return asRecord(part.fileData) !== undefined;
 }
 
-/** Per-value parts from `providerOptions.google.content`, the Gemini embedding spelling. */
 function multimodalContent(
   options: Record<string, unknown> | undefined,
 ): (ContentPart[] | null)[] | undefined {
@@ -66,10 +58,6 @@ function openRouterPart(part: ContentPart): OpenRouterEmbeddingPart {
   throw new Error('OpenRouter embeddings take inline data, not file URIs');
 }
 
-/**
- * Sends values that carry `google.content` parts to OpenRouter's multimodal
- * embeddings API; text-only calls keep going through the AI SDK provider.
- */
 export function multimodalEmbeddingMiddleware(
   apiKey: string,
   modelId: string,
@@ -159,7 +147,6 @@ const AUDIO_FORMATS: Record<string, string> = {
   'audio/flac': 'flac',
 };
 
-/** Word-timed transcription through OpenRouter's speech-to-text API. */
 export function openRouterTranscriptionModel(
   client: OpenRouter,
   modelId: string,

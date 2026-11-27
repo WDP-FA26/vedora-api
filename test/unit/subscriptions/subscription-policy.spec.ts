@@ -39,7 +39,6 @@ describe('subscription catalogue compatibility', () => {
     expect(effectivePlan({ planCode: BillingPlan.PRO, planVersion: 2 })).toBe(
       BillingPlan.PRO,
     );
-    // Legacy PREMIUM somehow tagged v2 still resolves safely via v2 branch
     expect(
       effectivePlan({ planCode: BillingPlan.PREMIUM, planVersion: 2 }),
     ).toBe(BillingPlan.PLUS);

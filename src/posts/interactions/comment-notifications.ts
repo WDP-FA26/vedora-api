@@ -13,7 +13,6 @@ function excerpt(body: string) {
   return text.length > max ? `${text.slice(0, max - 1).trimEnd()}…` : text;
 }
 
-/** One notice per affected author; collateral replies are not labelled policy violations. */
 export function commentRemovalNotifications(
   comments: PostComment[],
   targetId: string,
@@ -44,13 +43,11 @@ export function commentRemovalNotifications(
       postId,
       note: excerpt(comment.body),
       reason: direct ? reason : undefined,
-      // No commentId: these rows must survive comment cascades and cannot link to deleted content.
     });
   }
   return [...notices.values()];
 }
 
-/** Several reports in the same removed thread yield one result per reporter. */
 export function commentReportNotifications(
   reports: CommentReport[],
   actorId: string,

@@ -261,7 +261,6 @@ export class AdminWorkQueueService {
       support: counts.SUPPORT,
       knowledge: counts.KNOWLEDGE,
     };
-    // A post awaiting review and also reported is a single moderation item.
     const combined = [
       ...items('POST_REVIEW', posts.oldest),
       ...items(

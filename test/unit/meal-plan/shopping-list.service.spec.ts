@@ -19,7 +19,6 @@ import {
 const USER_ID = '4a1e32e4-e18e-4dd7-8b4a-246ef2113ff2';
 const WEEK = '2026-11-16';
 const NEXT_WEEK = '2026-11-23';
-// 00:30 on Monday 2026-11-16 in the app time zone, so every day is still ahead.
 const MONDAY_MORNING = new Date('2026-11-15T17:30:00Z');
 const OTHER_USER_ID = '4a1e32e4-e18e-4dd7-8b4a-246ef2113ff9';
 const TOFU_ID = 'a1a2d3e4-0000-4000-8000-000000000001';
@@ -128,7 +127,6 @@ describe('ShoppingListService', () => {
     await addEntry(Weekday.TUE, MealSection.DINNER, RECIPE_2, 0);
     await addEntry(Weekday.MON, MealSection.OTHER, RECIPE_1, 0);
     await addEntry(Weekday.MON, MealSection.LUNCH, RECIPE_1, 0);
-    // Excluded day and excluded user
     await addEntry(Weekday.FRI, MealSection.LUNCH, RECIPE_2, 0);
     await addEntry(
       Weekday.MON,
@@ -253,7 +251,6 @@ describe('ShoppingListService', () => {
     await addEntry(Weekday.MON, MealSection.BREAKFAST, RECIPE_1, 0);
     await addEntry(Weekday.MON, MealSection.BREAKFAST, RECIPE_2, 1);
     await addEntry(Weekday.MON, MealSection.BREAKFAST, RECIPE_3, 2);
-    // Orphan recipe entry
     await addEntry(
       Weekday.MON,
       MealSection.DINNER,

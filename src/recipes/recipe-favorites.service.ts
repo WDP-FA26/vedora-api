@@ -41,9 +41,6 @@ export class RecipeFavoritesService {
     query: PaginationQueryDto,
   ): Promise<PaginatedResponseDto<FavoriteRecipeDto>> {
     const { skip, take } = getPaginationArgs(query);
-    // The page and the count share one filter: favorites whose recipe still
-    // exists. A favorite left behind by a deleted recipe is neither listed
-    // nor counted.
     const withRecipe: PipelineStage[] = [
       { $match: { userId } },
       {
@@ -75,7 +72,6 @@ export class RecipeFavoritesService {
     const recipeIds = rows.map(({ recipeId }) => recipeId);
     const saved = await this.recipes.find({ _id: { $in: recipeIds } }).exec();
     const savedById = new Map(saved.map((recipe) => [recipe.id, recipe]));
-    // Keep each recipe paired with its own favorite row (and savedAt).
     const pairs = rows.flatMap((row) => {
       const recipe = savedById.get(row.recipeId);
       return recipe ? [{ recipe, savedAt: row.createdAt }] : [];

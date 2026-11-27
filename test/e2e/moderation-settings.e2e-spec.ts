@@ -55,8 +55,6 @@ describe('Moderation settings (e2e)', () => {
     ]);
   });
   beforeEach(async () => {
-    // A reset keeps the row and its version count, so start each test from
-    // no saved settings at all; the reset then clears the service cache.
     await e2e.connection.collection('moderation_settings').deleteMany({});
     await asAdmin(request(server()).post(`${url}/reset`)).expect(200);
   });

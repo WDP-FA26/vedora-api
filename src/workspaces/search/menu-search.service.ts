@@ -13,10 +13,8 @@ import { MenuSearchIndexService } from './menu-search-index.service.js';
 
 export const MAX_MENU_SEARCH_RESULTS = runtimeConfig.POST_SEARCH_MAX_RESULTS;
 
-/** Up to this many words, a dish must share a word with the query. */
 export const SHORT_QUERY_MAX_WORDS = 2;
 
-/** "cơm", "bánh mì": a dish name rather than a description. */
 export function isShortQuery(query: string): boolean {
   return query.trim().split(/\s+/).length <= SHORT_QUERY_MAX_WORDS;
 }
@@ -82,9 +80,6 @@ export class MenuSearchService {
     if (dense === null) {
       request = { ...page, prefetch: lexical, query: { fusion: 'rrf' } };
     } else if (isShortQuery(trimmed)) {
-      // One or two words: every Vietnamese dish is "close" in meaning to
-      // "cơm" or "chè", so meaning alone pulled in dishes that share no word
-      // with the query. Keep the dishes that share a word, ranked by meaning.
       request = {
         ...page,
         prefetch: lexical,
@@ -92,8 +87,6 @@ export class MenuSearchService {
         using: MENU_DENSE_VECTOR,
       };
     } else {
-      // A longer query ("món nước thanh đạm") describes the dish; meaning may
-      // find dishes that share no word with it.
       const semantic = {
         query: dense,
         using: MENU_DENSE_VECTOR,

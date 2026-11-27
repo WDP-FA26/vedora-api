@@ -35,7 +35,6 @@ function urlOf(input: Parameters<typeof fetch>[0]): URL {
 
 export type AiBiller = AiCostCall['billedBy'];
 
-/** The provider API a URL belongs to; null for any other host or path. */
 function billerOf(target: URL): AiBiller | null {
   for (const adapter of ALL_PROVIDER_ADAPTERS) {
     const base = new URL(adapter.cost.baseUrl);
@@ -49,7 +48,6 @@ function billerOf(target: URL): AiBiller | null {
   return null;
 }
 
-/** What a call is for, from the OpenRouter or AI Gateway endpoint it goes to. */
 function operationOf(target: URL): AiCostOperation {
   const path = target.pathname;
   if (path.endsWith('/embeddings') || path.endsWith('/embedding-model'))
@@ -70,11 +68,6 @@ export class AiCostTransportService {
     @InjectModel(AiCostCall.name) private readonly calls: Model<AiCostCall>,
   ) {}
 
-  /**
-   * A fetch that records each call under `model`. `operation` names what the
-   * call is for when its URL cannot tell, such as a moderation call through the
-   * chat API.
-   */
   forModel(
     model: string,
     feature = 'SYSTEM',
@@ -86,7 +79,6 @@ export class AiCostTransportService {
   readonly fetch: typeof fetch = (input, init) =>
     this.observe(input, init, fetch);
 
-  /** The underlying function is supplied in tests; production always uses native fetch. */
   async observe(
     input: Parameters<typeof fetch>[0],
     init: Parameters<typeof fetch>[1],
@@ -95,11 +87,9 @@ export class AiCostTransportService {
     feature = 'SYSTEM',
     operation: AiCostOperation = operationOf(urlOf(input)),
   ): Promise<Response> {
-    // A provider's fetch hook can serve other hosts; never record credentials or arbitrary URLs.
     const billedBy = billerOf(urlOf(input));
     if (!billedBy) return underlying(input, init);
     const scope = aiCostContext.getStore();
-    // The OpenRouter SDK passes a Request with no init; fetch callers pass both.
     const signal =
       init?.signal ?? (input instanceof Request ? input.signal : null);
     const requestText = await requestBodyText(input, init);
@@ -214,7 +204,6 @@ export class AiCostTransportService {
       cachedTokens,
       cacheWriteTokens,
     } = observation;
-    // chargeKey is assigned only with a reported cost; a later attempt can supply missing cost.
     const chargeKey =
       observation.costUsd !== null && generationId
         ? `${billedBy}:${generationId}`
@@ -240,7 +229,6 @@ export class AiCostTransportService {
       await this.calls.updateOne({ _id: id }, { $set: values }).exec();
     } catch (error) {
       if (!isUniqueViolation(error)) throw error;
-      // Retain the attempt but count a provider generation's reported charge just once.
       const { chargeKey: _chargeKey, ...duplicateValues } = values;
       await this.calls
         .updateOne(

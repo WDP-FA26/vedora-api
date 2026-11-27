@@ -58,7 +58,6 @@ export class MealPlanVoiceSessionDto {
   model!: string;
 }
 
-/** Panels of the planner page that cover the calendar; `none` is the calendar alone. */
 export const VOICE_SCREEN_PANELS = [
   'none',
   'recipe',
@@ -68,19 +67,15 @@ export const VOICE_SCREEN_PANELS = [
 ] as const;
 export type VoiceScreenPanel = (typeof VOICE_SCREEN_PANELS)[number];
 
-/** Tabs inside the `bodyMetrics` nutrition & BMI companion sheet. */
 export const BODY_METRICS_TABS = ['weekly', 'bmi', 'dietary'] as const;
 export type BodyMetricsTab = (typeof BODY_METRICS_TABS)[number];
 
-/** Parts of a recipe card the screen can be scrolled to. */
 export const RECIPE_SECTIONS = ['top', 'ingredients', 'steps'] as const;
 export type RecipeSection = (typeof RECIPE_SECTIONS)[number];
 
-/** Relative scroll directions supported by `setScreen` on the active view. */
 export const SCREEN_SCROLL_DIRECTIONS = ['up', 'down', 'top', 'bottom'] as const;
 export type ScreenScrollDirection = (typeof SCREEN_SCROLL_DIRECTIONS)[number];
 
-/** Live scroll position of the active panel or calendar, read from the DOM as the user speaks. */
 export class MealPlanVoiceScrollStateDto {
   @ApiProperty({ minimum: 0, maximum: 100 })
   @IsInt()
@@ -97,7 +92,6 @@ export class MealPlanVoiceScrollStateDto {
   atBottom!: boolean;
 }
 
-/** What the planner page shows while the user speaks, so the agent can refer to it. */
 export class MealPlanVoiceScreenDto {
   @ApiProperty({
     example: '2026-11-23',

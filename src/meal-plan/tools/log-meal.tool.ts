@@ -11,11 +11,6 @@ import {
 import type { MealLogService } from '../meal-log/meal-log.service.js';
 import { SECTION_NAMES } from '../meal-planner.prompt.js';
 
-/**
- * Writes one dish the user says they ate into the food diary. Same rules as
- * `POST /meal-plan/log`: today or a few days back, a catalog recipe or a
- * named dish.
- */
 export function logMealTool(mealLog: MealLogService, userId: string) {
   return tool({
     description:

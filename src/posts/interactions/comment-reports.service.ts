@@ -85,7 +85,6 @@ export class CommentReportsService {
         .exec();
       if (!post)
         throw new ResourceNotFoundException('NOT_FOUND', 'Post not found');
-      // Fence edits/deletions while taking the evidence snapshot, without marking the comment edited.
       const comment = await this.comments
         .findOneAndUpdate(
           { _id: commentId, postId },
@@ -205,7 +204,6 @@ export class CommentReportsService {
             );
           return { row: decided!, notifications };
         }
-        // Shares the same post write fence as reply/edit/delete, so no new child can escape a root removal.
         const post = await this.posts
           .findOneAndUpdate(
             { _id: report.postId },
@@ -245,7 +243,6 @@ export class CommentReportsService {
           .session(session)
           .exec();
         if (comment) {
-          // Existing schema middleware cascades replies, notifications and reply-to references.
           await this.comments
             .deleteOne({ _id: comment.id, postId: report.postId }, { session })
             .exec();

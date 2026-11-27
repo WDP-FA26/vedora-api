@@ -37,7 +37,6 @@ import {
 const MAX_CATALOG_INGREDIENTS =
   runtimeConfig.RECIPE_DRAFT_MAX_CATALOG_INGREDIENTS;
 
-/** Reads a post, pasted caption or the form's recipe with AI and returns a recipe form prefill. */
 @Injectable()
 export class RecipeDraftsService {
   private readonly logger = new Logger(RecipeDraftsService.name);
@@ -175,7 +174,6 @@ export class RecipeDraftsService {
       return readPostSource(post, this.mediaAssets, dto.mediaId);
     }
     if (currentRecipe) {
-      // The form's recipe is not a source part: it goes in its own prompt tag.
       return {
         parts: [],
         description: `form recipe ${currentRecipe.length} chars`,

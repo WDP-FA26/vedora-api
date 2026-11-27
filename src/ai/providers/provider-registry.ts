@@ -26,11 +26,6 @@ export {
   DEFAULT_OPENROUTER_MODERATION_PROVIDER_ORDER,
 };
 
-/**
- * Single registration point for AI provider adapters.
- * `AI_PROVIDER` selects the active adapter for the app; telemetry and cost
- * reconciliation look up the historical biller adapter by id.
- */
 const PROVIDERS: Record<AiProviderId, AiProviderAdapter> = {
   gateway: gatewayAdapter,
   openrouter: openRouterAdapter,
@@ -39,7 +34,6 @@ const PROVIDERS: Record<AiProviderId, AiProviderAdapter> = {
 export const ALL_PROVIDER_ADAPTERS: readonly AiProviderAdapter[] =
   Object.values(PROVIDERS);
 
-/** The provider `AI_PROVIDER` picks; validated at startup by `environment.ts`. */
 export function activeProvider(): AiProviderId {
   return process.env.AI_PROVIDER === 'openrouter' ? 'openrouter' : 'gateway';
 }
@@ -73,7 +67,6 @@ export function moderationProviderOrder(config: ConfigService): string[] {
   return providerAdapter().moderationProviderOrder(config);
 }
 
-/** Gateway realtime client for voice sessions (only Vercel AI Gateway serves realtime). */
 export function createGatewayRealtimeClient(apiKey: string): GatewayClient {
   return createGatewayClient(apiKey);
 }

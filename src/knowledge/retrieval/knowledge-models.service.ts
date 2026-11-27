@@ -70,7 +70,6 @@ export class KnowledgeModelsService {
       });
       return embeddings;
     }
-    // One request per batch: `google.content` must line up with the values of that request.
     const vectors: number[][] = [];
     for (let start = 0; start < inputs.length; start += IMAGE_BATCH) {
       vectors.push(
@@ -117,7 +116,6 @@ export class KnowledgeModelsService {
     }
   }
 
-  /** The text of each page, read by the OCR model one page at a time. */
   async ocrPdf(pdf: Uint8Array): Promise<string[]> {
     const pages = await splitPages(pdf);
     const signal = AbortSignal.timeout(OCR_TIMEOUT_MS);
@@ -201,14 +199,12 @@ export class KnowledgeModelsService {
       label: 'index-knowledge-images',
       values,
       abortSignal: signal,
-      // Gemini's multimodal embedding parts, which the AI SDK passes on per value.
       providerOptions: { google: { content } },
     });
     return embeddings;
   }
 }
 
-/** One single-page PDF per page, in order. */
 async function splitPages(pdf: Uint8Array): Promise<Uint8Array[]> {
   const mupdf = await import('mupdf');
   const source = new mupdf.PDFDocument(pdf);
@@ -229,7 +225,6 @@ async function splitPages(pdf: Uint8Array): Promise<Uint8Array[]> {
   }
 }
 
-/** Drops a Markdown fence around the whole page and any image links. */
 function cleanOcrText(text: string): string {
   const unfenced = text
     .trim()

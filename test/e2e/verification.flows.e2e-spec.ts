@@ -12,12 +12,6 @@ import { StorageService } from '@src/storage/storage.service.js';
 import { createE2eApp, type E2eApp } from '@test/support/e2e-app.js';
 import { createUser } from '@test/support/fixtures.js';
 
-/**
- * Black-box flows for the verified-chef badge (/verification): applicant
- * submits proofs, admins review, and the badge shows on the public profile.
- * Object storage (RustFS) is the only faked boundary.
- */
-
 const requestSchema = z.object({
   id: z.string(),
   status: z.enum(VerificationStatus),
@@ -52,7 +46,6 @@ describe('Verified chef badge flows (e2e)', () => {
   const requests = () =>
     e2e.mongo.connection.model<VerificationRequest>(VerificationRequest.name);
 
-  /** A proof row as if the presigned upload had completed. */
   const uploadedProof = async (ownerId: string) => {
     const id = randomUUID();
     await proofs().create({

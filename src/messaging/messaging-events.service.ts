@@ -19,7 +19,6 @@ export type MessagingSignal =
 
 type OutboxInsert = mongo.ChangeStreamInsertDocument<MessagingEvent>;
 
-/** MongoDB change streams fan out committed outbox inserts across API instances. */
 @Injectable()
 export class MessagingEventsService implements OnModuleDestroy {
   private readonly logger = new Logger(MessagingEventsService.name);
@@ -79,14 +78,12 @@ export class MessagingEventsService implements OnModuleDestroy {
   private async watch(): Promise<void> {
     let watcher: mongo.ChangeStream<MessagingEvent, OutboxInsert> | undefined;
     try {
-      // Build the collection before opening its change stream, including on an empty database.
       await this.events.init();
       watcher = this.events.collection.watch<MessagingEvent, OutboxInsert>(
         [{ $match: { operationType: 'insert' } }],
         { maxAwaitTimeMS: 1000 },
       );
       this.watcher = watcher;
-      // Opening the cursor before signalling ready closes the subscribe/first-write race.
       const first = await watcher.tryNext();
       if (this.stopped) return;
       this.ready = true;

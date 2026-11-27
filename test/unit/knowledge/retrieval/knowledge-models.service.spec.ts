@@ -18,7 +18,6 @@ function createService(config: Record<string, unknown> = {}) {
   );
 }
 
-/** The JSON the call put on the wire, from a raw fetch or an SDK `Request`. */
 async function requestBody(call = 0): Promise<Record<string, unknown>> {
   const [input, init] = fetchMock.mock.calls[call];
   if (typeof init?.body === 'string') {
@@ -120,7 +119,6 @@ describe('KnowledgeModelsService', () => {
       (_input, init) =>
         new Promise((_, reject) => {
           const signal = init?.signal;
-          // The SDK reaches fetch asynchronously, so the signal may already be aborted.
           if (signal?.aborted) reject(new Error('aborted'));
           signal?.addEventListener('abort', () => reject(new Error('aborted')));
         }),
@@ -150,7 +148,6 @@ describe('KnowledgeModelsService', () => {
   });
 
   describe('ocrPdf', () => {
-    /** A PDF with one line of text per page. */
     async function pdfOf(...pages: string[]): Promise<Uint8Array> {
       const mupdf = await import('mupdf');
       const document = new mupdf.PDFDocument();

@@ -110,8 +110,6 @@ export class BlogAssistantService {
     const userTurn = messages.findLast((message) => message.role === 'user');
     const ticket = await this.usage.consume(userId, AiFeature.BLOG_CHAT, {
       requestId: userTurn?.id,
-      // The draft may be saved for the first time between editor tool calls.
-      // Bind to the chat session, not a blogId that can appear mid-turn.
       prompt: { parts: userTurn?.parts, sessionId: dto.id },
       input: { messages, editor: dto.editor, blogId: dto.blogId },
       continuation: last.role !== 'user',
@@ -152,7 +150,6 @@ export class BlogAssistantService {
           session: 'vedora-blog',
           scope: [userId, dto.id ?? dto.blogId ?? 'default'],
           instructions: BLOG_ASSISTANT_STATIC_INSTRUCTIONS,
-          // Session-scoped chat: 5m, like the meal planner.
           systemTtl: '5m',
         }),
         maxOutputTokens: MAX_OUTPUT_TOKENS,

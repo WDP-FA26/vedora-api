@@ -2,7 +2,6 @@ import { runtimeConfig } from '../config/runtime-config.js';
 import { StateConflictException } from '../common/exceptions/state-conflict.exception.js';
 import { Weekday } from '../mongo/models.js';
 
-/** How many weeks after the current one a plan may be made for. */
 export const MEAL_PLAN_WEEKS_AHEAD = 4;
 
 const WEEKDAY_ORDER: readonly Weekday[] = Object.values(Weekday);
@@ -17,7 +16,6 @@ function formatDate(epoch: number): string {
   return new Date(epoch).toISOString().slice(0, 10);
 }
 
-/** The calendar date (`YYYY-MM-DD`) of `now` in `timeZone`. */
 export function calendarDate(now: Date, timeZone: string): string {
   const parts = new Intl.DateTimeFormat('en-CA', {
     timeZone,
@@ -34,14 +32,12 @@ export function addDays(date: string, days: number): string {
   return formatDate(parseDate(date) + days * DAY_MS);
 }
 
-/** The Monday of the week that holds `date`. */
 export function mondayOf(date: string): string {
   const sundayFirst = new Date(parseDate(date)).getUTCDay();
   const sinceMonday = (sundayFirst + 6) % 7;
   return addDays(date, -sinceMonday);
 }
 
-/** True for a real calendar date written `YYYY-MM-DD`. */
 export function isCalendarDate(value: string): boolean {
   if (!DATE_PATTERN.test(value)) return false;
   const epoch = parseDate(value);
@@ -49,13 +45,11 @@ export function isCalendarDate(value: string): boolean {
   return formatDate(epoch) === value;
 }
 
-/** The weekday of a `YYYY-MM-DD` date. */
 export function weekdayOf(date: string): Weekday {
   const sundayFirst = new Date(parseDate(date)).getUTCDay();
   return WEEKDAY_ORDER[(sundayFirst + 6) % 7];
 }
 
-/** True for a real calendar date written `YYYY-MM-DD` that is a Monday. */
 export function isWeekStart(value: string): boolean {
   if (!DATE_PATTERN.test(value)) return false;
   const epoch = parseDate(value);
@@ -66,15 +60,10 @@ export function isWeekStart(value: string): boolean {
 
 export interface MealWeek {
   weekStart: string;
-  /** Monday of the week that holds today. */
   currentWeekStart: string;
-  /** Today's date in the app time zone. */
   today: string;
-  /** Last Monday a plan may be made for. */
   maxWeekStart: string;
-  /** Calendar date of each weekday of this week. */
   dates: Record<Weekday, string>;
-  /** Days that may still change: today and later. */
   editableDays: Weekday[];
 }
 
@@ -105,12 +94,10 @@ export function mealWeek(
   };
 }
 
-/** True when no plan may be made for the week yet, because it is too far ahead. */
 export function isBeyondHorizon(week: MealWeek): boolean {
   return week.weekStart > week.maxWeekStart;
 }
 
-/** The week for `weekStart` (the current week when omitted) as of now. */
 export function currentMealWeek(
   weekStart?: string,
   now: Date = new Date(),
@@ -118,7 +105,6 @@ export function currentMealWeek(
   return mealWeek(weekStart, now, runtimeConfig.APP_TIMEZONE);
 }
 
-/** Refuses a week that is further ahead than plans may be made. */
 export function assertWithinHorizon(week: MealWeek): void {
   if (!isBeyondHorizon(week)) return;
   throw new StateConflictException(
@@ -128,7 +114,6 @@ export function assertWithinHorizon(week: MealWeek): void {
   );
 }
 
-/** Refuses a change to a day before today, and a week too far ahead. */
 export function assertDaysEditable(
   week: MealWeek,
   days: readonly Weekday[],

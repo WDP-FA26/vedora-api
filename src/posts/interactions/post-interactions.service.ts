@@ -201,7 +201,6 @@ export class PostInteractionsService {
         const target = await this.requireComment(postId, targetId, session);
         const parentId = target.parentId ?? target.id;
         await this.requireComment(postId, parentId, session);
-        // These writes conflict with deletion of the root or selected reply, including account cascades.
         await this.comments.updateMany(
           { _id: { $in: [...new Set([parentId, targetId])] }, postId },
           { $inc: { threadRevision: 1 } },
@@ -215,7 +214,6 @@ export class PostInteractionsService {
         return { post, targetAuthorId: target.authorId, comment };
       },
     );
-    // Vedora AI cannot sign in, so replies to it notify no one.
     if (
       result.targetAuthorId !== authorId &&
       !isSystemAccount(result.targetAuthorId)
@@ -304,7 +302,6 @@ export class PostInteractionsService {
           )
           .session(session)
           .exec();
-        // The schema cascades root children and notifications and clears surviving reply-to pointers.
         await this.comments
           .deleteOne({ _id: commentId, postId }, { session })
           .exec();

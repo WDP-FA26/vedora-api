@@ -15,7 +15,6 @@ export class PaymentIntent extends Identified {
   @Prop({ type: String, enum: Object.values(BillingPlan), required: true })
   planCode!: BillingPlan;
 
-  // Missing means the original PRO/PREMIUM catalogue. Never default old rows to v2.
   @Prop({ type: Number, enum: [1, 2] })
   planVersion?: number;
 

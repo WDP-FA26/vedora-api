@@ -44,8 +44,6 @@ describe('generateMealDays', () => {
       [Weekday.SAT, slots(['soup-3'])],
       [Weekday.SUN, slots(['soup-4'])],
     ]);
-    // Eight breakfast dishes: four free ones are already eaten at Monday's
-    // lunch, so the dish being replaced is the least used one in the week.
     const candidates = [1, 2, 3, 4, 5, 6, 7, 8].map((n) =>
       candidate(`soup-${n}`, RecipeTag.SOUP),
     );
@@ -90,7 +88,6 @@ describe('generateMealDays', () => {
       random: () => 0,
     });
 
-    // Unchanged days are not returned, so the saved dish stays in place.
     expect(generated).toEqual([]);
   });
 
@@ -222,7 +219,6 @@ describe('generateMealDays', () => {
     expect(totalKcal).toBeGreaterThanOrEqual(Math.round(2000 * 0.88));
     expect(totalKcal).toBeLessThanOrEqual(Math.round(2000 * 1.15));
 
-    // Partial eating-out schedule (only DINNER filled) should remain 1 dish.
     const partialOnly = await generateMealDays({
       candidates: pool,
       saved: new Map(),

@@ -9,7 +9,6 @@ export interface DecisionPolicy<V extends string> {
   readonly criteria: Readonly<Record<V, string>>;
 }
 
-/** The chat model that answers guardrail questions (Claude Haiku via OpenRouter). */
 export type DecisionModel = Exclude<LanguageModel, string>;
 
 export interface DecisionTurn {
@@ -17,13 +16,10 @@ export interface DecisionTurn {
   text: string;
 }
 
-/** One user message, or chat turns from oldest to newest. */
 export type DecisionState = string | readonly DecisionTurn[];
 
-// One budget for the whole call, retries included.
 const DEFAULT_TIMEOUT_MS = runtimeConfig.AI_DECISION_TIMEOUT_MS;
 const MAX_RETRIES = runtimeConfig.AI_DECISION_MAX_RETRIES;
-/** Room for low-effort thinking plus the one-field answer. */
 const MAX_OUTPUT_TOKENS = runtimeConfig.AI_DECISION_MAX_OUTPUT_TOKENS;
 
 function escapeDecisionTags(text: string): string {
@@ -49,11 +45,6 @@ function choicesOf<V extends string>(policy: DecisionPolicy<V>): [V, ...V[]] {
   return [first, ...rest];
 }
 
-/**
- * The system prompt: the policy, its categories with their definitions, and
- * the user content in its own tags. How much the model reasons is set by the
- * request's effort level, not by the prompt.
- */
 export function decisionInstructions<V extends string>(
   policy: DecisionPolicy<V>,
 ): string {
@@ -80,7 +71,6 @@ export function decisionInstructions<V extends string>(
   return lines.join('\n');
 }
 
-/** The user content, wrapped in tags the instructions name. */
 export function decisionPrompt(state: DecisionState): string {
   if (typeof state === 'string') {
     return `Message:\n<message>${escapeDecisionTags(state)}</message>`;
@@ -95,11 +85,6 @@ export function decisionPrompt(state: DecisionState): string {
   return lines.join('\n');
 }
 
-/**
- * Asks the model which of the policy's categories `state` falls into. The AI
- * SDK retries retryable provider errors; a refusal or an answer outside the
- * choices throws.
- */
 export async function decide<V extends string>(
   model: DecisionModel,
   state: DecisionState,

@@ -1,7 +1,6 @@
 import type { UIMessageChunk } from 'ai';
 import type { AiUsageService, UsageTicket } from './ai-usage.service.js';
 
-/** Settle once, including cancellation; no DB transaction spans model/network IO. */
 export function quotaStream(
   stream: ReadableStream<UIMessageChunk>,
   usage: AiUsageService,
@@ -29,8 +28,6 @@ export function quotaStream(
           failed = true;
           await settle(false);
         }
-        // The browser may submit editor tool outputs as soon as it sees finish.
-        // Commit before exposing that chunk so a legitimate continuation is ready.
         if (value.type === 'finish') await settle(!failed);
         controller.enqueue(value);
       } catch (error) {

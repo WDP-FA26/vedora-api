@@ -71,12 +71,10 @@ function isPrivateIPv6(address: string): boolean {
   const isUnspecified = words.every((w) => w === 0);
   const isLoopback = words.slice(0, 7).every((w) => w === 0) && words[7] === 1;
   if (isUnspecified || isLoopback) return true;
-  // ::ffff:0:0/96 (IPv4-mapped) and ::/96 (IPv4-compatible)
   const topZero = words.slice(0, 5).every((w) => w === 0);
   if (topZero && (words[5] === 0xffff || words[5] === 0)) {
     return isPrivateIPv4Word(words[6]);
   }
-  // 64:ff9b::/96 (NAT64)
   if (
     words[0] === 0x0064 &&
     words[1] === 0xff9b &&
@@ -86,9 +84,9 @@ function isPrivateIPv6(address: string): boolean {
   }
   const first = words[0];
   return (
-    (first & 0xfe00) === 0xfc00 || // fc00::/7 unique local
-    (first & 0xffc0) === 0xfe80 || // fe80::/10 link-local
-    (first & 0xff00) === 0xff00 // ff00::/8 multicast
+    (first & 0xfe00) === 0xfc00 ||
+    (first & 0xffc0) === 0xfe80 ||
+    (first & 0xff00) === 0xff00
   );
 }
 

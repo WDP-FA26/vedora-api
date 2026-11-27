@@ -15,7 +15,6 @@ const trim = ({ value }: { value: unknown }): unknown =>
 export const CALORIE_RESEARCH_STATUSES = ['DONE', 'SKIPPED', 'FAILED'] as const;
 export type CalorieResearchStatus = (typeof CALORIE_RESEARCH_STATUSES)[number];
 
-/** Send exactly one of `postId`, `text` or `currentRecipe`; `instruction` may go with any. */
 export class CreateRecipeDraftDto {
   @ApiPropertyOptional({
     format: 'uuid',

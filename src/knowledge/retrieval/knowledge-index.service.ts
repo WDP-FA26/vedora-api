@@ -27,7 +27,6 @@ const UPSERT_BATCH = runtimeConfig.KNOWLEDGE_UPSERT_BATCH_SIZE;
 interface IndexedDocument {
   id: string;
   title: string;
-  /** Tags every point, so one run's points can be told from another's. */
   runId: string;
 }
 
@@ -106,8 +105,6 @@ export class KnowledgeIndexService {
       })),
     ];
 
-    // Clear only what this run may have written before (a retry), never
-    // another run's points: the run that finishes current cleans up the rest.
     await this.removeRun(document.id, document.runId);
     for (let start = 0; start < points.length; start += UPSERT_BATCH) {
       await this.qdrant.upsert(this.collection, {
@@ -118,7 +115,6 @@ export class KnowledgeIndexService {
     return images.length;
   }
 
-  /** Deletes the points one indexing run wrote. */
   async removeRun(documentId: string, runId: string): Promise<void> {
     await this.ensureCollection();
     await this.qdrant.delete(this.collection, {
@@ -132,7 +128,6 @@ export class KnowledgeIndexService {
     });
   }
 
-  /** Deletes the document's points written by any run but `runId`. */
   async removeOtherRuns(documentId: string, runId: string): Promise<void> {
     await this.ensureCollection();
     await this.qdrant.delete(this.collection, {
@@ -191,11 +186,6 @@ export class KnowledgeIndexService {
   }
 }
 
-/**
- * The page's headings as Markdown parses them: ATX (`# Sắt`, closing hashes
- * dropped but `C#` kept) and setext (`Canxi` over `===`), never a `#` line
- * inside a code block.
- */
 function headingsOf(markdown: string): string[] {
   const headings: string[] = [];
   for (const node of fromMarkdown(markdown).children) {
@@ -210,11 +200,6 @@ function hasHeading(markdown: string): boolean {
   return headingsOf(markdown).length > 0;
 }
 
-/**
- * The heading an orphan chunk (no heading above it on its page) belongs to.
- * OCR often lifts a table above the text of its page, so a table takes the
- * page's first heading; other chunks continue the previous page's last one.
- */
 function fallbackHeading(
   chunk: string,
   pageHeadings: string[],

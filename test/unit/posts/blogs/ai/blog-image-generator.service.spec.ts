@@ -15,7 +15,6 @@ const PUBLIC = 'https://files.vedora.test/vedora-blogs';
 const PNG =
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==';
 
-/** A noisy 640x480 PNG, sized like a model image, that WebP shrinks a lot. */
 function samplePng(): Uint8Array {
   const binary = typeof ffmpegStatic === 'string' ? ffmpegStatic : 'ffmpeg';
   const result = spawnSync(

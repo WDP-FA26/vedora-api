@@ -24,7 +24,6 @@ import {
   SaveRecipeCategoryDto,
 } from './dto/recipe-category.dto.js';
 
-/** Gap between neighbours, so the order stays readable in the database. */
 const SORT_STEP = 10;
 
 type DefaultCategory = Pick<
@@ -32,7 +31,6 @@ type DefaultCategory = Pick<
   'name' | 'baseTag' | 'icon' | 'sortOrder'
 >;
 
-/** The nine dish kinds the app started with, created once on an empty database. */
 const DEFAULT_CATEGORIES: readonly DefaultCategory[] = [
   {
     name: 'Món canh, súp',
@@ -102,7 +100,6 @@ export class RecipeCategoriesService implements OnApplicationBootstrap {
     await this.createDefaultsIfEmpty();
   }
 
-  /** Seeds the defaults only while the collection is empty, so deleted ones stay deleted. */
   async createDefaultsIfEmpty(): Promise<void> {
     const existing = await this.categories.estimatedDocumentCount().exec();
     if (existing > 0) return;
@@ -115,7 +112,6 @@ export class RecipeCategoriesService implements OnApplicationBootstrap {
     try {
       await this.categories.insertMany(rows, { ordered: false });
     } catch (error: unknown) {
-      // Another instance seeded at the same moment; its rows win.
       if (!isUniqueViolation(error)) throw error;
     }
   }
@@ -136,7 +132,6 @@ export class RecipeCategoriesService implements OnApplicationBootstrap {
     return createPaginatedResponse(rows.map(toDto), totalItems, query);
   }
 
-  /** What members browse by: categories an admin has not hidden, in admin order. */
   async findVisible(
     query: PaginationQueryDto,
   ): Promise<PaginatedResponseDto<RecipeCategoryDto>> {
@@ -154,7 +149,6 @@ export class RecipeCategoriesService implements OnApplicationBootstrap {
     return createPaginatedResponse(rows.map(toDto), totalItems, query);
   }
 
-  /** A new category goes to the end of the list. */
   async create(dto: SaveRecipeCategoryDto): Promise<RecipeCategoryDto> {
     const id = randomUUID();
     const last = await this.categories
@@ -169,7 +163,6 @@ export class RecipeCategoriesService implements OnApplicationBootstrap {
     return this.findOne(id);
   }
 
-  /** `ids` is every category, in the new order; they are renumbered 10, 20, 30… */
   async reorder(dto: ReorderRecipeCategoriesDto): Promise<void> {
     await this.mongo.withTransaction(async (session) => {
       const rows = await this.categories

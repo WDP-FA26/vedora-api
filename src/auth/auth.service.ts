@@ -90,8 +90,6 @@ export class AuthService {
       dto.password,
       user?.passwordHash ?? DUMMY_PASSWORD_HASH,
     );
-    // bcrypt only reads the first 72 bytes, and stored passwords never exceed
-    // them (hashPassword refuses), so a longer one cannot be the right one.
     const passwordMatches = hashMatches && !truncates(dto.password);
 
     if (!user || !passwordMatches) {
@@ -223,7 +221,6 @@ export class AuthService {
     return user;
   }
 
-  /** The account a session acts as, plus the person behind a page session. */
   async me(current: AuthenticatedUser): Promise<CurrentUserDto> {
     const [user, actor] = await Promise.all([
       this.getCurrentUser(current.sub),
@@ -238,11 +235,6 @@ export class AuthService {
     return this.createAuthResponse(user, rotatedToken, rotatedToken.actorId);
   }
 
-  /**
-   * Swaps the current session for one acting as `pageId`, or back to the
-   * person's own account when `pageId` is null. The current refresh token is
-   * revoked, so the browser holds one session at a time.
-   */
   async switchAccount(
     current: AuthenticatedUser,
     refreshToken: string,
@@ -333,7 +325,6 @@ export class AuthService {
     };
   }
 
-  /** `actorId` makes it a page session; it must come with the page's own refresh token. */
   private async createAuthResponse(
     user: PublicUser,
     issuedRefreshToken?: IssuedRefreshToken,

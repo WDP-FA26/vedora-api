@@ -36,9 +36,7 @@ const SPINACH_RECIPE = 'd1a2d3e4-0000-4000-8000-000000000002';
 const RICE_RECIPE = 'd1a2d3e4-0000-4000-8000-000000000003';
 const WEEK = '2026-11-16';
 const NEXT_WEEK = '2026-11-23';
-// 00:30 on Monday 2026-11-16 in the app time zone, so every day is still editable.
 const MONDAY_MORNING = new Date('2026-11-15T17:30:00Z');
-// 12:00 on Wednesday 2026-11-18 in the app time zone.
 const WEDNESDAY = new Date('2026-11-18T05:00:00Z');
 
 const TITLES: Record<string, string> = {
@@ -49,10 +47,6 @@ const TITLES: Record<string, string> = {
 
 const recipeRef = (id: string) => ({ id, title: TITLES[id] ?? id, tag: null });
 
-/**
- * A tool output as the planner saves it: one changed day with all four
- * sections, where only lunch differs.
- */
 function lunchChange(
   weekStart: string,
   day: Weekday,
@@ -217,14 +211,12 @@ describe('MealPlannerChatHistoryService', () => {
     };
     await service.recordAssistantMessage(USER_A, threadId, assistantWithTools);
 
-    // Empty assistant placeholder should not be stored
     await service.recordAssistantMessage(USER_A, threadId, {
       id: 'empty-assistant',
       role: 'assistant',
       parts: [{ type: 'text', text: '   ' }],
     });
 
-    // Refused turn metadata is preserved
     await service.recordUserMessage(
       USER_A,
       threadId,
@@ -238,7 +230,6 @@ describe('MealPlannerChatHistoryService', () => {
       metadata: { refused: true },
     });
 
-    // Add 10 more messages so total > 10
     for (let i = 1; i <= 10; i++) {
       await service.recordUserMessage(
         USER_A,
@@ -317,7 +308,6 @@ describe('MealPlannerChatHistoryService', () => {
       }),
     ).rejects.toBeInstanceOf(InvalidInputException);
 
-    // Refused turn must be stripped together with its preceding user message
     await service.recordUserMessage(USER_A, threadId, 'Viết code JS', 'u-bad');
     await service.recordAssistantMessage(USER_A, threadId, {
       id: 'a-bad',
@@ -368,7 +358,6 @@ describe('MealPlannerChatHistoryService', () => {
       ],
     });
 
-    // Syncing same IDs again updates in place without duplicating
     const updated = await service.updateThread(USER_A, threadId, {
       proposalStatuses: { 'call-fill1': 'saved' },
       messages: [
@@ -513,7 +502,6 @@ describe('MealPlannerChatHistoryService', () => {
       expect(await lunchOf(WEEK, Weekday.WED)).toEqual([TOFU_RECIPE]);
       expect(await lunchOf(WEEK, Weekday.THU)).toEqual([RICE_RECIPE]);
 
-      // The undo is saved on the next reply, so the next undo goes one change further back.
       await sayIn('v3', 'user', [text('Hoàn tác tiếp')]);
       await sayIn('va3', 'assistant', [toolPart('tool-undoLastChange', first)]);
       const second = await service.undoLatestChange(USER_A, voiceThread);
@@ -525,7 +513,6 @@ describe('MealPlannerChatHistoryService', () => {
     });
 
     it('restores the earliest previous of each day, from the target message on, and drops those messages', async () => {
-      // The plan as the assistant left it after the turns below.
       await mealPlan.apply(USER_A, WEEK, [
         lunchOnly(Weekday.WED, [SPINACH_RECIPE]),
         lunchOnly(Weekday.THU, [RICE_RECIPE]),
@@ -548,18 +535,15 @@ describe('MealPlannerChatHistoryService', () => {
           'tool-fillSlots',
           lunchChange(WEEK, Weekday.THU, [], [RICE_RECIPE]),
         ),
-        // Not saved: must not be put back.
         toolPart(
           'tool-autoBalancePlan',
           lunchChange(WEEK, Weekday.FRI, [TOFU_RECIPE], [], false),
         ),
-        // Still running: must not be put back.
         toolPart(
           'tool-editPlan',
           lunchChange(WEEK, Weekday.FRI, [SPINACH_RECIPE], [RICE_RECIPE]),
           'input-available',
         ),
-        // A draft-era output without `applied`.
         toolPart('tool-editPlan', {
           ...lunchChange(WEEK, Weekday.SAT, [TOFU_RECIPE], []),
           applied: undefined,

@@ -157,7 +157,6 @@ describe('AdminAiCostsService', () => {
     });
 
     it('computes Decimal128 totals, nearest-rank P95, UTC+7 boundaries, and feature/model filters', async () => {
-      // 20 turns with exact costs 1..20 so nearest-rank P95 = ceil(0.95 * 20) = 19.
       for (let i = 1; i <= 20; i += 1) {
         await seed(String(i), {
           resolvedModel: 'actual/model',
@@ -169,7 +168,6 @@ describe('AdminAiCostsService', () => {
           cacheWriteTokens: 3,
         });
       }
-      // Incomplete / duplicate / pending / failed calls excluded from fully-priced mean/P95.
       await seed(null, {
         resolvedModel: 'actual/model',
         feature: 'BLOG_CHAT',
@@ -185,7 +183,6 @@ describe('AdminAiCostsService', () => {
         feature: 'BLOG_CHAT',
         status: 'PENDING',
       });
-      // Different feature & next Bangkok day (2026-10-01T17:00:00Z = 2026-10-02 Bangkok).
       await seed('100', {
         feature: 'KNOWLEDGE',
         startedAt: new Date('2026-10-01T17:00:00Z'),

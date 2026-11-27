@@ -131,8 +131,6 @@ export class RecipeRelationsService {
     session: ClientSession,
   ): Promise<void> {
     const ingredientIds = ingredients.map(({ ingredientId }) => ingredientId);
-    // Ingredient deletion takes the same locks, so neither side can commit
-    // against a snapshot that misses the other.
     for (const ingredientId of [...new Set(ingredientIds)].sort()) {
       await lockDocument(this.mongo, session, 'ingredient', ingredientId);
     }

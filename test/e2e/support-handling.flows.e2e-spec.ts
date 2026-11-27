@@ -43,7 +43,6 @@ interface AdminPageBody {
   items: { id: string; assignee: { id: string } | null }[];
 }
 
-/** Storage stand-in: every presigned upload "arrives" unless listed as missing. */
 const missingKeys = new Set<string>();
 const fakeStorage = {
   isConfigured: () => true,
@@ -61,7 +60,6 @@ const fakeStorage = {
   delete: () => Promise.resolve(),
 };
 
-/** Records follow-up emails instead of sending them; can be told to fail. */
 const sentFollowUps: { to: string; followUp: SupportFollowUpEmail }[] = [];
 let failMail = false;
 const fakeMail = {
@@ -412,14 +410,12 @@ describe('Support handling: claims, reopen, attachments & internal notes (e2e)',
       expect(await sweep()).toEqual({ reminded: 1, expired: 0 });
       expect(await sweep()).toEqual({ reminded: 0, expired: 0 });
 
-      // Far past the deadline, but the final warning has not gone out yet.
       await setWaiting(ticket.id, { waitingUserSince: ago(400) });
       expect(await sweep()).toEqual({ reminded: 1, expired: 0 });
 
       const warned = await tickets().findOne({ _id: ticket.id }).exec();
       expect(warned?.status).toBe(SupportTicketStatus.WAITING_USER);
       expect(warned?.waitingReminderCount).toBe(2);
-      // The final warning promises 48h, so it cannot expire right away.
       expect(await sweep()).toEqual({ reminded: 0, expired: 0 });
 
       await setWaiting(ticket.id, { lastReminderAt: ago(49) });

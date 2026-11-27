@@ -77,12 +77,6 @@ export class PostsService {
     return this.postsQuery.load(id, authorId);
   }
 
-  /**
-   * Edits a short post's text and/or its videos. Changed content is moderated
-   * again like a new post: the post is PROCESSING until every new video is
-   * ready and the verdict is in, so a rejected, held or failed post can be
-   * fixed and resubmitted.
-   */
   async update(
     id: string,
     authorId: string,

@@ -6,7 +6,6 @@ import {
   Weekday,
 } from '../mongo/models.js';
 
-/** A recipe the user may eat, reduced to what the generator ranks on. */
 export interface GeneratorCandidate {
   id: string;
   title: string;
@@ -15,7 +14,6 @@ export interface GeneratorCandidate {
   caloriesPerServing?: number | null;
   nutritionPillars?: readonly NutritionPillar[];
   ingredientIds: string[];
-  /** Whether the recipe matches the free-text wish of the request. */
   matchesQuery: boolean;
 }
 
@@ -23,26 +21,17 @@ export type SlotRecipeIds = Record<MealSection, string[]>;
 
 export interface GeneratorInput {
   candidates: GeneratorCandidate[];
-  /** What is saved today, so repeats and same-day clashes are seen. */
   saved: ReadonlyMap<Weekday, SlotRecipeIds>;
   days: readonly Weekday[];
   sections: readonly MealSection[];
-  /** Slots that must stay exactly as they are. */
   skip: readonly { day: Weekday; section: MealSection }[];
-  /** Keep every slot that already has a dish. */
   onlyEmpty: boolean;
-  /** How many dishes each filled slot gets. */
   perSection: number;
-  /** Skip the tag-to-meal fit, e.g. when the user asked for specific tags. */
   ignoreFit: boolean;
-  /** Optional BMI goal & daily calorie target to steer dish selection naturally. */
   nutritionGoal?: NutritionGoal | null;
   dailyCalorieTarget?: number | null;
-  /** Ingredients for every recipe id (including saved/pinned dishes outside candidates). */
   ingredientsById?: ReadonlyMap<string, readonly string[]>;
-  /** One answer per ingredient set: true when no two ingredients clash. */
   areCompatible: (ingredientSets: string[][]) => Promise<boolean[]>;
-  /** Returns [0, 1); injected so tests are deterministic. */
   random: () => number;
 }
 
@@ -78,8 +67,6 @@ const NOT_FOR_MAIN_MEALS: readonly RecipeTag[] = [
   RecipeTag.SNACK,
 ];
 
-// A dish may appear in different meals (lunch and dinner), but never twice in
-// the same meal across the week unless nothing else is left.
 const SAME_MEAL_REPEAT_PENALTY = 100;
 const SAME_DAY_REPEAT_PENALTY = 40;
 const REPEAT_PENALTY = 2;
@@ -270,14 +257,6 @@ function sameIds(a: readonly string[], b: readonly string[]): boolean {
   return a.length === b.length && a.every((id, index) => id === b[index]);
 }
 
-/**
- * Fills the chosen slots with one dish each. A dish is ranked by how well its
- * tag fits the meal, and the user's wishes, and is pushed
- * down for every time it already appears in the week. The best few are then
- * checked against the dishes already picked for the same meal for incompatible
- * ingredients; other meals of the day do not matter.
- * Returns whole days (all four sections), only for days that changed.
- */
 export async function generateMealDays(
   input: GeneratorInput,
 ): Promise<GeneratedDay[]> {
@@ -327,9 +306,6 @@ export async function generateMealDays(
       while (pickedIds.length < desiredCount) {
         const sameMeal = idsInMeal(week, section, day);
         for (const id of pickedIds) sameMeal.add(id);
-        // Replacing a slot means the user wants something new. Its old dish
-        // was just un-counted, so it would otherwise rank as the least used
-        // dish and come straight back; keep it only as a last resort.
         for (const id of replaced) sameMeal.add(id);
         const sameDay = new Set(allIds(slots));
         const dayState = dayNutritionState(slots, byId);
@@ -392,7 +368,6 @@ async function topUpDayForCalorieTarget(
 ): Promise<boolean> {
   const target = input.dailyCalorieTarget;
   if (target === null || target === undefined || target <= 0) return false;
-  // Never inflate a partial eating-out day when one of the main meals was left out.
   const allMainPopulated =
     slots.BREAKFAST.length > 0 &&
     slots.LUNCH.length > 0 &&
@@ -442,7 +417,6 @@ async function topUpDayForCalorieTarget(
   return toppedUp;
 }
 
-/** Dishes already in this meal (e.g. every breakfast) on the other days. */
 function idsInMeal(
   week: ReadonlyMap<Weekday, SlotRecipeIds>,
   section: MealSection,

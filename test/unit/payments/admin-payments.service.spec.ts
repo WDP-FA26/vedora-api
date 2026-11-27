@@ -206,7 +206,6 @@ describe('AdminPaymentsService', () => {
         expect(res.total).toBe(1);
       }
 
-      // Regex characters are escaped so partial / wildcard queries do not match
       for (const q of ['exact', '.*', '$where']) {
         const res = await service.orders(
           Object.assign(new AdminPaymentListDto(), RANGE, { q }),
@@ -281,7 +280,6 @@ describe('AdminPaymentsService', () => {
       const secondBuyer = await makeUser();
       const suspended = await makeUser({ status: AccountStatus.SUSPENDED });
 
-      // Created before range, captured on 2026-10-01 Bangkok (2026-09-30T17:00Z)
       await seedIntent({
         userId: defaultUser.id,
         planCode: BillingPlan.PLUS,
@@ -290,7 +288,6 @@ describe('AdminPaymentsService', () => {
         createdAt: new Date('2026-09-01T00:00:00Z'),
         capturedAt: new Date('2026-09-30T17:00:00Z'),
       });
-      // Created on 2026-10-02 Bangkok, captured on 2026-10-02 Bangkok (upgrades defaultUser to PRO)
       await seedIntent({
         userId: defaultUser.id,
         planCode: BillingPlan.PRO,
@@ -299,7 +296,6 @@ describe('AdminPaymentsService', () => {
         createdAt: new Date('2026-10-02T01:00:00Z'),
         capturedAt: new Date('2026-10-02T02:00:00Z'),
       });
-      // Non-VND excluded from captured revenue
       await seedIntent({
         userId: secondBuyer.id,
         currency: 'USD',
@@ -307,14 +303,12 @@ describe('AdminPaymentsService', () => {
         createdAt: new Date('2026-10-01T10:00:00Z'),
         capturedAt: new Date('2026-10-01T10:00:00Z'),
       });
-      // Cancelled created in range
       await seedIntent({
         userId: suspended.id,
         status: PaymentStatus.CANCELLED,
         createdAt: new Date('2026-10-01T10:00:00Z'),
         cancelledAt: NOW,
       });
-      // Suspended user with active payment excluded from global membershipSnapshot
       await seedIntent({
         userId: suspended.id,
         planCode: BillingPlan.PLUS,
@@ -367,7 +361,6 @@ describe('AdminPaymentsService', () => {
           confirmedVnd: '99000',
         },
       ]);
-      // Only defaultUser is active + verified; latest cycle is PRO (secondBuyer had USD but still SUCCEEDED PLUS)
       expect(report.membershipSnapshot).toEqual({
         asOf: NOW.toISOString(),
         scope: 'GLOBAL_ACTIVE_VERIFIED_ACCOUNTS',
@@ -489,7 +482,6 @@ describe('AdminPaymentsService', () => {
       expect(unmatchedOnly.total).toBe(1);
       expect(unmatchedOnly.items[0].intentId).toBeNull();
 
-      // Contradictory AND filters return 0 rather than overwriting each other
       const contradictory = await service.receiptsPage(
         Object.assign(new AdminReceiptQueryDto(), RANGE, {
           unmatched: 'true',

@@ -26,7 +26,6 @@ export const SYSTEM_LOG_RESOURCES = [
 ] as const;
 export type SystemLogResource = (typeof SYSTEM_LOG_RESOURCES)[number];
 
-/** Application-readable history; there is deliberately no update/delete API. */
 @Schema(collectionSchema('system_logs', 'created'))
 export class SystemLog extends Identified {
   @Prop({ type: String, default: () => randomUUID() }) _id!: string;

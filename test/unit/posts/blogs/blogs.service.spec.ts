@@ -447,7 +447,6 @@ describe('BlogsService lifecycle', () => {
       blogs.update(draft.id, otherId, { title: 'Hack' }),
     ).rejects.toBeInstanceOf(ResourceNotFoundException);
 
-    // Publish draft
     const publishing = await blogs.update(draft.id, authorId, {
       status: PostStatus.PUBLISHED,
       coverImageUrl: `${STORAGE}/blogs/user/img.jpg`,
@@ -455,7 +454,6 @@ describe('BlogsService lifecycle', () => {
     expect(publishing.status).toBe(PostStatus.PROCESSING);
     expect(mediaService.settlePostsLater).toHaveBeenCalledWith([draft.id]);
 
-    // Update PENDING_REVIEW without explicit status -> keeps publishing (PROCESSING + settle)
     mediaService.settlePostsLater.mockClear();
     await postsModel
       .updateOne(
@@ -469,7 +467,6 @@ describe('BlogsService lifecycle', () => {
     expect(fromPending.status).toBe(PostStatus.PROCESSING);
     expect(mediaService.settlePostsLater).toHaveBeenCalledWith([draft.id]);
 
-    // Recipe-only edit on PUBLISHED blog -> stays PUBLISHED, no re-moderation
     mediaService.settlePostsLater.mockClear();
     const recipe = await createRecipe(db, { title: 'Món mới' });
     await postsModel
@@ -484,7 +481,6 @@ describe('BlogsService lifecycle', () => {
     expect(recipeOnly.status).toBe(PostStatus.PUBLISHED);
     expect(mediaService.settlePostsLater).not.toHaveBeenCalled();
 
-    // Update REJECTED without status -> transitions to DRAFT
     await postsModel
       .updateOne({ _id: draft.id }, { $set: { status: PostStatus.REJECTED } })
       .exec();
@@ -495,7 +491,6 @@ describe('BlogsService lifecycle', () => {
     });
     expect(fromRejected.status).toBe(PostStatus.DRAFT);
 
-    // Return PUBLISHED to DRAFT explicitly
     await postsModel
       .updateOne({ _id: draft.id }, { $set: { status: PostStatus.PUBLISHED } })
       .exec();

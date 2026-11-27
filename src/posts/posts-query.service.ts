@@ -42,7 +42,6 @@ import { SearchPostsQueryDto } from './dto/search-posts-query.dto.js';
 import { PostRelationsService } from './post-relations.service.js';
 import { ResourceNotFoundException } from '../common/exceptions/resource-not-found.exception.js';
 
-/** What the author of a rejected post is shown: each part the model quoted and why. */
 function findingsOf(
   post: Post,
   reasonTexts: ReadonlyMap<string, string>,
@@ -200,13 +199,6 @@ export class PostsQueryService {
     return this.pageOfPublished(rows, query.limit, userId);
   }
 
-  /**
-   * Turns `limit + 1` bookmark/repost rows, newest first, into a page of the
-   * posts they point at that are still published. Whether another page exists
-   * is decided from the rows before filtering, so a hidden post in the
-   * lookahead slot never ends paging early; the page may hold fewer than
-   * `limit` posts instead. The cursor is the last row's post id.
-   */
   private async pageOfPublished(
     rows: readonly { postId: string }[],
     limit: number,
@@ -234,10 +226,6 @@ export class PostsQueryService {
     };
   }
 
-  /**
-   * Published posts that `userId` reposted, most recently reposted first.
-   * 404 unless the profile is public, like `GET /profiles/:id`.
-   */
   async listReposts(
     userId: string,
     query: CursorPaginationQueryDto,
@@ -290,8 +278,6 @@ export class PostsQueryService {
         .findOne({ _id: query.cursor, authorId: { $in: authorIds } })
         .exec();
       if (!cursor?.publishedAt) return { items: [], nextCursor: null };
-      // Like every other timeline: by when a post went public, so one held
-      // for review lands where it was published, not where it was written.
       Object.assign(
         filter,
         afterCursor('publishedAt', {

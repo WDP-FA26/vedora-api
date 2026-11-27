@@ -42,7 +42,6 @@ describe('AI cost telemetry and Admin reports with MongoDB', () => {
   });
   const jsonResponse = (data: object, status = 200) =>
     Response.json(data, { status, headers: { 'x-provider': 'fixture' } });
-  /** A generation lookup in the shape the OpenRouter SDK validates. */
   const generation = (fields: Record<string, unknown>) => ({
     data: {
       api_type: null,

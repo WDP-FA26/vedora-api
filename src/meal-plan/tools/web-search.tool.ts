@@ -5,11 +5,6 @@ export { webSearchTool } from '../../ai/tools/web-search.tool.js';
 
 const MAX_REASON_LENGTH = 200;
 
-/**
- * Asks the user for permission to search the web. It has no `execute`, so the
- * agent stops on it and the client shows a consent card with the reason; the
- * user's answer comes back as the next turn with `allowWebSearch`.
- */
 export function requestWebSearchTool() {
   return tool({
     description:

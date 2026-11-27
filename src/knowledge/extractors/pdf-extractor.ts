@@ -30,7 +30,6 @@ export class PdfExtractor {
 
   constructor(private readonly models: KnowledgeModelsService) {}
 
-  /** OCRs the file. The result is reviewed before it is indexed. */
   async extract(file: Uint8Array): Promise<ExtractedSection[]> {
     const mupdf = await import('mupdf');
     return this.withDocument(mupdf, file, async (document, pdf) => {
@@ -73,7 +72,6 @@ export class PdfExtractor {
     });
   }
 
-  /** The images of each page, without calling OCR. Same pages as `extract`. */
   async extractImages(file: Uint8Array): Promise<Uint8Array[][]> {
     const mupdf = await import('mupdf');
     return this.withDocument(mupdf, file, (document) =>

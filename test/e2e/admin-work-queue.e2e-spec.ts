@@ -132,7 +132,7 @@ describe('Admin pending work and navigation badges (real MongoDB HTTP)', () => {
     for (let n = 4; n <= 6; n++) reportIds.push((await report(p.id, 1)).id);
     await report(p.id, 7, PostReportStatus.DISMISSED);
     await report(p.id, 8, PostReportStatus.RESOLVED);
-    await report(randomUUID(), 9); // A missing post cannot be opened in the existing post-report queue.
+    await report(randomUUID(), 9);
     const commentId = randomUUID();
     for (let n = 1; n <= 3; n++)
       await model<CommentReport>(CommentReport.name).create({
@@ -273,7 +273,6 @@ describe('Admin pending work and navigation badges (real MongoDB HTTP)', () => {
   });
 
   it('refreshes after review; clearing a report on a held post does not remove the remaining moderation job', async () => {
-    // Existing review DTOs need a reporter account; bind the fixture report to one.
     await model<PostReport>(PostReport.name).updateOne(
       { _id: heldReport },
       { $set: { reporterId: author.id } },

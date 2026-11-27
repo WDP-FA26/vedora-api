@@ -39,7 +39,6 @@ export const MEAL_LOG_MIN_SERVINGS = 0.25;
 export const MEAL_LOG_MAX_SERVINGS = 20;
 export const MEAL_LOG_MAX_CALORIES_PER_SERVING = 5000;
 
-/** Calorie sources a client may set; RECIPE is set by the API only. */
 export const CLIENT_CALORIE_SOURCES = [
   CalorieSource.USER,
   CalorieSource.WEB_ESTIMATE,

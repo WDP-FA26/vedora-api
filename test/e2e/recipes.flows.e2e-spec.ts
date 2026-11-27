@@ -50,7 +50,6 @@ interface FavoriteBody {
   savedAt: string;
 }
 
-/** Meal plans are saved per week, and past days are locked. */
 const NEXT_WEEK = nextWeekStart();
 
 describe('Recipe catalog and admin flows (e2e)', () => {
@@ -531,7 +530,6 @@ describe('Recipe catalog and admin flows (e2e)', () => {
     });
   });
 
-  // Each test races up to 100 transactions; give them more than the default 5s.
   describe(
     'concurrent writes against recipe deletion',
     { timeout: 60_000 },
@@ -580,7 +578,6 @@ describe('Recipe catalog and admin flows (e2e)', () => {
         expect(await orphanCount('RecipeRating', [recipe.id])).toBe(0);
       });
 
-      // BUG-1: Recipe delete takes no recipe lock, so a concurrent first-time favorite/rating commits after the cascade (orphan rows)
       it('never leaves a favorite pointing at a deleted recipe', async () => {
         const recipeIds: string[] = [];
         for (let attempt = 0; attempt < ATTEMPTS; attempt++) {
@@ -598,7 +595,6 @@ describe('Recipe catalog and admin flows (e2e)', () => {
         expect(await orphanCount('RecipeFavorite', recipeIds)).toBe(0);
       });
 
-      // BUG-1: Recipe delete takes no recipe lock, so a concurrent first-time favorite/rating commits after the cascade (orphan rows)
       it('never leaves a rating pointing at a deleted recipe', async () => {
         const recipeIds: string[] = [];
         for (let attempt = 0; attempt < ATTEMPTS; attempt++) {
@@ -616,7 +612,6 @@ describe('Recipe catalog and admin flows (e2e)', () => {
         expect(await orphanCount('RecipeRating', recipeIds)).toBe(0);
       });
 
-      // BUG-6: PUT /meal-plan/days checks recipes in preview() outside its transaction, so a recipe deleted meanwhile is saved (intermittent, ~1 in 25-100 races)
       it('never leaves a meal-plan entry pointing at a deleted recipe', async () => {
         const { token } = await signedUser();
         const recipeIds: string[] = [];
@@ -647,7 +642,6 @@ describe('Recipe catalog and admin flows (e2e)', () => {
         expect(await orphanCount('MealPlanEntry', recipeIds)).toBe(0);
       });
 
-      // BUG-2: Ingredient delete and recipe create check references in different snapshots, leaving a recipe with a missing ingredient
       it('never both deletes an ingredient and saves a recipe that uses it', async () => {
         let bothSucceeded = 0;
         for (let attempt = 0; attempt < ATTEMPTS; attempt++) {
@@ -713,7 +707,6 @@ describe('Recipe catalog and admin flows (e2e)', () => {
       };
     }
 
-    // BUG-3: Favorites list pairs savedAt by index after dropping a missing recipe, shifting every later savedAt
     it('reports each saved recipe with its own savedAt', async () => {
       const { body, older, newer, olderSavedAt, newerSavedAt } =
         await seedFavoritesWithDanglingNewest();
@@ -723,7 +716,6 @@ describe('Recipe catalog and admin flows (e2e)', () => {
       ]);
     });
 
-    // BUG-3: Favorites list counts favorites of missing recipes in totalItems
     it('counts only the recipes it can list in totalItems', async () => {
       const { body } = await seedFavoritesWithDanglingNewest();
       expect(body.meta.totalItems).toBe(2);

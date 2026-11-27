@@ -73,13 +73,6 @@ function expiredText(ticket: SupportTicket): string {
   return `${base} Bạn có thể trả lời trong ${runtimeConfig.SUPPORT_REOPEN_WINDOW_DAYS} ngày để mở lại hồ sơ.`;
 }
 
-/**
- * Follows up on tickets waiting for their author, the way Zendesk's
- * "bump, bump, solve" does: a reminder, a final warning, then expiry. Each
- * step is a public message plus a notification, and only a ticket that got
- * both reminders can expire. Any reply resets the count (see the services).
- * Each step is also emailed through Resend after the transaction commits.
- */
 @Injectable()
 export class SupportMaintenanceService {
   private readonly logger = new Logger(SupportMaintenanceService.name);
@@ -146,11 +139,6 @@ export class SupportMaintenanceService {
     return result;
   }
 
-  /**
-   * Emails the step to the author when their address is verified and the
-   * account is active. Email is a best-effort copy of the in-app message and
-   * notification, so a failed send is logged and the sweep moves on.
-   */
   private async emailAuthor(
     ticketId: string,
     step: WaitingStep,
@@ -179,10 +167,6 @@ export class SupportMaintenanceService {
     }
   }
 
-  /**
-   * Re-reads the ticket under its lock and applies the step only if it is
-   * still due, so a reply that commits first wins and nothing is sent twice.
-   */
   private async applyStep(
     ticketId: string,
     step: WaitingStep,
@@ -244,7 +228,6 @@ export class SupportMaintenanceService {
       ],
       { session },
     );
-    // Reminders are not replies: lastMessageAt stays on the real conversation.
     await this.tickets
       .updateOne(
         { _id: ticket.id },

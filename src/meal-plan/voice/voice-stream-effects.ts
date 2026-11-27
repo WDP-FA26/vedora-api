@@ -47,7 +47,6 @@ export type PlannerStateDomain =
   'plan' | 'shoppingList' | 'mealLog' | 'nutrition' | 'dietary';
 
 export interface PlannerStateEvent {
-  /** Monotonic per-stream sequence number so older patches never overwrite newer state. */
   seq?: number;
   invalidate?: PlannerStateDomain[];
   patch?: {
@@ -278,16 +277,10 @@ interface ToolDerivedEffects {
   screen?: VoiceScreenEvent;
   progress?: string;
   endCall?: true;
-  /** Action summaries take precedence over pure `setScreen` summaries. */
   actionSummary?: string;
   screenSummary?: string;
 }
 
-/**
- * Derives transient UI events, progress lines, and fallback spoken summaries
- * from a finished planner tool call so the browser never needs to mirror tool
- * output schemas.
- */
 export function deriveVoiceToolEffects(
   toolName: string,
   output: unknown,
@@ -495,12 +488,6 @@ function dataChunk(type: `data-${string}`, data: unknown): UIMessageChunk {
   return { type, data, transient: true };
 }
 
-/**
- * Enriches any planner UIMessageStream (text chat or voice) with unified
- * transient `data-state` events (invalidate/patch) as soon as a mutating tool
- * finishes. When `voice: true`, also emits `data-screen`, `data-progress`,
- * `data-end-call`, and `data-summary`.
- */
 export function withPlannerStreamEffects(
   stream: ReadableStream<UIMessageChunk>,
   options: { voice: boolean },

@@ -5,10 +5,6 @@ import type { MealLogService } from '../meal-log/meal-log.service.js';
 import { DAY_NAMES, SECTION_NAMES } from '../meal-planner.prompt.js';
 import { plannableWeekStarts, weekStartInput } from './planner-weeks.js';
 
-/**
- * What the user actually ate this week, beside the plan and their target. The
- * planner reads it before adjusting the days still ahead.
- */
 export function getEatingLogTool(
   mealLog: MealLogService,
   userId: string,

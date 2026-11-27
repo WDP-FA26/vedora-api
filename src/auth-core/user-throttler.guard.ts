@@ -9,7 +9,6 @@ export class UserThrottlerGuard extends ThrottlerGuard {
     return Promise.resolve(request.user.sub);
   }
 
-  /** Admins are not rate limited; the role comes from the verified access token. */
   protected shouldSkip(context: ExecutionContext): Promise<boolean> {
     const request = context.switchToHttp().getRequest<AuthenticatedRequest>();
     return Promise.resolve(request.user.role === UserRole.ADMIN);

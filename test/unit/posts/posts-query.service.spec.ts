@@ -354,8 +354,6 @@ describe('PostsQueryService', () => {
       expect(invalid).toEqual({ items: [], nextCursor: null });
     });
 
-    // Regression for BUG-M7: a non-published post in the lookahead slot
-    // must not end pagination early.
     it('keeps paging past an unpublished post in bookmarks', async () => {
       const p1 = await createPost(db, { authorId: author.id, body: 'First' });
       const p2 = await createPost(db, { authorId: author.id, body: 'Second' });

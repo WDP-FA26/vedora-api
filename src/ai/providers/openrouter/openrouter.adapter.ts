@@ -29,10 +29,8 @@ import {
   openRouterTranscriptionModel,
 } from './openrouter.sdk-models.js';
 
-/** OpenRouter models whose Gateway ids differ. */
 export const OPENROUTER_MODEL_DEFAULTS: ProviderModelDefaults = {
   image: 'qwen/qwen-image-2.1-turbo',
-  // Mistral Small 4, the Gateway's mistral/mistral-small.
   ocr: 'mistralai/mistral-small-2603',
   rerank: 'qwen/qwen3-reranker-8b',
 };
@@ -45,25 +43,12 @@ const OPENROUTER_MODEL_ENV: Record<ProviderModelKind, string> = {
 
 const EMBEDDING_BATCH_SIZE = runtimeConfig.AI_EMBEDDING_BATCH_SIZE;
 
-/**
- * Providers tried first for the Haiku moderation calls, by OpenRouter slug.
- * Both moderation callers require `structured_outputs` (`Output.object`), so
- * only endpoints supporting `structured_outputs` on `anthropic/claude-haiku-5.5`
- * are listed (`claude-on-aws` and `amazon-bedrock` do not support it and are
- * filtered out by OpenRouter before `order` applies).
- */
 export const DEFAULT_OPENROUTER_MODERATION_PROVIDER_ORDER =
   'anthropic,google-vertex/global,azure/global';
 
-/**
- * The same providers for the chat models (Haiku by default): the structured
- * outputs they rely on need them, and a prompt cache lives on one provider.
- */
 export const DEFAULT_OPENROUTER_CHAT_PROVIDER_ORDER =
   DEFAULT_OPENROUTER_MODERATION_PROVIDER_ORDER;
 
-/** OpenRouter's `reasoning` request field; the thinking itself is never returned. */
-// A type alias, not an interface, so it stays assignable to the AI SDK's JSON provider options.
 type ReasoningSetting = {
   effort: ReasoningEffort;
   exclude: true;
@@ -73,7 +58,6 @@ function reasoningSetting(effort: ReasoningEffort): ReasoningSetting {
   return { effort, exclude: true };
 }
 
-/** The OpenRouter provider with Vedora's base URL and app attribution. */
 function openRouter(
   apiKey: string,
   customFetch?: typeof fetch,
@@ -88,11 +72,6 @@ function openRouter(
   });
 }
 
-/**
- * OpenRouter's spelling: `cacheControl` for Anthropic breakpoints (also as the
- * request-level advancing breakpoint), `session_id` for sticky routing, and
- * `reasoning` for the effort.
- */
 export const openRouterDialect: ProviderDialect = {
   cacheBreakpoint: (ttl) => ({
     openrouter: { cacheControl: ephemeralCache(ttl) },
@@ -113,15 +92,6 @@ export const openRouterDialect: ProviderDialect = {
   }),
 };
 
-/**
- * OpenRouter's `openrouter:web_search` server tool: OpenRouter runs the
- * searches and returns the results to the model as `url_citation`
- * annotations, which appear in SDK responses as `url` sources.
- *
- * Built by hand because `@openrouter/ai-sdk-provider`'s `tools.webSearch`
- * flattens its options to the top level of the tool, where OpenRouter ignores
- * them; the server tool reads them from `parameters`.
- */
 export function openRouterWebSearchTool(): Tool {
   return {
     type: 'provider',
@@ -141,7 +111,6 @@ export function openRouterWebSearchTool(): Tool {
   };
 }
 
-/** The app's models served by OpenRouter. */
 export function openRouterModels(apiKey: string): AiModelFactory {
   return {
     chat: (
@@ -162,7 +131,6 @@ export function openRouterModels(apiKey: string): AiModelFactory {
       });
     },
     embedding: (modelId, { dimensions, fetch: customFetch }) => {
-      // The provider has no `dimensions` setting, so it goes in the request body.
       const model = openRouter(apiKey, customFetch).textEmbeddingModel(
         modelId,
         {

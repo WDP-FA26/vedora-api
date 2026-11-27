@@ -18,7 +18,6 @@ const bm25Base = {
   avg_len: 16,
 } as const;
 
-/** BM25 document descriptor for profile fields (exact or diacritic-folded). */
 export function profileBm25(text: string, folded: boolean) {
   return {
     text,
@@ -29,7 +28,6 @@ export function profileBm25(text: string, folded: boolean) {
   };
 }
 
-/** BM25 prefix-tokenized descriptor used when indexing names and handles. */
 export function profilePrefixBm25(text: string) {
   return {
     text,
@@ -43,7 +41,6 @@ export function profilePrefixBm25(text: string) {
   };
 }
 
-/** Strips leading `@` handle prefixes while keeping multi-word queries intact. */
 export function normalizeProfileQuery(query: string): string {
   return query
     .trim()
@@ -51,7 +48,6 @@ export function normalizeProfileQuery(query: string): string {
     .trim();
 }
 
-/** Combines full name and username (including separator-split tokens) for BM25 indexing. */
 export function buildProfileIdentityText(user: {
   fullName: string;
   username: string;

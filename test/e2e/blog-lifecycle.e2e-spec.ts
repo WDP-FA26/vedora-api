@@ -83,7 +83,6 @@ describe('Blog lifecycle: publish, edit, hide, delete (e2e)', () => {
     });
   const patch = (id: string, payload: object, token = authorToken) =>
     as(token, request(server()).patch(`/api/v1/blogs/${id}`)).send(payload);
-  /** The blog as its author reads it once the background moderation ended. */
   const settled = async (id: string): Promise<BlogDetailDto> => {
     await e2e.settled();
     const response = await as(
@@ -92,7 +91,6 @@ describe('Blog lifecycle: publish, edit, hide, delete (e2e)', () => {
     ).expect(200);
     return response.body as BlogDetailDto;
   };
-  /** Publishes a new blog, which answers PROCESSING, and returns its verdict. */
   const published = async (payload: object = {}): Promise<BlogDetailDto> => {
     const response = await create({ status: 'PUBLISHED', ...payload }).expect(
       201,
@@ -185,7 +183,6 @@ describe('Blog lifecycle: publish, edit, hide, delete (e2e)', () => {
     it('hides it from the lists while it is checked again, then returns the verdict', async () => {
       const blog = await published();
       expect(await ids('/api/v1/blogs')).toContain(blog.id);
-      // Hold the background check so the lists can be read while it waits.
       const media = e2e.app.get(MediaService);
       const later = vi
         .spyOn(media, 'settlePostsLater')

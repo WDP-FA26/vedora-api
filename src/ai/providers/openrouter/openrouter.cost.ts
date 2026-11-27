@@ -18,7 +18,6 @@ import {
 } from '../provider-shared.js';
 import { createOpenRouterClient } from './openrouter.client.js';
 
-/** Parses OpenRouter JSON / SSE payloads (Chat Completions, Responses API, SDK). */
 export function parseOpenRouterPayload(
   payload: unknown,
   observation: CostObservation,
@@ -63,13 +62,11 @@ export function parseOpenRouterPayload(
   }
 }
 
-/** Looks up a single generation's settled charge from OpenRouter. */
 export async function lookupOpenRouterGeneration(
   config: ConfigService,
   generationId: string,
   fallback: GenerationFallback,
 ): Promise<CostObservation> {
-  // No cost transport fetch here: the lookup itself must not create a cost row.
   const openrouter = createOpenRouterClient(
     config.getOrThrow<string>('OPENROUTER_API_KEY'),
   );

@@ -13,7 +13,6 @@ export class PostAuthorDto {
   @ApiProperty({ nullable: true, type: String })
   avatarUrl!: string | null;
 
-  /** Verified professional (chef badge). A trust signal only. */
   @ApiProperty()
   isProfessional!: boolean;
 }

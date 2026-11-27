@@ -3,11 +3,6 @@ import { z } from 'zod';
 
 export const MAX_ASK_USER_OPTIONS = 6;
 
-/**
- * Hands a choice to the user. It has no `execute`, so the turn ends on it: the
- * app shows the options as buttons and the user's pick (or anything they type)
- * comes back as their next message.
- */
 export function askUserTool() {
   return tool({
     description:

@@ -293,7 +293,6 @@ describe('UsersService', () => {
       expect(await users().findById(activeAdmin1.id).exec()).not.toBeNull();
       expect(await audits().countDocuments()).toBe(0);
 
-      // A SUSPENDED admin is not protected by last-active-admin.
       await service.remove(suspendedAdmin.id, asActor(activeAdmin1));
       expect(await users().findById(suspendedAdmin.id).exec()).toBeNull();
 
@@ -316,7 +315,6 @@ describe('UsersService', () => {
         ),
       ).rejects.toBeInstanceOf(AccessDeniedException);
 
-      // No-op when role is unchanged and expectedVersion matches
       const noop = await service.updateRole(
         member.id,
         { role: UserRole.USER, expectedVersion: 0, reason: 'Already user' },
@@ -325,7 +323,6 @@ describe('UsersService', () => {
       expect(noop.accountVersion).toBe(0);
       expect(await audits().countDocuments()).toBe(0);
 
-      // Promote USER -> ADMIN
       const promoted = await service.updateRole(
         member.id,
         { role: UserRole.ADMIN, expectedVersion: 0, reason: 'Promote' },
@@ -334,7 +331,6 @@ describe('UsersService', () => {
       expect(promoted.role).toBe(UserRole.ADMIN);
       expect(promoted.accountVersion).toBe(1);
 
-      // Stale version fails
       await expect(
         service.updateRole(
           member.id,
@@ -343,7 +339,6 @@ describe('UsersService', () => {
         ),
       ).rejects.toMatchObject({ code: 'ACCOUNT_VERSION_CONFLICT' });
 
-      // Self-demotion succeeds while another ACTIVE admin exists
       const demotedSelf = await service.updateRole(
         member.id,
         { role: UserRole.USER, expectedVersion: 1, reason: 'Step down' },
@@ -352,7 +347,6 @@ describe('UsersService', () => {
       expect(demotedSelf.role).toBe(UserRole.USER);
       expect(demotedSelf.accountVersion).toBe(2);
 
-      // Cannot demote the last ACTIVE admin
       await expect(
         service.updateRole(
           admin.id,
@@ -439,7 +433,6 @@ describe('UsersService', () => {
         ),
       ).rejects.toBeInstanceOf(AccessDeniedException);
 
-      // No-op when status matches
       const noop = await service.updateStatus(
         member.id,
         {
@@ -451,7 +444,6 @@ describe('UsersService', () => {
       );
       expect(noop.accountVersion).toBe(0);
 
-      // Suspend ACTIVE -> SUSPENDED
       const suspended = await service.updateStatus(
         member.id,
         {
@@ -464,7 +456,6 @@ describe('UsersService', () => {
       expect(suspended.status).toBe(AccountStatus.SUSPENDED);
       expect(suspended.accountVersion).toBe(1);
 
-      // Stale version fails
       await expect(
         service.updateStatus(
           member.id,
@@ -477,7 +468,6 @@ describe('UsersService', () => {
         ),
       ).rejects.toMatchObject({ code: 'ACCOUNT_VERSION_CONFLICT' });
 
-      // Reactivate SUSPENDED -> ACTIVE
       const reactivated = await service.updateStatus(
         member.id,
         {

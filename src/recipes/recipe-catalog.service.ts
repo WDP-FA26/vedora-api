@@ -136,7 +136,6 @@ export class RecipeCatalogService {
     };
   }
 
-  /** Ingredients whose name or alias contains one of the allergen keywords. */
   private async allergenIngredientIds(
     keywords: readonly string[],
   ): Promise<Set<string>> {

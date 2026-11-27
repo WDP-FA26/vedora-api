@@ -58,11 +58,6 @@ export class KnowledgeDocument extends Identified {
   @Prop({ type: String, default: null })
   reviewNote!: string | null;
 
-  /**
-   * The extraction or indexing run that owns the document now. A run only
-   * writes its result while this still names it, so a run the cron gave up
-   * on, or one overtaken by a newer approval, cannot overwrite the outcome.
-   */
   @Prop({ type: String, default: null })
   runId?: string | null;
 
@@ -83,7 +78,6 @@ onDelete(KnowledgeDocumentSchema, async (db, ids, session) => {
     .deleteMany({ documentId: { $in: ids } }, { session });
 });
 
-/** The OCR text of one PDF page, kept until an admin approves the document. */
 @Schema(collectionSchema('knowledge_pages'))
 export class KnowledgePage extends Identified {
   @Prop({ type: String, default: () => randomUUID() })
@@ -92,7 +86,6 @@ export class KnowledgePage extends Identified {
   @Prop({ type: String, required: true })
   documentId!: string;
 
-  /** 1-based page number. */
   @Prop({ type: Number, required: true })
   page!: number;
 

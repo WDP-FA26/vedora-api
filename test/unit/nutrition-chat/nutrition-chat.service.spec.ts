@@ -190,7 +190,6 @@ describe('NutritionChatService', () => {
     expect(replyText(chunks)).toBe('Ăn đậu phụ');
     const { prompt, providerOptions } = model.doStreamCalls[0];
     expect(prompt[0]).toMatchObject({ role: 'system' });
-    // Session-scoped chat: its system prefix uses the 5m cache, not 1h.
     expect(prompt[0].providerOptions?.openrouter?.cacheControl).toEqual({
       type: 'ephemeral',
     });
@@ -341,7 +340,6 @@ describe('NutritionChatService', () => {
     rateLimitModeration = true;
     const chunks = ask('Đậu phụ có bao nhiêu canxi?');
     await expect(chunks).rejects.toThrow(FeatureUnavailableException);
-    // The first try plus the AI SDK's AI_DECISION_MAX_RETRIES retries.
     expect(moderator.calls).toHaveLength(
       runtimeConfig.AI_DECISION_MAX_RETRIES + 1,
     );

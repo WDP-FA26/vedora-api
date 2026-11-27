@@ -86,11 +86,6 @@ function recipeLines(recipe: SummaryRecipe, labels: CommentLabels): string[] {
   return lines;
 }
 
-/**
- * The plain-text comment Vedora AI posts: the summary, then the recipe if
- * any, then a disclaimer. Lines that do not fit `maxLength` are dropped from
- * the end of the recipe, so the summary and the disclaimer always show.
- */
 export function formatSummaryComment(
   input: SummaryCommentInput,
   maxLength: number,
@@ -113,7 +108,6 @@ export function formatSummaryComment(
   if (truncated) text = `${text}\n${labels.more}`;
   const full = `${text}${footer}`;
   if (full.length <= maxLength) return full;
-  // Only an overly long summary gets here: cut it, keep the disclaimer.
   const room = maxLength - footer.length - 1;
   return `${head.slice(0, Math.max(room, 0))}…${footer}`;
 }

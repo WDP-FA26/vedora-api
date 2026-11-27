@@ -20,7 +20,6 @@ import type {
   NutritionProfileDto,
 } from '@src/recipes/dto/dietary.dto.js';
 
-// Wednesday 2026-11-18: Monday and Tuesday have passed.
 const emptyPlan = (): MealPlanDto => ({
   weekStart: '2026-11-16',
   currentWeekStart: '2026-11-16',

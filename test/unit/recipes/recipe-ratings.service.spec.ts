@@ -76,7 +76,6 @@ describe('RecipeRatingsService', () => {
     });
 
     await service.set(RECIPE_ID, USER_1, 4);
-    // Updating own rating does not duplicate count
     await service.set(RECIPE_ID, USER_1, 5);
     await service.set(RECIPE_ID, USER_2, 4);
 
@@ -100,7 +99,6 @@ describe('RecipeRatingsService', () => {
         err.code === 'EMAIL_NOT_VERIFIED',
     );
 
-    // Verify, rate, then become unverified: aggregate excludes unverified rating, and user can still remove it
     await service.set(RECIPE_ID, USER_1, 5);
     await users().updateOne(
       { _id: USER_1 },

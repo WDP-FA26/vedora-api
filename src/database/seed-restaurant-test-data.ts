@@ -1,14 +1,3 @@
-/**
- * Local test data for restaurant pages: test accounts and page applications
- * in every state the admin review and the 3-step form need.
- *
- *   npm run seed:restaurants
- *
- * Re-running replaces the previous run's data (accounts on @seed.vedora.test
- * and their applications, pages and proof images). Every account's password
- * is SEED_USER_PASSWORD, like `vedora.admin`. Refuses to run unless
- * DATABASE_URL points at localhost. See docs/test-data-restaurant-pages.md.
- */
 import 'dotenv/config';
 import { randomUUID } from 'node:crypto';
 import {
@@ -53,14 +42,12 @@ type ApplicationSpec = {
   vegetarianLevel: VegetarianLevel;
   phone: string;
   otherPlatformUrls: string[];
-  /** Null for an application made before the 3-step form. */
   legal: WorkspaceLegal | null;
   statement: string | null;
   proofs: ProofSpec[];
   status: VerificationStatus;
   rejectReason?: WorkspaceRejectReason;
   reviewNote?: string;
-  /** How long ago it was sent, and reviewed when it was. */
   daysAgo: number;
 };
 
@@ -88,14 +75,8 @@ const HOUSEHOLD_PROOFS: ProofSpec[] = [
 
 const INDIVIDUAL_PROOFS: ProofSpec[] = HOUSEHOLD_PROOFS.slice(0, 3);
 
-/**
- * Tax codes start with 99 and citizen IDs with 099: neither prefix is a
- * province code, so they cannot belong to a real business or person.
- */
 const APPLICATIONS: ApplicationSpec[] = [
   {
-    // An approved page, for the map, the restaurant profile and as the
-    // look-alike that B's application is warned about.
     owner: 'test.chuquan.anh',
     name: 'Chay Hoa Sen - Cơm chay - Lý Thường Kiệt',
     username: 'test-chay-hoa-sen',
@@ -123,8 +104,6 @@ const APPLICATIONS: ApplicationSpec[] = [
     daysAgo: 20,
   },
   {
-    // Pending; same tax code as A's approved page and pinned 50 m from it,
-    // so the review shows both SAME_TAX_CODE and NEARBY_PAGE.
     owner: 'test.chuquan.binh',
     name: 'Chay Hoa Sen 2 - Lẩu nấm - Lý Thường Kiệt',
     username: 'test-chay-hoa-sen-2',
@@ -152,7 +131,6 @@ const APPLICATIONS: ApplicationSpec[] = [
     daysAgo: 1,
   },
   {
-    // Pending and clean: every document, no warnings. The one to approve.
     owner: 'test.chuquan.cuong',
     name: 'An Nhiên Chay - Bún Huế - Lê Thánh Tôn',
     username: 'test-an-nhien-chay',
@@ -190,7 +168,6 @@ const APPLICATIONS: ApplicationSpec[] = [
     daysAgo: 2,
   },
   {
-    // An individual seller's earlier application, rejected 10 days ago.
     owner: 'test.chuquan.dung',
     name: 'Xe chè chay cô Dung',
     username: 'test-che-co-dung-cu',
@@ -220,7 +197,6 @@ const APPLICATIONS: ApplicationSpec[] = [
     daysAgo: 10,
   },
   {
-    // Her new application: pending, warned with RECENT_REJECTION.
     owner: 'test.chuquan.dung',
     name: 'Xe chè chay cô Dung - Chè đậu - Lê Lợi',
     username: 'test-che-co-dung',
@@ -248,8 +224,6 @@ const APPLICATIONS: ApplicationSpec[] = [
     daysAgo: 0,
   },
   {
-    // Rejected with a note and nothing pending: the owner can test
-    // "Sửa và gửi lại".
     owner: 'test.chuquan.em',
     name: 'Bếp Chay Em - Cơm phần - Hải Châu',
     username: 'test-bep-chay-em',
@@ -279,8 +253,6 @@ const APPLICATIONS: ApplicationSpec[] = [
     daysAgo: 3,
   },
   {
-    // Sent before the 3-step form: no legal details, typed ward, untyped
-    // proofs. The review sheet labels it "Đơn theo mẫu cũ".
     owner: 'test.chuquan.phuong',
     name: 'Quán Chay Phương',
     username: 'test-quan-chay-phuong',
@@ -321,7 +293,6 @@ function required(name: string): string {
   return value;
 }
 
-/** Test data must never reach a shared or production database. */
 function assertLocalDatabase(url: string): void {
   const host = new URL(url).hostname;
   if (host !== 'localhost' && host !== '127.0.0.1')
@@ -337,7 +308,6 @@ function escapeXml(text: string): string {
     .replaceAll('>', '&gt;');
 }
 
-/** A placeholder document image that says what it stands for. */
 function proofImage(proof: ProofSpec, owner: string): Buffer {
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="800" height="520" viewBox="0 0 800 520">
   <rect width="800" height="520" fill="${PROOF_COLORS[proof.kind]}"/>
@@ -361,7 +331,6 @@ function storageClient(): S3Client {
   });
 }
 
-/** Deletes the previous run's accounts, applications, pages and proof images. */
 async function removePreviousRun(
   connection: Connection,
   storage: S3Client,
@@ -540,7 +509,6 @@ async function createApplication(
       workspaceId,
       storageKey: key,
       kind: proof.kind,
-      // Keeps the form's order when the review lists them by upload time.
       createdAt: new Date(sentAt.getTime() + index * 1000),
     });
   }

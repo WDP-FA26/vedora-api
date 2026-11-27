@@ -19,10 +19,6 @@ export class CommentBodyDto {
 }
 
 export class CommentAuthorDto extends PostAuthorDto {
-  /**
-   * True for Vedora AI, the system account behind automatic summaries. It has
-   * no profile page, so clients should not link to one.
-   */
   @ApiProperty()
   isSystem!: boolean;
 }

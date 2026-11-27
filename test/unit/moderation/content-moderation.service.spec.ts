@@ -58,7 +58,6 @@ function serviceAnswering(answer: Answer | Error | (() => Error)) {
   const settings = new FakeSettings();
   const service = new ContentModerationService(
     { id: 'anthropic/claude-haiku-5.5', model },
-    // The service only reads settings.get() and settings.reasonTexts().
     settings as ModerationSettingsService,
   );
   return { service, model };

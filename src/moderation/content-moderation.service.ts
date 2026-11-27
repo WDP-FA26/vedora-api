@@ -28,7 +28,6 @@ import { ModerationSettingsService } from './moderation-settings.service.js';
 
 export const CONTENT_MODERATION_MODEL = Symbol('CONTENT_MODERATION_MODEL');
 
-/** The reviewer model and the id it is billed and stored under. */
 export interface ModerationModel {
   id: string;
   model: Exclude<LanguageModel, string>;
@@ -37,40 +36,25 @@ export interface ModerationModel {
 const TIMEOUT_MS = runtimeConfig.MODERATION_CONTENT_TIMEOUT_MS;
 const MAX_RETRIES = runtimeConfig.AI_DECISION_MAX_RETRIES;
 const MAX_TEXT_CHARS = runtimeConfig.MODERATION_MAX_TEXT_CHARS;
-/** Room for low-effort thinking plus the rating and its evidence. */
 const MAX_OUTPUT_TOKENS = runtimeConfig.MODERATION_CONTENT_MAX_OUTPUT_TOKENS;
 const MAX_RISK = 3;
 const SESSION_ID = 'vedora-content-moderation';
-/** The highest risk level: a clear violation. */
 const HIGH_RISK = 3;
-/** The risk level from which an admin looks before the content is published. */
 const MEDIUM_RISK = 2;
 const PROHIBITED_CONTENT_CODE = 'prohibited_content';
 
 export type ContentDecision = 'publish' | 'review' | 'reject';
 
-/**
- * Verdict of content the model could not rate because it or its provider
- * refused to read it. It is not a policy category, so admins see it as is.
- */
 export const PROVIDER_BLOCKED_KEY = 'provider_blocked';
-/** Verdict of content the model could not rate because the call failed. */
 export const MODERATION_FAILED_KEY = 'moderation_failed';
 
 export interface ContentAssessment {
   decision: ContentDecision;
-  /** The category it breaks worst; null when it breaks none. */
   category: string | null;
-  /** 0 (no risk) to 3 (a clear violation); null when the model gave none. */
   riskLevel: number | null;
-  /** Null only for empty content, which is never sent to the model. */
   evidence: ModerationEvidence | null;
 }
 
-/**
- * Where a risk level sends content. A high-risk rating the model cannot back
- * with checked evidence goes to an admin instead of being rejected.
- */
 export function decisionFor(
   riskLevel: number,
   verifiedEvidence: number,
@@ -100,12 +84,10 @@ function unrated(
   };
 }
 
-/** Content the model refused to read: held for an admin. */
 export function providerBlockedAssessment(model: string): ContentAssessment {
   return unrated(PROVIDER_BLOCKED_KEY, 'REFUSED', model);
 }
 
-/** Content the model could not rate (an error, a timeout): held for an admin. */
 export function failedAssessment(model: string): ContentAssessment {
   return unrated(MODERATION_FAILED_KEY, 'FAILED', model);
 }
@@ -114,7 +96,6 @@ export function isProviderBlocked(assessment: ContentAssessment): boolean {
   return assessment.category === PROVIDER_BLOCKED_KEY;
 }
 
-/** True when the model's provider refused the input itself (HTTP 400 `prohibited_content`). */
 function isProviderRefusal(error: unknown): boolean {
   if (APICallError.isInstance(error)) {
     if (error.statusCode !== 400) return false;
@@ -126,7 +107,6 @@ function isProviderRefusal(error: unknown): boolean {
   return false;
 }
 
-/** The texts, trimmed and cut to the length the model reads; empty ones dropped. */
 function readableSources(sources: EvidenceSources): EvidenceSources {
   const texts: EvidenceText[] = [];
   for (const text of sources.texts) {
@@ -144,11 +124,6 @@ function categoryKeys(policy: ContentPolicySettings): [string, ...string[]] {
   return [first, ...rest];
 }
 
-/**
- * Rates content in one call to the reviewer model (Claude Haiku through
- * OpenRouter): a risk level, the category it breaks and the parts that break
- * it, checked against the content before anyone sees them.
- */
 @Injectable()
 export class ContentModerationService {
   private readonly logger = new Logger(ContentModerationService.name);
@@ -159,15 +134,10 @@ export class ContentModerationService {
     private readonly settings: ModerationSettingsService,
   ) {}
 
-  /** The model id stored with every verdict. */
   get modelId(): string {
     return this.reviewer.id;
   }
 
-  /**
-   * Throws when the model does not answer or answers out of range. Content
-   * the model or its provider refuses to read is held for an admin.
-   */
   async review(
     sources: EvidenceSources,
     draftPolicy?: ContentPolicySettings,
@@ -242,10 +212,6 @@ export class ContentModerationService {
     };
   }
 
-  /**
-   * For content with no review queue (comments, generated summaries): a high
-   * risk or content the model refused to read is turned away.
-   */
   async requireAllowed(text: string): Promise<void> {
     let assessment: ContentAssessment;
     try {

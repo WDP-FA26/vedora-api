@@ -148,12 +148,10 @@ describe('ProfilesService flows', () => {
         expect.anything(),
       );
 
-      // Idempotent repeat follow does not emit a second relationship event
       messagingEvents.record.mockClear();
       await service.follow(bob.id, alice.id);
       expect(messagingEvents.record).not.toHaveBeenCalled();
 
-      // Unfollow records event only when a row was deleted
       await service.unfollow(bob.id, alice.id);
       expect(messagingEvents.record).toHaveBeenCalledExactlyOnceWith(
         [bob.id, alice.id],
@@ -244,8 +242,6 @@ describe('ProfilesService flows', () => {
       ).resolves.toEqual({ items: [], nextCursor: null });
     });
 
-    // BUG-L-A4: following() filters unverified accounts after limit+1 fetch,
-    // causing nextCursor to become null early when an unverified user sits in lookahead.
     it('keeps paging past an unverified account in following list', async () => {
       const alice = await createUser(db);
       const bob = await createUser(db);

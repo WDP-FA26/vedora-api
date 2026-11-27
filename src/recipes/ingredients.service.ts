@@ -126,7 +126,6 @@ export class IngredientsService {
 
   async remove(id: string): Promise<void> {
     await this.mongo.withTransaction(async (session) => {
-      // Saving a recipe locks its ingredients too (assertReferences).
       await lockDocument(this.mongo, session, 'ingredient', id);
       const inUse = await this.recipes
         .countDocuments({ 'ingredients.ingredientId': id })

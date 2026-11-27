@@ -31,7 +31,6 @@ export const AI_COST_FEATURES = [
 
 type AiCostFeature = (typeof AI_COST_FEATURES)[number];
 
-/** The first route a request path matches names its feature; none is SYSTEM. */
 const FEATURE_ROUTES: readonly [RegExp, AiCostFeature][] = [
   [/\/meal-plan\/chat\/?$/, 'MEAL_PLAN_CHAT'],
   [/\/blogs\/ai\/chat\/?$/, 'BLOG_CHAT'],
@@ -52,7 +51,6 @@ function featureOf(path: string): AiCostFeature {
   return 'SYSTEM';
 }
 
-/** The client's id for this turn, which a retry of the same turn repeats. */
 function clientTurnId(
   feature: AiCostFeature,
   body: Record<string, unknown>,

@@ -32,7 +32,6 @@ export class GuestChatGuard implements CanActivate {
         'Guest session required',
       );
 
-    // Let ValidationPipe reject malformed bodies with 400 before spending quota.
     if (request.body !== undefined) {
       if (
         typeof request.body !== 'object' ||

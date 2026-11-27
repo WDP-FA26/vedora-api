@@ -13,7 +13,6 @@ import type {
 import { createE2eApp, type E2eApp } from '@test/support/e2e-app.js';
 import { createRecipe, createUser } from '@test/support/fixtures.js';
 
-// 00:30 on Wednesday 2026-11-18 in the app time zone.
 const WEEK = '2026-11-16';
 const MONDAY = '2026-11-16';
 const TODAY = '2026-11-18';

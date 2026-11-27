@@ -174,7 +174,6 @@ describe('IncompatibilityRulesService', () => {
     expect(page.items.map((r) => r.id)).toEqual([second.id, first.id]);
     expect(page.items[1].source).toBe('Sách dinh dưỡng');
 
-    // Updating a rule keeping the same pair is allowed and clears optional source
     const updated = await service.update(first.id, {
       a: { kind: 'INGREDIENT', id: spinach },
       b: { kind: 'INGREDIENT', id: tofu },
@@ -183,7 +182,6 @@ describe('IncompatibilityRulesService', () => {
     expect(updated.reason).toBe('Lý do mới');
     expect(updated.source).toBeNull();
 
-    // Updating a rule to collide with another existing rule fails
     await expect(
       service.update(first.id, {
         a: { kind: 'GROUP', id: greens },
@@ -192,7 +190,6 @@ describe('IncompatibilityRulesService', () => {
       }),
     ).rejects.toBeInstanceOf(StateConflictException);
 
-    // Updating missing rule throws 404
     const missingRuleId = 'c1a2d3e4-0000-4000-8000-000000000099';
     await expect(
       service.update(missingRuleId, {

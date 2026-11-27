@@ -98,10 +98,6 @@ export class ModerationSettingsService {
     return new Map(choices.map((choice) => [choice.key, choice.reasonText]));
   }
 
-  /**
-   * A save made from the defaults (version 0): the very first one creates
-   * the row; after a reset it reuses the row and continues its version.
-   */
   private async saveOverDefaults(
     fields: Omit<ContentSettings, 'version' | 'updatedAt'>,
   ): Promise<ModerationSettings | null> {

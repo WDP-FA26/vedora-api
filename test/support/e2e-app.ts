@@ -28,31 +28,22 @@ export interface E2eApp {
   mongo: MongoService;
   connection: Connection;
   sign(user: { id: string; username: string }): Promise<string>;
-  /** Waits for the moderation a request started in the background. */
   settled(): Promise<void>;
   close(): Promise<void>;
 }
 
 export const VIOLATION_MARKER = 'VIOLATION';
 export const BORDERLINE_MARKER = 'BORDERLINE';
-/** The provider refuses to read the content (HTTP 400 `prohibited_content`). */
 export const PROVIDER_BLOCKED_MARKER = 'PROVIDERBLOCKED';
 
 const CHOICE_MARKER = /CHOICE:([a-z_0-9]+)/;
 
-/** The member content of a review call: the user message, as the model reads it. */
 function reviewedContent(call: FakeModelCall): string {
   return JSON.stringify(
     call.options.prompt.filter(({ role }) => role === 'user'),
   );
 }
 
-/**
- * The reviewer model for e2e tests, steered by markers in the content:
- * VIOLATION is a high risk quoted as evidence (rejected), BORDERLINE a medium
- * risk (held for an admin), CHOICE:<key> a high risk for that category,
- * PROVIDERBLOCKED a provider refusal; anything else is no risk.
- */
 function answerReview(call: FakeModelCall) {
   const content = reviewedContent(call);
   if (content.includes(PROVIDER_BLOCKED_MARKER)) {
@@ -99,7 +90,6 @@ function highRisk(category: string, quote: string) {
 
 const fakeReviewer: ModerationModel = {
   id: 'fake/haiku',
-  // A function (not a list) answers every call.
   model: new FakeModel(answerReview),
 };
 

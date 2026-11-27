@@ -18,12 +18,6 @@ import type { ShoppingListService } from '../shopping-list.service.js';
 import { BMI_LABELS, DAY_NAMES } from '../meal-planner.prompt.js';
 import { plannableWeekStarts, weekStartInput } from './planner-weeks.js';
 
-/**
- * Voice-mode screen control. The API validates what to show and streams a
- * transient `data-screen` event so the browser reconciles the page while the
- * voice agent talks.
- */
-
 export interface BodyMetricsSummary {
   heightCm: number | null;
   weightKg: number | null;
@@ -52,7 +46,6 @@ export function bodyMetricsText(metrics: BodyMetricsSummary): string {
   return `Hiện tại: ${parts.join(', ')}.`;
 }
 
-/** The views `setScreen` can put on screen; `calendar` is the calendar with no panel open. */
 const SCREEN_VIEWS = [
   'calendar',
   'recipe',
@@ -80,9 +73,7 @@ export interface SetScreenOutput {
   tab: BodyMetricsTab | null;
   date: string | null;
   metrics: BodyMetricsSummary | null;
-  /** Concise ingredient lines when view is `shoppingList`, so voice can read them aloud. */
   shoppingItems: string[] | null;
-  /** Why nothing changed, worded so the agent can fix the call. */
   problem: string | null;
   done?: boolean;
 }
@@ -198,12 +189,6 @@ function setScreenText(output: SetScreenOutput): string {
   return `Đã đóng các bảng; màn hình đang hiện lịch${day}${scrollNote}.`;
 }
 
-/**
- * The voice agent's one screen tool: it names the view the user should see, and
- * the browser reconciles the page to it (opening a view closes the panel before).
- * Inputs that only make sense for one view are checked here, and a call that
- * cannot be shown comes back with a problem the agent can act on.
- */
 export function setScreenTool(
   mealPlan: MealPlanService,
   dietary: DietaryService,

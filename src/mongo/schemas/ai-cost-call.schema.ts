@@ -16,7 +16,6 @@ export class AiCostCall extends Identified {
   @Prop({ type: String, default: null }) resolvedModel!: string | null;
   @Prop({ type: String, default: null }) provider!: string | null;
   @Prop({ type: String, default: null }) generationId!: string | null;
-  /** Who billed the call, and so where its generation id can be looked up. */
   @Prop({
     type: String,
     enum: ['openrouter', 'gateway'],

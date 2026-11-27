@@ -1,4 +1,3 @@
-/** Convert a calendar midnight to UTC using the selected IANA timezone. */
 export function zonedMidnight(day: string, timeZone: string): Date {
   const target = Date.parse(`${day}T00:00:00Z`);
   const formatter = new Intl.DateTimeFormat('en-CA', {
@@ -34,7 +33,6 @@ export function nextCalendarDay(day: string): string {
     .slice(0, 10);
 }
 
-/** The `YYYY-MM-DD` calendar day of an instant in the given IANA timezone. */
 export function calendarDay(instant: Date, timeZone: string): string {
   return new Intl.DateTimeFormat('en-CA', {
     timeZone,

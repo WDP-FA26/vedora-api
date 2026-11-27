@@ -4,13 +4,6 @@ import { QdrantService } from '@src/qdrant/qdrant.service.js';
 import { KnowledgeIndexService } from '@src/knowledge/retrieval/knowledge-index.service.js';
 import { KnowledgeModelsService } from '@src/knowledge/retrieval/knowledge-models.service.js';
 
-/**
- * Chunking rules, black-box through what gets embedded and upserted:
- * every chunk carries the nearest heading above it exactly once (from its own
- * page, or carried over from earlier pages), blank pages add nothing, and
- * no text from a page is lost.
- */
-
 const document = { id: 'doc-1', title: 'dinh-duong.pdf', runId: 'run-1' };
 const PREFIX = 'title: dinh-duong.pdf | text: ';
 
@@ -30,7 +23,6 @@ describe('KnowledgeIndexService chunking flows', () => {
   const pagesOf = (texts: string[]) =>
     texts.map((text) => ({ text, images: [] }));
 
-  /** The chunk texts sent for embedding, without the title prefix. */
   const embeddedChunks = async (texts: string[]): Promise<string[]> => {
     await service.index(document, pagesOf(texts));
     const textCall = models.embed.mock.calls.find(([inputs]) =>
@@ -86,8 +78,6 @@ describe('KnowledgeIndexService chunking flows', () => {
       expect(upsertedPayloads()).toEqual([]);
     });
 
-    // Points of other runs are cleared by KnowledgeService once this run
-    // finishes as the document's current one (removeOtherRuns).
     it("still clears this run's earlier points when a re-index has no chunks", async () => {
       await service.index(document, pagesOf(['']));
 
@@ -190,7 +180,6 @@ describe('KnowledgeIndexService chunking flows', () => {
       expect(opening).toMatch(/^Sắt\n/);
     });
 
-    // BUG-6: the carried-over heading uses a regex that disagrees with Markdown (code fences)
     it('does not treat a commented line inside a code block as a heading', async () => {
       const chunks = await embeddedChunks([
         '# Sắt\n\nĐậu lăng giàu sắt.',
@@ -201,7 +190,6 @@ describe('KnowledgeIndexService chunking flows', () => {
       expect(chunks.at(-1)).toBe('Sắt\nRau bina cũng giàu sắt.');
     });
 
-    // BUG-6: the carried-over heading uses a regex that disagrees with Markdown (closing #)
     it('drops only the closing hashes of a heading, not a trailing # in its text', async () => {
       const chunks = await embeddedChunks([
         '# Ngôn ngữ C#\n\nĐoạn mở đầu.',
@@ -211,7 +199,6 @@ describe('KnowledgeIndexService chunking flows', () => {
       expect(chunks.at(-1)).toBe('Ngôn ngữ C#\nTrang sau.');
     });
 
-    // BUG-6: the carried-over heading uses a regex that disagrees with Markdown (setext)
     it('carries a setext heading to the next page', async () => {
       const chunks = await embeddedChunks([
         'Canxi\n=====\n\nĐậu phụ giàu canxi.',

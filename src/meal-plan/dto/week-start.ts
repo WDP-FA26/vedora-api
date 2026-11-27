@@ -21,7 +21,6 @@ class IsWeekStartConstraint implements ValidatorConstraintInterface {
 const WEEK_START_DESCRIPTION =
   'Monday of the week, `YYYY-MM-DD` in the app time zone (see `GET /config/public`). Not a Sunday or any other day.';
 
-/** A required `weekStart`: the Monday of a week as `YYYY-MM-DD`. */
 export const WeekStart = () =>
   applyDecorators(
     ApiProperty({
@@ -34,7 +33,6 @@ export const WeekStart = () =>
     Validate(IsWeekStartConstraint),
   );
 
-/** An optional `weekStart`; the current week when left out. */
 export const OptionalWeekStart = () =>
   applyDecorators(
     ApiPropertyOptional({

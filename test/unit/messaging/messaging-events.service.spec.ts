@@ -133,7 +133,6 @@ describe('MessagingEventsService', () => {
       'evt-2',
     ]);
 
-    // A later subscriber sees ready immediately while connected.
     const seenLate: MessagingSignal[] = [];
     const subLate = service.stream(userA).subscribe((s) => seenLate.push(s));
     expect(seenLate[0]).toEqual({ type: 'ready' });

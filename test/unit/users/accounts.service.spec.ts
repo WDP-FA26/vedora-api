@@ -258,7 +258,6 @@ describe('AccountsService', () => {
         { email: 'target@vedora.vn', username: 'target.user' },
         cutoff,
       );
-      // freshPending doesn't match email/username above; let's also verify a fresh match is preserved
       const freshMatch = await createUser(db, {
         username: 'fresh.match',
         email: 'freshmatch@vedora.vn',

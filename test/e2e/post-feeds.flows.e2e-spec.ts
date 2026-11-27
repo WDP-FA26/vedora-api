@@ -17,11 +17,6 @@ interface Page {
   nextCursor: string | null;
 }
 
-/**
- * Timeline, following feed and "for you" feed: ordering, tiebreakers,
- * cursor correctness and visibility (docs/docs-for-FE/pagination.md,
- * blogs.md, Swagger descriptions of /posts/feed and /posts/following).
- */
 describe('Post feed flows (e2e)', () => {
   let e2e: E2eApp;
   let viewer: User;
@@ -120,7 +115,6 @@ describe('Post feed flows (e2e)', () => {
           authorId: author.id,
           status,
           body: status,
-          // A post taken back for review keeps its first publish date.
           publishedAt: new Date(),
         });
       }
@@ -177,7 +171,6 @@ describe('Post feed flows (e2e)', () => {
     });
 
     it('orders a post approved after review by when it went public, like the timeline', async () => {
-      // BUG-2: Following feed sorts by createdAt while every other timeline sorts by publishedAt
       const reader = await createUser(e2e.mongo);
       const readerToken = await e2e.sign(reader);
       const followed = await createUser(e2e.mongo);

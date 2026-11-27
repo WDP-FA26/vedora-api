@@ -48,7 +48,6 @@ const TOGGLED_TYPES: readonly NotificationType[] = [
   NotificationType.FOLLOW,
 ];
 
-/** The once-per-recipient key of a toggled notification, or null for other types. */
 function toggleKeyOf(input: NotifyInput): string | null {
   if (!TOGGLED_TYPES.includes(input.type)) return null;
   return `${input.type}:${input.actorId ?? ''}:${input.postId ?? ''}`;
@@ -109,8 +108,6 @@ export class NotificationsService {
   async notify(input: NotifyInput): Promise<void> {
     if (input.recipientId === input.actorId) return;
     try {
-      // A notification whose actor is gone would count as unread but never
-      // show in the list, so it is not created at all.
       const actor = input.actorId
         ? await this.users.findById(input.actorId).exec()
         : null;
@@ -138,7 +135,6 @@ export class NotificationsService {
     }
   }
 
-  /** Persist system notices atomically with the caller's write; never emit before commit. */
   async storeSystemNotifications(
     inputs: SystemNotifyInput[],
     session: ClientSession,
@@ -159,7 +155,6 @@ export class NotificationsService {
     return this.notifications.create(fields, { session, ordered: true });
   }
 
-  /** Realtime is best effort; the committed rows remain readable if a stream is unavailable. */
   async publishStored(notifications: Notification[]): Promise<void> {
     if (!notifications.length) return;
     try {
@@ -186,7 +181,6 @@ export class NotificationsService {
     }
   }
 
-  /** A like/repost/follow notification that already exists, including rows from before toggleKey. */
   private async alreadyNotified(input: NotifyInput): Promise<boolean> {
     const existing = await this.notifications
       .findOne({
@@ -200,7 +194,6 @@ export class NotificationsService {
     return existing !== null;
   }
 
-  /** Creates the notification, or returns null when a concurrent toggle already did. */
   private async insertOnce(
     fields: Partial<Notification>,
   ): Promise<Notification | null> {

@@ -14,10 +14,6 @@ import { asRecord } from '../provider-shared.js';
 const PARALLEL_SEARCH_TOOL_ID = 'gateway.parallel_search';
 const EMBEDDING_BATCH_SIZE = runtimeConfig.AI_EMBEDDING_BATCH_SIZE;
 
-/**
- * The URLs a Parallel search returned, as `url` sources: OpenRouter reports
- * its search results as sources, and callers read citations from there.
- */
 function searchSources(
   part: LanguageModelV4ToolResult,
   searchToolNames: ReadonlySet<string>,
@@ -62,7 +58,6 @@ function withSearchSources(
   return result;
 }
 
-/** Adds a `url` source after each Parallel search result, in results and streams. */
 export const searchSourcesMiddleware: LanguageModelV4Middleware = {
   specificationVersion: 'v4',
   wrapGenerate: async ({ doGenerate, params }) => {
@@ -91,10 +86,6 @@ export const searchSourcesMiddleware: LanguageModelV4Middleware = {
   },
 };
 
-/**
- * The model's effort for calls that set none. `defaultSettingsMiddleware`
- * has no `reasoning` setting, so this one fills it in.
- */
 export function defaultReasoningMiddleware(
   effort: ReasoningEffort,
 ): LanguageModelV4Middleware {
@@ -108,7 +99,6 @@ export function defaultReasoningMiddleware(
   };
 }
 
-/** Embedding size as the AI SDK's `dimensions` option, which the Gateway maps per provider. */
 export function gatewayEmbeddingMiddleware(
   dimensions: number,
 ): EmbeddingModelV4Middleware {

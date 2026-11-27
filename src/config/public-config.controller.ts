@@ -4,7 +4,6 @@ import { createHash } from 'node:crypto';
 import { DisabledEndpointGuard } from '../common/guards/disabled-endpoint.guard.js';
 import { runtimeConfig } from './runtime-config.js';
 
-/** Deliberate allowlist. Never serialize ConfigService or process.env. */
 export function publicRuntimeConfig() {
   const config = {
     timeZone: runtimeConfig.APP_TIMEZONE,

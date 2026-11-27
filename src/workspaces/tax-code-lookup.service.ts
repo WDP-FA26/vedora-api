@@ -37,12 +37,6 @@ function emptyResult(
   };
 }
 
-/**
- * Looks up a page application's company tax code in the tax department's
- * public data, so the reviewing admin sees the registered name and status
- * beside what the applicant typed. The source allows only a few requests a
- * minute, so answers are kept for a day.
- */
 @Injectable()
 export class TaxCodeLookupService {
   private readonly logger = new Logger(TaxCodeLookupService.name);
@@ -90,13 +84,11 @@ export class TaxCodeLookupService {
     return { ...registration, nameMatches };
   }
 
-  /** The registration for a company tax code, from the cache when it is fresh. */
   async lookUp(taxCode: string, now = Date.now()): Promise<Registration> {
     const cached = this.cache.get(taxCode);
     if (cached && cached.expiresAt > now) return cached.result;
 
     const result = await this.fetchRegistration(taxCode);
-    // A failed request is not an answer; ask again next time.
     if (result.status !== TaxCodeLookupStatus.UNAVAILABLE) {
       this.cache.set(taxCode, { expiresAt: now + CACHE_MS, result });
     }

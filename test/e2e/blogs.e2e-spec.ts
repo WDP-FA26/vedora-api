@@ -31,7 +31,6 @@ describe('Blogs (HTTP)', () => {
   const server = () => e2e.app.getHttpServer();
   const asAuthor = (req: request.Test) => req.auth(token, { type: 'bearer' });
 
-  /** The blog as its author reads it once the background moderation ended. */
   const settledBlog = async (id: string): Promise<BlogDetailDto> => {
     await e2e.settled();
     const response = await asAuthor(
@@ -39,7 +38,6 @@ describe('Blogs (HTTP)', () => {
     ).expect(200);
     return response.body as BlogDetailDto;
   };
-  /** Creates a blog; a published one is returned once it has been checked. */
   const createBlog = async (fields: object = {}): Promise<BlogDetailDto> => {
     const response = await asAuthor(request(server()).post('/api/v1/blogs'))
       .send({

@@ -24,10 +24,6 @@ function passedNote(output: AutoBalanceOutput): string {
   return `\nDAY_PASSED: ${days} came before today, so they were skipped and cannot change. Tell the user plainly.`;
 }
 
-/**
- * Balances the saved week toward the daily kcal target by filling missing
- * slots and stacking complementary 2nd/3rd dishes + snacks where needed.
- */
 export function autoBalancePlanTool(
   mealPlan: MealPlanService,
   userId: string,

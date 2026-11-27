@@ -24,7 +24,6 @@ export class NutritionAgent extends ToolLoopAgent<never, NutritionTools> {
       ...PromptCache.agent({
         session: 'vedora-nutrition-chat',
         instructions: INSTRUCTIONS,
-        // Session-scoped chat: 5m, like the meal planner.
         systemTtl: '5m',
       }),
       maxOutputTokens: MAX_OUTPUT_TOKENS,

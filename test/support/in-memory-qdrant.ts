@@ -281,11 +281,6 @@ function evaluateFormula(
   return baseScore;
 }
 
-/**
- * Zero-container, in-memory drop-in for `QdrantService` in e2e tests.
- * Supports dense cosine similarity, BM25 text scoring, RRF fusion, recommend,
- * formula rescoring, and payload filters without requiring a Qdrant container.
- */
 export class InMemoryQdrantService {
   private readonly collections = new Map<string, StoredCollection>();
 

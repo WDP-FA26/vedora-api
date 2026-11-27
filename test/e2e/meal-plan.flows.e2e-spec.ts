@@ -36,7 +36,6 @@ type Sections = {
   others?: string[];
 };
 
-// 00:30 on Monday 2026-11-16 in the app time zone, so every day is still ahead.
 const WEEK = '2026-11-16';
 const MONDAY_MORNING = new Date('2026-11-15T17:30:00Z');
 
@@ -506,7 +505,6 @@ describe('Meal plan and shopping list flows (e2e)', () => {
   });
   describe('weeks', () => {
     const NEXT_WEEK = '2026-11-23';
-    // 12:00 on Wednesday 2026-11-18 in the app time zone.
     const WEDNESDAY = new Date('2026-11-18T05:00:00Z');
 
     afterEach(() => {
@@ -949,7 +947,6 @@ describe('Meal plan and shopping list flows (e2e)', () => {
   describe('rewinding the assistant chat', () => {
     const SECTIONS = ['BREAKFAST', 'LUNCH', 'DINNER', 'OTHER'] as const;
 
-    /** A saved editPlan output that changed lunch of one day. */
     const lunchChange = (
       day: `${Weekday}`,
       previous: Recipe[],

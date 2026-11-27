@@ -217,10 +217,8 @@ describe('DietaryService', () => {
       '2026-11-10',
       saved.history[0].date,
     ]);
-    // Older date check-in keeps current user weightKg from the newest entry.
     expect(pastCheckIn.weightKg).toBe(64);
 
-    // Same-day check-in updates in place instead of duplicating.
     const sameDayUpdate = await service.checkInWeight(USER_ID, {
       weightKg: 63.4,
       feeling: BodyFeeling.NORMAL,

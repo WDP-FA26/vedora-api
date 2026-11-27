@@ -10,7 +10,6 @@ import {
 
 const MAX_INPUT_CHARS = runtimeConfig.POST_SUMMARY_MAX_INPUT_CHARS;
 
-/** A labelled piece of a post, e.g. its body or one video's transcript. */
 export interface PostSourcePart {
   label: string;
   text: string;
@@ -18,17 +17,10 @@ export interface PostSourcePart {
 
 export interface PostSource {
   parts: PostSourcePart[];
-  /** One line for the log. */
   description: string;
-  /** Ready videos whose transcript is not written yet. */
   untranscribedVideos: number;
 }
 
-/**
- * What a post says, for the AI to read: a blog's title and content, or a
- * post's text plus the transcript of each ready video (only `onlyMediaId`'s
- * when given), within MAX_INPUT_CHARS.
- */
 export async function readPostSource(
   post: Post,
   mediaAssets: Model<MediaAsset>,
@@ -87,7 +79,6 @@ export async function readPostSource(
   };
 }
 
-/** Keeps the whole source within MAX_INPUT_CHARS, cutting the last parts first. */
 export function clipParts(parts: PostSourcePart[]): PostSourcePart[] {
   const clipped: PostSourcePart[] = [];
   let room = MAX_INPUT_CHARS;

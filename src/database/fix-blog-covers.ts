@@ -1,14 +1,3 @@
-/**
- * One-off repair: set every blog's cover to the first image in its content,
- * the rule BlogsService now applies on each save. Older blogs can carry a
- * cover the author has since removed from the article.
- *
- *   npm run fix:blog-covers            # dry run: lists what would change
- *   npm run fix:blog-covers -- --apply # writes the changes
- *
- * Only `blog.coverImageUrl` is written; status, moderation and `updatedAt`
- * are left alone, so no blog goes back to review.
- */
 import 'dotenv/config';
 import { isURL } from 'class-validator';
 import mongoose from 'mongoose';
@@ -27,7 +16,6 @@ function required(name: string): string {
 
 async function main(): Promise<void> {
   const apply = process.argv.includes('--apply');
-  // Same default as src/config/environment.ts.
   const bucket = process.env.STORAGE_BLOGS_BUCKET || 'vedora-blogs';
   const storagePrefix = `${required('STORAGE_PUBLIC_URL').replace(/\/+$/, '')}/${bucket}/`;
   const isAllowed = (url: string) =>

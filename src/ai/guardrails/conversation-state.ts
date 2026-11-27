@@ -10,10 +10,6 @@ export interface ModerationTurn {
 const DEFAULT_MAX_MODERATION_CHARS =
   runtimeConfig.AI_MODERATION_CONTEXT_MAX_CHARS;
 
-/**
- * Formats chat turns into a single evaluation state so the guardrail inspects
- * multi-turn history alongside the latest user turn in one model call.
- */
 export function conversationModerationState(
   turns: readonly ModerationTurn[],
   maxChars: number = DEFAULT_MAX_MODERATION_CHARS,
@@ -48,7 +44,6 @@ function endsWithUserRole(value: unknown): boolean {
   );
 }
 
-/** Rejects chat payloads whose final turn is not authored by the user. */
 export function LastMessageFromUser(options?: ValidationOptions) {
   return (object: object, propertyName: string): void => {
     registerDecorator({
@@ -66,7 +61,6 @@ export function LastMessageFromUser(options?: ValidationOptions) {
   };
 }
 
-/** Defensive service-layer check matching `@LastMessageFromUser()`. */
 export function assertLastMessageFromUser(
   messages: readonly { role: string }[],
 ): void {

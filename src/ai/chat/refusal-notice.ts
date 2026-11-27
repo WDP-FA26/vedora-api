@@ -1,12 +1,5 @@
 import type { StreamTextTransform, TextStreamPart, ToolSet } from 'ai';
 
-/**
- * Claude Haiku 5.5's safety classifiers can decline a step (`finishReason:
- * 'content-filter'`), with no server-side fallback. The step then ends with no
- * reply or a partial one, so this adds `notice` as the step's closing text:
- * the user (or the voice model speaking the reply) always hears why it stopped.
- * `onRefusal` runs once per declined step, so callers can count refusals.
- */
 export function refusalNotice<TOOLS extends ToolSet>(
   notice: string,
   onRefusal?: () => void,

@@ -72,7 +72,6 @@ export class AdminRecipeCategoriesController {
     return this.categories.create(dto);
   }
 
-  // Declared before `:id` so `order` is not read as an id.
   @Put('order')
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({

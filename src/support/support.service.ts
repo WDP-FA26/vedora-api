@@ -151,7 +151,6 @@ export function toSupportMessageDto(
   };
 }
 
-/** The reopen deadline, or null once it has passed (or never applied). */
 function openReopenDeadline(ticket: SupportTicket): Date | null {
   const deadline = reopenDeadlineOf(ticket);
   if (!deadline || deadline.getTime() <= Date.now()) return null;
@@ -429,7 +428,6 @@ export class SupportService {
         ? await this.users.find({ _id: { $in: senderIds } }).exec()
         : [];
     const usersById = new Map(senders.map((user) => [user.id, user]));
-    // Only public messages were loaded, so internal-note images never get a URL.
     const attachmentsByMessage = await this.attachments.forMessages(
       messages.map((msg) => msg.id),
     );
@@ -469,7 +467,6 @@ export class SupportService {
     await this.attachments.assertReady(authorId, attachmentIds);
 
     await this.mongo.withTransaction(async (session) => {
-      // The user lock guards the active-ticket limit a reopen has to respect.
       await lockDocument(this.mongo, session, 'user', authorId);
       await lockDocument(this.mongo, session, 'ticket', id);
       const ticket = await this.tickets
@@ -545,7 +542,6 @@ export class SupportService {
         messageId,
       });
 
-      // A reopened ticket keeps its assignee but loses the old resolution.
       const reopenFields = reopening
         ? { resolvedById: null, resolvedAt: null, resolutionNote: null }
         : {};
@@ -587,7 +583,6 @@ export class SupportService {
     );
   }
 
-  /** The author may send a few messages in a row, then waits for an admin. */
   private async assertNotWaitingForAdmin(
     ticketId: string,
     session: ClientSession,

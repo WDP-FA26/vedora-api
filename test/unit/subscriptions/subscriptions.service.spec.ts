@@ -182,7 +182,6 @@ describe('SubscriptionsService', () => {
     expect(period.planCode).toBe(BillingPlan.PRO);
     expect(period.key).toBe(`payment:${winner.id}`);
 
-    // Also verifies default `now` argument works without throwing
     expect((await service.period(USER_ID)).planCode).toBe(BillingPlan.PRO);
     await intents().deleteMany({});
     expect((await service.period(USER_ID)).planCode).toBe('FREE');

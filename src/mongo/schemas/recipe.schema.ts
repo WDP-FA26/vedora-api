@@ -10,10 +10,6 @@ import {
 import { cascadeOnDelete, collectionSchema } from './common.js';
 import { Identified } from './identified.js';
 
-/**
- * An admin-managed dish category. `baseTag` is the fixed kind the meal planner
- * understands, so a new category still lands in the right meals.
- */
 @Schema(collectionSchema('recipe_categories'))
 export class RecipeCategory extends Identified {
   @Prop({ type: String, default: () => randomUUID() })
@@ -53,7 +49,6 @@ export const RecipeCategorySchema =
   SchemaFactory.createForClass(RecipeCategory);
 RecipeCategorySchema.index({ name: 1 }, { unique: true });
 RecipeCategorySchema.index({ sortOrder: 1, _id: 1 });
-// The public list skips hidden categories.
 RecipeCategorySchema.index({ hidden: 1, sortOrder: 1, _id: 1 });
 
 @Schema(collectionSchema('ingredients'))
@@ -234,7 +229,6 @@ export class Recipe extends Identified {
 
 export const RecipeSchema = SchemaFactory.createForClass(Recipe);
 RecipeSchema.index({ postId: 1 });
-// The catalog's `?tag=` filter, newest first like the unfiltered list.
 RecipeSchema.index({ tag: 1, updatedAt: -1, _id: -1 });
 RecipeSchema.index({ 'ingredients.ingredientId': 1 });
 
@@ -243,7 +237,6 @@ cascadeOnDelete(RecipeSchema, [
   { model: 'RecipeFavorite', field: 'recipeId', action: 'delete' },
   { model: 'RecipeRating', field: 'recipeId', action: 'delete' },
   { model: 'MealPlanEntry', field: 'recipeId', action: 'delete' },
-  // The log keeps its copied name and calories; only the link goes.
   { model: 'MealLogEntry', field: 'recipeId', action: 'unset' },
 ]);
 
@@ -292,12 +285,6 @@ export const RecipeRatingSchema = SchemaFactory.createForClass(RecipeRating);
 RecipeRatingSchema.index({ recipeId: 1, userId: 1 }, { unique: true });
 RecipeRatingSchema.index({ userId: 1 });
 
-/**
- * One dish in one slot of one week of a user's plan. `weekStart` is the Monday
- * of the week as `YYYY-MM-DD` in the app time zone. The collection is new:
- * the earlier `meal_plan_entries` held one recurring week without dates and
- * has a unique index that would reject the same dish in two weeks.
- */
 @Schema(collectionSchema('meal_plan_week_entries', 'none'))
 export class MealPlanEntry extends Identified {
   @Prop({ type: String, default: () => randomUUID() })

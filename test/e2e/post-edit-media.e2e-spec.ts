@@ -77,8 +77,6 @@ describe('Editing the videos of a post (e2e)', () => {
 
   const expectDiscarded = async (mediaId: string) => {
     const row = await media().findById(mediaId).exec();
-    // The Cloudinary copy is purged by the maintenance job, so the row may
-    // still exist, but it no longer belongs to any post.
     expect(
       row === null || (row.postId === null && row.discardedAt !== null),
     ).toBe(true);

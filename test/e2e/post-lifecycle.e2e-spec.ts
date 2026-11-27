@@ -99,7 +99,6 @@ describe('Post lifecycle: create, edit, delete and what hangs off a post (e2e)',
       .expect(200);
     return (response.body as PostPage).items.map(({ id }) => id);
   };
-  /** The post as its author reads it once the background moderation ended. */
   const settled = async (id: string): Promise<PostBody> => {
     await e2e.settled();
     const response = await as(
@@ -108,7 +107,6 @@ describe('Post lifecycle: create, edit, delete and what hangs off a post (e2e)',
     ).expect(200);
     return response.body as PostBody;
   };
-  /** Creates a text post, which answers PROCESSING, and returns its verdict. */
   const publish = async (body = 'Đậu hũ sốt cà'): Promise<PostBody> => {
     const response = await create({ type: 'POST', body }).expect(201);
     const created = response.body as PostBody;
@@ -426,7 +424,6 @@ describe('Post lifecycle: create, edit, delete and what hangs off a post (e2e)',
 
       const saved = await posts().findById(created.id).exec();
       expect(saved?.status).toBe(PostStatus.REMOVED);
-      // Related rows stay attached so an admin can restore the post if needed.
       expect(
         await model(PostComment.name).countDocuments({ postId: created.id }),
       ).toBe(1);

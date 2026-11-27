@@ -207,7 +207,6 @@ export class AdminSupportService {
       }
 
       const messageId = randomUUID();
-      // Any admin may leave an internal note, on any ticket, open or closed.
       if (isInternal) {
         await this.messages.create(
           [
@@ -264,7 +263,6 @@ export class AdminSupportService {
         messageId,
       });
 
-      // Replying to an unclaimed ticket claims it for the replying admin.
       await this.tickets
         .updateOne(
           { _id: ticket.id },
@@ -306,10 +304,6 @@ export class AdminSupportService {
     return this.getOne(id);
   }
 
-  /**
-   * Claims an active ticket for the caller. `force` takes it over from
-   * another admin; without it, a ticket someone else holds answers 409.
-   */
   async claim(
     id: string,
     adminId: string,
@@ -345,7 +339,6 @@ export class AdminSupportService {
     return this.getOne(id);
   }
 
-  /** Hands a ticket the caller holds back to the shared queue. */
   async release(
     id: string,
     adminId: string,
@@ -566,8 +559,6 @@ export class AdminSupportService {
         return;
       }
 
-      // REJECT: intentionally keep post.moderation.reviewedAt unchanged so the
-      // incidentKey and 14-day appeal window remain deterministic.
       await this.tickets
         .updateOne(
           { _id: ticket.id },

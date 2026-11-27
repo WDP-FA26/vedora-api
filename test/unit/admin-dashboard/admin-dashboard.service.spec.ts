@@ -33,7 +33,6 @@ describe('AdminDashboardService', () => {
   let memberId: string;
   let adminId: string;
 
-  // Bangkok 2026-10-01 is 2026-09-30T17:00:00Z .. 2026-10-01T16:59:59.999Z
   const before = new Date('2026-09-30T16:59:59.999Z');
   const day1Start = new Date('2026-09-30T17:00:00.000Z');
   const day2Start = new Date('2026-10-01T17:00:00.000Z');

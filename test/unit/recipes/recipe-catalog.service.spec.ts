@@ -212,7 +212,6 @@ describe('RecipeCatalogService', () => {
       [MUSHROOM_ID],
     );
 
-    // Regex metacharacters in alias match safely
     const byAlias = await service.list({
       page: 1,
       limit: 20,
@@ -224,7 +223,6 @@ describe('RecipeCatalogService', () => {
     );
     expect(byAlias.items.map((i) => i.id)).not.toContain(noTime.id);
 
-    // maxMinutes excludes recipes where both times are null
     const quick = await service.list({
       page: 1,
       limit: 20,
@@ -234,7 +232,6 @@ describe('RecipeCatalogService', () => {
     expect(quick.items.map((i) => i.id)).not.toContain(noTime.id);
     expect(quick.items.map((i) => i.id)).toContain(safe.id);
 
-    // suitableForMe excludes direct avoided, group avoided, and internal conflicts; keeps safe ones
     const suitable = await service.list(
       { page: 1, limit: 1, suitableForMe: true },
       USER_ID,
@@ -251,7 +248,6 @@ describe('RecipeCatalogService', () => {
     expect(suitableIds).not.toContain(avoidedGroup.id);
     expect(suitableIds).not.toContain(internalConflict.id);
 
-    // Out-of-range page returns empty items with accurate totalItems
     const emptyPage = await service.list({
       page: 99,
       limit: 20,

@@ -4,7 +4,6 @@ import { lockDocument } from './document-lock.js';
 import { isUniqueViolation } from './errors.js';
 import type { MongoService } from './mongo.service.js';
 
-/** Same account locks as suspension/deletion, always taken in a stable order. */
 export async function withUserLocks<T>(
   mongo: MongoService,
   userIds: string[],
@@ -19,8 +18,6 @@ export async function withUserLocks<T>(
         return run(session);
       });
     } catch (error) {
-      // A lock's first concurrent upsert can report E11000 without the
-      // transient-transaction label. Retry the entire, aborted transaction.
       if (!isUniqueViolation(error)) throw error;
     }
   }

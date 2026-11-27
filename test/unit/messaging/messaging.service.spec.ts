@@ -466,7 +466,6 @@ describe('MessagingService', () => {
         body: 'First message',
       });
 
-      // Same clientMessageId + same body is idempotent.
       const retry = await service.sendToUser(alice.id, bob.id, {
         clientMessageId,
         body: 'First message',
@@ -475,7 +474,6 @@ describe('MessagingService', () => {
       expect(retry.message.sequence).toBe(1);
       expect(await events().countDocuments()).toBe(1);
 
-      // Same clientMessageId + different body throws 409 MESSAGE_ID_CONFLICT.
       await expect(
         service.sendToUser(alice.id, bob.id, {
           clientMessageId,
@@ -483,7 +481,6 @@ describe('MessagingService', () => {
         }),
       ).rejects.toBeInstanceOf(StateConflictException);
 
-      // Mismatched expectedConversationId throws NOT_FOUND.
       await expect(
         service.sendToUser(
           alice.id,
@@ -493,7 +490,6 @@ describe('MessagingService', () => {
         ),
       ).rejects.toBeInstanceOf(ResourceNotFoundException);
 
-      // Reply via sendToConversation increments sequence to 2.
       const reply = await service.sendToConversation(
         bob.id,
         first.conversationId,
@@ -501,7 +497,6 @@ describe('MessagingService', () => {
       );
       expect(reply.message.sequence).toBe(2);
 
-      // Non-participant (including admin) cannot send to conversation.
       await expect(
         service.sendToConversation(admin.id, first.conversationId, {
           clientMessageId: randomUUID(),
@@ -564,7 +559,6 @@ describe('MessagingService', () => {
         unreadCount: 1,
       });
 
-      // A request keeps its initiator after unfollow, so its recipient can still accept it.
       await unfollow(alice, carol);
       const afterUnfollow = await service.getConversation(
         carol.id,
@@ -576,7 +570,6 @@ describe('MessagingService', () => {
         canSend: false,
       });
 
-      // Cursor belonging to another box throws MESSAGE_CURSOR_INVALID.
       await expect(
         service.listConversations(alice.id, {
           box: MessagingInbox.FRIENDS,
@@ -585,7 +578,6 @@ describe('MessagingService', () => {
         }),
       ).rejects.toMatchObject({ code: 'MESSAGE_CURSOR_INVALID' });
 
-      // Non-participant getConversation throws NOT_FOUND.
       await expect(
         service.getConversation(admin.id, ab.conversationId),
       ).rejects.toBeInstanceOf(ResourceNotFoundException);
@@ -957,7 +949,6 @@ describe('MessagingService', () => {
         unreadCount: 1,
       });
 
-      // Marking an earlier message read never moves readSequence backwards or emits duplicate event.
       const read1 = await service.markRead(
         bob.id,
         m1.conversationId,

@@ -18,11 +18,6 @@ import {
   prepareTestDatabase,
 } from '@test/support/mongo-test-db.js';
 
-/**
- * Fan-out and read-state flows of notifications (notifications.md):
- * self actions never notify, repeated like/repost/follow toggles notify once,
- * the list pages newest first, and read state is per recipient.
- */
 describe('Notifications flows', () => {
   let app: INestApplication;
   let db: MongoService;
@@ -64,7 +59,6 @@ describe('Notifications flows', () => {
   });
 
   describe('fan-out', () => {
-    // BUG-7: concurrent toggles race past the find-then-create dedupe
     it('creates one LIKE notification when the same like arrives twice at once', async () => {
       const postId = randomUUID();
       const like = {
@@ -79,7 +73,6 @@ describe('Notifications flows', () => {
       expect(await countFor(recipient.id)).toBe(1);
     });
 
-    // BUG-7: concurrent toggles race past the find-then-create dedupe
     it('creates one FOLLOW notification when follow is toggled concurrently', async () => {
       const follow = {
         recipientId: recipient.id,
@@ -193,7 +186,6 @@ describe('Notifications flows', () => {
       expect(received).toEqual([]);
     });
 
-    // BUG-8: a notification from a missing actor is counted unread but never listed
     it('counts as unread only notifications the list can show', async () => {
       await service.notify({
         recipientId: recipient.id,

@@ -57,7 +57,6 @@ export class PostViewsService implements OnApplicationShutdown {
     await this.flush();
   }
 
-  /** Adds to `Post.viewCount`; on failure the rows go back into the queue. */
   private async saveTotals(rows: ViewRow[]): Promise<boolean> {
     try {
       await this.posts.bulkWrite(
@@ -82,11 +81,6 @@ export class PostViewsService implements OnApplicationShutdown {
     }
   }
 
-  /**
-   * Adds the same views to the per-day rollup used by author analytics. It is
-   * best effort: a failure is logged and dropped, never re-queued, so the
-   * lifetime total is not counted twice.
-   */
   private async saveDays(rows: ViewRow[], day: string): Promise<void> {
     try {
       const published = await this.posts

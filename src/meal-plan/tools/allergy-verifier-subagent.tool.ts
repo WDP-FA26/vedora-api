@@ -57,7 +57,6 @@ export interface AllergyVerificationResult {
   checkedDishesCount: number;
   flaggedDishes: FlaggedDishReport[];
   summary: string;
-  /** Set when flagged dishes were replaced: what changed in the saved plan. */
   weekStart?: string;
   days?: PlanChange['days'];
   problems?: PlanChange['problems'];
@@ -122,10 +121,7 @@ async function runSemanticAllergyAudit(
     ...PromptCache.singleTurn({
       session: 'vedora-allergy-verifier',
       instructions: ALLERGY_AUDIT_INSTRUCTIONS,
-      // Medium keeps the voice planner responsive; the keyword pass above
-      // still flags the obvious allergens before this call.
       effort: 'medium',
-      // Runs inside a meal planner session: 5m, like the planner.
       ttl: '5m',
     }),
     prompt: [
@@ -140,11 +136,6 @@ async function runSemanticAllergyAudit(
   return { flagged: output.flagged, summary: output.summary };
 }
 
-/**
- * Dedicated Allergy Verification Subagent tool: audits every dish in the active
- * week's saved plan against natural-language allergy notes and
- * automatically swaps out unsafe dishes while keeping safe selections intact.
- */
 export function verifyMealPlanAllergiesTool(
   model: LanguageModel,
   mealPlan: MealPlanService,

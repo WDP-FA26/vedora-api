@@ -32,8 +32,6 @@ import { AiCostTransportService } from '../ai/telemetry/ai-cost-transport.servic
           DEFAULT_CONTENT_MODERATION_MODEL,
         );
         const model = aiModels(config).chat(id, {
-          // Haiku 5.5's default: judging a policy with disguised words and
-          // quoting evidence gains from more thinking than the chat guardrail.
           effort: 'medium',
           providerOrder: moderationProviderOrder(config),
           fetch: costs.forModel(id, 'CONTENT_MODERATION', 'MODERATION'),

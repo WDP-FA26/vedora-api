@@ -37,7 +37,6 @@ describe('TranscriptionService', () => {
   });
 
   describe('transcribe', () => {
-    /** The reason of the exception a failing transcription throws. */
     async function failureReason(): Promise<string | null> {
       const error: unknown = await service
         .transcribe({
@@ -59,15 +58,11 @@ describe('TranscriptionService', () => {
               { word: 'chào', start: 0.4, end: 0.8 },
               { word: 'mọi', start: 0.8, end: 1.2 },
               { word: 'người.', start: 1.2, end: 1.6 },
-              // pause > 0.8s triggers new cue, hallucination filtered out
               { word: 'Đăng', start: 3.0, end: 3.3 },
               { word: 'ký', start: 3.3, end: 3.6 },
               { word: 'kênh.', start: 3.6, end: 4.0 },
-              // non-letter cue filtered out
               { word: '123!', start: 5.0, end: 5.2 },
-              // zero-duration cue filtered out
               { word: 'nope', start: 6.0, end: 6.0 },
-              // long multi-sentence cue (>7s) split into sentences
               { word: 'Cắt', start: 7.5, end: 8.0 },
               { word: 'đậu.', start: 8.0, end: 11.5 },
               { word: 'Chiên', start: 11.6, end: 12.5 },

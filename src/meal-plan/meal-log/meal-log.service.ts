@@ -55,7 +55,6 @@ const NO_CALORIES: Calories = {
   calorieReferences: [],
 };
 
-/** Calories the client sent, with references kept only for a web estimate. */
 function clientCalories(
   caloriesPerServing: number,
   source: ClientCalorieSource | undefined,
@@ -104,7 +103,6 @@ function toEntryDto(entry: MealLogEntry): MealLogEntryDto {
 const EDITABLE_DAYS = runtimeConfig.MEAL_LOG_EDITABLE_DAYS;
 const MAX_ENTRIES_PER_MEAL = runtimeConfig.MEAL_LOG_MAX_ENTRIES_PER_MEAL;
 
-/** Days the log may change: today and the `EDITABLE_DAYS` before it. */
 interface LogWindow {
   today: string;
   oldestDate: string;
@@ -132,7 +130,6 @@ function sectionOrder(section: MealSection): number {
   return MEAL_SECTIONS.indexOf(section);
 }
 
-/** What the user ate, beside the plan of what they meant to eat. */
 @Injectable()
 export class MealLogService {
   constructor(
@@ -146,7 +143,6 @@ export class MealLogService {
     private readonly estimator: CalorieEstimator,
   ) {}
 
-  /** The log of one week beside its plan and the user's calorie target. */
   async week(
     userId: string,
     weekStart?: string,
@@ -202,8 +198,6 @@ export class MealLogService {
       });
     }
 
-    // Today is still going, and a day with an unknown dish would read low:
-    // the average covers finished days whose every dish has calories.
     let loggedDays = 0;
     let completeDays = 0;
     let completeSum = 0;
@@ -343,7 +337,6 @@ export class MealLogService {
     await this.entries.deleteOne({ _id: id, userId }).exec();
   }
 
-  /** Asks AI to look a dish's calories up on the web. Nothing is saved. */
   async estimateCalories(
     userId: string,
     dto: EstimateCaloriesDto,

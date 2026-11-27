@@ -281,7 +281,7 @@ describe('PostSearchIndexService', () => {
       .mockRejectedValueOnce(new Error('second drain failed'));
 
     service.schedule();
-    service.catchUp(); // hits drainAgain = true branch
+    service.catchUp();
     await new Promise((resolve) => setTimeout(resolve, 40));
 
     expect(drainSpy).toHaveBeenCalledTimes(2);

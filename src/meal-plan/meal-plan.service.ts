@@ -89,7 +89,6 @@ export interface RecipeSuggestion {
   nutritionPillars?: NutritionPillar[];
   ingredients: string[];
   description?: string | null;
-  /** Ingredients the user avoids. The recipe can be discussed but never planned. */
   avoidedIngredients: string[];
 }
 
@@ -108,16 +107,10 @@ export interface RecipeInstructions {
     note: string | null;
   }[];
   steps: string[];
-  /** Ingredients the user avoids. The recipe can be discussed but never planned. */
   avoidedIngredients: string[];
 }
 
 export type MealPlanPreview = MealPlanPreviewDto;
-/**
- * What an assistant tool changed in the saved plan: each changed day with all
- * four sections, before (`previous`) and after (`recipes`). `applied` is false
- * when nothing was saved (no change, or an unknown or avoided dish).
- */
 export type PlanChange = MealPlanPreview & { applied: boolean };
 
 function noChange(weekStart: string): PlanChange {
@@ -128,7 +121,6 @@ const MAX_SUGGESTIONS = runtimeConfig.MEAL_PLAN_SUGGESTIONS_LIMIT;
 
 type SlotKey = { day: Weekday; section: MealSection };
 
-/** A dish that no longer exists or that the user avoids can never be saved. */
 function isBlockingProblem(problem: MealPlanProblemDto): boolean {
   return (
     problem.code === 'UNKNOWN_RECIPE' || problem.code === 'AVOIDED_INGREDIENT'
@@ -188,7 +180,6 @@ const allSlots = (): SlotKey[] =>
 const dishes = (day: DaySections | undefined): RecipeRow[] =>
   day ? MEAL_SECTIONS.flatMap((section) => day[section]) : [];
 
-/** The request without the days that have passed, and the pins on them. */
 function onlyEditable(
   dto: GenerateMealDaysDto,
   week: MealWeek,
@@ -224,17 +215,12 @@ export class MealPlanService {
     private readonly mongo: MongoService,
   ) {}
 
-  /** The saved plan of one week; the current week when `weekStart` is left out. */
   async find(userId: string, weekStart?: string): Promise<MealPlanDto> {
     const week = currentMealWeek(weekStart);
     assertWithinHorizon(week);
     return this.toPlan(userId, week, await this.saved(userId, week.weekStart));
   }
 
-  /**
-   * Lightweight week load for the AI planner prompt: skips `minWeekStart` and
-   * `problems`, neither of which is read when formatting planner context.
-   */
   async findForPrompt(
     userId: string,
     weekStart?: string,
@@ -254,7 +240,6 @@ export class MealPlanService {
     };
   }
 
-  /** The earliest week to browse back to: the first one with a dish, or the current week. */
   private async minWeekStart(userId: string, week: MealWeek): Promise<string> {
     const first = await this.entries
       .findOne({ userId })
@@ -482,10 +467,6 @@ export class MealPlanService {
     };
   }
 
-  /**
-   * Picks dishes for the requested slots without an LLM and returns them as a
-   * checked preview, like `preview`. Nothing is saved or added to the draft.
-   */
   async generate(
     userId: string,
     dto: GenerateMealDaysDto,
@@ -539,10 +520,6 @@ export class MealPlanService {
     );
   }
 
-  /**
-   * Picks dishes for the requested slots without an LLM and saves them into
-   * the plan straight away; returns what changed, checked like `preview`.
-   */
   async fillPlan(
     userId: string,
     dto: GenerateMealDaysDto,
@@ -614,11 +591,6 @@ export class MealPlanService {
     return { ...change, filled, allSlotsAlreadyFilled };
   }
 
-  /**
-   * Balances editable days toward the target calorie budget and saves the
-   * result: trims extra dishes on over-budget days and adds complementary
-   * dishes on under-budget days while keeping existing choices.
-   */
   async autoBalancePlan(
     userId: string,
     options: {
@@ -691,11 +663,6 @@ export class MealPlanService {
     return { ...change, filled: changed, targetCalories: resolvedTarget };
   }
 
-  /**
-   * Applies slot operations to the saved plan. An operation that cannot apply
-   * is reported in `errors` and skipped; an unknown or avoided dish keeps the
-   * whole change from being saved.
-   */
   async editPlan(
     userId: string,
     weekStart: string,
@@ -712,12 +679,6 @@ export class MealPlanService {
     return { ...change, errors };
   }
 
-  /**
-   * Puts days back the way they were (the rewind of an assistant turn). Days
-   * that have passed since cannot change and are returned as `skipped`; a dish
-   * that has been deleted or is now avoided is left out and counted in
-   * `droppedDishes`, so one stale dish never blocks the rest of the rewind.
-   */
   async restoreDays(
     userId: string,
     weekStart: string,
@@ -773,11 +734,6 @@ export class MealPlanService {
     return this.weekIds(await this.saved(userId, week.weekStart));
   }
 
-  /**
-   * Saves the days where `next` differs from the saved plan. A dish that is
-   * unknown or avoided refuses the whole change; a same-day clash is saved and
-   * listed in `problems`, as with `PUT /meal-plan/days`.
-   */
   private async commitChange(
     userId: string,
     week: MealWeek,
@@ -792,8 +748,6 @@ export class MealPlanService {
       return { ...preview, applied: true };
     }
 
-    // A dish that no longer exists or that the user avoids is left out; the
-    // rest of the change is still saved, and the problems say what was dropped.
     const leftOut = preview.problems.filter(isBlockingProblem);
     const kept = await this.previewChange(
       userId,
@@ -810,7 +764,6 @@ export class MealPlanService {
     };
   }
 
-  /** Previews the days where `next` differs from what is saved, or null when none does. */
   private async previewChange(
     userId: string,
     week: MealWeek,
@@ -844,9 +797,6 @@ export class MealPlanService {
   ): Promise<MealPlanDto> {
     const week = currentMealWeek(weekStart);
     const preview = await this.preview(userId, week.weekStart, days);
-    // A DAY_CONFLICT is a warning: the user may still choose to eat these
-    // together, and it comes back in `MealPlanDto.problems`. Only a dish the
-    // user avoids or one that no longer exists is refused.
     if (hasFatalProblem(preview.problems)) {
       throw new StateConflictException(
         'MEAL_PLAN_INVALID',
@@ -861,7 +811,6 @@ export class MealPlanService {
     return this.writeDays(userId, week, preview, options);
   }
 
-  /** Replaces the days of `preview` in the saved plan, all or nothing. */
   private async writeDays(
     userId: string,
     week: MealWeek,
@@ -889,9 +838,6 @@ export class MealPlanService {
         .exec();
       if (!user)
         throw new ResourceNotFoundException('NOT_FOUND', 'User not found');
-      // The preview checked the dishes outside this transaction; lock them
-      // (as recipe deletion does) and check again, so a dish deleted in
-      // between is refused instead of saved as a dangling entry.
       const recipeIds = [...new Set(entries.map(({ recipeId }) => recipeId))];
       for (const recipeId of recipeIds.sort()) {
         await lockDocument(this.mongo, session, 'recipe', recipeId);
@@ -944,11 +890,6 @@ export class MealPlanService {
     return this.toPlan(userId, week, await this.weekOf(saved));
   }
 
-  /**
-   * Copies the dishes of one week onto the days of another that may still
-   * change. The target must be empty on those days unless `overwrite` is set,
-   * and the whole copy is saved or refused together.
-   */
   async copyWeek(
     userId: string,
     fromWeekStart: string,
@@ -1038,8 +979,6 @@ export class MealPlanService {
     const conflicts = await this.rules.findConflictsForEach(
       matching.map(ingredientIds),
     );
-    // Recipes with an avoided ingredient stay searchable, so the assistant can
-    // answer questions about them, but come after the ones the user can eat.
     const edible: RecipeSuggestion[] = [];
     const flagged: RecipeSuggestion[] = [];
     matching.forEach((recipe, index) => {
@@ -1064,7 +1003,6 @@ export class MealPlanService {
     return [...edible, ...flagged].slice(0, MAX_SUGGESTIONS);
   }
 
-  /** Full recipe for one id, null when it is missing. Avoided ingredients are flagged, not hidden. */
   async recipeInstructions(
     userId: string,
     recipeId: string,
@@ -1156,11 +1094,6 @@ export class MealPlanService {
     });
   }
 
-  /**
-   * An avoided ingredient is checked per day a dish was added to; two
-   * incompatible ingredients are checked per meal (one slot), so a dish in
-   * lunch never clashes with one in dinner.
-   */
   private async problems(
     userId: string,
     week: Week,
@@ -1318,8 +1251,6 @@ function toRecipeDto(recipe: RecipeRow): MealRecipeDto {
   };
 }
 
-/** Names of the recipe's ingredients that the user avoids, in recipe order. */
-/** Ingredients whose name or alias contains one of the user's allergen keywords. */
 function avoidedNames(
   recipe: RecipeRow,
   allergyKeywords: readonly string[],

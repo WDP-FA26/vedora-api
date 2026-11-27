@@ -15,27 +15,22 @@ export enum UserRole {
   ADMIN = 'ADMIN',
 }
 
-/** A PERSONAL account belongs to one person; a PAGE is a restaurant run by its members. */
 export enum AccountType {
   PERSONAL = 'PERSONAL',
   PAGE = 'PAGE',
 }
 
 export enum WorkspaceMemberRole {
-  /** Opened the page; adds and removes managers. Exactly one per page. */
   OWNER = 'OWNER',
   MANAGER = 'MANAGER',
 }
 
-/** The legal form a restaurant page applies under; it decides which fields and documents are required. */
 export enum LegalEntityType {
   COMPANY = 'COMPANY',
   HOUSEHOLD = 'HOUSEHOLD',
-  /** A small seller exempt from business registration; identified by their citizen ID. */
   INDIVIDUAL = 'INDIVIDUAL',
 }
 
-/** How the restaurant serves food. */
 export enum BusinessForm {
   RESTAURANT = 'RESTAURANT',
   EATERY = 'EATERY',
@@ -43,15 +38,12 @@ export enum BusinessForm {
   ONLINE = 'ONLINE',
 }
 
-/** How strictly vegetarian the restaurant is. */
 export enum VegetarianLevel {
   VEGAN = 'VEGAN',
   LACTO_OVO = 'LACTO_OVO',
-  /** A mixed restaurant with its own vegetarian menu. */
   VEGETARIAN_MENU = 'VEGETARIAN_MENU',
 }
 
-/** What a page application's proof image shows. */
 export enum WorkspaceProofKind {
   ID_FRONT = 'ID_FRONT',
   ID_BACK = 'ID_BACK',
@@ -62,7 +54,6 @@ export enum WorkspaceProofKind {
   OTHER = 'OTHER',
 }
 
-/** Why an admin rejected a page application; `OTHER` needs a note. */
 export enum WorkspaceRejectReason {
   BLURRY_DOCUMENTS = 'BLURRY_DOCUMENTS',
   TAX_CODE_MISMATCH = 'TAX_CODE_MISMATCH',
@@ -79,7 +70,6 @@ export enum AccountStatus {
   ACTIVE = 'ACTIVE',
   SUSPENDED = 'SUSPENDED',
   DELETED = 'DELETED',
-  /** The built-in Vedora AI account: it cannot sign in and has no public profile. */
   SYSTEM = 'SYSTEM',
 }
 
@@ -246,12 +236,9 @@ export enum CaptionStatus {
 }
 
 export enum PostSummaryStatus {
-  /** Claimed by a summarizer run; released for retry once stale. */
   PENDING = 'PENDING',
   READY = 'READY',
-  /** Nothing worth summarizing (too short, no speech, not about food). */
   SKIPPED = 'SKIPPED',
-  /** Gave up after the maximum number of attempts. */
   FAILED = 'FAILED',
 }
 
@@ -302,7 +289,6 @@ export enum MealSection {
   OTHER = 'OTHER',
 }
 
-/** What kind of dish a recipe is; the meal planner shows one icon per tag. */
 export enum RecipeTag {
   SOUP = 'SOUP',
   SALAD = 'SALAD',
@@ -315,7 +301,6 @@ export enum RecipeTag {
   SNACK = 'SNACK',
 }
 
-/** Icon an admin picks for a recipe category; the frontend maps each to a glyph. */
 export enum RecipeCategoryIcon {
   SOUP = 'SOUP',
   SALAD = 'SALAD',
@@ -329,23 +314,15 @@ export enum RecipeCategoryIcon {
   UTENSILS = 'UTENSILS',
 }
 
-/** Where a meal-log entry came from. */
 export enum MealLogSource {
-  /** Ticked off a dish of the saved plan. */
   PLAN = 'PLAN',
-  /** A catalog recipe that was not in the plan. */
   RECIPE = 'RECIPE',
-  /** Free text: a dish outside the catalog. */
   CUSTOM = 'CUSTOM',
 }
 
-/** Where a meal-log entry's calories came from. */
 export enum CalorieSource {
-  /** The recipe's calories per serving when logged. */
   RECIPE = 'RECIPE',
-  /** Typed by the user. */
   USER = 'USER',
-  /** Estimated by AI from a web search; an estimate, not a measurement. */
   WEB_ESTIMATE = 'WEB_ESTIMATE',
 }
 

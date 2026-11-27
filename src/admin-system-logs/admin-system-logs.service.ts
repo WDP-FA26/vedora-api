@@ -41,7 +41,6 @@ export class AdminSystemLogsService {
     @InjectModel(SystemLog.name) private readonly logs: Model<SystemLog>,
   ) {}
 
-  /** Observational history must never change an already completed business response. */
   async append(input: SystemLogInput): Promise<void> {
     let timer: ReturnType<typeof setTimeout> | undefined;
     try {

@@ -81,7 +81,6 @@ describe('conversation-state guardrails', () => {
       'The last message must come from the user',
     );
 
-    // Empty or non-array delegates to @ArrayMinSize/@IsArray
     expect(
       await validate(plainToInstance(SampleChatDto, { messages: [] })),
     ).toHaveLength(0);

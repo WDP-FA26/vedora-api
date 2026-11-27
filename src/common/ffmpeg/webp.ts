@@ -1,9 +1,7 @@
 import { runFfmpeg } from './ffmpeg.js';
 
-/** libwebp quality (0-100); 80 keeps photos visually lossless at a fraction of PNG size. */
 const WEBP_QUALITY = 80;
 
-/** Re-encodes one still image (PNG, JPEG, WebP) as lossy WebP, keeping its size and alpha. */
 export async function toWebp(source: Uint8Array): Promise<Buffer> {
   const input = Buffer.from(
     source.buffer,

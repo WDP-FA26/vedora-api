@@ -462,7 +462,6 @@ export class PaymentsService {
       )
         return record('ACCOUNT_UNAVAILABLE', intent.id);
       const capturedAt = new Date();
-      // The deadline can pass while checking account eligibility.
       if (await this.cancelExpired(intent, session, capturedAt)) {
         changed = { userId: intent.userId, intentId: intent.id };
         return record('PAYMENT_EXPIRED', intent.id);
@@ -494,7 +493,6 @@ export class PaymentsService {
     if (changed) await this.notifyCommitted(changed);
   }
 
-  /** Bounded sweep; also called on owner reads so downtime cannot prolong a QR. */
   async expirePending(userId?: string): Promise<number> {
     const candidates = await this.intents
       .find({

@@ -51,7 +51,6 @@ import {
       useValue: new ConfigService({ API_PREFIX: 'api/v1' }),
     },
     { provide: StorageService, useValue: { isConfigured: () => false } },
-    // Profiles now includes people search; these messaging flows never search or index profiles.
     { provide: QdrantService, useValue: {} },
     {
       provide: ModerationSettingsService,

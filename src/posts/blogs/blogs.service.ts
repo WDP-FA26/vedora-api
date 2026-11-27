@@ -289,7 +289,6 @@ export class BlogsService {
     }
   }
 
-  /** The cover the feed shows: the first allowed image in the content. */
   private coverOf(content: string): string | null {
     return coverFromContent(content, (url) => this.isAllowedCover(url));
   }
@@ -298,11 +297,6 @@ export class BlogsService {
     return this.storage.keyFromPublicUrl(StorageTarget.Blogs, url) !== null;
   }
 
-  /**
-   * `coverImageUrl` is no longer stored as sent (the cover comes from the
-   * content), but an external/malformed one is still refused so clients get
-   * the same error as before.
-   */
   private validateCover(url: string | null | undefined) {
     if (!url || this.isAllowedCover(url)) return;
     throw new InvalidInputException(

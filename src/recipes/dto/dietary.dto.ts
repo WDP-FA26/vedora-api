@@ -28,7 +28,6 @@ export const MAX_MEMORY_ITEM_LENGTH = 200;
 const trim = ({ value }: { value: unknown }): unknown =>
   typeof value === 'string' ? value.trim() : value;
 
-/** Trims each line and drops blanks and repeats; anything else is left for the validators. */
 const cleanLines = ({ value }: { value: unknown }): unknown => {
   if (!Array.isArray(value)) return value;
   const lines: unknown[] = [];
@@ -40,7 +39,6 @@ const cleanLines = ({ value }: { value: unknown }): unknown => {
   return lines;
 };
 
-/** What the meal planner remembers about the user, in their own words. */
 export class DietaryMemoryDto {
   @ApiProperty({
     type: [String],

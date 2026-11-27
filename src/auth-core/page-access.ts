@@ -3,11 +3,6 @@ import type { User, WorkspaceMember } from '../mongo/models.js';
 import { UnauthenticatedException } from '../common/exceptions/unauthenticated.exception.js';
 import { assertAccountActive } from './account-access.js';
 
-/**
- * A page session is only valid while the person behind it is ACTIVE and
- * still a member of the page. Checked on every request and every refresh,
- * so removing a manager or suspending them ends their page session at once.
- */
 export async function assertPageAccess(
   users: Model<User>,
   members: Model<WorkspaceMember>,

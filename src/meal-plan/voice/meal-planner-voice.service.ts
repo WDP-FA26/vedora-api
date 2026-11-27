@@ -16,17 +16,10 @@ import {
   type PlannerChatOptions,
 } from '../meal-planner-chat.service.js';
 
-/** Long enough to open the WebSocket; an open session keeps going after it. */
 const TOKEN_TTL_SECONDS = 60;
 
 type Gateway = ReturnType<typeof createGatewayRealtimeClient>;
 
-/**
- * The meal planner's voice agent. The browser talks to the realtime model
- * through Vercel AI Gateway with a short-lived token from `createSession`;
- * whenever the model delegates work, the browser sends the user's words to
- * `turn`, which streams the same planner agent as the text chat, in voice mode.
- */
 @Injectable()
 export class MealPlannerVoiceService {
   private readonly gateway: Gateway | null;
@@ -45,11 +38,6 @@ export class MealPlannerVoiceService {
     );
   }
 
-  /**
-   * Every spoken request runs on the meal planner chat quota, so a user with none
-   * left gets no session: the call would connect and then fail on every turn.
-   * Admins are never limited, as in the text chat.
-   */
   async createSession(
     userId: string,
     threadId?: string,
@@ -70,8 +58,6 @@ export class MealPlannerVoiceService {
         'Your shared AI text allowance is exhausted',
       );
     }
-    // Warm the planner's static voice prefix in the background while the
-    // token is minted and GPT-Live connects & greets the user.
     void this.chat.warmVoiceCache(userId, threadId);
     const { token, url, expiresAt } =
       await this.gateway.experimental_realtime.getToken({
@@ -81,11 +67,6 @@ export class MealPlannerVoiceService {
     return { token, url, expiresAt: expiresAt ?? null, model: this.model };
   }
 
-  /**
-   * One spoken turn as an AI SDK UI message stream, the same as the text chat's.
-   * Web search stays off in voice mode to avoid extra round trips and keep spoken
-   * latency low.
-   */
   async turn(
     userId: string,
     dto: MealPlanVoiceTurnRequestDto,

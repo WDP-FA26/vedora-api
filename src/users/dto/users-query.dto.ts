@@ -5,7 +5,6 @@ import { Transform } from 'class-transformer';
 import { IsIn, IsOptional, IsString, MaxLength } from 'class-validator';
 import { PaginationQueryDto } from '../../common/pagination/index.js';
 
-/** Statuses an admin can list by; the system account is never listed. */
 const LISTED_STATUSES = Object.values(AccountStatus).filter(
   (status) => status !== AccountStatus.SYSTEM,
 );

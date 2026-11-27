@@ -83,7 +83,6 @@ export class AdminPostsService {
     @InjectModel(Post.name) private readonly posts: Model<Post>,
   ) {}
 
-  /** Soft-deletes a post, resolves pending reports, and notifies author & reporters. */
   async remove(id: string, adminId: string, reason?: string): Promise<void> {
     const notice = await this.reports.removalNotice(id);
     const trimmedReason = reason?.trim() || notice?.reason || null;
@@ -156,7 +155,6 @@ export class AdminPostsService {
     }
   }
 
-  /** Restores a soft-deleted post and closes any active appeal as APPROVED. */
   async restore(
     id: string,
     adminId: string,

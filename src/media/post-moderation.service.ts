@@ -45,7 +45,6 @@ const STATUS_BY_DECISION: Record<ContentAssessment['decision'], PostStatus> = {
   reject: PostStatus.REJECTED,
 };
 
-/** What the author is told once the automatic check has decided. */
 const NOTIFICATION_BY_DECISION: Record<
   ContentAssessment['decision'],
   NotificationType
@@ -65,7 +64,6 @@ const MAX_INLINE_IMAGES = runtimeConfig.MODERATION_MAX_INLINE_IMAGES;
 @Injectable()
 export class PostModerationService implements OnModuleInit {
   private readonly logger = new Logger(PostModerationService.name);
-  /** Posts whose verdict is being worked out in this process. */
   private readonly judging = new Set<string>();
 
   constructor(
@@ -98,11 +96,6 @@ export class PostModerationService implements OnModuleInit {
     }
   }
 
-  /**
-   * Rates each PROCESSING post and applies the verdict. A post already being
-   * rated (a background run and a poll at once) is skipped, so it costs one
-   * model call. Returns how many were published.
-   */
   async settle(postIds: string[]): Promise<number> {
     let published = 0;
     for (const id of postIds) {
@@ -117,7 +110,6 @@ export class PostModerationService implements OnModuleInit {
     return published;
   }
 
-  /** True when the post was published. */
   private async settleOne(id: string): Promise<boolean> {
     const judged = await this.judge(id);
     if (judged === null) return false;
@@ -237,10 +229,6 @@ export class PostModerationService implements OnModuleInit {
     });
   }
 
-  /**
-   * The post's verdict, or null when it is not PROCESSING or still waits for
-   * a transcript. A failure to load or rate it holds it for an admin.
-   */
   private async judge(
     id: string,
   ): Promise<{ post: Post; assessment: ContentAssessment } | null> {
@@ -277,7 +265,6 @@ export class PostModerationService implements OnModuleInit {
               publishedAt: published
                 ? { $ifNull: ['$publishedAt', now] }
                 : '$publishedAt',
-              // Quotes come from members: never read them as expressions.
               moderation: {
                 $literal: {
                   verdict: assessment.category ?? 'allow',
@@ -303,10 +290,6 @@ export class PostModerationService implements OnModuleInit {
     return result.modifiedCount > 0;
   }
 
-  /**
-   * The text and pictures the reviewer rates, labelled with where each came
-   * from. Null while a video still waits for its transcript.
-   */
   private async sourcesOf(post: Post): Promise<EvidenceSources | null> {
     if (post.type === PostType.BLOG) return this.blogSources(post);
     const videos = await this.readyVideos(post.id);
@@ -397,7 +380,6 @@ export class PostModerationService implements OnModuleInit {
     return { texts, images };
   }
 
-  /** The cover and up to MAX_INLINE_IMAGES images of ours in the content. */
   private blogImageUrls(
     coverImageUrl: string | null,
     content: string,

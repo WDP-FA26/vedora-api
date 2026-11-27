@@ -43,7 +43,6 @@ const STALE_AFTER_MS = runtimeConfig.POST_SUMMARY_STALE_AFTER_SECONDS * 1000;
 const WINDOW_MS = runtimeConfig.POST_SUMMARY_WINDOW_SECONDS * 1000;
 const MAX_ERROR_LENGTH = 500;
 
-/** Thrown inside the comment transaction when another run took the claim over. */
 class ClaimLostError extends Error {}
 
 interface Claim {
@@ -58,10 +57,8 @@ export class PostSummariesService {
   private readonly logger = new Logger(PostSummariesService.name);
   private readonly enabled: boolean;
   private draining: Promise<void> | null = null;
-  /** Set once the Vedora AI account is known to exist; checked again after a restart. */
   private systemAccountReady = false;
   private systemAccountConflictLogged = false;
-  /** The posts last reported as waiting for transcripts, to log only changes. */
   private waitingKey = '';
 
   constructor(
@@ -95,7 +92,6 @@ export class PostSummariesService {
     await this.draining;
   }
 
-  /** Summarizes recently published posts that have no summary yet, and retries stale claims. */
   async drain(): Promise<void> {
     if (!this.systemAccountReady) {
       this.systemAccountReady = await this.ensureSystemAccount();
@@ -121,10 +117,6 @@ export class PostSummariesService {
     return this.summaries.findOne({ postId }).exec();
   }
 
-  /**
-   * Creates the Vedora AI account if it is missing and re-asserts what keeps
-   * it unusable for sign-in. False when its username is taken by a member.
-   */
   async ensureSystemAccount(): Promise<boolean> {
     try {
       await this.users.updateOne(
@@ -150,7 +142,6 @@ export class PostSummariesService {
       return true;
     } catch (error) {
       if (!isUniqueViolation(error)) throw error;
-      // Retried on every run, but reported once so the log is not flooded.
       if (!this.systemAccountConflictLogged) {
         this.systemAccountConflictLogged = true;
         this.logger.error(
@@ -161,7 +152,6 @@ export class PostSummariesService {
     }
   }
 
-  /** Recently published posts that have no summary row yet. */
   private unsummarizedStages(): PipelineStage[] {
     return [
       {
@@ -203,10 +193,8 @@ export class PostSummariesService {
     ];
   }
 
-  /** Recently published posts with no summary row, whose videos are transcribed. */
   private async unsummarizedPostIds(): Promise<string[]> {
     const pipeline = this.unsummarizedStages();
-    // Without captions no transcript is coming, so nothing waits for one.
     if (this.captions.active) {
       pipeline.push({ $match: { untranscribed: { $size: 0 } } });
     }
@@ -219,7 +207,6 @@ export class PostSummariesService {
     return rows.map((row) => row._id);
   }
 
-  /** Logs the posts held back for their videos' transcripts, when that list changes. */
   private async logWaiting(): Promise<void> {
     const pipeline = this.unsummarizedStages();
     pipeline.push(
@@ -260,7 +247,6 @@ export class PostSummariesService {
       });
       return { id: created.id, postId, claimedAt, attempts: 1 };
     } catch (error) {
-      // Another run claimed it first.
       if (isUniqueViolation(error)) return null;
       throw error;
     }
@@ -412,11 +398,6 @@ export class PostSummariesService {
     );
   }
 
-  /**
-   * Stores the summary and posts its comment together, or neither. Returns
-   * the comment id (null when the post left PUBLISHED meanwhile), or
-   * undefined when moderation turned the comment away.
-   */
   private async publish(
     claim: Claim,
     result: {
@@ -427,8 +408,6 @@ export class PostSummariesService {
     },
   ): Promise<string | null | undefined> {
     const body = formatSummaryComment(result, MAX_COMMENT_LENGTH);
-    // Like every member comment, the AI's is moderated: its source is member
-    // text that may try to steer the model.
     try {
       await this.moderation.requireAllowed(body);
     } catch (error) {
@@ -445,7 +424,6 @@ export class PostSummariesService {
       return undefined;
     }
     return this.mongo.withTransaction(async (session) => {
-      // Like a member's comment, this write conflicts with deleting the post.
       const post = await this.posts
         .findOneAndUpdate(
           { _id: claim.postId, status: PostStatus.PUBLISHED },
@@ -496,7 +474,6 @@ export class PostSummariesService {
     );
   }
 
-  /** The text to summarize, and a one-line description of it for the log. */
   private sourceOf(post: Post): Promise<PostSource> {
     return readPostSource(post, this.mediaAssets);
   }
@@ -534,7 +511,6 @@ function trimmedOrNull(value: string | null): string | null {
   return trimmed;
 }
 
-/** Drops empty lines and impossible numbers the model may return. */
 function cleanRecipe(recipe: SummaryOutput['recipe']): SummaryRecipe | null {
   if (!recipe) return null;
   const title = recipe.title.trim();

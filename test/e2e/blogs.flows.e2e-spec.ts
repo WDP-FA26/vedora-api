@@ -28,11 +28,6 @@ interface ErrorBody {
   code: string;
 }
 
-/**
- * Blog lifecycle DRAFT → PROCESSING → PUBLISHED / PENDING_REVIEW / REJECTED,
- * validation edges and the blog AI assistant guard rails
- * (docs/docs-for-FE/blogs.md, content-moderation.md, blog-ai-assistant.md).
- */
 describe('Blog flows (e2e)', () => {
   let e2e: E2eApp;
   let author: User;
@@ -69,7 +64,6 @@ describe('Blog flows (e2e)', () => {
   const patch = (id: string, payload: object, token = authorToken) =>
     as(token, request(server()).patch(`/api/v1/blogs/${id}`)).send(payload);
   const draft = async () => (await create().expect(201)).body as BlogBody;
-  /** The blog as its author reads it once the background moderation ended. */
   const settled = async (id: string): Promise<BlogBody> => {
     await e2e.settled();
     const response = await as(
@@ -78,7 +72,6 @@ describe('Blog flows (e2e)', () => {
     ).expect(200);
     return response.body as BlogBody;
   };
-  /** Publishes a new blog, which answers PROCESSING, and returns its verdict. */
   const publish = async (payload: object = {}): Promise<BlogBody> => {
     const response = await create({ status: 'PUBLISHED', ...payload }).expect(
       201,
@@ -305,7 +298,6 @@ describe('Blog flows (e2e)', () => {
     });
 
     it('refuses a request without the editor state before using the allowance', async () => {
-      // BUG-3: The required `editor` field is not enforced, so the request reaches quota + model
       const response = await chat({ messages: [userMessage] });
 
       expect(response.status).toBe(400);

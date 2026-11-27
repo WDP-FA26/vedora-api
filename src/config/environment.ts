@@ -85,7 +85,6 @@ export class EnvironmentVariables {
   @Max(31536000)
   REFRESH_TOKEN_TTL = 2592000;
 
-  /** Seconds a just-rotated refresh token may be sent again (parallel or retried refreshes). */
   @Type(() => Number)
   @IsInt()
   @Min(0)
@@ -138,7 +137,6 @@ export class EnvironmentVariables {
   @IsBoolean()
   CAPTIONS_ENABLED = true;
 
-  /** Vedora AI comments a summary (and recipe, if any) on newly published posts. */
   @Transform(toBoolean)
   @IsBoolean()
   POST_SUMMARIES_ENABLED = true;
@@ -156,23 +154,16 @@ export class EnvironmentVariables {
   @IsIn(REASONING_EFFORTS)
   AI_REASONING_EFFORT = 'low';
 
-  /**
-   * The provider every AI SDK call goes to: `gateway` (Vercel AI Gateway) or
-   * `openrouter`. Switch to `openrouter` when the Gateway is down.
-   */
   @IsIn(AI_PROVIDERS)
   AI_PROVIDER: AiProvider = 'gateway';
 
-  /** Vercel AI Gateway key: required at startup (alongside OPENROUTER_API_KEY) for Gateway calls and meal planner voice. */
   @IsString()
   @IsNotEmpty()
   AI_GATEWAY_API_KEY!: string;
 
-  /** Comma-separated Gateway provider slugs the chat models try first; empty lets the Gateway route. */
   @IsString()
   AI_GATEWAY_PROVIDER_ORDER = DEFAULT_GATEWAY_PROVIDER_ORDER;
 
-  /** Realtime voice model on AI Gateway, e.g. openai/gpt-live-1.1 or spacexai/grok-voice-3.0. */
   @IsString()
   VOICE_REALTIME_MODEL = 'openai/gpt-live-1.1';
 
@@ -239,20 +230,16 @@ export class EnvironmentVariables {
   @IsString()
   AI_CONTENT_MODERATION_MODEL = DEFAULT_CONTENT_MODERATION_MODEL;
 
-  /** Comma-separated OpenRouter provider slugs for the chat models; empty lets OpenRouter route. */
   @IsString()
   OPENROUTER_PROVIDER_ORDER = DEFAULT_OPENROUTER_CHAT_PROVIDER_ORDER;
 
-  /** Comma-separated OpenRouter provider slugs for both moderation models; empty lets OpenRouter route. */
   @IsString()
   OPENROUTER_MODERATION_PROVIDER_ORDER =
     DEFAULT_OPENROUTER_MODERATION_PROVIDER_ORDER;
 
-  /** App URL sent as `HTTP-Referer` so AI providers attribute requests instead of `Unknown`. */
   @IsUrl({ require_tld: false })
   AI_APP_URL = DEFAULT_AI_APP_URL;
 
-  /** App display name sent as `X-Title` / `X-OpenRouter-Title` to AI providers. */
   @IsString()
   @IsNotEmpty()
   AI_APP_TITLE = DEFAULT_AI_APP_TITLE;
@@ -303,35 +290,28 @@ export class EnvironmentVariables {
   @Max(1)
   POST_SEARCH_MIN_SCORE = 0.65;
 
-  /** Rerank knowledge search results; false skips the reranker. */
   @Transform(toBoolean)
   @IsBoolean()
   KNOWLEDGE_RERANK_ENABLED = true;
 
-  /** Knowledge reranker with `AI_PROVIDER=openrouter`; blank uses qwen/qwen3-reranker-8b. */
   @IsString()
   OPENROUTER_RERANK_MODEL = '';
 
-  /** Knowledge reranker on AI Gateway; blank uses cohere/rerank-v5-fast. */
   @IsString()
   AI_GATEWAY_RERANK_MODEL = '';
 
   @IsString()
   BLOG_AI_MODEL = '';
 
-  /** Blog image model with `AI_PROVIDER=openrouter`; blank uses the adapter default. */
   @IsString()
   OPENROUTER_IMAGE_MODEL = '';
 
-  /** Blog image model on AI Gateway; blank uses microsoft/mai-image-2.7-flash. */
   @IsString()
   AI_GATEWAY_IMAGE_MODEL = '';
 
-  /** Knowledge base PDF OCR model with `AI_PROVIDER=openrouter`; blank uses mistralai/mistral-small-2603. */
   @IsString()
   OPENROUTER_OCR_MODEL = '';
 
-  /** Knowledge base PDF OCR model on AI Gateway; blank uses mistral/mistral-small. */
   @IsString()
   AI_GATEWAY_OCR_MODEL = '';
 
@@ -346,7 +326,6 @@ export class EnvironmentVariables {
   @Matches(/^[A-Za-z0-9:_-]{1,100}$/)
   PAYMENT_EVENTS_CHANNEL = 'vedora:payments:v1';
 
-  // New catalogue uses distinct env names so an old PRO=49000 cannot price v2 Pro.
   @Type(() => Number)
   @IsInt()
   @Min(1)

@@ -11,12 +11,6 @@ import {
 import { createE2eApp, type E2eApp } from '@test/support/e2e-app.js';
 import { createUser } from '@test/support/fixtures.js';
 
-/**
- * Black-box flows for /profiles: editing your own profile, follow/unfollow
- * state transitions and idempotency, follower/following cursor pagination,
- * and what guests can see.
- */
-
 const PROFILE_SUMMARY_KEYS = [
   'avatarUrl',
   'bio',
@@ -81,7 +75,6 @@ describe('Profile and follow flows (e2e)', () => {
       (await request(server()).get(`/api/v1/profiles/${id}`).expect(200)).body,
     );
 
-  /** Inserts a follow with a fixed time, bypassing the API ordering. */
   const insertFollow = (followerId: string, followingId: string, at: Date) =>
     e2e.mongo.connection.collection<RawFollow>('follows').insertOne({
       _id: randomUUID(),
@@ -129,7 +122,6 @@ describe('Profile and follow flows (e2e)', () => {
       await patchMe({ fullName: 'a'.repeat(101) }).expect(400);
     });
 
-    // BUG-5: UpdateProfileDto checks fullName/bio length before trimming
     it('applies the 100-character limit to the trimmed full name', async () => {
       const response = await patchMe({ fullName: ` ${'a'.repeat(100)} ` });
 
@@ -144,7 +136,6 @@ describe('Profile and follow flows (e2e)', () => {
       expect((await profile(me.id)).bio).toBeNull();
     });
 
-    // BUG-6: PATCH /profiles/me with bio: null crashes with 500
     it('rejects a null bio with 400 instead of crashing', async () => {
       const response = await patchMe({ bio: null });
 
@@ -341,7 +332,6 @@ describe('Profile and follow flows (e2e)', () => {
       expect(seen).toEqual(newestFirst);
     });
 
-    // BUG-7: follower/following pagination stops early when a hidden account fills a page
     it('still reaches older verified followers when an unverified follower sits in the page', async () => {
       const followed = await createUser(e2e.mongo);
       const oldest = await createUser(e2e.mongo);

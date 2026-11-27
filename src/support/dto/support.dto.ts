@@ -60,7 +60,6 @@ export type AdminAssigneeFilter = (typeof ADMIN_ASSIGNEE_FILTERS)[number];
 
 const MAX_ATTACHMENTS = runtimeConfig.SUPPORT_MAX_ATTACHMENTS_PER_MESSAGE;
 
-/** Ids from `POST /support/attachments`, uploaded before the message is sent. */
 function AttachmentIds() {
   return applyDecorators(
     ApiPropertyOptional({

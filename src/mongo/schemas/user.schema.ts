@@ -78,11 +78,9 @@ export class User extends Identified {
   @Prop({ type: Date, default: null })
   searchIndexedAt!: Date | null;
 
-  /** What the meal planner must never serve this user, one natural-language line each. */
   @Prop({ type: [String], required: true, default: [] })
   allergies!: string[];
 
-  /** Lasting tastes and habits the meal planner keeps in mind, one line each. */
   @Prop({ type: [String], required: true, default: [] })
   foodPreferences!: string[];
 
@@ -226,7 +224,6 @@ export const UserAccountAuditSchema =
 UserAccountAuditSchema.index({ userId: 1, createdAt: 1 });
 UserAccountAuditSchema.index({ actorId: 1, createdAt: 1 });
 
-/** One weight/BMI check-in entry per user per calendar day (`YYYY-MM-DD`). */
 @Schema(collectionSchema('body_metric_logs'))
 export class BodyMetricLog extends Identified {
   @Prop({ type: String, default: () => randomUUID() })

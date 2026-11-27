@@ -1,17 +1,12 @@
 import { ApiProperty } from '@nestjs/swagger';
 
 export enum TaxCodeLookupStatus {
-  /** The tax department knows the code. */
   FOUND = 'FOUND',
-  /** The tax department does not know the code. */
   NOT_FOUND = 'NOT_FOUND',
-  /** No company tax code to look up: a 12-digit personal code (not public) or no legal step. */
   NOT_APPLICABLE = 'NOT_APPLICABLE',
-  /** The lookup service failed or limited the request; try again later. */
   UNAVAILABLE = 'UNAVAILABLE',
 }
 
-/** What the tax department's public data says about an application's tax code. */
 export class TaxCodeLookupDto {
   @ApiProperty({ enum: TaxCodeLookupStatus }) status!: TaxCodeLookupStatus;
   @ApiProperty({ type: String, nullable: true, example: '0101245486' })

@@ -20,15 +20,6 @@ import { StorageService } from '@src/storage/storage.service.js';
 import { createE2eApp, type E2eApp } from '@test/support/e2e-app.js';
 import { createUser } from '@test/support/fixtures.js';
 
-/**
- * Black-box flows of the admin knowledge base: upload → OCR → review →
- * approve/reject → index → delete. Real MongoDB and a real local Qdrant
- * (a collection of its own per run); only S3, OCR and OpenRouter embeddings
- * are stubbed at their boundary.
- */
-
-// ConfigModule validates the environment when AppModule is imported, so the
-// collection and vector size must be set before any import runs.
 const COLLECTION = vi.hoisted(() => {
   const name = `knowledge_flows_${crypto.randomUUID().replaceAll('-', '')}`;
   process.env.QDRANT_COLLECTION = name;
@@ -93,7 +84,6 @@ describe('Knowledge base flows (HTTP + MongoDB + Qdrant)', () => {
     return count;
   };
 
-  /** Creates a document over HTTP and returns its id and storage key. */
   const startUpload = async (filename = 'dinh-duong.pdf') => {
     const response = await http()
       .post(route)
@@ -106,7 +96,6 @@ describe('Knowledge base flows (HTTP + MongoDB + Qdrant)', () => {
     return { id: document.id, storageKey: document.storageKey };
   };
 
-  /** Confirms the PDF upload and waits for the OCR step to finish. */
   const uploadAndExtract = async (texts: string[] = CALCIUM_PAGES) => {
     extractedPages = texts;
     const document = await startUpload();
@@ -130,7 +119,6 @@ describe('Knowledge base flows (HTTP + MongoDB + Qdrant)', () => {
       timeout: 10_000,
     });
 
-  /** Calls through, so a test can await the background run it starts. */
   const watchBackgroundRuns = (method: 'ingest' | 'indexApproved') =>
     vi.spyOn(knowledge, method);
   const allSettled = async (
@@ -153,7 +141,6 @@ describe('Knowledge base flows (HTTP + MongoDB + Qdrant)', () => {
     qdrant = e2e.app.get(QdrantService);
     knowledge = e2e.app.get(KnowledgeService);
     maintenance = e2e.app.get(KnowledgeMaintenanceService);
-    // Never write into a developer's real collection.
     if (e2e.app.get(KnowledgeIndexService).collection !== COLLECTION) {
       throw new Error('QDRANT_COLLECTION was not isolated for this spec');
     }
@@ -372,7 +359,6 @@ describe('Knowledge base flows (HTTP + MongoDB + Qdrant)', () => {
       expect(await pointCount(id)).toBe(0);
     });
 
-    // BUG-4: a stuck extraction that the cron already FAILED is revived by the late OCR result
     it('keeps a document FAILED when its interrupted extraction finishes after the cron failed it', async () => {
       extractGate = deferred<void>();
       const runs = watchBackgroundRuns('ingest');
@@ -590,14 +576,11 @@ describe('Knowledge base flows (HTTP + MongoDB + Qdrant)', () => {
       await approve(id).expect(200);
       await waitForStatus(id, KnowledgeDocumentStatus.READY);
 
-      // Two short pages, no images: one chunk each.
       expect(await pointCount(id)).toBe(CALCIUM_PAGES.length);
     });
 
-    // BUG-5: overlapping index runs (stuck run returned to review, then re-approved) duplicate points
     it('keeps one copy of the points when a stuck run and its re-approval both finish', async () => {
       const { id } = await uploadAndExtract();
-      // Two short pages, no images: one run indexes two chunks.
       const singleRun = CALCIUM_PAGES.length;
       const runs = watchBackgroundRuns('indexApproved');
       const firstRun = deferred<void>();
@@ -610,8 +593,6 @@ describe('Knowledge base flows (HTTP + MongoDB + Qdrant)', () => {
       embedGate = secondRun;
       await approve(id).expect(200);
       await vi.waitFor(() => expect(models.embed).toHaveBeenCalledTimes(4));
-      // Interleave deterministically: both runs clear the old points before
-      // either writes its new ones (each run is remove-then-upsert).
       const realDelete = qdrant.delete.bind(qdrant);
       const realUpsert = qdrant.upsert.bind(qdrant);
       const bothRemoved = deferred<void>();
@@ -636,7 +617,6 @@ describe('Knowledge base flows (HTTP + MongoDB + Qdrant)', () => {
       expect(await pointCount(id)).toBe(singleRun);
     });
 
-    // BUG-3: a run the cron gave up on still marks a since-REJECTED document READY and searchable
     it('keeps a document REJECTED when an interrupted indexing run finishes after the rejection', async () => {
       embedGate = deferred<void>();
       const runs = watchBackgroundRuns('indexApproved');
@@ -801,7 +781,6 @@ describe('Knowledge base flows (HTTP + MongoDB + Qdrant)', () => {
       expect(await pointCount(kept.id)).toBe(keptPoints);
     });
 
-    // BUG-1: DELETE during INDEXING leaves the document's points in Qdrant
     it('leaves no Qdrant points when deleted while indexing', async () => {
       embedGate = deferred<void>();
       const runs = watchBackgroundRuns('indexApproved');
@@ -817,7 +796,6 @@ describe('Knowledge base flows (HTTP + MongoDB + Qdrant)', () => {
       expect(await pointCount(id)).toBe(0);
     });
 
-    // BUG-2: DELETE during PROCESSING leaves orphan OCR pages
     it('leaves no pages when deleted while the OCR is running', async () => {
       extractGate = deferred<void>();
       const runs = watchBackgroundRuns('ingest');

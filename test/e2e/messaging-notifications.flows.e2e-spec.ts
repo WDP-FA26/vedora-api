@@ -9,10 +9,6 @@ import {
 import { createE2eApp, type E2eApp } from '@test/support/e2e-app.js';
 import { createUser } from '@test/support/fixtures.js';
 
-/**
- * Gaps in the messaging contract (realtime-messaging.md) and the HTTP side of
- * notifications (notifications.md), through the full application.
- */
 describe('Messaging and notification flows (HTTP)', () => {
   let e2e: E2eApp;
   let alice: User;

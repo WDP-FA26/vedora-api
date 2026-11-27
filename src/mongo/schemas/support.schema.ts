@@ -47,7 +47,6 @@ export class SupportAppealData {
   @Prop({ type: String, enum: APPEAL_TRIGGER_STATUSES, required: true })
   triggerStatus!: AppealTriggerStatus;
 
-  /** Identifies the specific moderation rejection or admin removal incident. */
   @Prop({ type: String, required: true })
   incidentKey!: string;
 
@@ -102,11 +101,9 @@ export class SupportTicket extends Identified {
   })
   status!: SupportTicketStatus;
 
-  /** Populated only when category === CONTENT_APPEAL. */
   @Prop({ type: SupportAppealDataSchema, default: null })
   appeal!: SupportAppealData | null;
 
-  /** Optional reference code (e.g. SePay payment transfer code) for non-appeal tickets. */
   @Prop({ type: String, default: null })
   referenceCode!: string | null;
 
@@ -124,22 +121,15 @@ export class SupportTicket extends Identified {
   @Prop({ type: Number, required: true, default: 1 })
   messageCount!: number;
 
-  /** Set when status becomes WAITING_USER; used to auto-expire stale tickets. */
   @Prop({ type: Date, default: null })
   waitingUserSince!: Date | null;
 
-  /**
-   * Reminders sent during the current WAITING_USER stretch (0, 1 or 2). Like
-   * Zendesk's "bump bump solve", a ticket only expires after the final one,
-   * and every reply from either side starts the count again.
-   */
   @Prop({ type: Number, default: 0 })
   waitingReminderCount!: number;
 
   @Prop({ type: Date, default: null })
   lastReminderAt!: Date | null;
 
-  /** The admin who claimed the ticket; only they may reply publicly or resolve it. */
   @Prop({ type: String, default: null })
   assigneeId!: string | null;
 
@@ -240,7 +230,6 @@ export class SupportMessage extends Identified {
   @Prop({ type: Boolean, required: true, default: false })
   isInternal!: boolean;
 
-  /** Empty when the message carries only attachments. */
   @Prop({ type: String, default: '' })
   body!: string;
 
@@ -256,10 +245,6 @@ cascadeOnDelete(SupportMessageSchema, [
   { model: 'SupportAttachment', field: 'messageId', action: 'delete' },
 ]);
 
-/**
- * An image uploaded to the private support bucket. It stays unattached
- * (`messageId: null`) until a message claims it; stale unattached uploads are purged.
- */
 @Schema(collectionSchema('support_attachments', 'created'))
 export class SupportAttachment extends Identified {
   @Prop({ type: String, default: () => randomUUID() })

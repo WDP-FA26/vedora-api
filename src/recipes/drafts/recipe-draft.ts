@@ -30,7 +30,6 @@ const draftSourceSchema = z.object({
   url: z.string(),
 });
 
-/** What the model returns. Catalog entries are referred to by short refs ("i3", "g1"). */
 export const draftOutput = z.object({
   recipe: z
     .object({
@@ -63,20 +62,12 @@ export const draftOutput = z.object({
 export type DraftOutput = z.infer<typeof draftOutput>;
 export type DraftRecipeOutput = NonNullable<DraftOutput['recipe']>;
 
-/** What one draft call reads. Each piece goes into the prompt in its own tag. */
 export interface DraftRequest {
-  /** Post text, video transcripts or pasted text: written by users, read as data. */
   parts: readonly PostSourcePart[];
-  /** The recipe on the admin form, to revise; read as data. */
   currentRecipe: string | null;
-  /** The admin's own request: the only instructions in the request. */
   instruction: string | null;
 }
 
-/**
- * Removes the prompt's own tags from text a user wrote, so a caption cannot
- * close `<source>` early or pose as `<admin_request>`.
- */
 export function stripDraftTags(text: string): string {
   return text.replace(
     /<\/?(?:source|current_recipe|admin_request|catalog|ingredients|groups)\b[^>]*>?/gi,
@@ -84,7 +75,6 @@ export function stripDraftTags(text: string): string {
   );
 }
 
-/** The prompt text after the cached catalog prefix. */
 export function draftRequestText(request: DraftRequest): string {
   const blocks: string[] = [];
   if (request.parts.length > 0) {
@@ -116,7 +106,6 @@ export interface CatalogGroup {
   name: string;
 }
 
-/** The catalog as the model sees it, with a short ref for each entry. */
 export interface DraftCatalog {
   ingredients: Map<string, CatalogIngredient>;
   groups: Map<string, CatalogGroup>;
@@ -128,14 +117,11 @@ export interface NamedRef {
 }
 
 export interface DraftIngredient {
-  /** The ingredient as the source names it. */
   name: string;
   quantity: number | null;
   unit: string | null;
   note: string | null;
-  /** The catalog ingredient it is, or null when the catalog has none. */
   match: NamedRef | null;
-  /** A new catalog ingredient to create, when `match` is null. */
   suggestion: {
     name: string;
     aliases: string[];
@@ -171,7 +157,6 @@ export function buildDraftCatalog(
   return catalog;
 }
 
-/** The catalog listing that goes into the prompt, one entry per line. */
 export function describeCatalog(catalog: DraftCatalog): string {
   const lines: string[] = ['<ingredients>'];
   for (const [ref, ingredient] of catalog.ingredients) {
@@ -188,17 +173,10 @@ export function describeCatalog(catalog: DraftCatalog): string {
   return lines.join('\n');
 }
 
-/** Lowercased, NFC, single-spaced: "  Đậu  Hũ " and "đậu hũ" are the same name. */
 export function normalizeName(name: string): string {
   return name.normalize('NFC').trim().toLowerCase().replace(/\s+/g, ' ');
 }
 
-/**
- * Turns the model's answer into a draft the recipe form accepts: catalog
- * refs become ids (unknown refs are dropped), names the model did not match
- * are looked up among catalog names and aliases, a second row for the same ingredient is
- * folded into the first, and every value is cut to the form's limits.
- */
 export function toRecipeDraft(
   output: DraftOutput,
   catalog: DraftCatalog,
@@ -286,7 +264,6 @@ function indexByName(catalog: DraftCatalog): Map<string, CatalogIngredient> {
   for (const ingredient of catalog.ingredients.values()) {
     byName.set(normalizeName(ingredient.name), ingredient);
   }
-  // A name wins over another ingredient's alias.
   for (const ingredient of catalog.ingredients.values()) {
     for (const alias of ingredient.aliases) {
       const key = normalizeName(alias);
@@ -300,11 +277,6 @@ type OutputIngredient = NonNullable<
   DraftOutput['recipe']
 >['ingredients'][number];
 
-/**
- * The catalog ingredient the model pointed at, else the one with the same
- * name or alias. The model's own aliases are not used to match: it only gives
- * them when it judged the catalog has no such food.
- */
 function findMatch(
   item: OutputIngredient,
   name: string,
@@ -332,7 +304,6 @@ function suggestIngredient(
     const alias = clipText(raw, MAX_NAME_LENGTH);
     if (!alias) continue;
     const key = normalizeName(alias);
-    // An alias another ingredient already uses would only confuse lookups.
     if (seen.has(key) || byName.has(key)) continue;
     seen.add(key);
     if (aliases.length < MAX_ALIASES) aliases.push(alias);
@@ -348,7 +319,6 @@ function suggestIngredient(
   return { name, aliases, groups };
 }
 
-/** Adds a repeated ingredient's amount to the first row's note, e.g. "300 g; thêm 1 muỗng". */
 function foldNote(
   note: string | null,
   quantity: number | null,

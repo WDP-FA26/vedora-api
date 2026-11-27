@@ -24,7 +24,6 @@ import { createE2eApp, type E2eApp } from '@test/support/e2e-app.js';
 import { createPost, createUser } from '@test/support/fixtures.js';
 import { runtimeConfig } from '@src/config/runtime-config.js';
 
-// Exercise real moderation/settlement without downloading frames or calling a paid provider.
 vi.mock('@src/common/http/fetch-public-image.js', () => ({
   fetchPublicImage: vi.fn().mockResolvedValue(Buffer.from('fixture-image')),
 }));

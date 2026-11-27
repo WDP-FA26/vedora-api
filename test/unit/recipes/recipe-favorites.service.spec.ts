@@ -103,7 +103,6 @@ describe('RecipeFavoritesService', () => {
     });
     expect(firstDoc).not.toBeNull();
 
-    // Repeat save keeps original timestamp
     await service.set(RECIPE_1, USER_ID, true);
     const secondDoc = await favorites().findOne({
       recipeId: RECIPE_1,
@@ -111,7 +110,6 @@ describe('RecipeFavoritesService', () => {
     });
     expect(secondDoc?.createdAt.getTime()).toBe(firstDoc?.createdAt.getTime());
 
-    // Remove and repeat remove idempotently
     await expect(service.set(RECIPE_1, USER_ID, false)).resolves.toEqual({
       recipeId: RECIPE_1,
       isFavorite: false,

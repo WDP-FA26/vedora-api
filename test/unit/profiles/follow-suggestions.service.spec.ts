@@ -52,8 +52,6 @@ describe('FollowSuggestionsService', () => {
     await posts().deleteMany({});
     await suggestions().deleteMany({});
     await dismissals().deleteMany({});
-    // Clear internal 10-minute activeAuthors cache by mocking time past expiry if needed;
-    // since each test resets posts/users, advancing Date.now guarantees a fresh pool.
   });
 
   afterAll(async () => {
@@ -77,18 +75,14 @@ describe('FollowSuggestionsService', () => {
       const dismissedFan = await createUser(db, { username: 'dismissed' });
 
       await follows().create([
-        // viewer follows friend1 and friend2
         { followerId: viewer.id, followingId: friend1.id },
         { followerId: viewer.id, followingId: friend2.id },
-        // friend1 & friend2 follow mutualTwo -> mutualCount = 2
         { followerId: friend1.id, followingId: mutualTwo.id },
         { followerId: friend2.id, followingId: mutualTwo.id },
-        // friend1 follows mutualOne, viewer itself, unverified, and bothSignals
         { followerId: friend1.id, followingId: mutualOne.id },
         { followerId: friend1.id, followingId: viewer.id },
         { followerId: friend1.id, followingId: unverified.id },
         { followerId: friend1.id, followingId: bothSignals.id },
-        // followsViewer, bothSignals, dismissedFan, and unverified follow viewer
         { followerId: followsViewer.id, followingId: viewer.id },
         { followerId: bothSignals.id, followingId: viewer.id },
         { followerId: dismissedFan.id, followingId: viewer.id },
@@ -159,7 +153,6 @@ describe('FollowSuggestionsService', () => {
       ]);
       await service.rebuild([viewer.id]);
 
-      // Mutate state after rebuild: follow fan1, unverify fan2, delete fan3
       await follows().create({ followerId: viewer.id, followingId: fan1.id });
       await users().updateOne(
         { _id: fan2.id },
@@ -220,7 +213,6 @@ describe('FollowSuggestionsService', () => {
         authorId: unverifiedActive.id,
         publishedAt: recent,
       });
-      // Ignored: DRAFT and >30d old
       await createPost(db, {
         authorId: viewer.id,
         publishedAt: recent,
@@ -252,13 +244,11 @@ describe('FollowSuggestionsService', () => {
       ]);
       expect(aggregateSpy).toHaveBeenCalledTimes(1);
 
-      // Within 10-minute TTL, activePool uses cache
       offset += 5 * 60 * 1000;
       const second = await service.list(viewer.id, 5);
       expect(second.items).toHaveLength(2);
       expect(aggregateSpy).toHaveBeenCalledTimes(1);
 
-      // Past 10-minute TTL, activePool recomputes
       offset += 6 * 60 * 1000;
       await service.list(viewer.id, 5);
       expect(aggregateSpy).toHaveBeenCalledTimes(2);

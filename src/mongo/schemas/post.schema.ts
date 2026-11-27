@@ -43,7 +43,6 @@ export const EVIDENCE_FIELDS = [
 ] as const;
 export type EvidenceField = (typeof EVIDENCE_FIELDS)[number];
 
-/** One part of a post that the reviewer model says breaks the policy. */
 @Schema({ _id: false })
 export class ModerationEvidenceItem {
   @Prop({ type: String, enum: EVIDENCE_FIELDS, required: true })
@@ -55,11 +54,9 @@ export class ModerationEvidenceItem {
   @Prop({ type: String, required: true })
   reason!: string;
 
-  /** Text fields: the exact substring. Frames and images: text the model read in it (OCR, may be off). */
   @Prop({ type: String, default: null })
   quote!: string | null;
 
-  /** Offset of `quote` in the field (UTF-16 code units, after NFC). Text fields only. */
   @Prop({ type: Number, default: null })
   start!: number | null;
 
@@ -85,14 +82,12 @@ export class ModerationEvidence {
   @Prop({ type: String, enum: EVIDENCE_STATUSES, required: true })
   status!: EvidenceStatus;
 
-  /** Why the content got its risk level, in Vietnamese: null unless READY. */
   @Prop({ type: String, default: null })
   summary!: string | null;
 
   @Prop({ type: [ModerationEvidenceItemSchema], default: [] })
   items!: ModerationEvidenceItem[];
 
-  /** Model quotes that did not match the post, so were dropped. */
   @Prop({ type: Number, default: 0 })
   dropped!: number;
 
@@ -111,7 +106,6 @@ export class PostModeration {
   @Prop({ type: String, required: true })
   verdict!: string;
 
-  /** 0 (no risk) to 3 (a clear violation); null when the model gave none or on posts judged before risk levels. */
   @Prop({ type: Number, default: null })
   riskLevel!: number | null;
 
@@ -127,7 +121,6 @@ export class PostModeration {
   @Prop({ type: String, default: null })
   reviewNote!: string | null;
 
-  /** Admin-only explanation of the verdict, from the same model call. */
   @Prop({ type: ModerationEvidenceSchema, default: null })
   evidence?: ModerationEvidence | null;
 }
@@ -208,7 +201,6 @@ export class Post extends Identified {
   @Prop({ type: Number, default: 0 })
   draftVersion!: number;
 
-  /** Serializes comment writes with post deletion without changing its public edit time. */
   @Prop({ type: Number, default: 0 })
   commentRevision!: number;
 
@@ -272,7 +264,6 @@ export class PostComment extends Identified {
   @Prop({ type: String, default: null })
   replyToId!: string | null;
 
-  /** A write fence for concurrent replies and parent/target deletion. */
   @Prop({ type: Number, default: 0 })
   threadRevision!: number;
 
@@ -395,11 +386,6 @@ export const PostReportSchema = SchemaFactory.createForClass(PostReport);
 PostReportSchema.index({ postId: 1, reporterId: 1 }, { unique: true });
 PostReportSchema.index({ status: 1, createdAt: 1 });
 
-/**
- * Views of one published post on one app-time-zone calendar day, rolled up by
- * PostViewsService. Counts start when this collection was introduced; earlier
- * views exist only in `Post.viewCount`.
- */
 @Schema(collectionSchema('post_view_days', 'none'))
 export class PostViewDay extends Identified {
   @Prop({ type: String, default: () => randomUUID() })
@@ -411,7 +397,6 @@ export class PostViewDay extends Identified {
   @Prop({ type: String, required: true })
   authorId!: string;
 
-  /** `YYYY-MM-DD` in APP_TIMEZONE. */
   @Prop({ type: String, required: true })
   date!: string;
 

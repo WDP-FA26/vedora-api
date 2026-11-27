@@ -1,13 +1,6 @@
 import mongoose from 'mongoose';
 import { MongoMemoryReplSet } from 'mongodb-memory-server';
 
-/**
- * Ensures a MongoDB replica set is ready for the test run:
- * - If `TEST_DATABASE_URL` is set, verifies it is reachable up front.
- * - Otherwise starts an ephemeral single-node replica set via
- *   `mongodb-memory-server`, exposes its URI on `process.env.TEST_DATABASE_URL`
- *   for Vitest workers, and stops it on teardown.
- */
 export default async function setupTestMongo(): Promise<
   (() => Promise<void>) | void
 > {

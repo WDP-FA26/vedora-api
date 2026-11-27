@@ -76,7 +76,6 @@ export class PostReportDto {
   @ApiProperty() createdAt!: Date;
 }
 
-/** Post-only extension: comment reporting keeps its existing input contract. */
 export class CreatePostWithEvidenceReportDto extends CreatePostReportDto {
   @ApiPropertyOptional({
     type: [String],

@@ -10,12 +10,6 @@ const lines = z
   .array(z.string().trim().min(1).max(MAX_MEMORY_ITEM_LENGTH))
   .max(MAX_MEMORY_ITEMS);
 
-/**
- * Adds and removes lines in the user's memory ("Ghi nhớ" in their dietary
- * profile): allergies and preferences. The user sees and edits the same lines.
- * The app checks planned dishes against the allergies, so `onAllergiesSaved`
- * lets the rest of the turn use the new lines at once.
- */
 export function updateMemoryTool(
   dietary: DietaryService,
   userId: string,

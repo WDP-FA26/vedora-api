@@ -19,7 +19,6 @@ import {
 import { rethrowUniqueViolation } from './unique-conflict.js';
 import { ResourceNotFoundException } from '../common/exceptions/resource-not-found.exception.js';
 
-/** Filter that leaves out the Vedora AI system account. */
 export const HUMAN_ACCOUNT = { status: { $ne: AccountStatus.SYSTEM } } as const;
 
 export type NewUser = Pick<User, 'username' | 'fullName' | 'email'> &
@@ -70,8 +69,6 @@ export class AccountsService {
     });
   }
 
-  // These lookups serve sign-in, recovery and admin reads, so they never
-  // return the Vedora AI system account (see system-account.ts).
   findByUsername(username: string): Promise<User | null> {
     return this.users.findOne({ username, ...HUMAN_ACCOUNT }).exec();
   }

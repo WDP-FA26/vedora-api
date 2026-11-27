@@ -85,7 +85,6 @@ export class UpdateProfileDto {
     maxLength: runtimeConfig.PROFILE_BIO_MAX_LENGTH,
     description: 'Empty string clears the bio; null is rejected',
   })
-  // Only an absent bio skips validation: null must fail IsString with 400.
   @ValidateIf((_object, value: unknown) => value !== undefined)
   @Transform(trim)
   @IsString()

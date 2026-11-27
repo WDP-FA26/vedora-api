@@ -52,14 +52,11 @@ function toReportDto(report: PostReport): PostReportDto {
 
 const EXCERPT_LENGTH = 80;
 
-/** Who to tell once an admin removes a post. */
 export interface PostRemovalNotice {
   postId: string;
   authorId: string;
   reporterIds: string[];
-  /** The most reported reason, or null when nobody reported the post. */
   reason: PostReportReason | null;
-  /** The blog title or the start of the post text, so people know which post. */
   excerpt: string | null;
 }
 
@@ -215,9 +212,6 @@ export class PostReportsService {
     return dto;
   }
 
-  /**
-   * Reads who to tell about an admin soft-deleting a post.
-   */
   async removalNotice(postId: string): Promise<PostRemovalNotice | null> {
     const post = await this.posts
       .findOne({ _id: postId })
@@ -260,10 +254,6 @@ export class PostReportsService {
       .exec();
   }
 
-  /**
-   * Tells the author their post was removed (with postId so they can view it
-   * and file an appeal) and every reporter that the reported post is gone.
-   */
   async announceRemoval(
     notice: PostRemovalNotice,
     adminId: string,
@@ -277,7 +267,6 @@ export class PostReportsService {
         note,
       }),
     );
-    // An admin removing their own post needs no notice.
     if (notice.authorId !== adminId) {
       sends.push(
         this.notifications.notify({

@@ -262,7 +262,6 @@ describe('Meal planner AI tools', () => {
   describe('fillSlotsTool', () => {
     beforeEach(() => {
       vi.useFakeTimers({ toFake: ['Date'] });
-      // Thursday 2026-11-19 in Vietnam: Monday to Wednesday have passed.
       vi.setSystemTime(new Date('2026-11-19T03:00:00Z'));
     });
     afterEach(() => {
@@ -876,8 +875,6 @@ describe('Meal planner AI tools', () => {
       );
       expect(output.applied).toBe(true);
       expect(output.safe).toBe(true);
-      // The removal and the refill are one change: a rewind puts back the
-      // flagged dish, the state before the tool ran.
       const mondayLunch = output.days?.[0].sections[0];
       expect(mondayLunch?.recipes.map(({ id }) => id)).toEqual([safeId]);
       expect(mondayLunch?.previous.map(({ id }) => id)).toEqual([recipe1]);

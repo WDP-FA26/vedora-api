@@ -1,5 +1,3 @@
-// Leaf file: schema helpers import the names from here, so they never have to
-// import the schemas that import them.
 export const MODEL_NAMES = [
   'PostReportEvidence',
   'DocumentLock',

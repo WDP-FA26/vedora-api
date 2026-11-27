@@ -1,8 +1,3 @@
-// Generated from https://provinces.open-api.vn/api/v2/?depth=2 on 2026-11-27:
-// Vietnam's 34 provinces and 3,321 wards, communes and special zones after the
-// merger of 1 July 2025. Codes are the official ones, zero-padded. Do not edit by hand.
-
-/** Province or centrally run city name by official code. */
 export const VN_PROVINCES = {
   '01': 'Thành phố Hà Nội',
   '04': 'Tỉnh Cao Bằng',
@@ -44,7 +39,6 @@ export type VnProvinceCode = keyof typeof VN_PROVINCES;
 
 export const VN_PROVINCE_CODES = Object.keys(VN_PROVINCES) as VnProvinceCode[];
 
-/** Each province's wards, communes and special zones as `[code, name]`. */
 export const VN_WARDS: Record<
   VnProvinceCode,
   readonly (readonly [string, string])[]
@@ -3440,10 +3434,6 @@ export const VN_WARDS: Record<
   ],
 };
 
-/**
- * The slug codes applications used before official codes (until 27/11/2026),
- * mapped to the official province code.
- */
 export const LEGACY_PROVINCE_CODES: Record<string, VnProvinceCode> = {
   'ha-noi': '01',
   'cao-bang': '04',
@@ -3485,7 +3475,6 @@ export function isVnProvinceCode(value: unknown): value is VnProvinceCode {
   return typeof value === 'string' && Object.hasOwn(VN_PROVINCES, value);
 }
 
-/** The ward's name, or null when the code is not a ward of that province. */
 export function wardName(
   provinceCode: VnProvinceCode,
   wardCode: string,

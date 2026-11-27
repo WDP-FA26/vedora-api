@@ -4,7 +4,6 @@ import { runFfmpeg } from '../common/ffmpeg/ffmpeg.js';
 const MAX_SIDE_PX = runtimeConfig.MODERATION_IMAGE_MAX_SIDE_PX;
 const MIN_SIDE_PX = runtimeConfig.MODERATION_IMAGE_MIN_SIDE_PX;
 
-/** ffmpeg filters that fit any picture inside the moderation model's image limits. */
 const MODERATION_FILTERS: readonly string[] = [
   `scale=w='min(iw,${MAX_SIDE_PX})':h='min(ih,${MAX_SIDE_PX})':force_original_aspect_ratio=decrease`,
   "crop=w='trunc(iw/2)*2':h='trunc(ih/2)*2'",

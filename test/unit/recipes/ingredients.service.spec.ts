@@ -73,7 +73,6 @@ describe('IngredientsService', () => {
     expect(list.items.map((i) => i.name)).toEqual(['Bơ mè', 'Đậu hũ']);
     expect(list.items.find((i) => i.id === tofu.id)?.recipeCount).toBe(1);
 
-    // Update tofu: keep only g1, clear aliases
     const updated = await service.update(tofu.id, {
       name: 'Đậu hũ non',
       groupIds: [g1.id],
@@ -82,10 +81,8 @@ describe('IngredientsService', () => {
     expect(updated.aliases).toEqual([]);
     expect(updated.groups.map((g) => g.id)).toEqual([g1.id]);
 
-    // Update sesame with no groups
     await service.update(sesame.id, { name: 'Mè trắng' });
 
-    // Deleting an ingredient used in a recipe fails with INGREDIENT_IN_USE
     await expect(service.remove(tofu.id)).rejects.toSatisfy(
       (err: unknown) =>
         err instanceof StateConflictException &&
@@ -180,7 +177,6 @@ describe('IngredientsService', () => {
       }),
     ).rejects.toBeInstanceOf(ResourceNotFoundException);
 
-    // Tolerates dangling ingredient id in DB group document
     await groups().updateOne(
       { _id: g2.id },
       { $set: { ingredientIds: ['a1a2d3e4-0000-4000-8000-000000000099'] } },

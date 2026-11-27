@@ -816,7 +816,6 @@ describe('MediaService', () => {
       });
       expect((await media())?.aspectRatio).toBe('16:9');
 
-      // Second upload notification while PROCESSING is a no-op
       await service.handleNotification({
         notification_type: 'upload',
         resource_type: 'video',

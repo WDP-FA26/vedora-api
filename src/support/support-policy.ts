@@ -64,10 +64,6 @@ export function isTicketActive(status: SupportTicketStatus): boolean {
   );
 }
 
-/**
- * Every REJECTED post and every admin-REMOVED post can be appealed.
- * Author self-deleted posts are never appealable.
- */
 export function appealTriggerStatusOf(post: Post): AppealTriggerStatus | null {
   if (post.status === PostStatus.REJECTED) return 'REJECTED';
   if (
@@ -79,11 +75,6 @@ export function appealTriggerStatusOf(post: Post): AppealTriggerStatus | null {
   return null;
 }
 
-/**
- * Deterministic timestamp of the rejection or admin removal. Rejecting an
- * appeal never mutates `post.moderation.reviewedAt`, so this value stays stable
- * for the entire incident.
- */
 export function blockedAtOf(post: Post): Date | null {
   const trigger = appealTriggerStatusOf(post);
   if (trigger === 'REMOVED') {
@@ -297,11 +288,6 @@ export function generateTicketCode(category: SupportTicketCategory): string {
   return `${prefix}-${suffix}`;
 }
 
-/**
- * Until when the author may reopen a finished ticket by replying to it.
- * Appeals never reopen: their outcome is tied to the post's moderation state,
- * and a new appeal goes through `evaluateAppealEligibility` instead.
- */
 export function reopenDeadlineOf(
   ticket: Pick<SupportTicket, 'category' | 'status' | 'resolvedAt'>,
   windowDays = runtimeConfig.SUPPORT_REOPEN_WINDOW_DAYS,
@@ -317,7 +303,6 @@ export type AuthorReplyMode = 'REPLY' | 'REOPEN';
 export type AuthorReplyBlock =
   'TICKET_ALREADY_CLOSED' | 'TICKET_REOPEN_WINDOW_EXPIRED';
 
-/** Whether the author's next message continues the ticket or reopens it. */
 export function authorReplyModeOf(
   ticket: Pick<SupportTicket, 'category' | 'status' | 'resolvedAt'>,
   now: Date = new Date(),
@@ -331,10 +316,6 @@ export function authorReplyModeOf(
   return { mode: 'REOPEN' };
 }
 
-/**
- * A claimed ticket belongs to its assignee: other admins may add internal
- * notes but not reply publicly or resolve it until they take it over.
- */
 export function isClaimedByOther(
   ticket: Pick<SupportTicket, 'assigneeId'>,
   adminId: string,
@@ -363,11 +344,6 @@ type WaitingTicket = Pick<
   'status' | 'waitingUserSince' | 'waitingReminderCount' | 'lastReminderAt'
 >;
 
-/**
- * When a WAITING_USER ticket expires. The final reminder promises the author
- * the full notice period (expire − final hours), so a late reminder pushes
- * the deadline back instead of closing the ticket right after the warning.
- */
 export function autoCloseAtOf(
   ticket: WaitingTicket,
   timings: WaitingReminderTimings = waitingReminderTimings(),
@@ -387,10 +363,6 @@ export function autoCloseAtOf(
 
 export type WaitingStep = 'FIRST_REMINDER' | 'FINAL_REMINDER' | 'EXPIRE';
 
-/**
- * Zendesk-style "bump, bump, solve": a silent author gets a reminder, then a
- * final warning, and only a ticket that received both can expire.
- */
 export function nextWaitingStep(
   ticket: WaitingTicket,
   now: Date,

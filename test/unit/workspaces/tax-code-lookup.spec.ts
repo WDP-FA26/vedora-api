@@ -38,7 +38,6 @@ describe('isPublicTaxCode', () => {
   it('accepts company codes only', () => {
     expect(isPublicTaxCode('0101245486')).toBe(true);
     expect(isPublicTaxCode('0101245486-001')).toBe(true);
-    // Personal codes (citizen IDs) are not public.
     expect(isPublicTaxCode('001203004005')).toBe(false);
     expect(isPublicTaxCode('12345')).toBe(false);
   });

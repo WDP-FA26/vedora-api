@@ -1,7 +1,5 @@
 import { randomUUID } from 'node:crypto';
 
-// ConfigModule reads the environment when AppModule is imported, so the
-// header that separates guest IPs must be set before any import runs.
 vi.hoisted(() => {
   process.env.CLIENT_IP_HEADER = 'x-test-ip';
 });
@@ -72,7 +70,6 @@ const languageModel = new MockLanguageModelV4({
     }),
 });
 
-/** Flags any conversation that contains FLAGGED; allows everything else. */
 const moderator = new FakeModel((call) => ({
   object: {
     choice: call.lastUserMessage?.includes(FLAGGED) ? 'harmful' : 'allow',
@@ -92,7 +89,6 @@ function isTextDelta(value: unknown): value is { type: string; delta: string } {
   );
 }
 
-/** Joins the text deltas of an AI SDK UI message stream (SSE) body. */
 function replyText(body: string): string {
   let text = '';
   for (const line of body.split('\n')) {
@@ -103,7 +99,6 @@ function replyText(body: string): string {
   return text;
 }
 
-/** The planner chat is about one week, sent as weekStart. */
 const NEXT_WEEK = nextWeekStart();
 
 describe('Assistant chat flows (e2e)', () => {
@@ -312,7 +307,6 @@ describe('Assistant chat flows (e2e)', () => {
         message: 'Lên thực đơn tuần chay',
       }).expect(200);
 
-      // A refused turn is stored with refused metadata and does not poison the next turn.
       const callsBeforeRefusal = modelCalls();
       const refusedRes = await chat(token, {
         threadId,
@@ -432,7 +426,6 @@ describe('Assistant chat flows (e2e)', () => {
       const token = await e2e.sign(admin);
       const threadId = randomUUID();
 
-      // 6 allowed turns -> 12 messages (exceeds old client-side context limit)
       for (let turn = 1; turn <= 6; turn++) {
         const res = await chat(token, {
           threadId,
@@ -442,7 +435,6 @@ describe('Assistant chat flows (e2e)', () => {
         expect(replyText(res.text)).toBe(REPLY);
       }
 
-      // Add a moderation-refused turn into the same thread
       await chat(token, {
         threadId,
         requestId: 'u-refused',
@@ -530,7 +522,6 @@ describe('Assistant chat flows (e2e)', () => {
         proposalStatuses: { 'call-1': 'saved' },
       });
 
-      // Cross-user isolation
       await request(server())
         .get(`/api/v1/meal-plan/chat/threads/${threadId}`)
         .set('Authorization', `Bearer ${other.token}`)
@@ -545,7 +536,6 @@ describe('Assistant chat flows (e2e)', () => {
         .set('Authorization', `Bearer ${other.token}`)
         .expect(404);
 
-      // Owner cannot stream into another user's thread either
       await chat(other.token, {
         threadId,
         requestId: randomUUID(),
@@ -674,7 +664,6 @@ describe('Assistant chat flows (e2e)', () => {
         message: 'Đoạn chat B',
       }).expect(200);
 
-      // Stream into threadA with the already-synced requestId: must not duplicate user message
       await new Promise((resolve) => setTimeout(resolve, 15));
       await chat(token, {
         threadId: threadA,
@@ -708,7 +697,6 @@ describe('Assistant chat flows (e2e)', () => {
       const { token } = await signedUser();
       const missingId = randomUUID();
 
-      // Empty list for new user & out-of-range page
       const emptyRes = await request(server())
         .get('/api/v1/meal-plan/chat/threads')
         .set('Authorization', `Bearer ${token}`)
@@ -727,7 +715,6 @@ describe('Assistant chat flows (e2e)', () => {
         meta: { page: 99, limit: 10, totalItems: 0 },
       });
 
-      // Invalid pagination & invalid UUID params & invalid proposal status
       await request(server())
         .get('/api/v1/meal-plan/chat/threads?page=0')
         .set('Authorization', `Bearer ${token}`)
@@ -762,7 +749,6 @@ describe('Assistant chat flows (e2e)', () => {
         .send({ proposalStatuses: { 'call-1': 'invalid' } })
         .expect(400);
 
-      // Non-existent thread UUID returns 404
       await request(server())
         .get(`/api/v1/meal-plan/chat/threads/${missingId}`)
         .set('Authorization', `Bearer ${token}`)
@@ -772,7 +758,6 @@ describe('Assistant chat flows (e2e)', () => {
         .set('Authorization', `Bearer ${token}`)
         .expect(404);
 
-      // Unauthenticated requests return 401
       await request(server()).get('/api/v1/meal-plan/chat/threads').expect(401);
       await request(server())
         .post('/api/v1/meal-plan/chat/threads')
@@ -858,7 +843,6 @@ describe('Assistant chat flows (e2e)', () => {
       }).expect(429);
     });
 
-    // BUG-5: Guest quota is consumed by the guard before body validation, so malformed requests burn messages
     it('does not spend the daily quota on requests rejected as malformed', async () => {
       const token = await guestToken();
       const ip = newIp();

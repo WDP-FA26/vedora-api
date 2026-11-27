@@ -24,10 +24,6 @@ export type EditMealLogOutput =
       done?: boolean;
     };
 
-/**
- * Updates or deletes an existing entry in the user's food diary. Uses the same
- * editable-window rules as `PATCH/DELETE /meal-plan/log/:id`.
- */
 export function editMealLogTool(mealLog: MealLogService, userId: string) {
   return tool({
     description: [

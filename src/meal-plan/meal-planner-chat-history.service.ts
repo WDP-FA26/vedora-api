@@ -38,10 +38,6 @@ export const DEFAULT_CHAT_THREAD_TITLE = 'Cuộc trò chuyện mới';
 const MAX_AUTO_TITLE_LENGTH = 80;
 const MAX_PREVIEW_LENGTH = 160;
 
-/**
- * A stored chat message as the model will see it. It is not validated here:
- * the chat service validates the whole history against the current tools.
- */
 export type StoredChatMessage = {
   id: string;
   role: 'user' | 'assistant';
@@ -60,7 +56,6 @@ const webSearchDecisionSchema = z.object({
   approved: z.boolean(),
 });
 
-/** Validates a client-supplied answer for `askUser` or `requestWebSearch`. */
 export function validatePlannerToolOutput(
   toolOutput: PlannerToolOutputDto,
 ): { answer: string } | { approved: boolean } {
@@ -82,7 +77,6 @@ function isProposalStatus(value: unknown): value is MealPlanChatProposalStatus {
   return value === 'staged' || value === 'saved' || value === 'dismissed';
 }
 
-/** The planner's tools that write the saved plan; each output is a `PlanChange`. */
 const PLAN_CHANGE_TOOL_TYPES: ReadonlySet<string> = new Set([
   'tool-fillSlots',
   'tool-autoBalancePlan',
@@ -91,10 +85,6 @@ const PLAN_CHANGE_TOOL_TYPES: ReadonlySet<string> = new Set([
 ]);
 
 const recipeRefSchema = z.object({ id: z.string() });
-/**
- * The part of a saved `PlanChange` a rewind needs. Outputs of the draft era
- * have no `applied` and were never saved, so they do not parse.
- */
 const savedChangeSchema = z.object({
   applied: z.literal(true),
   weekStart: z.string(),
@@ -111,12 +101,6 @@ const savedChangeSchema = z.object({
   ),
 });
 
-/**
- * The days the assistant changed in `parts`, as they were before its first
- * change, by week. A later change to the same day is ignored: the first
- * change's `previous` already holds the day before the turn.
- */
-/** How far back the voice agent's undo looks for a reply that changed the plan. */
 const UNDO_LOOKBACK_MESSAGES = 50;
 
 function daysBeforeChanges(
@@ -442,10 +426,6 @@ export class MealPlannerChatHistoryService {
     }
   }
 
-  /**
-   * Attaches a client-side tool output (`askUser` or `requestWebSearch`) to the
-   * stored assistant message part matching `toolCallId`.
-   */
   async recordToolOutput(
     userId: string,
     threadId: string,
@@ -487,7 +467,6 @@ export class MealPlannerChatHistoryService {
     await existing.save();
   }
 
-  /** Persists a single user message for the current turn. */
   async recordUserMessage(
     userId: string,
     threadId: string,
@@ -502,10 +481,6 @@ export class MealPlannerChatHistoryService {
     });
   }
 
-  /**
-   * Loads recent non-refused turns for `threadId` in chronological order, as
-   * stored. Validate them with `validateUIMessages` before use.
-   */
   async loadContextMessages(
     userId: string,
     threadId: string,
@@ -685,12 +660,6 @@ export class MealPlannerChatHistoryService {
     return this.getThread(userId, threadId);
   }
 
-  /**
-   * Goes back to just before the user's message `messageId`, like a rewind:
-   * the days the assistant changed from that turn on get their dishes back,
-   * and that message and everything after it leave the thread. Days that have
-   * passed since cannot change and are reported in `skipped`.
-   */
   async rewind(
     userId: string,
     threadId: string,
@@ -742,12 +711,6 @@ export class MealPlannerChatHistoryService {
     return { text: target.text, weeks: restored };
   }
 
-  /**
-   * Puts back the dishes changed by the newest assistant message of the thread
-   * that changed the plan and was not undone yet, keeping every message: the
-   * voice agent's "undo". The undo itself is recorded as an `undoLastChange`
-   * tool output on the current reply, which is how the next undo skips it.
-   */
   async undoLatestChange(
     userId: string,
     threadId: string,

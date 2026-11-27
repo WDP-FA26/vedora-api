@@ -58,7 +58,6 @@ describe('Content moderation review queue (e2e)', () => {
     await e2e.close();
   });
 
-  /** The post as its author reads it once the background moderation ended. */
   const settled = async (id: string): Promise<PostBody> => {
     await e2e.settled();
     const response = await request(server())
@@ -67,7 +66,6 @@ describe('Content moderation review queue (e2e)', () => {
       .expect(200);
     return response.body as PostBody;
   };
-  /** Creates a post, which answers PROCESSING, and returns its verdict. */
   const publish = async (body: string): Promise<PostBody> => {
     const response = await request(server())
       .post('/api/v1/posts')

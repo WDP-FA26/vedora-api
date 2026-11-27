@@ -77,11 +77,6 @@ export class AiUsageService {
     return this.summaryForPeriod(userId, feature, period, now);
   }
 
-  /**
-   * Whether `userId` may start another `feature` request now, by the same rule
-   * as `consume`: admins are never limited, everyone else needs a request left.
-   * Reads only; nothing is reserved.
-   */
   async hasAllowance(
     userId: string,
     feature: AiFeature,
@@ -139,7 +134,6 @@ export class AiUsageService {
     for (let attempt = 0; attempt < 5; attempt++) {
       try {
         return await this.mongo.withTransaction(async (session) => {
-          // Use the payment capture lock: a request belongs wholly to one cycle.
           await lockDocument(this.mongo, session, 'payer', userId);
           const period = await this.subscriptions.period(userId, now, session);
           let row = await this.requests
@@ -249,7 +243,6 @@ export class AiUsageService {
   }
 
   async refund(ticket: UsageTicket): Promise<void> {
-    // Ticket identity keeps a late failure from crediting a newly purchased cycle.
     await this.requests
       .updateOne(
         { _id: ticket.id, leaseToken: ticket.token, status: 'RESERVED' },

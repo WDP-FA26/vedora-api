@@ -47,8 +47,6 @@ onDelete(MealPlanChatThreadSchema, async (db, ids, session) => {
     .deleteMany({ threadId: { $in: ids } }, { session });
 });
 
-// `minimize: false` keeps empty objects: a tool called without arguments stores
-// `input: {}`, and the AI SDK rejects a history whose tool parts lack `input`.
 @Schema({ ...collectionSchema('meal_plan_chat_messages'), minimize: false })
 export class MealPlanChatMessage extends Identified {
   @Prop({ type: String, default: () => randomUUID() })
@@ -69,8 +67,6 @@ export class MealPlanChatMessage extends Identified {
   @Prop({ type: String, required: true, enum: ['user', 'assistant'] })
   role!: 'user' | 'assistant';
 
-  // Not `required`: Mongoose rejects '' for required strings, and a turn that
-  // only calls a tool (such as requestWebSearch) has no text.
   @Prop({ type: String, default: '' })
   text!: string;
 

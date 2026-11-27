@@ -117,7 +117,6 @@ export class MessagingController {
     };
     const frame = (signal: MessagingSignal): MessageEvent => {
       if (!('id' in signal)) return { type: `stream.${signal.type}`, data: {} };
-      // Do not serialize userIds or message text from the internal outbox.
       return {
         type: signal.type,
         id: signal.id,
@@ -129,7 +128,6 @@ export class MessagingController {
         },
       };
     };
-    // Serialize async authorization checks so a burst cannot reorder messages or read receipts.
     const live = new Observable<MessageEvent>((observer) => {
       let closed = false;
       let pending = Promise.resolve();

@@ -29,7 +29,6 @@ import {
   prepareTestDatabase,
 } from '@test/support/mongo-test-db.js';
 
-// 00:30 on Monday 2026-11-16 in the app time zone, so every day is still ahead.
 const WEEK = '2026-11-16';
 const MONDAY_MORNING = new Date('2026-11-15T17:30:00Z');
 

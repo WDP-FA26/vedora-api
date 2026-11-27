@@ -121,7 +121,6 @@ describe('Support tickets, content appeals & soft-delete/restore (e2e)', () => {
     ]);
   });
 
-  /** Creates a post and returns it once the background moderation ended. */
   const createPostViaApi = async (body: string): Promise<PostBody> => {
     const created = (
       await as(authorToken, request(server()).post('/api/v1/posts'))
@@ -138,7 +137,6 @@ describe('Support tickets, content appeals & soft-delete/restore (e2e)', () => {
 
   describe('general & payment support tickets', () => {
     it('supports opening PAYMENT_ISSUE tickets, multi-turn replies, internal notes, and RESOLVE/CLOSE decisions', async () => {
-      // Non-appeal ticket requires a subject
       await as(authorToken, request(server()).post('/api/v1/support/tickets'))
         .send({
           category: SupportTicketCategory.PAYMENT_ISSUE,
@@ -162,7 +160,6 @@ describe('Support tickets, content appeals & soft-delete/restore (e2e)', () => {
       expect(created.referenceCode).toBe('VD-992817');
       expect(created.appeal).toBeNull();
 
-      // Admin cannot use APPROVE on a PAYMENT_ISSUE ticket
       await as(
         adminToken,
         request(server()).post(
@@ -172,7 +169,6 @@ describe('Support tickets, content appeals & soft-delete/restore (e2e)', () => {
         .send({ decision: 'APPROVE', note: 'Sai loại quyết định' })
         .expect(400);
 
-      // Admin sends internal note (invisible to author) then public reply
       await as(
         adminToken,
         request(server()).post(
@@ -202,7 +198,6 @@ describe('Support tickets, content appeals & soft-delete/restore (e2e)', () => {
       ).body as TicketBody;
       expect(authorView.messages.some((m) => m.isInternal)).toBe(false);
 
-      // Author replies -> OPEN, then admin resolves with RESOLVE
       const reopened = (
         await as(
           authorToken,
@@ -243,7 +238,6 @@ describe('Support tickets, content appeals & soft-delete/restore (e2e)', () => {
 
   describe('content appeals, soft-delete, locking & auto-expiration', () => {
     it('supports soft-delete (author & admin), restore, edit lock, APPROVE/REJECT, 14-day window, and 7-day auto-expire', async () => {
-      // 1. Author soft-delete hides post & is not appealable; admin can restore
       const ownPost = await createPostViaApi('Món canh chua chay rất ngon');
       await as(
         authorToken,
@@ -257,7 +251,6 @@ describe('Support tickets, content appeals & soft-delete/restore (e2e)', () => {
         (await posts().findById(ownPost.id).exec())?.removal?.removedByRole,
       ).toBe(PostRemovalActor.AUTHOR);
 
-      // 2. Admin soft-delete resolves pending reports, allows author to appeal, and syncs on direct restore
       const reportedPost = await createPostViaApi('Bài chia sẻ món rau củ');
       await as(
         otherToken,
@@ -299,7 +292,6 @@ describe('Support tickets, content appeals & soft-delete/restore (e2e)', () => {
       expect(synced?.status).toBe(SupportTicketStatus.RESOLVED);
       expect(synced?.appeal?.outcome).toBe(AppealOutcome.APPROVED);
 
-      // 3. Rejected post appeal: locks edit/delete, rejects duplicate after REJECT, unlocks on edit
       const rejected = await createPostViaApi(
         `${VIOLATION_MARKER} Bài bị chặn`,
       );
@@ -345,7 +337,6 @@ describe('Support tickets, content appeals & soft-delete/restore (e2e)', () => {
         .expect(409);
       expect((dup.body as { code: string }).code).toBe('ALREADY_APPEALED');
 
-      // 4. 7-day WAITING_USER auto-expiration
       const staleTicket = (
         await as(authorToken, request(server()).post('/api/v1/support/tickets'))
           .send({

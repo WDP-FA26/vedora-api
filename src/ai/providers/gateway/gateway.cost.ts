@@ -17,10 +17,6 @@ import {
 } from '../provider-shared.js';
 import { createGatewayClient } from './gateway.client.js';
 
-/**
- * Parses AI Gateway HTTP JSON / SSE parts: cost, generation id and route live
- * in `providerMetadata.gateway`; token counts use the AI SDK's usage shape.
- */
 export function parseGatewayPayload(
   payload: unknown,
   observation: CostObservation,
@@ -61,13 +57,11 @@ function fetchWithTimeout(timeoutMs: number): typeof fetch {
   };
 }
 
-/** Looks up a single generation's settled charge from Vercel AI Gateway. */
 export async function lookupGatewayGeneration(
   config: ConfigService,
   generationId: string,
   fallback: GenerationFallback,
 ): Promise<CostObservation> {
-  // No cost transport fetch here: the lookup itself must not create a cost row.
   const gateway = createGatewayClient(
     config.getOrThrow<string>('AI_GATEWAY_API_KEY'),
     fetchWithTimeout(runtimeConfig.AI_COST_RECONCILE_TIMEOUT_MS),

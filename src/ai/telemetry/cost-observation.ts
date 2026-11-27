@@ -1,6 +1,5 @@
 import { runtimeConfig } from '../../config/runtime-config.js';
 
-/** Only allowlisted billing metadata survives; never persist prompts, headers or outputs. */
 export function metadataText(value: unknown): string | null {
   if (typeof value !== 'string') return null;
   if (value.length === 0 || value.length > 200) return null;
@@ -44,7 +43,6 @@ export type CostPayloadParser = (
   observation: CostObservation,
 ) => void;
 
-/** Streaming parser bounds memory, including image/base64 responses and oversized SSE lines. */
 export class CostResponseParser {
   readonly observation = new CostObservation();
   private readonly decoder = new TextDecoder();
@@ -103,8 +101,6 @@ export class CostResponseParser {
   private parse(value: string): void {
     try {
       this.parsePayload(JSON.parse(value), this.observation);
-    } catch {
-      /* Missing metadata is unknown, never free. */
-    }
+    } catch {}
   }
 }

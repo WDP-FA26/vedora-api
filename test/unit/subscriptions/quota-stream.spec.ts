@@ -37,9 +37,7 @@ describe('AI stream quota settlement', () => {
       usage,
       ticket,
     ).getReader();
-    while (!(await reader.read()).done) {
-      /* Drain the stream as the controller does. */
-    }
+    while (!(await reader.read()).done);
     expect(usage.refund).toHaveBeenCalledExactlyOnceWith(ticket);
     expect(usage.complete).not.toHaveBeenCalled();
   });

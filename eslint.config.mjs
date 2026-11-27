@@ -3,9 +3,6 @@ import eslintConfigPrettier from 'eslint-config-prettier';
 import vitest from '@vitest/eslint-plugin';
 import tseslint from 'typescript-eslint';
 
-// Paths retired by the refactors, so they do not creep back. Every
-// `no-restricted-imports` block below must spread these: a later block for the
-// same files replaces the options of an earlier one instead of merging.
 const retiredPathPatterns = [
   {
     group: ['**/post-search/**'],
@@ -50,7 +47,6 @@ const aiSharedLayerGroup = [
   '**/database/**',
 ];
 
-// Modules above the shared layers; the layers below must never import them.
 const featureGroups = [
   '**/auth/**',
   '**/users/**',
@@ -96,10 +92,7 @@ export default tseslint.config(
     ...vitest.configs.recommended,
     rules: {
       ...vitest.configs.recommended.rules,
-      // `expect(mock.method).toHaveBeenCalled()` passes a method unbound on
-      // purpose; Vitest has no type-aware replacement for this rule.
       '@typescript-eslint/unbound-method': 'off',
-      // supertest's `.expect(status)` is an assertion too.
       'vitest/expect-expect': [
         'error',
         {
@@ -108,7 +101,6 @@ export default tseslint.config(
       ],
     },
   },
-  // Paths retired by the refactors and internal provider adapters.
   {
     files: ['src/**/*.ts'],
     ignores: ['src/ai/providers/**'],
@@ -121,8 +113,6 @@ export default tseslint.config(
       ],
     },
   },
-  // The shared AI platform must not depend on any feature: features use it,
-  // never the other way round.
   {
     files: ['src/ai/**/*.ts'],
     ignores: ['src/ai/providers/**'],
@@ -229,8 +219,6 @@ export default tseslint.config(
       ],
     },
   },
-  // Config only validates environment variables; it must not pull in a
-  // feature module (the old nutrition-chat enum import was exactly that).
   {
     files: ['src/config/**/*.ts'],
     rules: {
@@ -268,8 +256,6 @@ export default tseslint.config(
       ],
     },
   },
-  // Auth core (guards, token types, password hashing) sits under every feature
-  // and under the login flow itself, so it imports none of them.
   {
     files: [
       'src/auth-core/**/*.ts',

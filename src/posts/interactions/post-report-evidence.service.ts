@@ -24,7 +24,6 @@ export interface EvidenceFile {
 }
 const PREFIX = 'post-report-evidence/';
 
-/** Recognize the supported raster formats from their bytes, not the supplied file name. */
 function imageType(bytes: Buffer): string | null {
   if (
     bytes.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]))
@@ -84,7 +83,6 @@ export class PostReportEvidenceService {
       );
     const id = randomUUID();
     const storageKey = PREFIX + ownerId + '/' + id;
-    // No signed PUT is exposed: once accepted, these bytes cannot be overwritten by the browser.
     await this.storage.putBytes(
       StorageTarget.Support,
       storageKey,

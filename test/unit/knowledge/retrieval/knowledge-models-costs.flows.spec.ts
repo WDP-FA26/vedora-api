@@ -18,13 +18,6 @@ import {
   prepareTestDatabase,
 } from '@test/support/mongo-test-db.js';
 
-/**
- * ai-cost-tracking.md: every HTTP attempt the knowledge base makes through an
- * AI SDK model (rerank, multimodal embeddings, OCR) leaves one
- * `ai_cost_calls` row with its operation, the requested model, status and
- * reported USD, and never the payload. These run with AI_PROVIDER=openrouter.
- */
-
 const RERANK_MODEL = 'cohere/rerank-4-pro';
 const EMBEDDING_MODEL = 'google/gemini-embedding-2';
 const SECRET_QUERY = 'bí mật truy vấn đậu phụ';
@@ -48,7 +41,6 @@ describe('Knowledge model calls are cost-tracked', () => {
   };
   const rerank = (signal = AbortSignal.timeout(5000)) =>
     service.rerank(SECRET_QUERY, ['đậu phụ', 'rau cải'], 2, signal);
-  /** Embeds images the way the knowledge base does, through the OpenRouter adapter. */
   const embedImages = (count = 1) => {
     const transport = app.get(AiCostTransportService);
     const model = openRouterModels('test-key').embedding(EMBEDDING_MODEL, {

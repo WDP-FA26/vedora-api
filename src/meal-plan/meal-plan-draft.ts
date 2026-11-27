@@ -38,7 +38,6 @@ function sameList(a: readonly string[], b: readonly string[]): boolean {
   return a.length === b.length && a.every((id, index) => id === b[index]);
 }
 
-/** Slots whose dishes differ between two weeks, in week order. */
 export function changedSlots(
   next: WeekIds,
   base: WeekIds,
@@ -58,10 +57,6 @@ export function changedSlots(
 
 const label = ({ day, section }: SlotKey) => `${day} ${section}`;
 
-/**
- * Applies the operations in order to a copy of `week`. Every operation that
- * cannot be applied is reported and skipped; the rest still take effect.
- */
 export function applyDraftOps(
   week: WeekIds,
   ops: readonly DraftOp[],

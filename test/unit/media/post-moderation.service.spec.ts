@@ -32,7 +32,6 @@ import { StorageService, StorageTarget } from '@src/storage/storage.service.js';
 vi.mock('@src/common/http/fetch-public-image.js', () => ({
   fetchPublicImage: vi.fn(() => Promise.resolve(Buffer.from('img'))),
 }));
-// Shrinking images needs ffmpeg and real pictures; the bytes are enough here.
 vi.mock('@src/moderation/moderation-image.js', () => ({
   toModerationJpeg: vi.fn((source: Buffer) => Promise.resolve(source)),
 }));
@@ -144,7 +143,6 @@ describe('PostModerationService', () => {
         expect((await posts().findById(post.id).exec())?.status).toBe(
           PostStatus.PUBLISHED,
         );
-        // The listener schedules captions after the status write lands.
         expect(schedule).toHaveBeenCalledOnce();
       });
     });

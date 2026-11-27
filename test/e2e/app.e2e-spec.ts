@@ -128,7 +128,6 @@ describe('Vedora API (e2e)', () => {
         .expect(400);
 
       expect(response.body).toMatchObject({ code: 'VALIDATION_FAILED' });
-      // The last-message-from-user check reports the same message as well.
       expect(
         (response.body as { details: { messages: string[] } }).details.messages,
       ).toContain(
@@ -158,8 +157,6 @@ describe('Vedora API (e2e)', () => {
           .expect(400);
       }
 
-      // Every guest message of the day is still left: the invalid requests
-      // above (and earlier in this block) were refused before the quota.
       const guestId = await app.get(GuestSessionService).verify(guest);
       const quota = app.get(GuestQuotaService);
       let spent = 0;

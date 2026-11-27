@@ -34,7 +34,6 @@ export class ShoppingListService {
   ): Promise<ShoppingListDto> {
     const week = currentMealWeek(query.weekStart);
     assertWithinHorizon(week);
-    // Shopping is for what is still to be cooked: days before today are left out.
     const days = WEEKDAYS.filter(
       (day) => query.days.includes(day) && week.editableDays.includes(day),
     );

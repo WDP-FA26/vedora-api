@@ -66,7 +66,6 @@ describe('Posts DTOs', () => {
       expect(valid.body).toBe('Đậu hũ sốt cà');
       await expect(validate(valid)).resolves.toHaveLength(0);
 
-      // Non-string body fails IsString while Transform keeps non-string untouched
       const nonStringBody = plainToInstance(CreatePostDto, {
         type: PostType.POST,
         body: 123,
@@ -74,7 +73,6 @@ describe('Posts DTOs', () => {
       expect(nonStringBody.body).toBe(123);
       await expect(validate(nonStringBody)).resolves.not.toHaveLength(0);
 
-      // Exceeding 250 words fails MaxWords
       const tooManyWords = plainToInstance(CreatePostDto, {
         type: PostType.POST,
         body: Array.from({ length: MAX_POST_BODY_WORDS + 1 }, () => 'a').join(
@@ -84,14 +82,12 @@ describe('Posts DTOs', () => {
       const wordErrors = await validate(tooManyWords);
       expect(wordErrors[0].constraints).toHaveProperty('maxWords');
 
-      // Exceeding 2000 chars fails MaxLength
       const tooLong = plainToInstance(CreatePostDto, {
         type: PostType.POST,
         body: 'a'.repeat(MAX_POST_BODY_LENGTH + 1),
       });
       await expect(validate(tooLong)).resolves.not.toHaveLength(0);
 
-      // Rejects BLOG type, duplicate mediaIds, >4 mediaIds, and non-UUID mediaIds
       const invalidType = plainToInstance(CreatePostDto, {
         type: PostType.BLOG,
       });

@@ -2,7 +2,6 @@ import { randomUUID } from 'node:crypto';
 import { WorkspaceProof, WorkspaceProofKind } from '@src/mongo/models.js';
 import type { MongoService } from '@src/mongo/mongo.service.js';
 
-/** A complete 3-step page application for a household business, minus `proofIds`. */
 export const PAGE_APPLICATION = {
   name: 'Chay An Lạc',
   username: 'chay.an.lac',
@@ -30,7 +29,6 @@ export const PAGE_APPLICATION = {
   consentsToReview: true,
 };
 
-/** The documents a household business must send. */
 export const HOUSEHOLD_PROOF_KINDS = [
   WorkspaceProofKind.ID_FRONT,
   WorkspaceProofKind.ID_BACK,
@@ -38,7 +36,6 @@ export const HOUSEHOLD_PROOF_KINDS = [
   WorkspaceProofKind.BUSINESS_LICENSE,
 ] as const;
 
-/** An admin approval with every checklist item ticked. */
 export const APPROVE_REVIEW = {
   decision: 'APPROVED',
   checklist: {
@@ -49,7 +46,6 @@ export const APPROVE_REVIEW = {
   },
 };
 
-/** Proof rows as if `ownerId` had uploaded one image of each kind; storage is faked by the caller. */
 export async function uploadedProofs(
   db: MongoService,
   ownerId: string,

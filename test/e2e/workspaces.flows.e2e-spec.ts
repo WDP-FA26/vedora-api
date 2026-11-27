@@ -24,12 +24,6 @@ import {
   uploadedProofs,
 } from '@test/support/workspace-application.js';
 
-/**
- * Black-box flows for restaurant pages (/workspaces): an owner applies with
- * proofs, an admin approves, members switch into the page and act as it.
- * Object storage (RustFS) is the only faked boundary.
- */
-
 const workspaceSchema = z.object({
   id: z.string(),
   pageUserId: z.string().nullable(),
@@ -65,7 +59,6 @@ const adminDetailSchema = z.object({
 
 const APPLICATION = PAGE_APPLICATION;
 
-/** What an individual seller sends: no business licence. */
 const IDENTITY_AND_STOREFRONT = [
   WorkspaceProofKind.ID_FRONT,
   WorkspaceProofKind.ID_BACK,
@@ -88,7 +81,6 @@ describe('Restaurant page flows (e2e)', () => {
   const model = <T>(name: string) => e2e.mongo.connection.model<T>(name);
   const users = () => model<User>(User.name);
 
-  /** Applies with a fresh set of uploaded proofs and checks the response status. */
   const apply = async (
     token: string,
     applicantId: string,
@@ -109,7 +101,6 @@ describe('Restaurant page flows (e2e)', () => {
       .auth(adminToken, { type: 'bearer' })
       .send(body);
 
-  /** An approved page owned by `owner`. */
   const approvedPage = async () => {
     const applied = workspaceSchema.parse(
       (await apply(ownerToken, owner.id, 201)).body,
@@ -122,7 +113,6 @@ describe('Restaurant page flows (e2e)', () => {
     return { workspaceId: workspace.id, pageUserId: workspace.pageUserId };
   };
 
-  /** A personal session for `user`, as a login would give. */
   const personalSession = async (user: User) => {
     const issued = await e2e.app.get(RefreshTokensService).issue(user.id);
     return { accessToken: await e2e.sign(user), refreshToken: issued.token };
@@ -265,7 +255,6 @@ describe('Restaurant page flows (e2e)', () => {
         .auth(ownerToken, { type: 'bearer' })
         .expect(403);
 
-      // The public source is never called from tests.
       const lookup = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
         Response.json({
           code: '00',
@@ -364,7 +353,6 @@ describe('Restaurant page flows (e2e)', () => {
           contactEmail: 'binh@example.com',
         },
       };
-      // No business licence is needed without a registered business.
       const proofIds = await uploadedProofs(
         e2e.mongo,
         owner.id,
@@ -377,7 +365,6 @@ describe('Restaurant page flows (e2e)', () => {
         .expect(201);
       expect(workspaceSchema.parse(created.body).status).toBe('PENDING');
 
-      // A household without its licence is turned away.
       const noLicence = await request(server())
         .post('/api/v1/workspaces')
         .auth(managerToken, { type: 'bearer' })
@@ -399,9 +386,7 @@ describe('Restaurant page flows (e2e)', () => {
           taxCode: '001203004005',
         },
         { ...individual.legal, taxCode: '0123456789' },
-        // 099 is no province's code.
         { ...individual.legal, taxCode: '099203004005' },
-        // A household's 12-digit tax code is a citizen ID too; 9 is a birth after 2100.
         { ...APPLICATION.legal, taxCode: '001903004005' },
         { ...APPLICATION.legal, legalName: '' },
       ])
@@ -437,7 +422,6 @@ describe('Restaurant page flows (e2e)', () => {
     it('needs a full checklist to approve and warns about look-alike pages', async () => {
       const { workspaceId } = await approvedPage();
 
-      // The same household opens a second page next door.
       const second = workspaceSchema.parse(
         (await apply(ownerToken, owner.id, 201, { username: 'an.lac.2' })).body,
       );
@@ -561,7 +545,6 @@ describe('Restaurant page flows (e2e)', () => {
           .exec(),
       ).not.toBe(null);
 
-      // The personal refresh token was spent on the switch.
       await request(server())
         .post('/api/v1/auth/refresh')
         .send({ refreshToken: personal.refreshToken })
@@ -680,7 +663,6 @@ describe('Restaurant page flows (e2e)', () => {
       const switched = sessionSchema.parse(
         (await switchTo(await personalSession(manager), pageUserId)).body,
       );
-      // Removed outside the API, so the page session is still live.
       await model<WorkspaceMember>(WorkspaceMember.name).deleteOne({
         workspaceId,
         userId: manager.id,
@@ -745,7 +727,6 @@ describe('Restaurant page flows (e2e)', () => {
         .auth(managerToken, { type: 'bearer' })
         .expect(409);
 
-      // A manager may leave.
       await request(server())
         .delete(`/api/v1/workspaces/${workspaceId}/members/${manager.id}`)
         .auth(managerToken, { type: 'bearer' })
@@ -792,7 +773,6 @@ describe('Restaurant page flows (e2e)', () => {
         .query({ minLng: 0, minLat: 50, maxLng: 1, maxLat: 10 })
         .expect(400);
 
-      // Partial viewport bounds fail validation with 400.
       await request(server())
         .get('/api/v1/restaurants')
         .query({ minLng: 105.7, maxLng: 106 })

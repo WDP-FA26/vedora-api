@@ -94,8 +94,6 @@ export class RecipesService {
   async remove(id: string): Promise<void> {
     const { deletedCount } = await this.mongo.withTransaction(
       async (session) => {
-        // Favorites, ratings and meal plans lock a recipe before referencing
-        // it, so none can commit a reference this deletion's cascade misses.
         await lockDocument(this.mongo, session, 'recipe', id);
         return this.recipes.deleteOne({ _id: id }, { session }).exec();
       },

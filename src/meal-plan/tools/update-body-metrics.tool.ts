@@ -8,11 +8,6 @@ import {
 import type { DietaryService } from '../../recipes/dietary.service.js';
 import { bodyMetricsText } from './voice-screen.tools.js';
 
-/**
- * Updates body metrics (height, weight, target weight, birth year, biological
- * sex, activity level, or nutrition goal) and optionally fixes a past day's
- * weight check-in when `date` is provided.
- */
 export function updateBodyMetricsTool(dietary: DietaryService, userId: string) {
   return tool({
     description:

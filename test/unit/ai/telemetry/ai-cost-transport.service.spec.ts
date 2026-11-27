@@ -103,7 +103,6 @@ describe('AiCostTransportService', () => {
       });
     }
 
-    // Control characters in body model fall back to default 'unknown'.
     await callsModel.deleteMany({});
     const req = new Request('https://openrouter.ai/api/v1/chat/completions', {
       method: 'POST',
@@ -244,7 +243,6 @@ describe('AiCostTransportService', () => {
       httpStatus: 502,
     });
 
-    // Stream read error
     await callsModel.deleteMany({});
     const brokenStream = new ReadableStream<Uint8Array>({
       pull() {

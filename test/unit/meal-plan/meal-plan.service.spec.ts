@@ -37,7 +37,6 @@ const RULE_ID = 'c1a2d3e4-0000-4000-8000-000000000001';
 const REASON = 'Oxalat cản hấp thu canxi';
 const WEEK = '2026-11-16';
 const NEXT_WEEK = '2026-11-23';
-// 00:30 on Monday 2026-11-16 in the app time zone, so every day is still editable.
 const MONDAY_MORNING = new Date('2026-11-15T17:30:00Z');
 
 describe('MealPlanService', () => {
@@ -53,7 +52,6 @@ describe('MealPlanService', () => {
 
   type ChangedDays = Awaited<ReturnType<MealPlanService['editPlan']>>['days'];
 
-  /** The dishes of one slot in a change: after (`recipes`) or before (`previous`). */
   const changedIds = (
     days: ChangedDays,
     day: Weekday,
@@ -66,7 +64,6 @@ describe('MealPlanService', () => {
     return slot[side].map(({ id }) => id);
   };
 
-  /** The saved dishes of one slot. */
   const savedIds = async (
     weekStart: string,
     day: Weekday,
@@ -414,7 +411,6 @@ describe('MealPlanService', () => {
   it('returns all 7 days in find() and reports problems on the saved timetable', async () => {
     await saved(Weekday.MON, MealSection.LUNCH, TOFU_RECIPE);
     await saved(Weekday.MON, MealSection.LUNCH, SPINACH_RECIPE);
-    // Orphan entry pointing to non-existent recipe should be skipped
     await saved(
       Weekday.TUE,
       MealSection.BREAKFAST,
@@ -508,7 +504,6 @@ describe('MealPlanService', () => {
     expect(allSafe.map((r) => r.id)).toEqual(
       expect.arrayContaining([RICE_RECIPE, noTimeRecipeId]),
     );
-    // Still searchable so the assistant can talk about it, but flagged and last.
     expect(allSafe.at(-1)).toMatchObject({
       id: TOFU_RECIPE,
       avoidedIngredients: ['Đậu hũ'],
@@ -753,7 +748,6 @@ describe('MealPlanService', () => {
     });
   });
   describe('weeks', () => {
-    // 12:00 on Wednesday 2026-11-18 in the app time zone.
     const WEDNESDAY = new Date('2026-11-18T05:00:00Z');
 
     const day = (
@@ -854,7 +848,6 @@ describe('MealPlanService', () => {
     });
 
     it('treats the day as over at midnight in the app time zone', async () => {
-      // 23:30 on Tuesday in Bangkok is still Tuesday; 00:30 Wednesday is not.
       vi.setSystemTime(new Date('2026-11-17T16:30:00Z'));
       const tuesday = await service.find(USER_ID);
       vi.setSystemTime(new Date('2026-11-17T17:30:00Z'));

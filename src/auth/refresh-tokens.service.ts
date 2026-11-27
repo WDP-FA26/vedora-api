@@ -27,27 +27,14 @@ export interface IssuedRefreshToken {
 
 export interface RotatedRefreshToken extends IssuedRefreshToken {
   userId: string;
-  /** Set when the session acts as the page in `userId`. */
   actorId: string | null;
 }
 
-/** Who a session belongs to: a person, or a person acting as a page. */
 export interface SessionOwner {
   userId: string;
   actorId: string | null;
 }
 
-/**
- * Refresh tokens rotate on every use, and a revoked token sent again normally
- * means it was stolen, so its whole family is revoked. A token rotated less
- * than `REFRESH_TOKEN_REUSE_GRACE_SECONDS` ago is the exception: parallel
- * refreshes and responses lost on the way back to the browser send it again
- * legitimately. It then gets the same replacement the first rotation issued,
- * as long as that replacement has not rotated in turn (only the most recent
- * predecessor qualifies). The replacement is derived from the old token with
- * an HMAC keyed by the server secret, so it can be given out again without
- * storing it, and only someone holding the old token and the key can know it.
- */
 @Injectable()
 export class RefreshTokensService {
   private readonly logger = new Logger(RefreshTokensService.name);
@@ -145,7 +132,6 @@ export class RefreshTokensService {
       return owner;
     });
 
-    // Another request rotated the same token first: answer like it did.
     if (!rotated) {
       const latest = await this.tokens.findOne({ tokenHash }).exec();
       if (!latest?.revokedAt) {
@@ -164,11 +150,6 @@ export class RefreshTokensService {
     };
   }
 
-  /**
-   * Who the rotated session belongs to. A page session whose member was
-   * removed from the page falls back to the member's own account instead of
-   * signing them out; a suspended member is signed out entirely.
-   */
   private async nextOwner(
     session: ClientSession,
     storedToken: RefreshToken,
@@ -197,11 +178,6 @@ export class RefreshTokensService {
     return membership !== null;
   }
 
-  /**
-   * A revoked token was sent again. Within the grace period after its own
-   * rotation it gets the replacement that rotation issued; anything else is
-   * treated as reuse of a stolen token and ends the whole family.
-   */
   private async reissue(
     token: string,
     storedToken: RefreshToken,
@@ -253,7 +229,6 @@ export class RefreshTokensService {
     await this.revokeFamily(storedToken.familyId, new Date(), 'LOGOUT');
   }
 
-  /** Also ends every page session the user acts in. */
   async revokeAllForUser(userId: string): Promise<void> {
     await this.tokens.updateMany(
       { $or: [{ userId }, { actorId: userId }], revokedAt: null },
@@ -261,7 +236,6 @@ export class RefreshTokensService {
     );
   }
 
-  /** Ends a member's sessions as one page, e.g. once they are removed from it. */
   async revokePageSessions(pageUserId: string, actorId: string): Promise<void> {
     await this.tokens.updateMany(
       { userId: pageUserId, actorId, revokedAt: null },
@@ -269,12 +243,6 @@ export class RefreshTokensService {
     );
   }
 
-  /**
-   * Ends the session `token` belongs to before it is swapped for another
-   * identity. The token must be live and belong to `owner` (the identity the
-   * access token speaks for), so a stolen access token alone cannot open a
-   * new 30-day session.
-   */
   async revokeForSwitch(token: string, owner: SessionOwner): Promise<void> {
     const storedToken = await this.tokens
       .findOne({ tokenHash: this.hashToken(token) })
@@ -309,7 +277,6 @@ export class RefreshTokensService {
     return randomBytes(48).toString('base64url');
   }
 
-  /** The token that replaces `token` when it rotates: the same every time, unknowable without the server secret. */
   private successorOf(token: string): string {
     this.successorKey ??= Buffer.from(
       hkdfSync(

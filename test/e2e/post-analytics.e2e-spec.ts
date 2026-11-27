@@ -17,7 +17,6 @@ import type {
 import { createE2eApp, type E2eApp } from '@test/support/e2e-app.js';
 import { createPost, createUser } from '@test/support/fixtures.js';
 
-/** Midday in Bangkok (UTC+7) on the given day. */
 const at = (day: string) => new Date(`${day}T05:00:00Z`);
 
 describe('Post analytics (HTTP)', () => {
@@ -83,7 +82,6 @@ describe('Post analytics (HTTP)', () => {
       interaction(removed.id, fan.id, at('2026-10-02')),
       interaction(othersPost.id, friend.id, at('2026-10-02')),
     ]);
-    // 00:30 on 8 October in Bangkok: outside the range.
     await model<PostRepost>('PostRepost').insertMany([
       interaction(main.id, friend.id, at('2026-10-04')),
       interaction(quiet.id, fan.id, new Date('2026-10-07T17:30:00Z')),

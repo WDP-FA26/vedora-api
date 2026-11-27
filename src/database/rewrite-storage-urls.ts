@@ -1,14 +1,3 @@
-/**
- * One-off migration: rewrite stored public object-storage URLs across MongoDB
- * collections from the legacy RustFS domain to the new SeaweedFS domain.
- *
- *   npm run rewrite:storage-urls                                      # dry run
- *   npm run rewrite:storage-urls -- --apply                           # write changes
- *   npm run rewrite:storage-urls -- --from=https://old --to=https://new
- *
- * Scans every collection in the database (including nested objects and arrays)
- * so no stored storage URL is missed.
- */
 import 'dotenv/config';
 import mongoose from 'mongoose';
 

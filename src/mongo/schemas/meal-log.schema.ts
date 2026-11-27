@@ -16,11 +16,6 @@ export class CalorieReference {
 export const CalorieReferenceSchema =
   SchemaFactory.createForClass(CalorieReference);
 
-/**
- * One dish the user ate. Separate from the plan, which holds what they meant
- * to eat. Name and calories are copied when logged, so the history stays as it
- * was when a recipe changes or is deleted (`recipeId` then becomes null).
- */
 @Schema(collectionSchema('meal_log_entries'))
 export class MealLogEntry extends Identified {
   @Prop({ type: String, default: () => randomUUID() })
@@ -29,7 +24,6 @@ export class MealLogEntry extends Identified {
   @Prop({ type: String, required: true })
   userId!: string;
 
-  /** Calendar date in the app time zone, `YYYY-MM-DD`. */
   @Prop({ type: String, required: true })
   date!: string;
 
@@ -48,7 +42,6 @@ export class MealLogEntry extends Identified {
   @Prop({ type: Number, required: true, default: 1 })
   servings!: number;
 
-  /** Unknown until the user types it or asks AI to estimate it. */
   @Prop({ type: Number, default: null })
   caloriesPerServing!: number | null;
 
@@ -70,7 +63,6 @@ export class MealLogEntry extends Identified {
 
 export const MealLogEntrySchema = SchemaFactory.createForClass(MealLogEntry);
 MealLogEntrySchema.index({ userId: 1, date: 1, section: 1, createdAt: 1 });
-// A recipe is logged once per meal; eating more of it raises its servings.
 MealLogEntrySchema.index(
   { userId: 1, date: 1, section: 1, recipeId: 1 },
   { unique: true, partialFilterExpression: { recipeId: { $type: 'string' } } },

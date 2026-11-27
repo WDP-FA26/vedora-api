@@ -73,20 +73,16 @@ const IMAGE_EXTENSIONS: Record<string, string> = {
   'image/png': 'png',
   'image/webp': 'webp',
 };
-// Proof limits are shared with the verified-chef badge.
 const MAX_PROOF_BYTES = runtimeConfig.VERIFICATION_PROOF_MAX_MB * 1048576;
 const MAX_UNSUBMITTED_PROOFS =
   runtimeConfig.VERIFICATION_MAX_UNSUBMITTED_PROOFS;
 const CLEANUP_AGE_MS = runtimeConfig.VERIFICATION_CLEANUP_AGE_SECONDS * 1000;
 const PROOF_URL_TTL_SECONDS = runtimeConfig.VERIFICATION_PROOF_URL_TTL_SECONDS;
 
-/** Page accounts have no mailbox; this reserved domain can never receive mail. */
 const pageEmail = (workspaceId: string) =>
   `page-${workspaceId}@pages.vedora.invalid`;
 
-/** Approved pages pinned this close to an application are flagged for the admin. */
 const NEARBY_PAGE_METERS = 100;
-/** An owner's rejections in this window are flagged on their next application. */
 const RECENT_REJECTION_MS = 30 * 24 * 3600 * 1000;
 const MAX_WARNING_PAGES = 5;
 
@@ -133,10 +129,6 @@ export class WorkspacesService implements OnApplicationBootstrap {
     await this.remapLegacyProvinceCodes();
   }
 
-  /**
-   * Applications sent before official province codes used slugs such as
-   * `ha-noi`; give them the official code. Does nothing once they are mapped.
-   */
   async remapLegacyProvinceCodes(): Promise<void> {
     const rows = await this.workspaces
       .find({ provinceCode: { $in: Object.keys(LEGACY_PROVINCE_CODES) } })
@@ -196,7 +188,6 @@ export class WorkspacesService implements OnApplicationBootstrap {
     return { id, upload };
   }
 
-  /** Opens a page application; the applicant becomes its owner. */
   async create(
     personId: string,
     dto: CreateWorkspaceDto,
@@ -234,7 +225,6 @@ export class WorkspacesService implements OnApplicationBootstrap {
     return this.detail(personId, workspaceId);
   }
 
-  /** Sends a rejected application back for review with new details and proofs. */
   async resubmit(
     personId: string,
     workspaceId: string,
@@ -289,7 +279,6 @@ export class WorkspacesService implements OnApplicationBootstrap {
     const membership = await this.members
       .findOne({ workspaceId, userId: personId })
       .exec();
-    // Non-members get the same answer as a missing page.
     if (!workspace || !membership)
       throw new ResourceNotFoundException('NOT_FOUND', 'Page not found');
     const [[dto], members] = await Promise.all([
@@ -386,10 +375,6 @@ export class WorkspacesService implements OnApplicationBootstrap {
     return this.detail(personId, workspaceId);
   }
 
-  /**
-   * The owner removes a manager, or a manager leaves. The owner cannot be
-   * removed. Their page sessions end at once.
-   */
   async removeMember(
     personId: string,
     workspaceId: string,
@@ -477,11 +462,6 @@ export class WorkspacesService implements OnApplicationBootstrap {
     return { ...dto, proofs: signed, warnings };
   }
 
-  /**
-   * Approving creates the page account (accountType PAGE, no password, no
-   * Google id, unreachable email) and links every member to it. The
-   * username is checked again here: it was only free when the owner applied.
-   */
   async review(
     workspaceId: string,
     reviewerId: string,
@@ -548,7 +528,6 @@ export class WorkspacesService implements OnApplicationBootstrap {
     return reviewed;
   }
 
-  /** Approved restaurants (optionally filtered by viewport), sorted nearest-first or A–Z by name. */
   async inView(
     query: RestaurantsInViewQueryDto,
   ): Promise<RestaurantPinListDto> {
@@ -581,8 +560,6 @@ export class WorkspacesService implements OnApplicationBootstrap {
     }
     const wrapsAntimeridian = query.minLng > query.maxLng;
     const spansHemisphere = query.maxLng - query.minLng >= 180;
-    // A box wider than half the globe has no well-defined GeoJSON polygon,
-    // so a zoomed-out map omits the spatial bounds filter.
     if (wrapsAntimeridian || spansHemisphere) return undefined;
     return {
       $geoWithin: {
@@ -804,8 +781,6 @@ export class WorkspacesService implements OnApplicationBootstrap {
             accountType: AccountType.PAGE,
             accountVersion: 0,
             isProfessional: false,
-            // Profiles, follows and search only list accounts with this set;
-            // a page has no mailbox, so approval stands in for verification.
             emailVerifiedAt: now,
           },
         ],
@@ -831,7 +806,6 @@ export class WorkspacesService implements OnApplicationBootstrap {
       ...this.restaurantFields(dto),
       provinceCode: dto.provinceCode,
       wardCode: dto.wardCode,
-      // The DTO already checked the ward belongs to the province.
       ward: wardName(dto.provinceCode, dto.wardCode),
       businessForm: dto.businessForm,
       vegetarianLevel: dto.vegetarianLevel,
@@ -862,7 +836,6 @@ export class WorkspacesService implements OnApplicationBootstrap {
     };
   }
 
-  /** The proofs are uploaded and include every kind the legal form requires. */
   private async assertApplicationProofs(
     personId: string,
     dto: CreateWorkspaceDto,
@@ -879,7 +852,6 @@ export class WorkspacesService implements OnApplicationBootstrap {
       );
   }
 
-  /** One application waits for review per person at a time. */
   private async assertNoOtherPending(
     session: ClientSession,
     personId: string,
@@ -928,7 +900,6 @@ export class WorkspacesService implements OnApplicationBootstrap {
     return proofs;
   }
 
-  /** Signs the admin should look at before deciding; they never block a decision. */
   private async warnings(workspace: Workspace): Promise<WorkspaceWarningDto[]> {
     const [sameTaxCode, nearby, recentRejections] = await Promise.all([
       this.sameTaxCodePages(workspace),
@@ -960,7 +931,6 @@ export class WorkspacesService implements OnApplicationBootstrap {
     return this.workspaces
       .find({
         _id: { $ne: workspace.id },
-        // `$type` lets the planner use the partial index on legal.taxCode.
         'legal.taxCode': { $eq: workspace.legal.taxCode, $type: 'string' },
         status: VerificationStatus.APPROVED,
       })
@@ -1114,7 +1084,6 @@ export class WorkspacesService implements OnApplicationBootstrap {
     };
   }
 
-  /** Once approved, name, username, bio and avatar come from the page account. */
   private async toDtos(
     workspaces: Workspace[],
     roles: Map<string, WorkspaceMemberRole>,
@@ -1144,7 +1113,6 @@ export class WorkspacesService implements OnApplicationBootstrap {
         createdAt: workspace.createdAt,
         proofCount: proofCounts.get(workspace.id) ?? 0,
         role,
-        // The tax code can be the owner's citizen ID; managers do not see it.
         legal: role === WorkspaceMemberRole.OWNER ? legalView(workspace) : null,
         ...this.profileFields(workspace),
       });
@@ -1282,7 +1250,6 @@ function isChecklistComplete(dto: ReviewWorkspaceDto): boolean {
   );
 }
 
-/** Whether the update changes the address or moves the map pin. */
 function movesRestaurant(
   current: Workspace,
   dto: RestaurantDetailsDto,

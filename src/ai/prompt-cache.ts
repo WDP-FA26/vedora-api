@@ -10,13 +10,6 @@ import type { ReasoningEffort } from './reasoning.js';
 
 const MAX_SESSION_ID_LENGTH = 256;
 
-/**
- * Prompt caching and sticky-session routing, whatever the provider: explicit 1h
- * breakpoints for shared static prefixes, optional 5m advancing breakpoints for
- * multi-turn agent loops, hashed session ids for stickiness, user-turn context
- * injection, and cache-safe final-step reminders. The provider's spelling of
- * each option comes from its `ProviderDialect`.
- */
 export class PromptCache {
   static sessionId(
     prefix: string,
@@ -91,7 +84,6 @@ export class PromptCache {
     instructions: string;
     ttl?: CacheTtl;
     enabled?: boolean;
-    /** Overrides the model's effort for this task; omit to keep the model's. */
     effort?: ReasoningEffort;
   }): CallOptions & { instructions: string | SystemModelMessage } {
     return {
@@ -118,10 +110,6 @@ export class PromptCache {
     instructions: string;
     systemTtl?: CacheTtl;
     historyTtl?: CacheTtl;
-    /**
-     * Overrides the model's effort for every step of this agent; omit to keep
-     * the model's. Keep it fixed per agent: changing it restarts the cache.
-     */
     effort?: ReasoningEffort;
   }): CallOptions & { instructions: SystemModelMessage } {
     return {

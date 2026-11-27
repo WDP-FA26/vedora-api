@@ -1,4 +1,3 @@
-/** Operational defaults, matched against the pre-refactor source. Units are part of each key. */
 export const numericDefaults = {
   ADMIN_WORK_PREVIEW_LIMIT: 10,
   ADMIN_WORK_REFRESH_SECONDS: 30,

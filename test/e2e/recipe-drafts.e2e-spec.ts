@@ -56,7 +56,6 @@ describe('AI recipe drafts (e2e)', () => {
       .set('Authorization', `Bearer ${token}`)
       .send(body);
 
-  /** The short ref the generator was shown for a catalog id. */
   function refOf(
     entries: Map<string, { id: string }>,
     id: string,

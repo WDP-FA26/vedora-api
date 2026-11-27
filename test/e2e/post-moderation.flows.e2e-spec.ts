@@ -36,12 +36,6 @@ interface ErrorBody {
 
 const WEBHOOK_SECRET = 'e2e-api-secret';
 
-/**
- * Post lifecycle around moderation and video processing:
- * PROCESSING → PUBLISHED / PENDING_REVIEW / REJECTED / FAILED, admin decisions,
- * Cloudinary webhooks and the upload endpoints
- * (docs/docs-for-FE/content-moderation.md, errors.md, Swagger).
- */
 describe('Post moderation and media flows (e2e)', () => {
   let e2e: E2eApp;
   let author: User;
@@ -80,7 +74,6 @@ describe('Post moderation and media flows (e2e)', () => {
       token,
       request(server()).post(`/api/v1/admin/posts/${id}/moderation`),
     ).send(payload);
-  /** The post as its author reads it once the background moderation ended. */
   const settled = async (id: string): Promise<PostBody> => {
     await e2e.settled();
     const response = await as(
@@ -89,7 +82,6 @@ describe('Post moderation and media flows (e2e)', () => {
     ).expect(200);
     return response.body as PostBody;
   };
-  /** Creates a text post, which waits for moderation, and returns its verdict. */
   const postWith = async (text: string): Promise<PostBody> => {
     const response = await create({ type: 'POST', body: text }).expect(201);
     const created = response.body as PostBody;

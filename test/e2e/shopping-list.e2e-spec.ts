@@ -4,7 +4,6 @@ import { createE2eApp, type E2eApp } from '@test/support/e2e-app.js';
 import { createUser } from '@test/support/fixtures.js';
 import { nextWeekStart } from '@test/support/meal-week.js';
 
-/** Wholly in the future: the list drops days that are already past. */
 const NEXT_WEEK = nextWeekStart();
 
 const ROOT = '/api/v1/meal-plan/shopping-list';

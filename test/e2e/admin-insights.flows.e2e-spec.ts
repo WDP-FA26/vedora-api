@@ -11,10 +11,6 @@ import {
 import { createE2eApp, type E2eApp } from '@test/support/e2e-app.js';
 import { createPost, createUser } from '@test/support/fixtures.js';
 
-/**
- * Admin aggregates over HTTP: the dashboard (admin-dashboard.md) and the AI
- * cost report (ai-cost-tracking.md), plus the health probes.
- */
 describe('Admin insights flows (HTTP)', () => {
   let e2e: E2eApp;
   let token: string;

@@ -15,7 +15,6 @@ interface CapturedRequest {
   headers: Headers;
 }
 
-/** Sends one call through a fake fetch and returns the request body and headers OpenRouter would get. */
 async function captureRequest(
   providerOrder?: string[],
 ): Promise<CapturedRequest> {

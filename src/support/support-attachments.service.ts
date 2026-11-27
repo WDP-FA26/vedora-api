@@ -27,11 +27,6 @@ const CLEANUP_AGE_MS =
   runtimeConfig.SUPPORT_ATTACHMENT_CLEANUP_AGE_SECONDS * 1000;
 const URL_TTL_SECONDS = runtimeConfig.SUPPORT_ATTACHMENT_URL_TTL_SECONDS;
 
-/**
- * Images on support messages. The browser uploads to the private support
- * bucket first; a message then claims the upload by id. Downloads use
- * short-lived signed URLs, so only people who can read the message see them.
- */
 @Injectable()
 export class SupportAttachmentsService {
   private readonly logger = new Logger(SupportAttachmentsService.name);
@@ -80,10 +75,6 @@ export class SupportAttachmentsService {
     return { id, upload };
   }
 
-  /**
-   * Checks, before the write transaction, that every id is the caller's own
-   * unsent upload and that its file reached storage.
-   */
   async assertReady(ownerId: string, ids: readonly string[]): Promise<void> {
     if (ids.length === 0) return;
     const rows = await this.attachments
@@ -108,10 +99,6 @@ export class SupportAttachmentsService {
     }
   }
 
-  /**
-   * Binds uploads to a message inside the caller's transaction. The filter
-   * repeats the ownership check, so a concurrent send cannot reuse an image.
-   */
   async attach(
     session: ClientSession,
     ownerId: string,
@@ -134,7 +121,6 @@ export class SupportAttachmentsService {
     }
   }
 
-  /** Signed download URLs for the given messages, grouped by message id. */
   async forMessages(
     messageIds: readonly string[],
   ): Promise<Map<string, SupportAttachmentDto[]>> {

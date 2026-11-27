@@ -64,12 +64,10 @@ describe('MenuSearchService.search', () => {
     const { service, qdrant } = setup();
     await service.search('cơm', 0, 4);
     const request = sentRequest(qdrant);
-    // Candidates come from the two keyword searches only.
     expect(usedVectors(request.prefetch)).toEqual([
       MENU_BM25_VECTOR,
       MENU_BM25_FOLDED_VECTOR,
     ]);
-    // Meaning re-ranks them; it adds nothing on its own.
     expect(request).toMatchObject({ query: VECTOR, using: MENU_DENSE_VECTOR });
   });
 

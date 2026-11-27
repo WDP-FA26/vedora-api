@@ -287,7 +287,6 @@ describe('PostsService', () => {
       expect(removed?.removal?.removedByRole).toBe(PostRemovalActor.AUTHOR);
       expect(removed?.removal?.previousStatus).toBe(post.status);
       expect(searchIndex.remove).toHaveBeenCalledWith(post.id);
-      // Media stays so an admin can still review or restore the post.
       expect(mediaService.discard).not.toHaveBeenCalled();
       await expect(service.remove(post.id, author.id)).rejects.toBeInstanceOf(
         ResourceNotFoundException,

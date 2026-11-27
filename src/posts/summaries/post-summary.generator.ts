@@ -39,10 +39,8 @@ export const summaryOutput = z.object({
 
 export type SummaryOutput = z.infer<typeof summaryOutput>;
 
-/** A labelled piece of a post, e.g. its body or one video's transcript. */
 export type SummarySourcePart = PostSourcePart;
 
-/** Asks the chat model for a summary (and recipe draft) of a post. */
 @Injectable()
 export class PostSummaryGenerator {
   readonly modelId: string;

@@ -1,15 +1,3 @@
-/**
- * One-off cleanup after the single-pass Claude Haiku moderation rewrite:
- * removes fields the old two-stage pipeline stored and the code no longer
- * reads (scores, router, hold markers, thresholds, evidence boxes). Nothing
- * breaks without it; Mongoose ignores unknown fields.
- *
- *   npm run clean:legacy-moderation            # dry run: counts what would change
- *   npm run clean:legacy-moderation -- --apply # removes the fields
- *
- * Only these fields are removed; status, verdicts, risk levels, evidence
- * items and `updatedAt` are left alone.
- */
 import 'dotenv/config';
 import mongoose from 'mongoose';
 
@@ -49,12 +37,9 @@ const CLEANUPS: Cleanup[] = [
   },
 ];
 
-/** A field inside the elements of an array, removed from every element. */
 interface ElementCleanup {
   collection: string;
-  /** The field as a query path, e.g. `items.box`. */
   field: string;
-  /** The same field as an update path over every element, e.g. `items.$[].box`. */
   unset: string;
 }
 

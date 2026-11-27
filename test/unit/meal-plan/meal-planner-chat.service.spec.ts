@@ -361,7 +361,6 @@ describe('MealPlannerChatService', () => {
     ]);
     const [system, userMsg] = model.doStreamCalls[0].prompt;
     expect(system).toMatchObject({ role: 'system' });
-    // The planner is session-scoped: its system prefix uses the 5m cache, not 1h.
     expect(system.providerOptions?.openrouter?.cacheControl).toEqual({
       type: 'ephemeral',
     });
@@ -924,7 +923,6 @@ describe('MealPlannerChatService', () => {
 
     const promptJson = JSON.stringify(model.doStreamCalls[0].prompt);
     expect(promptJson).toContain('Cháo yến mạch');
-    // Unanswered client-side tool calls are dropped (ignoreIncompleteToolCalls).
     expect(promptJson).not.toContain('call-ask-1');
     expect(promptJson).not.toContain('call-k1');
     expect(promptJson).not.toContain('call-plan-1');
@@ -993,7 +991,6 @@ describe('MealPlannerChatService', () => {
             type: 'tool-askUser',
             toolCallId: 'call-old',
             state: 'output-available',
-            // Saved before `options` became required.
             input: { question: 'Chọn món?' },
             output: { answer: 'Cháo' },
           },

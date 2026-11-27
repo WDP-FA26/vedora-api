@@ -30,7 +30,6 @@ describe('RefreshTokensService', () => {
     tokens()
       .findOne({ tokenHash: sha256(token) })
       .exec();
-  /** Moves a rotation back in time, past the reuse grace period. */
   const ageRotation = (token: string, seconds: number) =>
     tokens().updateOne(
       { tokenHash: sha256(token) },
@@ -154,8 +153,6 @@ describe('RefreshTokensService', () => {
       const issued = await service.issue(user.id);
       const rotated = await service.rotate(issued.token);
 
-      // Force the active replacement token to look expired and reset the old one?
-      // Instead, issue a second family member with an expired date in the same family.
       const activeDoc = await tokens()
         .findOne({ tokenHash: sha256(rotated.token) })
         .exec();
@@ -231,7 +228,6 @@ describe('RefreshTokensService', () => {
       const first = await service.issue(user.id);
       const second = await service.rotate(first.token);
 
-      // The browser never stored `second` and sends `first` again.
       const again = await service.rotate(first.token);
 
       expect(again.token).toBe(second.token);

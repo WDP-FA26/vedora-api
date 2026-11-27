@@ -21,7 +21,6 @@ export function isImageAspectRatio(value: string): value is ImageAspectRatio {
   return SUPPORTED_ASPECT_RATIOS.some((ratio) => ratio === value);
 }
 
-/** Runtime settings reject any other ratio, so the filter drops nothing. */
 export const IMAGE_ASPECT_RATIOS =
   runtimeConfig.AI_IMAGE_ALLOWED_ASPECT_RATIOS.split(',')
     .map((value) => value.trim())
@@ -144,11 +143,6 @@ export class BlogImageGeneratorService {
     }
   }
 
-  /**
-   * Models return multi-megabyte PNGs; WebP serves the same picture far smaller
-   * to web and mobile. The image is already paid for, so a failed or larger
-   * conversion keeps the original instead of failing the request.
-   */
   private async compress(original: StoredImage): Promise<StoredImage> {
     if (original.mediaType === 'image/webp') return original;
     let webp: Buffer;

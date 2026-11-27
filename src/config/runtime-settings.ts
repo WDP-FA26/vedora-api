@@ -27,7 +27,6 @@ const probabilities = new Set<string>([
   'TRANSCRIPTION_MAX_NO_SPEECH_PROB',
 ]);
 
-/** Pure parser shared by startup validation and tests. It never changes process.env. */
 export function parseRuntimeSettings(
   source: Record<string, unknown>,
 ): RuntimeSettings {

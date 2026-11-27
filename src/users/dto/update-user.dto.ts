@@ -9,7 +9,6 @@ import {
   ValidateIf,
 } from 'class-validator';
 
-/** Absent fields are left alone; null is validated, so it fails with 400. */
 const isPresent = (_object: object, value: unknown) => value !== undefined;
 
 export class UpdateUserDto {

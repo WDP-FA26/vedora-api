@@ -115,11 +115,9 @@ const fields = {
 export type FillSlotsOutput = PlanChange & {
   filled: number;
   allSlotsAlreadyFilled: boolean;
-  /** Requested days that came before today, which were left alone. */
   passedDays?: { day: Weekday; date: string }[];
 };
 
-/** Tells the model which requested days had passed, so it can say so to the user. */
 function passedNote(output: FillSlotsOutput): string {
   if (!output.passedDays || output.passedDays.length === 0) return '';
   const days = output.passedDays

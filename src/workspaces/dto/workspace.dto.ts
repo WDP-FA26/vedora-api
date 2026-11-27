@@ -58,7 +58,6 @@ export const MAX_WEBSITE_LENGTH = 300;
 export const MAX_LEGAL_NAME_LENGTH = 200;
 export const MAX_PERSON_NAME_LENGTH = 100;
 export const MAX_OTHER_PLATFORM_URLS = 5;
-/** One of each document kind fits, with room for a few menu or extra photos. */
 export const MAX_WORKSPACE_PROOFS = 10;
 
 const IDENTITY_AND_STOREFRONT = [
@@ -67,7 +66,6 @@ const IDENTITY_AND_STOREFRONT = [
   WorkspaceProofKind.STOREFRONT,
 ] as const;
 
-/** The proof kinds an application must include, by legal form. */
 export const REQUIRED_PROOF_KINDS: Record<
   LegalEntityType,
   readonly WorkspaceProofKind[]
@@ -83,13 +81,9 @@ export const REQUIRED_PROOF_KINDS: Record<
   [LegalEntityType.INDIVIDUAL]: IDENTITY_AND_STOREFRONT,
 };
 
-/** A company tax code: 10 digits, or 10-3 for a branch. */
 const COMPANY_TAX_CODE = /^\d{10}(-\d{3})?$/;
-/** Since 1 July 2025 households and individuals use the 12-digit citizen ID as their tax code. */
 const CITIZEN_ID = /^\d{12}$/;
-/** A household has either kind. */
 const HOUSEHOLD_TAX_CODE = /^(\d{10}(-\d{3})?|\d{12})$/;
-/** Restaurants returned for one map viewport. */
 export const MAX_RESTAURANTS_IN_VIEW = 200;
 
 const REVIEW_DECISIONS = [
@@ -100,14 +94,12 @@ const REVIEW_DECISIONS = [
 const trim = ({ value }: { value: unknown }): unknown =>
   typeof value === 'string' ? value.trim() : value;
 
-/** Tax codes are often typed with spaces or dots between digit groups. */
 const compactTaxCode = ({ value }: { value: unknown }): unknown =>
   typeof value === 'string' ? value.replace(/[\s.]/g, '') : value;
 
 const trimLower = ({ value }: { value: unknown }): unknown =>
   typeof value === 'string' ? value.trim().toLowerCase() : value;
 
-/** Blank optional text is stored as null. */
 const blankToNull = ({ value }: { value: unknown }): unknown => {
   if (typeof value !== 'string') return value;
   const trimmed = value.trim();
@@ -142,7 +134,6 @@ export class WorkspaceProofUploadDto {
   upload!: PresignedUploadDto;
 }
 
-/** Where the restaurant is. */
 export class RestaurantPlaceDto {
   @ApiProperty({ maxLength: MAX_ADDRESS_LENGTH })
   @Transform(trim)
@@ -162,10 +153,6 @@ export class RestaurantPlaceDto {
   latitude!: number;
 }
 
-/**
- * Where the restaurant is and how to reach it. Once a page is approved the
- * address and pin are locked; only the phone and website can change.
- */
 export class RestaurantDetailsDto extends RestaurantPlaceDto {
   @ApiPropertyOptional({
     type: String,
@@ -193,7 +180,6 @@ export class RestaurantDetailsDto extends RestaurantPlaceDto {
   website?: string | null;
 }
 
-/** The tax code format a legal form uses. */
 function taxCodeFormat(entityType: LegalEntityType): RegExp {
   if (entityType === LegalEntityType.COMPANY) return COMPANY_TAX_CODE;
   if (entityType === LegalEntityType.INDIVIDUAL) return CITIZEN_ID;
@@ -204,7 +190,6 @@ function isLegalEntityType(value: unknown): value is LegalEntityType {
   return Object.values(LegalEntityType).some((type) => type === value);
 }
 
-/** `taxCode` must have the format of the sibling `entityType`. */
 @ValidatorConstraint({ name: 'taxCodeForEntity' })
 class TaxCodeForEntity implements ValidatorConstraintInterface {
   validate(value: unknown, args: ValidationArguments): boolean {
@@ -212,10 +197,8 @@ class TaxCodeForEntity implements ValidatorConstraintInterface {
     const holder: unknown = args.object;
     if (typeof holder !== 'object' || holder === null) return false;
     const entityType: unknown = Reflect.get(holder, 'entityType');
-    // An unknown entityType already fails its own check.
     if (!isLegalEntityType(entityType)) return true;
     if (!taxCodeFormat(entityType).test(value)) return false;
-    // A 12-digit tax code is a citizen ID, whose digits encode a province and a birth year.
     if (value.length === 12) return isWellFormedCitizenId(value);
     return true;
   }
@@ -225,7 +208,6 @@ class TaxCodeForEntity implements ValidatorConstraintInterface {
   }
 }
 
-/** `wardCode` must be a ward of the sibling `provinceCode`. */
 @ValidatorConstraint({ name: 'wardOfProvince' })
 class WardOfProvince implements ValidatorConstraintInterface {
   validate(value: unknown, args: ValidationArguments): boolean {
@@ -233,7 +215,6 @@ class WardOfProvince implements ValidatorConstraintInterface {
     const holder: unknown = args.object;
     if (typeof holder !== 'object' || holder === null) return false;
     const provinceCode: unknown = Reflect.get(holder, 'provinceCode');
-    // An unknown provinceCode already fails its own check.
     if (!isVnProvinceCode(provinceCode)) return true;
     return wardName(provinceCode, value) !== null;
   }
@@ -246,7 +227,6 @@ class WardOfProvince implements ValidatorConstraintInterface {
 const needsLegalName = (dto: WorkspaceLegalDto): boolean =>
   dto.entityType !== LegalEntityType.INDIVIDUAL;
 
-/** Step 2 of the application: who stands behind the restaurant legally. */
 export class WorkspaceLegalDto {
   @ApiProperty({ enum: LegalEntityType })
   @IsEnum(LegalEntityType)
@@ -300,10 +280,6 @@ export class WorkspaceLegalDto {
   contactEmail!: string;
 }
 
-/**
- * A page application, filled in three steps: the restaurant, its legal
- * details, then the documents and the applicant's commitments.
- */
 export class CreateWorkspaceDto extends RestaurantPlaceDto {
   @ApiProperty({ maxLength: runtimeConfig.AUTH_FULL_NAME_MAX_LENGTH })
   @Transform(trim)
@@ -459,7 +435,6 @@ export class RestaurantLocationDto {
   @ApiProperty({ type: String, nullable: true }) website!: string | null;
 }
 
-/** The 3-step application's restaurant details; null on older applications. */
 export class RestaurantProfileFieldsDto extends RestaurantLocationDto {
   @ApiProperty({ type: String, nullable: true, enum: VN_PROVINCE_CODES })
   provinceCode!: string | null;
@@ -619,11 +594,8 @@ export class WorkspaceProofDto {
 }
 
 export enum WorkspaceWarningCode {
-  /** Another approved page uses this tax code (fine for branches; worth a look). */
   SAME_TAX_CODE = 'SAME_TAX_CODE',
-  /** An approved page is pinned within `NEARBY_PAGE_METERS`. */
   NEARBY_PAGE = 'NEARBY_PAGE',
-  /** The owner had another application rejected recently. */
   RECENT_REJECTION = 'RECENT_REJECTION',
 }
 
@@ -633,7 +605,6 @@ export class WorkspaceWarningPageDto {
   @ApiProperty({ enum: VerificationStatus }) status!: VerificationStatus;
 }
 
-/** Something the reviewing admin should look at; it never blocks a decision. */
 export class WorkspaceWarningDto {
   @ApiProperty({ enum: WorkspaceWarningCode }) code!: WorkspaceWarningCode;
   @ApiProperty({ type: [WorkspaceWarningPageDto] })
@@ -703,7 +674,6 @@ const hasBounds = (dto: RestaurantsInViewQueryDto): boolean =>
 const hasUserCoords = (dto: RestaurantsInViewQueryDto): boolean =>
   dto.userLng !== undefined || dto.userLat !== undefined;
 
-/** Optional map viewport (all 4 corners together) and optional user point for proximity sorting. */
 export class RestaurantsInViewQueryDto {
   @ApiPropertyOptional({ minimum: -180, maximum: 180 })
   @ValidateIf(hasBounds)

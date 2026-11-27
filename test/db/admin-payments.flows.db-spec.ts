@@ -157,7 +157,6 @@ describe('Admin payment flows (contract matrix)', () => {
   });
 
   describe('exact search q', () => {
-    // BUG-1: whitespace-only q is accepted and silently dropped, returning every order
     it.each(['orders', 'overview', 'export'])(
       'rejects a whitespace-only q on %s instead of silently ignoring it',
       async (route) => {

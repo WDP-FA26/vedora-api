@@ -3,11 +3,6 @@ import type { MealPlannerChatHistoryService } from '../meal-planner-chat-history
 import { DAY_NAMES } from '../meal-planner.prompt.js';
 import { z } from 'zod';
 
-/**
- * Voice-mode undo: puts the plan back as it was before the newest change of
- * this conversation that was not undone yet. Calling it again goes one change
- * further back. Messages stay; the text chat's "Quay lại" still works.
- */
 export function undoLastChangeTool(
   history: MealPlannerChatHistoryService,
   userId: string,

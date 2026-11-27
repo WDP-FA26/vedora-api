@@ -53,7 +53,6 @@ const LANGUAGE_CODES: Record<string, string> = {
 
 const translationOutput = z.object({ lines: z.array(z.string()) });
 
-/** A timed word or segment, as the AI SDK's `transcribe()` returns it. */
 export interface TimedWord {
   text: string;
   startSecond: number;
@@ -96,7 +95,6 @@ export class TranscriptionService {
       (sum, { start, end }) => sum + end - start,
       0,
     );
-    // Scribe answers word by word (with spacing entries) in `segments`.
     const words = spokenWords(
       result.words?.length ? result.words : result.segments,
     );
@@ -142,7 +140,6 @@ export class TranscriptionService {
   }
 }
 
-/** The words of a transcript, without the spacing entries some models return. */
 export function spokenWords(words: readonly TimedWord[]): TimedWord[] {
   return words.filter(({ text }) => text.trim().length > 0);
 }

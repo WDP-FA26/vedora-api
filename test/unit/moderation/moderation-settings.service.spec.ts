@@ -34,7 +34,6 @@ describe('ModerationSettingsService', () => {
     service = app.get(ModerationSettingsService);
   });
   beforeEach(async () => {
-    // A reset keeps the row and its version count; start from no row at all.
     await app
       .get(MongoService)
       .connection.collection('moderation_settings')

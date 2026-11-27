@@ -42,7 +42,6 @@ function sameDishes(a: readonly DishRef[], b: readonly DishRef[]): boolean {
   );
 }
 
-/** The slots that changed, one line per day, with the day's new kcal total. */
 export function describeChange(change: PlanChange): string {
   const lines: string[] = [];
   for (const { day, sections } of change.days) {
@@ -65,7 +64,6 @@ export function describeChange(change: PlanChange): string {
   return lines.join('\n');
 }
 
-/** What the model reads after a tool wrote (or failed to write) the plan. */
 export function changeFeedback(
   change: PlanChange,
   errors: readonly string[] = [],
@@ -93,11 +91,6 @@ export function changeFeedback(
   return `Saved to the user's plan for the week of ${change.weekStart}; the app shows the change in the chat and the user can rewind it. Changes:\n${describeChange(change)}${leftOutNote}${clashNote}${notes}`;
 }
 
-/**
- * Two changes saved one after the other as one: each day keeps the dishes
- * from before `first` and the dishes after `second`, so a rewind goes back
- * past both.
- */
 export function mergeChanges(
   first: PlanChange,
   second: PlanChange,

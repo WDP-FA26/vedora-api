@@ -37,11 +37,6 @@ export class ModerationSettings extends Identified {
   @Prop({ type: Number, required: true, default: 1 })
   version!: number;
 
-  /**
-   * Set by a reset: the API serves the defaults (version 0) but keeps this
-   * row, so the next save continues the version count instead of restarting
-   * at 1 and a stale editor's version can no longer match.
-   */
   @Prop({ type: Boolean, default: false })
   isReset?: boolean;
 

@@ -1,19 +1,9 @@
 export interface FrameSampling {
-  /** Target gap between two sampled frames of one video, in seconds. */
   intervalSeconds: number;
-  /** Frames every video gets, however short; wins over `maxPerPost`. */
   minPerVideo: number;
-  /** Frames a whole post may send to the model, shared by its videos. */
   maxPerPost: number;
 }
 
-/**
- * When to grab moderation frames, one list of seconds per video. Each video
- * gets one frame per `intervalSeconds`, at least `minPerVideo`, and the
- * videos share `maxPerPost` so one model call stays bounded. Frames sit in
- * the middle of equal segments, so the first and last moments are skipped.
- * A video of unknown length (0) gets `minPerVideo` frames at 0s.
- */
 export function videoFrameTimes(
   durations: readonly number[],
   sampling: FrameSampling,

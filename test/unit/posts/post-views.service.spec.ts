@@ -124,8 +124,8 @@ describe('PostViewsService', () => {
   });
 
   it('rolls views up per post and Bangkok calendar day', async () => {
-    const lateEvening = new Date('2026-11-19T16:30:00Z'); // 23:30 in Bangkok
-    const nextMorning = new Date('2026-11-19T17:30:00Z'); // 00:30 next day
+    const lateEvening = new Date('2026-11-19T16:30:00Z');
+    const nextMorning = new Date('2026-11-19T17:30:00Z');
     service.record('user-1', [postA, postB]);
     await service.flush(lateEvening);
     service.record('user-2', [postA]);

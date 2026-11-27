@@ -21,8 +21,6 @@ export type SubscriptionPlan = keyof typeof SUBSCRIPTION_LIMITS;
 export type PaidPlan = BillingPlan.PLUS | BillingPlan.PRO;
 export const PAID_PLANS = [BillingPlan.PLUS, BillingPlan.PRO] as const;
 
-// Historical purchase contract for rows created before allowance snapshots existed.
-// Changing the catalogue env must never retroactively change these entitlements.
 const HISTORICAL_LIMITS = {
   PLUS: { text: 300, images: 10 },
   PRO: { text: 900, images: 40 },

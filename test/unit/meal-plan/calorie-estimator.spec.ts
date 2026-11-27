@@ -3,7 +3,6 @@ import { CalorieEstimator } from '@src/meal-plan/meal-log/calorie-estimator.js';
 
 type Content = ConstructorParameters<typeof MockLanguageModelV4>[0];
 
-/** A model that searched (the sources) and then submitted `input`, the submitEstimate arguments as JSON text; null replies with text instead. */
 function modelReplying(
   input: string | null,
   sources: { url: string; title?: string }[] = [],

@@ -22,7 +22,6 @@ const finish = {
   warnings: [],
 };
 
-/** A Gateway that answers `content` and keeps each request body. */
 function fakeGateway(content: unknown[]): {
   bodies: Body[];
   fetch: typeof fetch;

@@ -61,7 +61,6 @@ type AuthorPost = Pick<
   '_id' | 'type' | 'body' | 'blog' | 'publishedAt' | 'viewCount'
 >;
 
-/** The span covering the previous period and the requested one. */
 interface Window {
   current: DashboardRange;
   previous: { from: string; to: string; dates: string[] };
@@ -275,7 +274,6 @@ export class PostAnalyticsService {
     return model.aggregate<GroupCount>(pipeline).exec().then(toCountMap);
   }
 
-  /** Interactions by other people on the author's published posts. */
   private interactionMatches(
     userId: string,
     postIds: string[],

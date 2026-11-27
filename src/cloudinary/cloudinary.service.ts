@@ -192,9 +192,6 @@ export class CloudinaryService {
 
   async findVideo(publicId: string): Promise<CloudinaryVideo | null> {
     try {
-      // The SDK types this as `any`; parsing it straight away keeps that out
-      // of our code. Without media_metadata the Admin API leaves out
-      // `duration`, so videos settled by polling (no webhook) lost their length.
       return cloudinaryVideoSchema.parse(
         await this.require().api.resource(publicId, {
           resource_type: 'video',

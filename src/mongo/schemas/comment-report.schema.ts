@@ -23,7 +23,6 @@ const ReportedCommentAuthorSchema = SchemaFactory.createForClass(
   ReportedCommentAuthor,
 );
 
-/** Evidence survives comment edits/deletion; only admins can read the snapshots. */
 @Schema(collectionSchema('comment_reports'))
 export class CommentReport extends Identified {
   @Prop({ type: String, default: () => randomUUID() }) _id!: string;

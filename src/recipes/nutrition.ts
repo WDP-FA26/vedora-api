@@ -59,7 +59,6 @@ const MIN_SAFE_DAILY_KCAL = 1200;
 const GOAL_DELTA_KCAL = 350;
 const FLEXIBLE_TOLERANCE_RATIO = 0.15;
 
-/** Asian WPRO/IDI BMI category cutoffs: <18.5, 18.5-22.9, 23.0-24.9, >=25.0. */
 export function classifyAsianBmi(bmi: number): BmiCategory {
   if (bmi < 18.5) return BmiCategory.UNDERWEIGHT;
   if (bmi < 23.0) return BmiCategory.NORMAL;
@@ -89,10 +88,6 @@ function sexOffset(sex: BiologicalSex | null): number {
   return -78;
 }
 
-/**
- * Computes Asian BMI, healthy weight range for height, Mifflin-St Jeor TDEE,
- * and flexible (±15%) daily calorie target from a user's body profile.
- */
 export function computeNutritionMetrics(
   input: NutritionProfileInput,
   currentYear: number = new Date().getFullYear(),
@@ -328,10 +323,6 @@ function isProteinIngredient(normalizedName: string): boolean {
   return containsAny(normalizedName, PROTEIN_KEYWORDS);
 }
 
-/**
- * Infers plant-based nutrition pillars from ingredient names and merges with
- * any explicit pillars saved on the recipe.
- */
 export function inferNutritionPillars(
   ingredientNames: readonly string[],
   explicit: readonly NutritionPillar[] = [],
@@ -363,10 +354,6 @@ const BASE_KCAL_BY_TAG: Record<RecipeTag, number> = {
   [RecipeTag.DRINK]: 160,
 };
 
-/**
- * Returns the stored `caloriesPerServing` or estimates an approximate value
- * per serving from the recipe tag, title, and ingredients so tracking never breaks.
- */
 export function resolveCaloriesPerServing(input: {
   caloriesPerServing?: number | null;
   tag: RecipeTag | null;
@@ -495,10 +482,6 @@ const DIRECT_INGREDIENT_HINTS = [
   'sa tế',
 ];
 
-/**
- * Extracts normalized allergen/avoidance keywords from free-text Vietnamese
- * dietary notes, expanding common allergen families (soy, gluten, nuts, sesame, etc.).
- */
 export function extractAllergyKeywords(
   text: string | null | undefined,
 ): string[] {

@@ -68,7 +68,6 @@ export class MediaService implements OnApplicationShutdown {
   private readonly logger = new Logger(MediaService.name);
   private readonly maxVideoDurationSec: number;
   private readonly lastRefresh = new Map<string, number>();
-  /** Moderation runs started by settlePostsLater that have not ended. */
   private readonly settling = new Set<Promise<void>>();
 
   constructor(
@@ -192,11 +191,6 @@ export class MediaService implements OnApplicationShutdown {
     }
   }
 
-  /**
-   * Makes `mediaIds` the post's media, in that order: keeps what is already
-   * attached, claims the new ones and detaches the rest. Detached media are
-   * returned so the caller can discard them once the transaction commits.
-   */
   async replacePostMedia(
     session: ClientSession,
     ownerId: string,
@@ -274,12 +268,6 @@ export class MediaService implements OnApplicationShutdown {
     }
   }
 
-  /**
-   * Moderates the posts after the request that changed them has returned:
-   * they stay PROCESSING until the verdict is in, and the author hears the
-   * outcome as a notification. A post the server stops on before its verdict
-   * is picked up again by MediaMaintenanceService.
-   */
   settlePostsLater(postIds: string[]): void {
     const task = this.settlePosts(postIds)
       .catch((error: unknown) => {
@@ -291,7 +279,6 @@ export class MediaService implements OnApplicationShutdown {
     this.settling.add(task);
   }
 
-  /** Resolves once every moderation started by settlePostsLater has ended. */
   async whenSettled(): Promise<void> {
     await Promise.allSettled([...this.settling]);
   }

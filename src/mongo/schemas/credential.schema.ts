@@ -4,7 +4,6 @@ import { OneTimeCodePurpose } from '../enums.js';
 import { collectionSchema } from './common.js';
 import { Identified } from './identified.js';
 
-/** Why a refresh token stopped working; `null` on tokens revoked before this was recorded. */
 export type RefreshTokenRevocation =
   'ROTATED' | 'LOGOUT' | 'REVOKED' | 'REUSE_DETECTED' | 'EXPIRED' | 'SWITCHED';
 
@@ -22,10 +21,6 @@ export class RefreshToken extends Identified {
   @Prop({ type: String, required: true })
   userId!: string;
 
-  /**
-   * Set on a page session: `userId` is the page and `actorId` the member
-   * acting as it. Null for a personal session.
-   */
   @Prop({ type: String, default: null })
   actorId!: string | null;
 

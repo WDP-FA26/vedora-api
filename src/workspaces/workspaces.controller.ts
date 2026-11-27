@@ -79,7 +79,6 @@ import { TaxCodeLookupDto } from './dto/tax-code-lookup.dto.js';
 import { TaxCodeLookupService } from './tax-code-lookup.service.js';
 import { WorkspacesService } from './workspaces.service.js';
 
-/** Pages are managed by the person, also while they act as one of their pages. */
 const personOf = (user: AuthenticatedUser): string => user.actorId ?? user.sub;
 
 @ApiTags('workspaces')

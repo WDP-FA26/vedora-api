@@ -19,10 +19,6 @@ function nonEmpty(value: string | undefined): string | undefined {
   return trimmed ? trimmed : undefined;
 }
 
-/**
- * Resolves app attribution (`HTTP-Referer` and `X-Title` / `X-OpenRouter-Title`)
- * from explicit overrides, `AI_APP_*` env vars, and Vedora defaults.
- */
 export function aiAppAttribution(overrides?: {
   appUrl?: string;
   appTitle?: string;
@@ -39,13 +35,11 @@ export function aiAppAttribution(overrides?: {
   };
 }
 
-/** Anthropic's ephemeral cache breakpoint; 5 minutes omits the `ttl` field. */
 export function ephemeralCache(ttl: CacheTtl = '1h'): EphemeralCacheSpec {
   if (ttl === '1h') return { type: 'ephemeral', ttl: '1h' };
   return { type: 'ephemeral' };
 }
 
-/** Provider slugs from a comma-separated list; empty leaves routing to the provider. */
 export function providerOrderFrom(value: string): string[] {
   const order: string[] = [];
   for (const slug of value.split(',')) {

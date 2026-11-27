@@ -18,13 +18,6 @@ import {
 import { createE2eApp, type E2eApp } from '@test/support/e2e-app.js';
 import { createUser } from '@test/support/fixtures.js';
 
-/**
- * Black-box flows for /auth: register -> verify email -> login -> refresh
- * rotation/reuse -> logout, password reset, Google sign-in and the JWT guard.
- * Only external boundaries are faked: outgoing mail (to read the codes),
- * Cloudflare Turnstile and Google's token endpoint. MongoDB is real.
- */
-
 const PUBLIC_USER_KEYS = [
   'accountType',
   'accountVersion',
@@ -126,7 +119,6 @@ describe('Auth flows (e2e)', () => {
       type: 'bearer',
     });
 
-  /** A verified, active password account created through the DB. */
   const activeUser = (fields: Partial<User> = {}) => {
     const name = uniqueName('flow');
     return createUser(e2e.mongo, {
@@ -137,13 +129,11 @@ describe('Auth flows (e2e)', () => {
     });
   };
 
-  /** Logs a verified user in and returns the parsed auth response. */
   const session = async (username: string) => {
     const response = await login(username).expect(200);
     return authResponseSchema.parse(response.body);
   };
 
-  /** Registers through the API and verifies with the mailed code. */
   const registerAndVerify = async () => {
     const name = uniqueName('signup');
     const email = `${name}@vedora.test`;
@@ -387,7 +377,6 @@ describe('Auth flows (e2e)', () => {
       expect(errorSchema.parse(response.body).code).toBe('BAD_REQUEST');
     });
 
-    // BUG-1: Email verification code can be redeemed twice concurrently
     it('lets only one of two parallel submissions of the same code issue tokens', async () => {
       const { email, code } = await pendingAccount();
 
@@ -592,7 +581,6 @@ describe('Auth flows (e2e)', () => {
       expect(errorSchema.parse(response.body).code).toBe('UNAUTHORIZED');
     });
 
-    // BUG-2: Login accepts a different password that shares the first 72 bytes
     it('rejects a password that only matches the stored one in its first 72 bytes', async () => {
       const stored = `${'a'.repeat(70)}é`;
       const user = await activeUser({
@@ -618,7 +606,6 @@ describe('Auth flows (e2e)', () => {
   });
 
   describe('POST /auth/refresh and /auth/logout', () => {
-    /** Moves every rotation of the user's tokens back past the reuse grace period. */
     const pastGrace = (userId: string) =>
       tokens().updateMany(
         { userId, revokedReason: 'ROTATED' },
