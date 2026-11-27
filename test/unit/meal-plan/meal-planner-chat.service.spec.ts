@@ -143,6 +143,7 @@ describe('MealPlannerChatService', () => {
     restaurantMenu.suggestForPlanner.mockResolvedValue([]);
 
     aiUsage.consume.mockResolvedValue(TICKET);
+    aiUsage.consumeVoice.mockResolvedValue(TICKET);
     aiUsage.complete.mockResolvedValue(undefined);
     aiUsage.refund.mockResolvedValue(undefined);
     history.assertThreadAccess.mockResolvedValue(undefined);
@@ -686,6 +687,48 @@ describe('MealPlannerChatService', () => {
     await convertReadableStreamToArray(await pendingStream);
   });
 
+  it('waits for an interrupted turn to be saved before reading the thread history', async () => {
+    const threadId = 'c7d1f9a2-5b3e-4c8a-9f10-2b6d7e8a9c01';
+    let saveFirstReply: () => void = () => undefined;
+    history.recordAssistantMessage.mockImplementationOnce(
+      () =>
+        new Promise<void>((resolve) => {
+          saveFirstReply = resolve;
+        }),
+    );
+    const service = await createService();
+
+    const firstTurn = convertReadableStreamToArray(
+      await service.stream(
+        USER_ID,
+        'Cân bằng lại thực đơn tuần sau',
+        new AbortController().signal,
+        WEEK,
+        undefined,
+        threadId,
+      ),
+    );
+    await vi.waitFor(() =>
+      expect(history.recordAssistantMessage).toHaveBeenCalledTimes(1),
+    );
+
+    const secondTurn = service.stream(
+      USER_ID,
+      'Khoan đã, chỉ đổi bữa tối thứ Hai thôi',
+      new AbortController().signal,
+      WEEK,
+      undefined,
+      threadId,
+    );
+    await new Promise<void>((resolve) => setTimeout(resolve, 20));
+    expect(history.loadContextMessages).toHaveBeenCalledTimes(1);
+
+    saveFirstReply();
+    await firstTurn;
+    await convertReadableStreamToArray(await secondTurn);
+    expect(history.loadContextMessages).toHaveBeenCalledTimes(2);
+  });
+
   it('forwards web citations to the client as source parts', async () => {
     steps = [
       [
@@ -756,7 +799,9 @@ describe('MealPlannerChatService', () => {
     const lastCall = model.doStreamCalls[maxSteps - 1];
     expect(lastCall.toolChoice).toEqual({ type: 'none' });
     expect(lastCall.prompt[0]).toEqual(model.doStreamCalls[0].prompt[0]);
-    expect(JSON.stringify(lastCall.prompt)).toContain('final step of this turn');
+    expect(JSON.stringify(lastCall.prompt)).toContain(
+      'final step of this turn',
+    );
     expect(JSON.stringify(model.doStreamCalls[0].prompt)).not.toContain(
       'final step of this turn',
     );

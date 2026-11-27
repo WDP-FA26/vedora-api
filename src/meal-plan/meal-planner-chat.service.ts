@@ -94,6 +94,7 @@ const VOICE_SUBAGENT_TIMEOUT_MS = 25_000;
 const VOICE_CACHE_WARMUP_COOLDOWN_MS = 2 * 60 * 1000;
 const VOICE_CACHE_WARMUP_TIMEOUT_MS = 10_000;
 const VOICE_CACHE_WARMUP_MAX_ENTRIES = 1_000;
+const PREVIOUS_TURN_SETTLE_MS = 5_000;
 
 const LAST_STEP_NOTE = `
 
@@ -285,6 +286,7 @@ function safeConversionTools(tools: ToolSet): ToolSet {
 export class MealPlannerChatService {
   private readonly logger = new Logger(MealPlannerChatService.name);
   private readonly warmedVoiceSessions = new Map<string, number>();
+  private readonly turnsInFlight = new Map<string, Promise<void>>();
 
   constructor(
     @Inject(MODERATION_MODEL)
@@ -727,6 +729,95 @@ export class MealPlannerChatService {
           )
         : this.usage.consume(userId, AiFeature.MEAL_PLAN_CHAT, usageContext);
 
+    const releaseTurn = await this.awaitPreviousTurn(userId, activeThreadId);
+    try {
+      return await this.streamTurn({
+        userId,
+        message,
+        abortSignal,
+        weekStart,
+        requestId,
+        threadId,
+        activeThreadId,
+        allowWebSearch,
+        toolOutput,
+        voice,
+        screen,
+        mode,
+        maxHistoryMessages,
+        consumeTicket,
+        releaseTurn,
+      });
+    } catch (error) {
+      releaseTurn();
+      throw error;
+    }
+  }
+
+  private async awaitPreviousTurn(
+    userId: string,
+    threadId: string,
+  ): Promise<() => void> {
+    const key = `${userId}:${threadId}`;
+    const previous = this.turnsInFlight.get(key);
+    let markSettled: () => void = () => undefined;
+    const current = new Promise<void>((resolve) => {
+      markSettled = resolve;
+    });
+    this.turnsInFlight.set(key, current);
+    if (previous) {
+      let timer: NodeJS.Timeout | undefined;
+      const timeout = new Promise<void>((resolve) => {
+        timer = setTimeout(resolve, PREVIOUS_TURN_SETTLE_MS);
+      });
+      await Promise.race([previous, timeout]);
+      clearTimeout(timer);
+    }
+    let released = false;
+    return () => {
+      if (released) return;
+      released = true;
+      markSettled();
+      if (this.turnsInFlight.get(key) === current) {
+        this.turnsInFlight.delete(key);
+      }
+    };
+  }
+
+  private async streamTurn({
+    userId,
+    message,
+    abortSignal,
+    weekStart,
+    requestId,
+    threadId,
+    activeThreadId,
+    allowWebSearch,
+    toolOutput,
+    voice,
+    screen,
+    mode,
+    maxHistoryMessages,
+    consumeTicket,
+    releaseTurn,
+  }: {
+    userId: string;
+    message: string;
+    abortSignal: AbortSignal;
+    weekStart: string;
+    requestId?: string;
+    threadId?: string;
+    activeThreadId: string;
+    allowWebSearch: boolean;
+    toolOutput: PlannerChatOptions['toolOutput'];
+    voice: boolean;
+    screen: PlannerChatOptions['screen'];
+    mode: ReturnType<typeof plannerModeConfig>;
+    maxHistoryMessages: number;
+    consumeTicket: () => ReturnType<AiUsageService['consume']>;
+    releaseTurn: () => void;
+  }) {
+    const cleanUserText = PLANNER_TAGS.strip(message);
     const userMessageId = requestId ?? randomUUID();
     const currentMessage: StoredChatMessage = {
       id: userMessageId,
@@ -760,7 +851,10 @@ export class MealPlannerChatService {
           abortSignal,
           consumeTicket,
         });
-    if ('refused' in prepared) return prepared.refused;
+    if ('refused' in prepared) {
+      releaseTurn();
+      return prepared.refused;
+    }
 
     const { ticket, storedMessages, context, pendingUserRecord } = prepared;
     try {
@@ -888,6 +982,8 @@ export class MealPlannerChatService {
             this.logger.warn(
               `Failed to save assistant chat message: ${String(error)}`,
             );
+          } finally {
+            releaseTurn();
           }
         },
         onError: (error) => {
