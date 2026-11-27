@@ -17,7 +17,26 @@ Luồng `text/event-stream`. Mỗi sự kiện:
 
 Luồng chỉ phát tới các client đang kết nối vào **cùng một instance API**; chạy nhiều instance cần bus dùng chung.
 
-## REST
+## Thông báo cấp gói
+
+Khi admin cấp Plus/Pro, người được cấp nhận `type: "SUBSCRIPTION_GRANTED"`:
+`actor`, `postId`, `commentId`, `ticketId`, `workspaceId`, `reason` đều null;
+`note` là nội dung hệ thống gồm tên gói, số ngày và thời điểm hết hạn theo
+`APP_TIMEZONE` (mặc định UTC+7). Không phải lý do cấp nội bộ do admin nhập.
+`readAt` ban đầu null. Dùng hình dạng NotificationDto thông thường, không có
+field bắt buộc mới.
+
+FE hiển thị nguồn Vedora, icon quà tặng, dùng note làm thông điệp, link `/billing`.
+Notification nằm trong danh sách/unread count; online nhận SSE để hiện toast
+và tăng badge. Nhận event này thì revalidate billing/me; stream cũng được mở
+trên trang billing/payment. Nếu note thiếu, dùng thông điệp cấp gói chung.
+
+Thông báo lưu cùng transaction grant/membership, chỉ phát sau commit. Lỗi lưu
+notification rollback cả lần cấp. Retry không cấp lại hay báo trùng. Offline
+vẫn đọc lại bằng REST; không tạo bù cho các grant trước tính năng này. Không
+gửi email cho lần cấp gói. SSE vẫn có giới hạn cùng instance như mô tả ở trên.
+
+## REST endpoints
 
 | Method | Path | Mô tả |
 | --- | --- | --- |
