@@ -447,4 +447,116 @@ describe('Admin subscription catalog and purchased QR contracts (real MongoDB HT
       ).toBe(true);
     });
   });
+
+  it('denies voice session and turn APIs to Free, Plus and an admin without Pro', async () => {
+    const sessionPath = '/api/v1/meal-plan/voice/session';
+    const turnsPath = '/api/v1/meal-plan/voice/turns';
+    const turn = { weekStart: '2026-11-23', message: 'Xin chào' };
+    await http()
+      .post(sessionPath)
+      .auth(memberToken, { type: 'bearer' })
+      .send({})
+      .expect(403)
+      .expect(({ text }) =>
+        expect(JSON.parse(text) as unknown).toMatchObject({
+          code: 'PRO_REQUIRED',
+        }),
+      );
+    await http()
+      .post(turnsPath)
+      .auth(memberToken, { type: 'bearer' })
+      .send(turn)
+      .expect(403);
+    await http()
+      .post(sessionPath)
+      .auth(token, { type: 'bearer' })
+      .send({})
+      .expect(403);
+    const plus = readPayment(await buy().expect(200));
+    await pay(plus, 49000).expect(200);
+    await http()
+      .post(sessionPath)
+      .auth(memberToken, { type: 'bearer' })
+      .send({})
+      .expect(403);
+    await http()
+      .post(turnsPath)
+      .auth(memberToken, { type: 'bearer' })
+      .send(turn)
+      .expect(403);
+  });
+
+  it('grants existing Pro voice independently of text quota and isolates request channels', async () => {
+    const order = readPayment(
+      await http()
+        .post('/api/v1/billing/payment-intents')
+        .auth(memberToken, { type: 'bearer' })
+        .set('Idempotency-Key', randomUUID())
+        .send({ planCode: 'PRO', planVersion: 2 })
+        .expect(200),
+    );
+    await pay(order, 99000).expect(200);
+    // The Pro purchase exists before the new voice policy reads it; no voice flag or minutes need migrating.
+    await model(PaymentIntent.name).updateOne(
+      { _id: order.id },
+      { $set: { textLimit: 0 } },
+    );
+    const subscriptions = e2e.app.get(SubscriptionsService);
+    expect(await subscriptions.requireProVoice(member.id)).toMatchObject({
+      planCode: 'PRO',
+      textLimit: 0,
+    });
+    const usage = e2e.app.get(AiUsageService);
+    expect(await usage.consume(member.id, AiFeature.MEAL_PLAN_CHAT)).toBeNull();
+    const requestId = randomUUID();
+    const ticket = await usage.consumeVoice(
+      member.id,
+      AiFeature.MEAL_PLAN_CHAT,
+      { requestId, input: 'voice turn' },
+    );
+    expect(ticket).not.toBeNull();
+    await usage.complete(ticket!);
+    expect(
+      await model<AiRequest>(AiRequest.name).findById(ticket!.id),
+    ).toMatchObject({ bucket: 'VOICE', charged: true });
+    expect(
+      await usage.summary(member.id, AiFeature.MEAL_PLAN_CHAT),
+    ).toMatchObject({ used: 0, limit: 0 });
+    await expect(
+      usage.consume(member.id, AiFeature.MEAL_PLAN_CHAT, {
+        requestId,
+        input: 'voice turn',
+        continuation: true,
+      }),
+    ).rejects.toMatchObject({ code: 'IDEMPOTENCY_CONFLICT' });
+    const period = await subscriptions.period(member.id);
+    await expect(
+      subscriptions.requireProVoice(member.id, period.expiresAt),
+    ).rejects.toMatchObject({ code: 'PRO_REQUIRED' });
+  });
+
+  it('removes voice access immediately for new planner requests after a downgrade to Plus', async () => {
+    const pro = readPayment(
+      await http()
+        .post('/api/v1/billing/payment-intents')
+        .auth(memberToken, { type: 'bearer' })
+        .set('Idempotency-Key', randomUUID())
+        .send({ planCode: 'PRO', planVersion: 2 })
+        .expect(200),
+    );
+    await pay(pro, 99000).expect(200);
+    await e2e.app.get(SubscriptionsService).requireProVoice(member.id);
+    const plus = readPayment(await buy().expect(200));
+    await pay(plus, 49000).expect(200);
+    await expect(
+      e2e.app
+        .get(AiUsageService)
+        .consumeVoice(member.id, AiFeature.MEAL_PLAN_CHAT),
+    ).rejects.toMatchObject({ code: 'PRO_REQUIRED' });
+    await http()
+      .post('/api/v1/meal-plan/voice/turns')
+      .auth(memberToken, { type: 'bearer' })
+      .send({ weekStart: '2026-11-23', message: 'Tiếp tục' })
+      .expect(403);
+  });
 });
