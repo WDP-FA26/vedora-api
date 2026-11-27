@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import type { ClientSession, Model } from 'mongoose';
+import type { ClientSession, Model, QueryFilter } from 'mongoose';
 import {
   AccountStatus,
   AccountType,
@@ -9,12 +9,16 @@ import {
   PaymentStatus,
   SubscriptionGrant,
   User,
+  UserRole,
 } from '../mongo/models.js';
 import { MongoService } from '../mongo/mongo.service.js';
 import { lockDocument } from '../mongo/document-lock.js';
 import { isUniqueViolation } from '../mongo/errors.js';
 import { ResourceNotFoundException } from '../common/exceptions/resource-not-found.exception.js';
 import { InvalidInputException } from '../common/exceptions/invalid-input.exception.js';
+import { AccessDeniedException } from '../common/exceptions/access-denied.exception.js';
+import { escapeRegExp } from '../common/text.js';
+import { paymentExpiresAt } from '../payments/payment-expiration.js';
 import { StateConflictException } from '../common/exceptions/state-conflict.exception.js';
 import { SubscriptionCatalogService } from './subscription-catalog.service.js';
 import { SubscriptionsService } from './subscriptions.service.js';
@@ -73,33 +77,17 @@ export class SubscriptionGrantsService {
 
   async search(query: SubscriptionUserQueryDto) {
     const q = query.q?.trim();
-    const escaped = q
-      ? new RegExp(q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i')
-      : null;
-    const filter = {
-      ...eligible,
-      ...(query.status
-        ? {
-            status: {
-              $in: [query.status].filter(
-                (status) =>
-                  status !== AccountStatus.DELETED &&
-                  status !== AccountStatus.SYSTEM,
-              ),
-            },
-          }
-        : {}),
-      ...(escaped
-        ? {
-            $or: [
-              { _id: q!.toLowerCase() },
-              ...['username', 'fullName', 'email'].map((field) => ({
-                [field]: escaped,
-              })),
-            ],
-          }
-        : {}),
-    };
+    const filter: QueryFilter<User> = { ...eligible };
+    if (query.status) filter.$and = [{ status: query.status }];
+    if (q) {
+      const escaped = new RegExp(escapeRegExp(q), 'i');
+      filter.$or = [
+        { _id: q.toLowerCase() },
+        ...['username', 'fullName', 'email'].map((field) => ({
+          [field]: escaped,
+        })),
+      ];
+    }
     const [rows, total] = await Promise.all([
       this.users
         .find(filter)
@@ -141,9 +129,8 @@ export class SubscriptionGrantsService {
         .findOne({
           userId,
           status: PaymentStatus.PENDING,
-          expiresAt: { $gt: now },
         })
-        .select('_id planCode amount expiresAt')
+        .select('_id createdAt expiresAt')
         .exec(),
       this.grants
         .find({ userId })
@@ -160,9 +147,13 @@ export class SubscriptionGrantsService {
         source:
           period.source ?? (period.planCode === 'FREE' ? 'FREE' : 'PAYMENT'),
       },
-      pendingPayment: pending
-        ? { id: pending.id, expiresAt: pending.expiresAt!.toISOString() }
-        : null,
+      pendingPayment:
+        pending && paymentExpiresAt(pending) > now
+          ? {
+              id: pending.id,
+              expiresAt: paymentExpiresAt(pending).toISOString(),
+            }
+          : null,
       recentGrants: recent.map(grantRow),
     };
   }
@@ -197,7 +188,26 @@ export class SubscriptionGrantsService {
     };
     try {
       return await this.mongo.withTransaction(async (session) => {
+        // Match account-management lock ordering so deleting a target or
+        // revoking an admin cannot race a benefits assignment.
+        for (const id of [...new Set([actorId, body.userId])].sort()) {
+          await lockDocument(this.mongo, session, 'user', id);
+        }
         await lockDocument(this.mongo, session, 'payer', body.userId);
+        const actor = await this.users
+          .findOne({
+            _id: actorId,
+            role: UserRole.ADMIN,
+            status: AccountStatus.ACTIVE,
+            emailVerifiedAt: { $ne: null },
+          })
+          .session(session)
+          .exec();
+        if (!actor)
+          throw new AccessDeniedException(
+            'FORBIDDEN',
+            'Active verified administrator required',
+          );
         const prior = await this.grants
           .findOne({ actorId, requestKey: key })
           .session(session)
