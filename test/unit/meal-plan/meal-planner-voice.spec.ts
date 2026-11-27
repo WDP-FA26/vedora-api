@@ -392,6 +392,58 @@ describe('voice tools', () => {
     });
   });
 
+  it('logMeal stores an estimated figure as an AI estimate', async () => {
+    const mealLog = mockDeep<MealLogService>();
+    mealLog.create.mockResolvedValue({
+      id: 'e2',
+      date: WEEK,
+      section: MealSection.OTHER,
+      source: MealLogSource.CUSTOM,
+      recipeId: null,
+      name: 'Trà sữa size M',
+      servings: 1,
+      caloriesPerServing: 320,
+      calories: 320,
+      calorieSource: CalorieSource.WEB_ESTIMATE,
+      calorieNote: null,
+      calorieReferences: [],
+      createdAt: new Date().toISOString(),
+    });
+    const toolDef = logMealTool(mealLog, USER_ID);
+
+    await toolDef.execute?.(
+      {
+        date: WEEK,
+        section: MealSection.OTHER,
+        name: 'Trà sữa size M',
+        caloriesPerServing: 320,
+        caloriesEstimated: true,
+      },
+      execOptions,
+    );
+
+    expect(mealLog.create).toHaveBeenCalledWith(
+      USER_ID,
+      expect.objectContaining({
+        caloriesPerServing: 320,
+        calorieSource: CalorieSource.WEB_ESTIMATE,
+      }),
+    );
+  });
+
+  it('says an estimated meal log figure is an estimate', () => {
+    const effects = deriveVoiceToolEffects('logMeal', {
+      entry: {
+        date: '2026-11-25',
+        section: MealSection.OTHER,
+        name: 'Trà sữa size M',
+        calories: 320,
+        calorieSource: CalorieSource.WEB_ESTIMATE,
+      },
+    });
+    expect(effects.actionSummary).toContain('khoảng 320 kcal (ước tính)');
+  });
+
   it('logMeal accepts exactly one of recipeId and name', async () => {
     const toolDef = logMealTool(mockDeep<MealLogService>(), USER_ID);
     const schema = asSchema(toolDef.inputSchema);

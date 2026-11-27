@@ -1,6 +1,6 @@
 import { tool } from 'ai';
 import { z } from 'zod';
-import { MealSection } from '../../mongo/models.js';
+import { CalorieSource, MealSection } from '../../mongo/models.js';
 import {
   type CreateMealLogEntryDto,
   MEAL_LOG_MAX_CALORIES_PER_SERVING,
@@ -14,7 +14,7 @@ import { SECTION_NAMES } from '../meal-planner.prompt.js';
 export function logMealTool(mealLog: MealLogService, userId: string) {
   return tool({
     description:
-      'Log a dish the user says they ate into their food diary. Use a recipeId when the dish is a Vedora recipe (from getPlan or searchRecipes); otherwise pass its name and, if the user said it, kcal per serving. Log only what the user clearly said they ate; ask first when the meal or day is unclear.',
+      'Log food or drink the user says they had into their food diary. Use a recipeId when the dish is a Vedora recipe (from getPlan or searchRecipes); otherwise pass its name with kcal per serving, either the figure the user said or your estimate for the amount they had with caloriesEstimated. Log only what the user clearly said they had; ask first when the meal or day is unclear, or when the amount, portion, or size would change the calories noticeably and they have not said it.',
     inputSchema: z
       .object({
         date: z
@@ -43,7 +43,15 @@ export function logMealTool(mealLog: MealLogService, userId: string) {
           .min(0)
           .max(MEAL_LOG_MAX_CALORIES_PER_SERVING)
           .optional()
-          .describe('kcal per serving, only when the user said it'),
+          .describe(
+            'kcal per serving: the figure the user said, or your estimate for the amount they had',
+          ),
+        caloriesEstimated: z
+          .boolean()
+          .optional()
+          .describe(
+            'true when caloriesPerServing is your estimate rather than a figure the user said',
+          ),
         done: z
           .boolean()
           .optional()
@@ -64,6 +72,10 @@ export function logMealTool(mealLog: MealLogService, userId: string) {
         recipeId: input.recipeId,
         name: input.name,
         caloriesPerServing: input.caloriesPerServing,
+        ...(input.caloriesEstimated === true &&
+        input.caloriesPerServing !== undefined
+          ? { calorieSource: CalorieSource.WEB_ESTIMATE }
+          : {}),
       };
       const entry = await mealLog.create(userId, dto);
       return input.done === true ? { entry, done: true } : { entry };
@@ -72,9 +84,13 @@ export function logMealTool(mealLog: MealLogService, userId: string) {
       const { entry } = output;
       const kcal =
         entry.calories === null ? 'chưa rõ kcal' : `~${entry.calories} kcal`;
+      const estimate =
+        entry.calorieSource === CalorieSource.WEB_ESTIMATE
+          ? ', AI ước tính'
+          : '';
       return {
         type: 'text',
-        value: `Đã ghi vào nhật ký ${entry.date}, bữa ${SECTION_NAMES[entry.section]}: ${entry.name} ×${entry.servings} (${kcal}) [id: ${entry.id}].`,
+        value: `Đã ghi vào nhật ký ${entry.date}, bữa ${SECTION_NAMES[entry.section]}: ${entry.name} ×${entry.servings} (${kcal}${estimate}) [id: ${entry.id}].`,
       };
     },
   });

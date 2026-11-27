@@ -362,7 +362,7 @@ export function deriveVoiceToolEffects(
       progress: 'Đã ghi món vào nhật ký, đang làm tiếp.',
     };
     if (isRecord(output) && isRecord(output.entry)) {
-      const { date, section, name, calories } = output.entry;
+      const { date, section, name, calories, calorieSource } = output.entry;
       if (typeof date === 'string') {
         effects.screen = {
           focus: { kind: 'eatingLog', date },
@@ -374,8 +374,11 @@ export function deriveVoiceToolEffects(
         typeof name === 'string' &&
         isMealSection(section)
       ) {
+        const estimated = calorieSource === 'WEB_ESTIMATE' ? ' (ước tính)' : '';
         const kcal =
-          typeof calories === 'number' ? `, khoảng ${calories} kcal` : '';
+          typeof calories === 'number'
+            ? `, khoảng ${calories} kcal${estimated}`
+            : '';
         effects.actionSummary = `Đã ghi món "${name}" vào nhật ký bữa ${SECTION_NAMES[section]} ${spokenDate(date)}${kcal}.`;
       }
     }
