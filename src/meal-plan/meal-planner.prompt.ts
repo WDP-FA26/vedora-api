@@ -89,7 +89,7 @@ const RECIPE_SECTION_TEXT: Record<RecipeSection, string> = {
 };
 
 const BODY_METRICS_TAB_TEXT: Record<BodyMetricsTab, string> = {
-  weekly: 'tab Tuần này (biểu đồ calo & 5 nhóm dưỡng chất)',
+  weekly: 'tab Theo tuần (biểu đồ calo & 5 nhóm dưỡng chất của tuần đang mở)',
   bmi: 'tab BMI (chỉ số cơ thể, nhập cân nặng & biểu đồ cân nặng)',
   dietary: 'tab Dị ứng & Gu ăn uống',
 };

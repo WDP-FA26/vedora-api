@@ -166,7 +166,7 @@ export function verifyMealPlanAllergiesTool(
           safe: true,
           checkedDishesCount: 0,
           flaggedDishes: [],
-          summary: 'Tuần này chưa có món nào trên lịch để kiểm định dị ứng.',
+          summary: `Tuần bắt đầu ${week} chưa có món nào trên lịch để kiểm định dị ứng.`,
         };
       }
 

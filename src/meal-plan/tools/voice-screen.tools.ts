@@ -128,7 +128,7 @@ const SCROLL_LABELS: Record<ScreenScrollDirection, string> = {
 };
 
 const BODY_METRICS_TAB_LABELS: Record<BodyMetricsTab, string> = {
-  weekly: 'tab Tuần này (biểu đồ dinh dưỡng)',
+  weekly: 'tab Theo tuần (biểu đồ dinh dưỡng)',
   bmi: 'tab BMI',
   dietary: 'tab Dị ứng & Gu',
 };
