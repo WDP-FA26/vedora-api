@@ -14,6 +14,8 @@ import {
   PaymentStatus,
   PaymentWebhookReceipt,
   SubscriptionCatalog,
+  SubscriptionMembership,
+  SubscriptionGrant,
   SystemLog,
   User,
   UserRole,
@@ -111,6 +113,8 @@ describe('Admin subscription catalog and purchased QR contracts (real MongoDB HT
   beforeEach(async () => {
     await Promise.all([
       model(SubscriptionCatalog.name).deleteMany({}),
+      model(SubscriptionMembership.name).deleteMany({}),
+      model(SubscriptionGrant.name).deleteMany({}),
       model(PaymentIntent.name).deleteMany({}),
       model(PaymentRequest.name).deleteMany({}),
       model(PaymentWebhookReceipt.name).deleteMany({}),
@@ -497,8 +501,8 @@ describe('Admin subscription catalog and purchased QR contracts (real MongoDB HT
     );
     await pay(order, 99000).expect(200);
     // The Pro purchase exists before the new voice policy reads it; no voice flag or minutes need migrating.
-    await model(PaymentIntent.name).updateOne(
-      { _id: order.id },
+    await model(SubscriptionMembership.name).updateOne(
+      { _id: member.id },
       { $set: { textLimit: 0 } },
     );
     const subscriptions = e2e.app.get(SubscriptionsService);
