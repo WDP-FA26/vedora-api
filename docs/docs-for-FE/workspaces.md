@@ -397,7 +397,7 @@ Thành viên page (chủ/quản lý) quản lý thực đơn qua:
 Public endpoints:
 
 - `GET /restaurants/:pageUserId/menu` — thực đơn công khai của nhà hàng.
-- `GET /restaurants/menu/search?q=…&limit=20&cursor=0` — tìm món ăn đang phục vụ qua Qdrant (dense + BM25 có/không dấu), trả về món kèm `restaurant` (`pageUserId`, `username`, `name`, `avatarUrl`, `address`, `longitude`, `latitude`, `averageRating`, `reviewCount`) và `nextCursor`.
+- `GET /restaurants/menu/search?q=…&limit=20&cursor=0` — tìm món ăn đang phục vụ qua Qdrant. Từ khóa 1–2 từ ("cơm", "bánh mì") chỉ ra món có chung ít nhất một chữ (có hoặc không dấu), xếp theo độ gần nghĩa; từ khóa dài hơn ("món nước thanh đạm") thì tìm cả theo nghĩa. Trả về món kèm `restaurant` (`pageUserId`, `username`, `name`, `avatarUrl`, `address`, `longitude`, `latitude`, `averageRating`, `reviewCount`) và `nextCursor`.
 
 ## Đánh giá sao & bình luận nhà hàng
 
