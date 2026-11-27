@@ -56,13 +56,13 @@ Chạy planner ở chế độ voice cho một lượt nói (một delegation c�
 | --- | --- | --- |
 | `data-screen` | `{ focus, close, scroll? }` | Mở/đóng panel (`recipe`, `eatingLog`, `bodyMetrics`, `shoppingList`, `planDay`), cuộn mượt (`up`, `down`, `top`, `bottom`) |
 | `data-state` | `{ invalidate?: ("plan" \| "shoppingList" \| "mealLog" \| "nutrition" \| "dietary")[], patch?: { nutrition? } }` | Cập nhật / invalidate SWR cache (dùng chung cho cả Text Chat & Voice) |
-| `data-progress` | `{ text }` | Gửi kênh `thinking` (và nói qua `commentary` nếu lượt chạy quá 6 giây) |
+| `data-progress` | `{ text }` | Gửi kênh `thinking`; GPT-Live tự quyết định có nhắc người dùng hay không |
 | `data-end-call` | `{}` | Đánh dấu cuộc gọi kết thúc sau khi GPT-Live đọc lời chào tạm biệt |
 | `data-summary` | `{ text }` | Câu tóm tắt tiếng Việt ngắn (chỉ phát trước `finish` khi tool nhanh kết thúc mà không sinh `text`) |
 
 Mở một panel (công thức, nhật ký, chỉ số cơ thể) thì FE đóng các panel khác đang mở.
 
-Phần `text` của tin nhắn cuối (hoặc `data-summary` nếu `text` rỗng) là câu trả lời ngắn để GPT-Live diễn đạt lại: gửi ngay khi nhận `finish` bằng `context-append` với `delegationId` của lượt và `providerOptions.openai.channel = "commentary"` (tối đa 500 token mỗi lần). Lượt chạy lâu (trên 6 giây) có thể gửi thêm một câu `commentary` ngắn từ `data-progress`.
+Phần `text` của tin nhắn cuối (hoặc `data-summary` nếu `text` rỗng) là câu trả lời ngắn để GPT-Live diễn đạt lại: gửi ngay khi nhận `finish` bằng `context-append` với `delegationId` của lượt và `providerOptions.openai.channel = "commentary"` (tối đa 500 token mỗi lần).
 
 `undoLastChange` đưa thực đơn về như trước lần thay đổi gần nhất chưa hoàn tác trong thread, không xóa tin nhắn (nút "Quay lại" của chat vẫn dùng được). Chế độ voice không có `askUser`: khi cần người dùng chọn, planner hỏi bằng lời.
 
