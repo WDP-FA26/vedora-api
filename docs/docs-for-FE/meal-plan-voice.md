@@ -55,7 +55,7 @@ Chạy planner ở chế độ voice cho một lượt nói (một delegation c�
 | data chunk | payload | FE làm gì |
 | --- | --- | --- |
 | `data-screen` | `{ focus, close, scroll? }` | Mở/đóng panel (`recipe`, `eatingLog`, `bodyMetrics`, `shoppingList`, `planDay`), cuộn mượt (`up`, `down`, `top`, `bottom`) |
-| `data-refresh` | `{ plan?, log?, nutrition?, dietary? }` | Mutate các SWR cache tương ứng |
+| `data-state` | `{ invalidate?: ("plan" \| "shoppingList" \| "mealLog" \| "nutrition" \| "dietary")[], patch?: { nutrition? } }` | Cập nhật / invalidate SWR cache (dùng chung cho cả Text Chat & Voice) |
 | `data-progress` | `{ text }` | Gửi kênh `thinking` (và nói qua `commentary` nếu lượt chạy quá 6 giây) |
 | `data-end-call` | `{}` | Đánh dấu cuộc gọi kết thúc sau khi GPT-Live đọc lời chào tạm biệt |
 | `data-summary` | `{ text }` | Câu tóm tắt tiếng Việt ngắn (chỉ phát trước `finish` khi tool nhanh kết thúc mà không sinh `text`) |

@@ -18,7 +18,7 @@ import {
 } from '@src/meal-plan/tools/voice-screen.tools.js';
 import {
   deriveVoiceToolEffects,
-  withVoiceStreamEffects,
+  withPlannerStreamEffects,
 } from '@src/meal-plan/voice/voice-stream-effects.js';
 import { voiceScreenContext } from '@src/meal-plan/meal-planner.prompt.js';
 import { MealPlannerVoiceService } from '@src/meal-plan/voice/meal-planner-voice.service.js';
@@ -514,13 +514,13 @@ describe('voice stream effects', () => {
     });
 
     const out = await convertReadableStreamToArray(
-      withVoiceStreamEffects(input),
+      withPlannerStreamEffects(input, { voice: true }),
     );
     const dataParts = out.filter((chunk) => chunk.type.startsWith('data-'));
 
     expect(dataParts).toContainEqual({
-      type: 'data-refresh',
-      data: { log: true },
+      type: 'data-state',
+      data: { invalidate: ['mealLog'], seq: 1 },
       transient: true,
     });
     expect(dataParts).toContainEqual({
@@ -583,7 +583,7 @@ describe('voice stream effects', () => {
     });
 
     const out = await convertReadableStreamToArray(
-      withVoiceStreamEffects(input),
+      withPlannerStreamEffects(input, { voice: true }),
     );
     expect(out.some((chunk) => chunk.type === 'data-summary')).toBe(false);
   });

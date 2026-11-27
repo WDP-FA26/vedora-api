@@ -29,13 +29,6 @@ export interface VoiceScreenEvent {
   scroll?: ScreenScrollDirection | null;
 }
 
-export interface VoiceRefreshEvent {
-  plan?: true;
-  log?: true;
-  nutrition?: true;
-  dietary?: true;
-}
-
 export type PlannerStateDomain =
   | 'plan'
   | 'shoppingList'
@@ -44,9 +37,15 @@ export type PlannerStateDomain =
   | 'dietary';
 
 export interface PlannerStateEvent {
+  /** Monotonic per-stream sequence number so older patches never overwrite newer state. */
+  seq?: number;
   invalidate?: PlannerStateDomain[];
   patch?: {
     nutrition?: Record<string, unknown>;
+    dietary?: {
+      section: 'allergies' | 'preferences';
+      lines: string[];
+    };
   };
 }
 
@@ -220,7 +219,6 @@ function summaryFromSetScreen(output: SetScreenOutput): string | null {
 interface ToolDerivedEffects {
   state?: PlannerStateEvent;
   screen?: VoiceScreenEvent;
-  refresh?: VoiceRefreshEvent;
   progress?: string;
   endCall?: true;
   /** Action summaries take precedence over pure `setScreen` summaries. */
@@ -240,7 +238,6 @@ export function deriveVoiceToolEffects(
   if (PLAN_TOOLS.has(toolName)) {
     const effects: ToolDerivedEffects = {
       state: { invalidate: ['plan', 'shoppingList'] },
-      refresh: { plan: true },
     };
     const change = extractPlanChange(output);
     if (change && change.applied && change.days.length > 0) {
@@ -259,9 +256,22 @@ export function deriveVoiceToolEffects(
   }
 
   if (toolName === 'updateMemory') {
+    if (
+      isRecord(output) &&
+      (output.section === 'allergies' || output.section === 'preferences') &&
+      Array.isArray(output.lines) &&
+      output.lines.every((item): item is string => typeof item === 'string')
+    ) {
+      return {
+        state: {
+          patch: {
+            dietary: { section: output.section, lines: output.lines },
+          },
+        },
+      };
+    }
     return {
       state: { invalidate: ['dietary'] },
-      refresh: { dietary: true },
     };
   }
 
@@ -285,7 +295,6 @@ export function deriveVoiceToolEffects(
   if (toolName === 'logMeal') {
     const effects: ToolDerivedEffects = {
       state: { invalidate: ['mealLog'] },
-      refresh: { log: true },
       progress: 'Đã ghi món vào nhật ký, đang làm tiếp.',
     };
     if (isRecord(output) && isRecord(output.entry)) {
@@ -333,7 +342,6 @@ export function deriveVoiceToolEffects(
       state: nutritionPatch
         ? { patch: { nutrition: nutritionPatch } }
         : { invalidate: ['nutrition'] },
-      refresh: { nutrition: true },
       screen: { focus: { kind: 'bodyMetrics' }, close: null },
       progress: 'Đã lưu chỉ số cơ thể mới, đang làm tiếp.',
       actionSummary:
@@ -346,7 +354,6 @@ export function deriveVoiceToolEffects(
   if (toolName === 'undoLastChange') {
     const effects: ToolDerivedEffects = {
       state: { invalidate: ['plan', 'shoppingList'] },
-      refresh: { plan: true },
       progress: 'Đã hoàn tác thay đổi trước đó, đang làm tiếp.',
     };
     if (isRecord(output) && Array.isArray(output.weeks)) {
@@ -399,14 +406,15 @@ function dataChunk(type: `data-${string}`, data: unknown): UIMessageChunk {
 /**
  * Enriches any planner UIMessageStream (text chat or voice) with unified
  * transient `data-state` events (invalidate/patch) as soon as a mutating tool
- * finishes. When `voice: true`, also emits `data-screen`, `data-refresh`,
- * `data-progress`, `data-end-call`, and `data-summary`.
+ * finishes. When `voice: true`, also emits `data-screen`, `data-progress`,
+ * `data-end-call`, and `data-summary`.
  */
 export function withPlannerStreamEffects(
   stream: ReadableStream<UIMessageChunk>,
   options: { voice: boolean },
 ): ReadableStream<UIMessageChunk> {
   const toolNames = new Map<string, string>();
+  let stateSeq = 0;
   let hasText = false;
   let lastActionSummary: string | null = null;
   let lastScreenSummary: string | null = null;
@@ -430,12 +438,12 @@ export function withPlannerStreamEffects(
           if (!toolName) return;
           const effects = deriveVoiceToolEffects(toolName, chunk.output);
           if (effects.state) {
-            controller.enqueue(dataChunk('data-state', effects.state));
+            stateSeq += 1;
+            controller.enqueue(
+              dataChunk('data-state', { ...effects.state, seq: stateSeq }),
+            );
           }
           if (options.voice) {
-            if (effects.refresh) {
-              controller.enqueue(dataChunk('data-refresh', effects.refresh));
-            }
             if (effects.screen) {
               controller.enqueue(dataChunk('data-screen', effects.screen));
             }
@@ -470,11 +478,4 @@ export function withPlannerStreamEffects(
       },
     }),
   );
-}
-
-/** Backwards-compatible helper for voice turns. */
-export function withVoiceStreamEffects(
-  stream: ReadableStream<UIMessageChunk>,
-): ReadableStream<UIMessageChunk> {
-  return withPlannerStreamEffects(stream, { voice: true });
 }
