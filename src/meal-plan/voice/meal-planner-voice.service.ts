@@ -5,6 +5,9 @@ import { type UIMessageChunk } from 'ai';
 import { createGatewayRealtimeClient } from '../../ai/providers/provider-registry.js';
 import { FeatureUnavailableException } from '../../common/exceptions/feature-unavailable.exception.js';
 import { SubscriptionsService } from '../../subscriptions/subscriptions.service.js';
+import { AiUsageService } from '../../subscriptions/ai-usage.service.js';
+import { AiFeature } from '../../mongo/models.js';
+import { QuotaReachedException } from '../../common/exceptions/quota-reached.exception.js';
 import type {
   MealPlanVoiceSessionDto,
   MealPlanVoiceTurnRequestDto,
@@ -27,6 +30,7 @@ export class MealPlannerVoiceService {
     config: ConfigService,
     private readonly chat: MealPlannerChatService,
     private readonly subscriptions: SubscriptionsService,
+    private readonly usage: AiUsageService,
   ) {
     const apiKey = config.get<string>('AI_GATEWAY_API_KEY', '');
     this.gateway = apiKey ? createGatewayRealtimeClient(apiKey) : null;
@@ -45,6 +49,12 @@ export class MealPlannerVoiceService {
       throw new FeatureUnavailableException(
         'SERVICE_UNAVAILABLE',
         'Voice is not configured',
+      );
+    }
+    if (!(await this.usage.hasAllowance(userId, AiFeature.MEAL_PLAN_CHAT))) {
+      throw new QuotaReachedException(
+        'AI_QUOTA_EXCEEDED',
+        'Voice requests require remaining shared AI text allowance',
       );
     }
     void this.chat.warmVoiceCache(userId, threadId);
