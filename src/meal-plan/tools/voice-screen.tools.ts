@@ -70,6 +70,8 @@ export interface SetScreenOutput {
   checkItems: string[] | null;
   uncheckItems: string[] | null;
   clearChecked: boolean;
+  expandItems: string[] | null;
+  collapseItems: string[] | null;
   tab: BodyMetricsTab | null;
   date: string | null;
   metrics: BodyMetricsSummary | null;
@@ -97,6 +99,8 @@ function screenOutput(
     checkItems: null,
     uncheckItems: null,
     clearChecked: false,
+    expandItems: null,
+    collapseItems: null,
     tab: null,
     date: null,
     metrics: null,
@@ -171,6 +175,12 @@ function setScreenText(output: SetScreenOutput): string {
     if (output.uncheckItems && output.uncheckItems.length > 0) {
       checkNotes.push(`đã bỏ đánh dấu: ${output.uncheckItems.join(', ')}`);
     }
+    if (output.expandItems && output.expandItems.length > 0) {
+      checkNotes.push(`đã mở danh sách món dùng: ${output.expandItems.join(', ')}`);
+    }
+    if (output.collapseItems && output.collapseItems.length > 0) {
+      checkNotes.push(`đã thu gọn: ${output.collapseItems.join(', ')}`);
+    }
     const checkSuffix =
       checkNotes.length > 0 ? ` ${checkNotes.join('; ')}.` : '';
     const items = output.shoppingItems;
@@ -205,7 +215,7 @@ export function setScreenTool(
       '- recipe: dish card with ingredients and steps. Pass recipeId or Vietnamese dish query; pass section (top/ingredients/steps) or 1-based step to jump. Omit recipeId and query to scroll the open recipe.',
       '- eatingLog: food diary. Pass date (YYYY-MM-DD) for any day (switches week automatically if needed); omit date for today.',
       '- bodyMetrics: nutrition & BMI sheet. Pass tab (weekly = calorie chart & 5 pillars, bmi = BMI/weight, dietary = allergies & preferences) and optional weekStart for another week. Already returns current BMI/target metrics.',
-      '- shoppingList: shopping list. Pass weekStart for another week, day (MON..SUN for one day, or ALL for whole week), people (1-4), checkItems/uncheckItems (ingredient names), or clearChecked: true. Already fetches and returns scaled ingredients.',
+      '- shoppingList: shopping list. Pass weekStart for another week, day (MON..SUN for one day, or ALL for whole week), people (1-4), checkItems/uncheckItems (ingredient names), clearChecked: true, or expandItems/collapseItems (ingredient names to expand/collapse which dishes use them). Already fetches and returns scaled ingredients and their dishes.',
       'Notes: Pass scroll (down/up/top/bottom) on any view. Pass done: true when no further explanation or tool work is needed after updating the screen. shoppingList and bodyMetrics fetch their own data directly without needing getPlan first. Plan edits, logMeal, editMealLog updates, updateBodyMetrics, and undoLastChange already focus their default views automatically, while setScreen can still be combined freely whenever the user wants a different view, tab, recipe, filter, item check, or scroll position. Meal slot edits belong to editPlan/fillSlots, and call hangup belongs to endCall.',
     ].join('\n'),
     inputSchema: z.object({
@@ -285,6 +295,20 @@ export function setScreenTool(
         .optional()
         .describe(
           'Only with view shoppingList: set true to untick all bought items',
+        ),
+      expandItems: z
+        .array(z.string().min(1).max(80))
+        .max(20)
+        .optional()
+        .describe(
+          'Only with view shoppingList: ingredient names to expand and show which dishes use them',
+        ),
+      collapseItems: z
+        .array(z.string().min(1).max(80))
+        .max(20)
+        .optional()
+        .describe(
+          'Only with view shoppingList: ingredient names to collapse their related dishes',
         ),
       tab: z
         .enum(BODY_METRICS_TABS)
@@ -421,7 +445,15 @@ export function setScreenTool(
               knownCount > 0
                 ? [rounded, item.unit].filter(Boolean).join(' ')
                 : 'chưa rõ lượng';
-            return `${item.name} (${qty})`;
+            const dishTitles: string[] = [];
+            for (const contrib of item.contributions) {
+              if (!dishTitles.includes(contrib.recipeTitle)) {
+                dishTitles.push(contrib.recipeTitle);
+              }
+            }
+            const dishesNote =
+              dishTitles.length > 0 ? `; món: ${dishTitles.join(', ')}` : '';
+            return `${item.name} (${qty}${dishesNote})`;
           });
         }
         const wholeWeek =
@@ -435,6 +467,8 @@ export function setScreenTool(
           checkItems: input.checkItems ?? null,
           uncheckItems: input.uncheckItems ?? null,
           clearChecked: input.clearChecked === true,
+          expandItems: input.expandItems ?? null,
+          collapseItems: input.collapseItems ?? null,
           shoppingItems,
           scroll,
           ...doneFlag,

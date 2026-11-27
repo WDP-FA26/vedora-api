@@ -34,6 +34,8 @@ export type VoiceFocus =
       checkItems?: string[] | null;
       uncheckItems?: string[] | null;
       clearChecked?: boolean;
+      expandItems?: string[] | null;
+      collapseItems?: string[] | null;
     }
   | { kind: 'planDay'; weekStart: string; day: Weekday | null };
 
@@ -208,6 +210,12 @@ function screenEventFromSetScreen(
         ? { uncheckItems: output.uncheckItems }
         : {}),
       ...(output.clearChecked ? { clearChecked: true } : {}),
+      ...(output.expandItems && output.expandItems.length > 0
+        ? { expandItems: output.expandItems }
+        : {}),
+      ...(output.collapseItems && output.collapseItems.length > 0
+        ? { collapseItems: output.collapseItems }
+        : {}),
     };
     return event;
   }
@@ -257,6 +265,12 @@ function summaryFromSetScreen(output: SetScreenOutput): string | null {
       : 'Đã mở bảng chỉ số cơ thể trên màn hình.';
   }
   if (output.view === 'shoppingList') {
+    if (output.expandItems && output.expandItems.length > 0) {
+      return `Đã mở danh sách món dùng ${output.expandItems.join(', ')} trong danh sách đi chợ.`;
+    }
+    if (output.collapseItems && output.collapseItems.length > 0) {
+      return `Đã thu gọn chi tiết ${output.collapseItems.join(', ')} trong danh sách đi chợ.`;
+    }
     const parts: string[] = [];
     if (output.day) parts.push(DAY_NAMES[output.day]);
     else if (output.wholeWeek) parts.push('cả tuần');

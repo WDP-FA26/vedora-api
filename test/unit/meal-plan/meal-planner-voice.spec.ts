@@ -6,6 +6,7 @@ import { QuotaReachedException } from '@src/common/exceptions/quota-reached.exce
 import type { AiUsageService } from '@src/subscriptions/ai-usage.service.js';
 import type { MealLogService } from '@src/meal-plan/meal-log/meal-log.service.js';
 import type { MealPlanService } from '@src/meal-plan/meal-plan.service.js';
+import type { ShoppingListService } from '@src/meal-plan/shopping-list.service.js';
 import type { MealPlannerChatHistoryService } from '@src/meal-plan/meal-planner-chat-history.service.js';
 import { MealPlannerChatService } from '@src/meal-plan/meal-planner-chat.service.js';
 import { logMealTool } from '@src/meal-plan/tools/log-meal.tool.js';
@@ -265,6 +266,81 @@ describe('voice tools', () => {
     });
   });
 
+  it('setScreen expands shopping list items and includes contributing dish titles', async () => {
+    const shoppingList = mockDeep<ShoppingListService>();
+    shoppingList.get.mockResolvedValue({
+      weekStart: WEEK,
+      days: [Weekday.MON],
+      quantityBasis: 'RECIPE_PER_OCCURRENCE',
+      items: [
+        {
+          ingredientId: 'ing-1',
+          name: 'Đậu phụ',
+          unit: 'g',
+          knownQuantity: '300.00',
+          hasUnknownQuantity: false,
+          contributions: [
+            {
+              recipeId: RECIPE_ID,
+              recipeTitle: 'Đậu phụ sốt cà',
+              day: Weekday.MON,
+              section: MealSection.LUNCH,
+              servings: 2,
+              quantity: '300.00',
+              note: null,
+            },
+            {
+              recipeId: 'r2',
+              recipeTitle: 'Canh đậu phụ rong biển',
+              day: Weekday.MON,
+              section: MealSection.DINNER,
+              servings: 2,
+              quantity: '100.00',
+              note: null,
+            },
+          ],
+        },
+      ],
+    });
+    const toolDef = setScreenTool(
+      mockDeep<MealPlanService>(),
+      mockDeep<DietaryService>(),
+      USER_ID,
+      WEEK,
+      undefined,
+      shoppingList,
+    );
+
+    const output = await toolDef.execute?.(
+      {
+        view: 'shoppingList',
+        day: Weekday.MON,
+        people: 2,
+        expandItems: ['đậu phụ'],
+      },
+      execOptions,
+    );
+
+    expect(output).toMatchObject({
+      applied: true,
+      view: 'shoppingList',
+      expandItems: ['đậu phụ'],
+      collapseItems: null,
+      shoppingItems: [
+        'Đậu phụ (400 g; món: Đậu phụ sốt cà, Canh đậu phụ rong biển)',
+      ],
+    });
+
+    const modelOut = await toolDef.toModelOutput?.({
+      toolCallId: 'call-1',
+      input: { view: 'shoppingList', expandItems: ['đậu phụ'] },
+      output,
+    });
+    const text = modelOut?.type === 'text' ? modelOut.value : '';
+    expect(text).toContain('đã mở danh sách món dùng: đậu phụ');
+    expect(text).toContain('Đậu phụ sốt cà');
+  });
+
   it('voiceScreenContext names the open recipe and the part shown', () => {
     const text = buildVoiceScreenContext({
       screen: {
@@ -466,6 +542,8 @@ describe('voice stream effects', () => {
         checkItems: ['đậu phụ'],
         uncheckItems: null,
         clearChecked: false,
+        expandItems: ['đậu phụ'],
+        collapseItems: ['cà chua'],
         tab: null,
         recipeId: null,
         title: null,
@@ -474,7 +552,7 @@ describe('voice stream effects', () => {
         scroll: null,
         date: null,
         metrics: null,
-        shoppingItems: ['đậu phụ (200 g)'],
+        shoppingItems: ['đậu phụ (200 g; món: Đậu phụ sốt cà)'],
         problem: null,
       }),
     ).toEqual({
@@ -485,11 +563,13 @@ describe('voice stream effects', () => {
           day: Weekday.MON,
           people: 2,
           checkItems: ['đậu phụ'],
+          expandItems: ['đậu phụ'],
+          collapseItems: ['cà chua'],
         },
         close: null,
       },
       screenSummary:
-        'Đã mở danh sách đi chợ (Thứ Hai, cho 2 người ăn) trên màn hình.',
+        'Đã mở danh sách món dùng đậu phụ trong danh sách đi chợ.',
     });
 
     expect(
