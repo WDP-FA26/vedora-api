@@ -25,6 +25,7 @@ const ReportedCommentAuthorSchema = SchemaFactory.createForClass(
 
 @Schema(collectionSchema('comment_reports'))
 export class CommentReport extends Identified {
+  @Prop({ type: String }) commentVersionSnapshot?: string;
   @Prop({ type: String, default: () => randomUUID() }) _id!: string;
   @Prop({ type: String, required: true }) postId!: string;
   @Prop({ type: String, required: true }) commentId!: string;
