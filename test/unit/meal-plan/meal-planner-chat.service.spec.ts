@@ -355,6 +355,8 @@ describe('MealPlannerChatService', () => {
       'consultNutritionSubagent',
       'verifyMealPlanAllergies',
       'searchRestaurantDishes',
+      'updateBodyMetrics',
+      'undoLastChange',
       'requestWebSearch',
     ]);
     const [system, userMsg] = model.doStreamCalls[0].prompt;
