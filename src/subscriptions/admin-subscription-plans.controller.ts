@@ -3,6 +3,12 @@ import {
   Controller,
   Get,
   Header,
+  Headers,
+  HttpCode,
+  Param,
+  ParseUUIDPipe,
+  Post,
+  Query,
   Put,
   Req,
   UseGuards,
@@ -12,6 +18,8 @@ import {
   ApiBearerAuth,
   ApiConflictResponse,
   ApiForbiddenResponse,
+  ApiHeader,
+  ApiNotFoundResponse,
   ApiOkResponse,
   ApiOperation,
   ApiTags,
@@ -28,6 +36,11 @@ import {
   UpdateSubscriptionCatalogDto,
 } from './subscription-catalog.dto.js';
 import { SubscriptionCatalogService } from './subscription-catalog.service.js';
+import {
+  CreateSubscriptionGrantDto,
+  SubscriptionUserQueryDto,
+} from './subscription-grant.dto.js';
+import { SubscriptionGrantsService } from './subscription-grants.service.js';
 
 @ApiTags('admin-subscription-plans')
 @ApiBearerAuth()
@@ -37,7 +50,57 @@ import { SubscriptionCatalogService } from './subscription-catalog.service.js';
 @ApiForbiddenResponse({ type: ErrorBodyDto })
 @Controller('admin/subscription-plans')
 export class AdminSubscriptionPlansController {
-  constructor(private readonly catalog: SubscriptionCatalogService) {}
+  constructor(
+    private readonly catalog: SubscriptionCatalogService,
+    private readonly grants: SubscriptionGrantsService,
+  ) {}
+
+  @Get('users')
+  @Header('Cache-Control', 'private, no-store')
+  @Header('Vary', 'Authorization')
+  @ApiOperation({
+    summary:
+      'Search personal accounts eligible for an administrative subscription grant',
+  })
+  users(@Query() query: SubscriptionUserQueryDto) {
+    return this.grants.search(query);
+  }
+
+  @Get('users/:userId')
+  @Header('Cache-Control', 'private, no-store')
+  @Header('Vary', 'Authorization')
+  @ApiNotFoundResponse({ type: ErrorBodyDto })
+  @ApiOperation({
+    summary:
+      'Current membership, pending QR warning and five latest administrative grants',
+  })
+  user(@Param('userId', new ParseUUIDPipe()) userId: string) {
+    return this.grants.detail(userId);
+  }
+
+  @Post('grants')
+  @HttpCode(200)
+  @Header('Cache-Control', 'private, no-store')
+  @Header('Vary', 'Authorization')
+  @ApiHeader({
+    name: 'Idempotency-Key',
+    required: true,
+    description: '8–200 letters, digits or . _ : -; reuse for the same retry',
+  })
+  @ApiOperation({
+    summary:
+      'Grant Plus/Pro now with a new cycle; does not create a payment or revenue',
+  })
+  @ApiBadRequestResponse({ type: ErrorBodyDto })
+  @ApiNotFoundResponse({ type: ErrorBodyDto })
+  @ApiConflictResponse({ type: ErrorBodyDto })
+  grant(
+    @Body() input: CreateSubscriptionGrantDto,
+    @Req() req: AuthenticatedRequest,
+    @Headers('idempotency-key') key?: string,
+  ) {
+    return this.grants.create(req.user.sub, input, key);
+  }
 
   @Get()
   @Header('Cache-Control', 'private, no-store')
