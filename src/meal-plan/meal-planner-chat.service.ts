@@ -709,16 +709,23 @@ export class MealPlannerChatService {
       abortSignal,
       AbortSignal.timeout(mode.turnTimeoutMs),
     ]);
+    const usageContext = {
+      requestId,
+      input: {
+        threadId: threadId ?? null,
+        message,
+        ...(toolOutput ? { toolOutput } : {}),
+      },
+      prompt: message,
+    };
     const consumeTicket = () =>
-      this.usage.consume(userId, AiFeature.MEAL_PLAN_CHAT, {
-        requestId,
-        input: {
-          threadId: threadId ?? null,
-          message,
-          ...(toolOutput ? { toolOutput } : {}),
-        },
-        prompt: message,
-      });
+      voice
+        ? this.usage.consumeVoice(
+            userId,
+            AiFeature.MEAL_PLAN_CHAT,
+            usageContext,
+          )
+        : this.usage.consume(userId, AiFeature.MEAL_PLAN_CHAT, usageContext);
 
     const userMessageId = requestId ?? randomUUID();
     const currentMessage: StoredChatMessage = {
