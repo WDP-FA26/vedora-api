@@ -10,7 +10,7 @@ export function undoLastChangeTool(
 ) {
   return tool({
     description:
-      'Undo the newest change you saved to the plan in this conversation (dishes filled, swapped, balanced or removed), putting those days back as they were. Each call undoes one earlier change. Use it when the user asks to undo, go back, or cancel a change already made. It does not touch the food diary or body metrics.',
+      'Undo the newest plan change from an earlier reply in this conversation (dishes filled, swapped, balanced or removed), putting those days back as they were. Each call undoes one earlier change. Use it when the user asks to undo, go back, or cancel a change they already saw. It only reaches changes saved by earlier replies, never one made during the current reply, so calling it to revise this reply’s own work would roll back an older change instead; to adjust something you changed in this reply, edit the plan again. It does not touch the food diary or body metrics.',
     inputSchema: z.object({
       done: z
         .boolean()
