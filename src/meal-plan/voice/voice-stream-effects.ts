@@ -44,11 +44,7 @@ export interface VoiceScreenEvent {
 }
 
 export type PlannerStateDomain =
-  | 'plan'
-  | 'shoppingList'
-  | 'mealLog'
-  | 'nutrition'
-  | 'dietary';
+  'plan' | 'shoppingList' | 'mealLog' | 'nutrition' | 'dietary';
 
 export interface PlannerStateEvent {
   /** Monotonic per-stream sequence number so older patches never overwrite newer state. */
@@ -99,7 +95,17 @@ function isMealSection(value: unknown): value is MealSection {
   return typeof value === 'string' && value in SECTION_NAMES;
 }
 
-function formatBodyMetricsDetails(metrics: BodyMetricsSummary | null): string[] {
+function spokenDate(date: string): string {
+  const match = /^\d{4}-(\d{2})-(\d{2})$/.exec(date);
+  if (!match) return `ngày ${date}`;
+  const month = Number(match[1]);
+  const day = Number(match[2]);
+  return `ngày ${day} tháng ${month}`;
+}
+
+function formatBodyMetricsDetails(
+  metrics: BodyMetricsSummary | null,
+): string[] {
   if (!metrics) return [];
   const details: string[] = [];
   if (typeof metrics.heightCm === 'number') {
@@ -126,7 +132,10 @@ function extractPlanChange(output: unknown): {
   days: Weekday[];
 } | null {
   if (!isRecord(output)) return null;
-  if (typeof output.weekStart !== 'string' || typeof output.applied !== 'boolean') {
+  if (
+    typeof output.weekStart !== 'string' ||
+    typeof output.applied !== 'boolean'
+  ) {
     return null;
   }
   if (!Array.isArray(output.days)) return null;
@@ -151,14 +160,20 @@ function isSetScreenOutput(output: unknown): output is SetScreenOutput {
   );
 }
 
-function screenEventFromSetScreen(output: SetScreenOutput): VoiceScreenEvent | null {
+function screenEventFromSetScreen(
+  output: SetScreenOutput,
+): VoiceScreenEvent | null {
   if (!output.applied) return null;
   const event: VoiceScreenEvent = {
     focus: null,
     close: null,
     ...(output.scroll ? { scroll: output.scroll } : {}),
   };
-  if (output.view === 'recipe' && output.recipeId !== null && output.title !== null) {
+  if (
+    output.view === 'recipe' &&
+    output.recipeId !== null &&
+    output.title !== null
+  ) {
     event.focus = {
       kind: 'recipe',
       recipeId: output.recipeId,
@@ -227,7 +242,7 @@ function summaryFromSetScreen(output: SetScreenOutput): string | null {
   }
   if (output.view === 'eatingLog') {
     return output.date
-      ? `Đã mở nhật ký ăn uống ngày ${output.date} trên màn hình.`
+      ? `Đã mở nhật ký ăn uống ${spokenDate(output.date)} trên màn hình.`
       : 'Đã mở nhật ký ăn uống hôm nay trên màn hình.';
   }
   if (output.view === 'bodyMetrics') {
@@ -354,7 +369,7 @@ export function deriveVoiceToolEffects(
       ) {
         const kcal =
           typeof calories === 'number' ? `, khoảng ${calories} kcal` : '';
-        effects.actionSummary = `Đã ghi món "${name}" vào nhật ký bữa ${SECTION_NAMES[section]} ngày ${date}${kcal}.`;
+        effects.actionSummary = `Đã ghi món "${name}" vào nhật ký bữa ${SECTION_NAMES[section]} ${spokenDate(date)}${kcal}.`;
       }
     }
     return effects;
@@ -387,7 +402,7 @@ export function deriveVoiceToolEffects(
         isMealSection(section) &&
         typeof servings === 'number'
       ) {
-        effects.actionSummary = `Đã cập nhật món "${name}" (×${servings}) trong nhật ký bữa ${SECTION_NAMES[section]} ngày ${date}.`;
+        effects.actionSummary = `Đã cập nhật món "${name}" (${servings} phần) trong nhật ký bữa ${SECTION_NAMES[section]} ${spokenDate(date)}.`;
       }
     }
     return effects;
@@ -396,8 +411,10 @@ export function deriveVoiceToolEffects(
   if (toolName === 'updateBodyMetrics') {
     const metrics = isRecord(output)
       ? {
-          heightCm: typeof output.heightCm === 'number' ? output.heightCm : null,
-          weightKg: typeof output.weightKg === 'number' ? output.weightKg : null,
+          heightCm:
+            typeof output.heightCm === 'number' ? output.heightCm : null,
+          weightKg:
+            typeof output.weightKg === 'number' ? output.weightKg : null,
           targetWeightKg:
             typeof output.targetWeightKg === 'number'
               ? output.targetWeightKg

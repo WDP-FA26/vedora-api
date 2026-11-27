@@ -234,7 +234,7 @@ describe('meal-planner prompt & refusals', () => {
     expect(output).toContain('giảm 1 kg');
   });
 
-  it('keeps text-only UI rules out of voice instructions', () => {
+  it('keeps text-only UI rules out of voice instructions and structures XML blocks cleanly', () => {
     const textPrompt = plannerStaticInstructions(false);
     const voicePrompt = plannerVoiceInstructions();
 
@@ -243,6 +243,10 @@ describe('meal-planner prompt & refusals', () => {
     expect(voicePrompt).not.toContain('Compact Markdown');
     expect(voicePrompt).not.toContain('clickable choices via askUser');
     expect(voicePrompt).toContain('Voice mode');
+    expect(voicePrompt).toContain('<voice_mode>');
+    expect(voicePrompt).toContain('<tool_and_screen_control>');
+    expect(voicePrompt).toContain('<spoken_output_format>');
+    expect(voicePrompt).not.toContain('logMeal together with setScreen');
   });
 
   it('includes recipe step and live scroll position in voiceScreenContext', () => {

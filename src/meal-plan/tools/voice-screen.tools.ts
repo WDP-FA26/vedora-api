@@ -156,8 +156,10 @@ function setScreenText(output: SetScreenOutput): string {
     return `Màn hình đang hiện nhật ký ăn uống ${day}${scrollNote}.`;
   }
   if (output.view === 'bodyMetrics') {
-    const tab = output.tab === null ? '' : ` (${BODY_METRICS_TAB_LABELS[output.tab]})`;
-    const week = output.weekStart === null ? '' : ` của tuần bắt đầu ${output.weekStart}`;
+    const tab =
+      output.tab === null ? '' : ` (${BODY_METRICS_TAB_LABELS[output.tab]})`;
+    const week =
+      output.weekStart === null ? '' : ` của tuần bắt đầu ${output.weekStart}`;
     const metrics =
       output.metrics === null ? '' : ` ${bodyMetricsText(output.metrics)}`;
     return `Màn hình đang hiện bảng chỉ số cơ thể${tab}${week}${scrollNote}.${metrics}`;
@@ -166,7 +168,8 @@ function setScreenText(output: SetScreenOutput): string {
     const scopeParts: string[] = [];
     if (output.day !== null) scopeParts.push(DAY_NAMES[output.day]);
     else if (output.wholeWeek) scopeParts.push('cả tuần');
-    if (output.weekStart !== null) scopeParts.push(`tuần bắt đầu ${output.weekStart}`);
+    if (output.weekStart !== null)
+      scopeParts.push(`tuần bắt đầu ${output.weekStart}`);
     if (output.people !== null) scopeParts.push(`${output.people} người ăn`);
     const scope = scopeParts.length > 0 ? ` (${scopeParts.join(', ')})` : '';
     const checkNotes: string[] = [];
@@ -177,7 +180,8 @@ function setScreenText(output: SetScreenOutput): string {
     if (output.uncheckItems && output.uncheckItems.length > 0) {
       checkNotes.push(`đã bỏ đánh dấu: ${output.uncheckItems.join(', ')}`);
     }
-    const checkSuffix = checkNotes.length > 0 ? ` ${checkNotes.join('; ')}.` : '';
+    const checkSuffix =
+      checkNotes.length > 0 ? ` ${checkNotes.join('; ')}.` : '';
     const items = output.shoppingItems;
     if (items && items.length > 0) {
       return `Màn hình đang hiện danh sách đi chợ${scope}${scrollNote}.${checkSuffix} Nguyên liệu cần mua (${items.length} mục): ${items.join('; ')}.`;
@@ -217,8 +221,7 @@ export function setScreenTool(
       '- eatingLog: food diary. Pass date (YYYY-MM-DD) for any day (switches week automatically if needed); omit date for today.',
       '- bodyMetrics: nutrition & BMI sheet. Pass tab (weekly = calorie chart & 5 pillars, bmi = BMI/weight, dietary = allergies & preferences) and optional weekStart for another week. Already returns current BMI/target metrics.',
       '- shoppingList: shopping list. Pass weekStart for another week, day (MON..SUN for one day, or ALL for whole week), people (1-4), checkItems/uncheckItems (ingredient names), or clearChecked: true. Already fetches and returns scaled ingredients.',
-      'Rules: Pass scroll (down/up/top/bottom) on any view. Pass done: true when the user only asked to control/view the screen. Do NOT call getPlan before opening shoppingList or bodyMetrics — this tool already fetches what you need. Do NOT use setScreen to end the voice call (use endCall) or to edit meal slots (use editPlan/fillSlots).',
-      'Examples: "đi chợ thứ 2 tuần sau cho 2 người" -> { view: "shoppingList", weekStart: "YYYY-MM-DD", day: "MON", people: 2, done: true }; "đánh dấu đã mua đậu phụ" -> { view: "shoppingList", checkItems: ["đậu phụ"], done: true }; "mở mục dị ứng" -> { view: "bodyMetrics", tab: "dietary", done: true }.',
+      'Rules: Pass scroll (down/up/top/bottom) on any view. Pass done: true when the user only asked to control or view the screen. Call setScreen directly without getPlan because it fetches shoppingList and bodyMetrics data itself. Reserve setScreen for explicit view switches, filters, item checks, jumps, and scrolling — plan edits, logMeal, editMealLog, updateBodyMetrics, and undoLastChange already focus their target views automatically, editPlan/fillSlots edit meal slots, and endCall ends the voice call.',
     ].join('\n'),
     inputSchema: z.object({
       view: z
@@ -245,7 +248,7 @@ export function setScreenTool(
         .enum(RECIPE_SECTIONS)
         .optional()
         .describe(
-          'Only with view recipe: the part to scroll to, for example steps when the user asks what comes next while cooking',
+          'Only with view recipe: the section to scroll to (top, ingredients, or steps)',
         ),
       step: z
         .number()
@@ -254,7 +257,7 @@ export function setScreenTool(
         .max(50)
         .optional()
         .describe(
-          'Only with view recipe: 1-based cooking step number to scroll to and highlight (e.g. 3 for step 3)',
+          'Only with view recipe: 1-based cooking step number to scroll to and highlight',
         ),
       scroll: z
         .enum(SCREEN_SCROLL_DIRECTIONS)
@@ -291,9 +294,7 @@ export function setScreenTool(
         .array(z.string().min(1).max(80))
         .max(20)
         .optional()
-        .describe(
-          'Only with view shoppingList: ingredient names to untick',
-        ),
+        .describe('Only with view shoppingList: ingredient names to untick'),
       clearChecked: z
         .boolean()
         .optional()
@@ -393,7 +394,8 @@ export function setScreenTool(
         });
       }
       if (input.view === 'shoppingList') {
-        const targetWeek = input.weekStart ?? screen?.weekStart ?? openWeekStart;
+        const targetWeek =
+          input.weekStart ?? screen?.weekStart ?? openWeekStart;
         const pickedDay: Weekday | null =
           input.day && input.day !== 'ALL' ? input.day : null;
         let targetDays: Weekday[];

@@ -422,7 +422,8 @@ describe('voice stream effects', () => {
         focus: { kind: 'planDay', weekStart: WEEK, day: Weekday.MON },
         close: null,
       },
-      progress: 'Đã lưu thay đổi thực đơn cho Thứ Hai, Chủ nhật, đang làm tiếp.',
+      progress:
+        'Đã lưu thay đổi thực đơn cho Thứ Hai, Chủ nhật, đang làm tiếp.',
     });
 
     expect(
@@ -617,7 +618,7 @@ describe('voice stream effects', () => {
     expect(dataParts).toContainEqual({
       type: 'data-summary',
       data: {
-        text: 'Đã ghi món "Phở chay" vào nhật ký bữa trưa ngày 2026-11-25, khoảng 420 kcal.',
+        text: 'Đã ghi món "Phở chay" vào nhật ký bữa trưa ngày 25 tháng 11, khoảng 420 kcal.',
       },
       transient: true,
     });
