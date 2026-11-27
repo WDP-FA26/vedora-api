@@ -369,7 +369,7 @@ export class MealPlannerChatService {
       ...(this.history
         ? { undoLastChange: undoLastChangeTool(this.history, userId, threadId) }
         : {}),
-      ...(voice ? {} : webTools(allowWebSearch)),
+      ...(voice ? { webSearch: webSearchTool() } : webTools(allowWebSearch)),
     };
     if (voice) {
       delete agentTools.askUser;

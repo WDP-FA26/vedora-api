@@ -48,7 +48,7 @@ Chạy planner ở chế độ voice cho một lượt nói (một delegation c�
 - `threadId`: thread chat để lưu lượt này. FE gửi thread đang mở trong khung chat, rồi tải lại thread đó (`GET /meal-plan/chat/threads/:threadId`) để lượt nói hiện ngay trong khung chat. Bỏ trống thì API tạo thread mới.
 - `requestId`: nên dùng delegation id để quota không bị trừ hai lần khi gửi lại.
 - `screen` (tùy chọn, nên gửi): trạng thái trang lúc người dùng nói, để agent hiểu "món này", "đóng nó đi", "bước tiếp theo", "cuộn xuống nữa". `{ weekStart, day?, panel: "none" | "recipe" | "eatingLog" | "bodyMetrics" | "shoppingList", recipeId?, recipeSection?: "top" | "ingredients" | "steps", recipeStep?: number, eatingLogDate?, scrollState?: { percent: number, atTop: boolean, atBottom: boolean } }`. API tự lấy tên món từ danh mục theo `recipeId`.
-- Tìm web: tắt ở chế độ voice để giữ độ trễ thấp (không gọi `webSearch` hay `requestWebSearch`).
+- Tìm web: agent có tool `webSearch` nhưng phải hỏi xin phép người dùng bằng lời trước khi tìm (không dùng nút `requestWebSearch`).
 
 Đọc stream bằng `parseJsonEventStream` của `ai` (`uiMessageChunkSchema`). Ngoài các chunk tiêu chuẩn (`text-delta`, `finish`, `error`), API phát kèm các data part transient (`transient: true`, không lưu vào lịch sử chat) ngay khi tool chạy xong để FE không phải mirror schema output của tool:
 

@@ -264,6 +264,7 @@ describe('meal-planner prompt & refusals', () => {
     expect(voicePrompt).toContain('<voice_mode>');
     expect(voicePrompt).toContain('<screen_and_tools>');
     expect(voicePrompt).toContain('<spoken_output_format>');
+    expect(voicePrompt).toContain('Before calling webSearch');
     expect(voicePrompt).not.toContain('Reserve setScreen');
     expect(voicePrompt).not.toContain('logMeal together with setScreen');
   });

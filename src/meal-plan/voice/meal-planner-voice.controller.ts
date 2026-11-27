@@ -70,7 +70,7 @@ export class MealPlannerVoiceController {
   @ApiOperation({
     summary: 'Answer one spoken turn with the meal planner',
     description:
-      'Streams the meal planner agent in voice mode on what the user said, as an AI SDK UI message stream (SSE) enriched with transient `data-*` events (`data-state`, `data-screen`, `data-progress`, `data-summary`, `data-end-call`). Send `screen` with what the page shows now so the agent can refer to it. The reply text is short and meant to be spoken. Closing the request stops the agent (the user spoke again or hung up); what was saved stays. Uses the meal planner chat quota; skips web search and the extra moderation round-trip for voice latency.',
+      'Streams the meal planner agent in voice mode on what the user said, as an AI SDK UI message stream (SSE) enriched with transient `data-*` events (`data-state`, `data-screen`, `data-progress`, `data-summary`, `data-end-call`). Send `screen` with what the page shows now so the agent can refer to it. The reply text is short and meant to be spoken. Closing the request stops the agent (the user spoke again or hung up); what was saved stays. Uses the meal planner chat quota; skips the extra moderation round-trip for voice latency, and asks the user aloud before calling web search.',
   })
   @ApiOkResponse({ description: 'UI message stream (text/event-stream)' })
   @ApiServiceUnavailableResponse({

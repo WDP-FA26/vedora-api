@@ -476,7 +476,7 @@ describe('MealPlannerChatService', () => {
     const names = (model.doStreamCalls[0].tools ?? []).map((t) => t.name);
     expect(names).not.toContain('askUser');
     expect(names).not.toContain('requestWebSearch');
-    expect(names).not.toContain('webSearch');
+    expect(names).toContain('webSearch');
     expect(names).toEqual(
       expect.arrayContaining([
         'searchRecipes',
