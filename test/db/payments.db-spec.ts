@@ -16,6 +16,7 @@ import {
   PaymentRequest,
   PaymentStatus,
   PaymentWebhookReceipt,
+  SubscriptionMembership,
   User,
   UserRole,
 } from '@src/mongo/models.js';
@@ -800,10 +801,12 @@ describe('SePay payments with MongoDB and HTTP', () => {
     const user = await makeUser(),
       payment = await create(user);
     await callback(event(payment)).expect(200);
-    await intents().updateOne(
-      { _id: payment.id },
-      { $set: { capturedAt: new Date(Date.now() - 31 * 86_400_000) } },
-    );
+    await db.connection
+      .model(SubscriptionMembership.name)
+      .updateOne(
+        { _id: user.id },
+        { $set: { expiresAt: new Date(Date.now() - 1) } },
+      );
     expect((await service.overview(user.id)).membership.planCode).toBe('FREE');
   });
   it('retains financial history after user deletion and ignores unavailable recipients', async () => {

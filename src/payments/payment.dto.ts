@@ -88,6 +88,11 @@ export class BillingCatalogDto {
 }
 
 export class MembershipDto {
+  @ApiPropertyOptional({
+    enum: ['ADMIN_GRANT'],
+    description: 'Present for administrative grants; no payment was recorded',
+  })
+  source?: 'ADMIN_GRANT';
   @ApiProperty({ enum: ['FREE', 'PLUS', 'PRO'] }) planCode!: string;
   @ApiPropertyOptional({ type: String, nullable: true }) startsAt!:
     string | null;

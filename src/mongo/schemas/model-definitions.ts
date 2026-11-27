@@ -1,6 +1,10 @@
 import type { Connection, Schema } from 'mongoose';
 import { DocumentLockSchema } from '../document-lock.js';
 import { SubscriptionCatalogSchema } from './subscription-catalog.schema.js';
+import {
+  SubscriptionMembershipSchema,
+  SubscriptionGrantSchema,
+} from './subscription-membership.schema.js';
 import { SystemLogSchema } from './system-log.schema.js';
 import { PostReportEvidenceSchema } from './post-report-evidence.schema.js';
 import type { MongoModelName } from './model-names.js';
@@ -91,6 +95,8 @@ export const MODEL_DEFINITIONS = [
   { name: 'MessagingEvent', schema: MessagingEventSchema },
   { name: 'User', schema: UserSchema },
   { name: 'SubscriptionCatalog', schema: SubscriptionCatalogSchema },
+  { name: 'SubscriptionMembership', schema: SubscriptionMembershipSchema },
+  { name: 'SubscriptionGrant', schema: SubscriptionGrantSchema },
   { name: 'UserAccountAudit', schema: UserAccountAuditSchema },
   { name: 'SystemLog', schema: SystemLogSchema },
   { name: 'BodyMetricLog', schema: BodyMetricLogSchema },

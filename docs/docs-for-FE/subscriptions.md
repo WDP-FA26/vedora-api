@@ -2,6 +2,11 @@
 
 ## Quy tắc đã chốt
 
+Admin có thể [cấp Plus/Pro ngay trong trang quản lý gói](admin-subscription-plans.md#cấp-gói-thủ-công).
+Lần cấp chốt duration/quota hiện hành, bắt đầu chu kỳ mới, thay gói đang dùng,
+không tạo doanh thu. Pro có voice như gói mua. Hết hạn không khôi phục gói cũ.
+QR chờ giữ hợp đồng; capture mới sau lần cấp có thể thay gói vừa cấp.
+
 Các mức dưới đây là **mặc định ban đầu**. Admin có thể thay giá và quota tại
 [Quản lý gói đăng ký](admin-subscription-plans.md); cấu hình DB đã lưu được ưu
 tiên hơn env. Giá/quota mới chỉ áp dụng cho đơn mới; đơn QR đang chờ và gói đã

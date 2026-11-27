@@ -156,6 +156,7 @@ export class PaymentsService {
               planCode: period.planCode,
               startsAt: period.startsAt.toISOString(),
               expiresAt: period.expiresAt.toISOString(),
+              ...(period.source ? { source: period.source } : {}),
             }
           : { planCode: 'FREE', startsAt: null, expiresAt: null },
       pendingPayment: pending ? this.serialize(pending) : null,
@@ -468,6 +469,7 @@ export class PaymentsService {
           'CAPTURE_CONFLICT',
           'Payment changed; retry callback',
         );
+      await this.subscriptions.activatePayment(intent, capturedAt, session);
       await record('CAPTURED', intent.id);
       changed = { userId: intent.userId, intentId: intent.id };
     });

@@ -87,7 +87,9 @@ Receipt không lưu số tiền nhận sai, nội dung chuyển khoản hoặc p
 
 ### `GET /admin/payments/subscriptions`
 
-Nhận page/limit, plan, userId; không nhận khoảng ngày/status/q của đơn. Trả `{ asOf, items, total, page, limit }`; mỗi item là đơn mới nhất đang xác định gói còn hạn của một tài khoản hoạt động đã xác minh. Cùng logic với snapshot, nhưng cho phép lọc plan/user riêng.
+Nhận page/limit, plan, userId; không nhận khoảng ngày/status/q của đơn. Trả `{ asOf, items, total, page, limit }`; mỗi item là membership hiện hành của một tài khoản hoạt động đã xác minh. Bao gồm cả gói admin cấp, mỗi người tối đa một dòng; cùng logic với snapshot, lọc plan/user riêng.
+
+Dòng do thanh toán giữ nguyên hợp đồng order. Dòng admin cấp có `source: "ADMIN_GRANT"`, `id` (ID lần cấp), `userId`, `planCode`, `startsAt`, `expiresAt` (ISO UTC), `textLimit`, `imageLimit` và `customer` như order. Không có amount/invoice/status thanh toán giả. FE phân nhánh theo source, hiện “Admin cấp · không thu tiền”, không link chi tiết đơn. Doanh thu/người mua/số đơn và CSV chỉ lấy payment thật. Chi tiết: [API cấp gói](admin-subscription-plans.md#cấp-gói-thủ-công).
 
 ### `GET /admin/payments/export`
 

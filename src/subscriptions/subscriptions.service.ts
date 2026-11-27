@@ -7,6 +7,7 @@ import {
   BillingPlan,
   PaymentIntent,
   PaymentStatus,
+  SubscriptionMembership,
   User,
   UserRole,
 } from '../mongo/models.js';
@@ -26,6 +27,7 @@ export interface SubscriptionPeriod {
   expiresAt: Date;
   textLimit: number;
   imageLimit: number;
+  source?: 'ADMIN_GRANT';
 }
 
 @Injectable()
@@ -33,9 +35,52 @@ export class SubscriptionsService {
   constructor(
     @InjectModel(PaymentIntent.name)
     private readonly intents: Model<PaymentIntent>,
+    @InjectModel(SubscriptionMembership.name)
+    private readonly memberships: Model<SubscriptionMembership>,
     @InjectModel(User.name) private readonly users: Model<User>,
     private readonly catalog: SubscriptionCatalogService,
   ) {}
+
+  /** Caller must hold the payer lock, inside the capture/grant transaction. */
+  async assign(
+    userId: string,
+    assignment: Omit<
+      SubscriptionMembership,
+      'id' | '_id' | 'createdAt' | 'updatedAt'
+    >,
+    session: ClientSession,
+  ): Promise<void> {
+    await this.memberships
+      .updateOne(
+        { _id: userId },
+        { $set: assignment },
+        { upsert: true, session },
+      )
+      .exec();
+  }
+
+  async activatePayment(
+    intent: PaymentIntent,
+    capturedAt: Date,
+    session: ClientSession,
+  ): Promise<void> {
+    const limits = purchasedLimits(intent);
+    await this.assign(
+      intent.userId,
+      {
+        source: 'PAYMENT',
+        sourceId: intent.id,
+        planCode: effectivePlan(intent),
+        startsAt: capturedAt,
+        expiresAt: new Date(
+          capturedAt.getTime() + intent.durationDays * 86_400_000,
+        ),
+        textLimit: limits.text,
+        imageLimit: limits.images,
+      },
+      session,
+    );
+  }
 
   async requireProVoice(
     userId: string,
@@ -60,6 +105,27 @@ export class SubscriptionsService {
     if (await this.isAdmin(userId, session)) {
       return this.adminPeriod(now, session);
     }
+    const assigned = await this.memberships
+      .findById(userId)
+      .session(session ?? null)
+      .exec();
+    if (assigned) {
+      if (assigned.expiresAt > now)
+        return {
+          planCode: assigned.planCode,
+          key: `${assigned.source === 'PAYMENT' ? 'payment' : 'admin-grant'}:${assigned.sourceId}`,
+          startsAt: assigned.startsAt,
+          expiresAt: assigned.expiresAt,
+          textLimit: assigned.textLimit,
+          imageLimit: assigned.imageLimit,
+          ...(assigned.source === 'ADMIN_GRANT'
+            ? { source: 'ADMIN_GRANT' as const }
+            : {}),
+        };
+      return this.free(now, session);
+    }
+    // Compatibility for purchases captured before assignments were introduced.
+
     const query = this.intents
       .findOne({ userId, status: PaymentStatus.SUCCEEDED })
       .sort({ capturedAt: -1, _id: -1 });
@@ -82,6 +148,13 @@ export class SubscriptionsService {
         };
       }
     }
+    return this.free(now, session);
+  }
+
+  private async free(
+    now: Date,
+    session?: ClientSession,
+  ): Promise<SubscriptionPeriod> {
     const { freeLimits } = await this.catalog.current(session);
     return {
       planCode: 'FREE',

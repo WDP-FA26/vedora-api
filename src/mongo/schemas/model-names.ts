@@ -52,6 +52,8 @@ export const MODEL_NAMES = [
   'MealPlanChatMessage',
   'PaymentIntent',
   'SubscriptionCatalog',
+  'SubscriptionMembership',
+  'SubscriptionGrant',
   'PaymentRequest',
   'PaymentWebhookReceipt',
   'AiUsage',
