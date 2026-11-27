@@ -36,6 +36,7 @@ import {
   CreatePostReportDto,
   PostReportsQueryDto,
 } from '../dto/post-interaction.dto.js';
+import { commentReviewVersion } from './comment-review-version.js';
 
 const toAuthor = (user: User) => ({
   id: user.id,
@@ -126,6 +127,7 @@ export class CommentReportsService {
             details: dto.details || null,
             parentId: comment.parentId ?? null,
             bodySnapshot: comment.body,
+            commentVersionSnapshot: commentReviewVersion(comment),
             authorSnapshot: toAuthor(author),
             status: PostReportStatus.PENDING,
           },
@@ -217,6 +219,19 @@ export class CommentReportsService {
           .findOne({ _id: report.commentId, postId: report.postId })
           .session(session)
           .exec();
+        if (dto.expectedCommentVersion === undefined) {
+          throw new InvalidInputException(
+            'BAD_REQUEST',
+            'Preview the current comment version before removing it',
+          );
+        }
+        const version = comment ? commentReviewVersion(comment) : null;
+        if (dto.expectedCommentVersion !== version) {
+          throw new StateConflictException(
+            'COMMENT_CHANGED',
+            'The comment changed after the preview; reload before removing it',
+          );
+        }
         const affected = comment
           ? await this.comments
               .find(
@@ -313,7 +328,7 @@ export class CommentReportsService {
     rows: CommentReport[],
   ): Promise<AdminCommentReportDto[]> {
     if (!rows.length) return [];
-    const [users, comments, posts, counts] = await Promise.all([
+    const [users, comments, posts, counts, reportCounts] = await Promise.all([
       this.users.find({ _id: { $in: rows.map((r) => r.reporterId) } }).exec(),
       this.comments.find({ _id: { $in: rows.map((r) => r.commentId) } }).exec(),
       this.posts
@@ -335,14 +350,69 @@ export class CommentReportsService {
           { $group: { _id: '$parentId', count: { $sum: 1 } } },
         ])
         .exec(),
+      this.reports
+        .aggregate<{
+          _id: string;
+          total: number;
+          pending: number;
+          resolved: number;
+          dismissed: number;
+        }>([
+          {
+            $match: {
+              commentId: {
+                $in: [...new Set(rows.map((row) => row.commentId))],
+              },
+            },
+          },
+          {
+            $group: {
+              _id: '$commentId',
+              total: { $sum: 1 },
+              pending: {
+                $sum: {
+                  $cond: [{ $eq: ['$status', PostReportStatus.PENDING] }, 1, 0],
+                },
+              },
+              resolved: {
+                $sum: {
+                  $cond: [
+                    { $eq: ['$status', PostReportStatus.RESOLVED] },
+                    1,
+                    0,
+                  ],
+                },
+              },
+              dismissed: {
+                $sum: {
+                  $cond: [
+                    { $eq: ['$status', PostReportStatus.DISMISSED] },
+                    1,
+                    0,
+                  ],
+                },
+              },
+            },
+          },
+        ])
+        .exec(),
     ]);
     const userById = new Map(users.map((u) => [u.id, u]));
     const commentById = new Map(comments.map((c) => [c.id, c]));
     const postIds = new Set(posts.map((p) => p.id));
     const countById = new Map(counts.map((c) => [c._id, c.count]));
+    const reportCountById = new Map(reportCounts.map((row) => [row._id, row]));
     return rows.map((row) => {
       const reporter = userById.get(row.reporterId);
       const comment = commentById.get(row.commentId);
+      const totals = reportCountById.get(row.commentId);
+      const version = comment ? commentReviewVersion(comment) : null;
+      const isEdited = Boolean(
+        comment &&
+        (row.commentVersionSnapshot
+          ? row.commentVersionSnapshot !== version
+          : comment.body !== row.bodySnapshot),
+      );
       return {
         ...toReport(row),
         reviewedAt: row.reviewedAt,
@@ -350,6 +420,10 @@ export class CommentReportsService {
         action: row.action,
         reporter: reporter ? toAuthor(reporter) : null,
         postAvailable: postIds.has(row.postId),
+        reportCount: totals?.total ?? 0,
+        pendingReportCount: totals?.pending ?? 0,
+        resolvedReportCount: totals?.resolved ?? 0,
+        dismissedReportCount: totals?.dismissed ?? 0,
         comment: {
           id: row.commentId,
           parentId: row.parentId,
@@ -357,6 +431,8 @@ export class CommentReportsService {
           author: row.authorSnapshot,
           currentBody: comment?.body ?? null,
           isAvailable: Boolean(comment),
+          isEdited,
+          currentVersion: version,
           replyCount: countById.get(row.commentId) ?? 0,
         },
       };
