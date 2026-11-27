@@ -93,7 +93,7 @@ export class AdminPaymentsController {
   @Header('Vary', 'Authorization')
   @ApiOperation({
     summary:
-      'Current Plus/Pro among active verified accounts; latest successful purchase replaces earlier cycles',
+        'Current paid or admin-granted Plus/Pro among active verified accounts; one assignment per user',
   })
   subscriptions(@Query() query: AdminSubscriptionQueryDto) {
     return this.payments.activeSubscriptions(query);

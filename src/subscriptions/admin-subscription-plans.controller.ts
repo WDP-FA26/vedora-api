@@ -39,6 +39,9 @@ import { SubscriptionCatalogService } from './subscription-catalog.service.js';
 import {
   CreateSubscriptionGrantDto,
   SubscriptionUserQueryDto,
+  GrantUsersPageDto,
+  GrantUserDetailDto,
+  SubscriptionGrantDto,
 } from './subscription-grant.dto.js';
 import { SubscriptionGrantsService } from './subscription-grants.service.js';
 
@@ -56,6 +59,7 @@ export class AdminSubscriptionPlansController {
   ) {}
 
   @Get('users')
+  @ApiOkResponse({ type: GrantUsersPageDto })
   @Header('Cache-Control', 'private, no-store')
   @Header('Vary', 'Authorization')
   @ApiOperation({
@@ -67,6 +71,7 @@ export class AdminSubscriptionPlansController {
   }
 
   @Get('users/:userId')
+  @ApiOkResponse({ type: GrantUserDetailDto })
   @Header('Cache-Control', 'private, no-store')
   @Header('Vary', 'Authorization')
   @ApiNotFoundResponse({ type: ErrorBodyDto })
@@ -79,6 +84,7 @@ export class AdminSubscriptionPlansController {
   }
 
   @Post('grants')
+  @ApiOkResponse({ type: SubscriptionGrantDto })
   @HttpCode(200)
   @Header('Cache-Control', 'private, no-store')
   @Header('Vary', 'Authorization')
