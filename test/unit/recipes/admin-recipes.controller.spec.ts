@@ -29,7 +29,11 @@ describe('AdminRecipesController', () => {
   });
 
   it('passes the admin and the source on to the draft service', async () => {
-    const draft = { recipe: null, untranscribedVideos: 0 };
+    const draft = {
+      recipe: null,
+      untranscribedVideos: 0,
+      calorieResearch: 'SKIPPED' as const,
+    };
     drafts.create.mockResolvedValue(draft);
 
     await expect(

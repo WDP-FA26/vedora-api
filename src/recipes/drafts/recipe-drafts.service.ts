@@ -26,15 +26,18 @@ import type {
 import {
   buildDraftCatalog,
   type DraftCatalog,
-  type DraftOutput,
+  type DraftRequest,
   toRecipeDraft,
 } from './recipe-draft.js';
-import { RecipeDraftGenerator } from './recipe-draft.generator.js';
+import {
+  type DraftResult,
+  RecipeDraftGenerator,
+} from './recipe-draft.generator.js';
 
 const MAX_CATALOG_INGREDIENTS =
   runtimeConfig.RECIPE_DRAFT_MAX_CATALOG_INGREDIENTS;
 
-/** Reads a post or pasted caption with AI and returns a recipe form prefill. */
+/** Reads a post, pasted caption or the form's recipe with AI and returns a recipe form prefill. */
 @Injectable()
 export class RecipeDraftsService {
   private readonly logger = new Logger(RecipeDraftsService.name);
@@ -55,7 +58,12 @@ export class RecipeDraftsService {
     dto: CreateRecipeDraftDto,
   ): Promise<RecipeDraftDto> {
     const source = await this.sourceOf(dto);
-    if (source.parts.length === 0) {
+    const request: DraftRequest = {
+      parts: source.parts,
+      currentRecipe: dto.currentRecipe || null,
+      instruction: dto.instruction || null,
+    };
+    if (request.parts.length === 0 && !request.currentRecipe) {
       throw new InvalidInputException(
         'EMPTY_RECIPE_SOURCE',
         'There is no text to read a recipe from',
@@ -71,6 +79,11 @@ export class RecipeDraftsService {
         .exec(),
       this.groups.find().sort({ name: 1, _id: 1 }).select('name').exec(),
     ]);
+    if (ingredients.length >= MAX_CATALOG_INGREDIENTS) {
+      this.logger.warn(
+        `The catalog has at least ${MAX_CATALOG_INGREDIENTS} ingredients; the draft only sees the first ${MAX_CATALOG_INGREDIENTS} by name, so later ones never match. Raise RECIPE_DRAFT_MAX_CATALOG_INGREDIENTS or look ingredients up per name.`,
+      );
+    }
     const catalog = buildDraftCatalog(
       ingredients.map((row) => ({
         id: row.id,
@@ -81,20 +94,25 @@ export class RecipeDraftsService {
     );
 
     const startedAt = Date.now();
-    const output = await this.generate(adminId, source, catalog);
-    const recipe = toRecipeDraft(output, catalog);
+    const result = await this.generate(adminId, request, catalog);
+    const recipe = toRecipeDraft(result.output, catalog);
+    const calorieResearch = recipe ? result.calorieResearch : 'SKIPPED';
     const seconds = ((Date.now() - startedAt) / 1000).toFixed(1);
     this.logger.log(
-      `Recipe draft in ${seconds}s by ${this.generator.modelId} (${source.description}): ${describeDraft(recipe)}`,
+      `Recipe draft in ${seconds}s by ${this.generator.modelId} (${source.description}): ${describeDraft(recipe)}, calories ${calorieResearch}`,
     );
-    return { recipe, untranscribedVideos: source.untranscribedVideos };
+    return {
+      recipe,
+      untranscribedVideos: source.untranscribedVideos,
+      calorieResearch,
+    };
   }
 
   private async generate(
     adminId: string,
-    source: PostSource,
+    request: DraftRequest,
     catalog: DraftCatalog,
-  ): Promise<DraftOutput> {
+  ): Promise<DraftResult> {
     const executionId = randomUUID();
     const context = {
       feature: 'RECIPE_DRAFT',
@@ -104,7 +122,7 @@ export class RecipeDraftsService {
     };
     try {
       return await aiCostContext.run(context, () =>
-        this.generator.generate(source.parts, catalog),
+        this.generator.generate(request, catalog),
       );
     } catch (error: unknown) {
       throw aiFailure('Recipe draft', error);
@@ -131,14 +149,16 @@ export class RecipeDraftsService {
 
   private async sourceOf(dto: CreateRecipeDraftDto): Promise<PostSource> {
     const text = dto.text ?? '';
-    if (dto.postId && text) {
+    const currentRecipe = dto.currentRecipe ?? '';
+    let sourceCount = 0;
+    for (const given of [dto.postId, text, currentRecipe]) {
+      if (given) sourceCount += 1;
+    }
+    if (sourceCount !== 1) {
       throw new InvalidInputException(
         'BAD_REQUEST',
-        'Send either postId or text, not both',
+        'Send exactly one of postId, text or currentRecipe',
       );
-    }
-    if (!dto.postId && !text) {
-      throw new InvalidInputException('BAD_REQUEST', 'Send postId or text');
     }
     if (dto.mediaId && !dto.postId) {
       throw new InvalidInputException(
@@ -153,6 +173,14 @@ export class RecipeDraftsService {
       }
       if (dto.mediaId) await this.requireReadyVideo(post.id, dto.mediaId);
       return readPostSource(post, this.mediaAssets, dto.mediaId);
+    }
+    if (currentRecipe) {
+      // The form's recipe is not a source part: it goes in its own prompt tag.
+      return {
+        parts: [],
+        description: `form recipe ${currentRecipe.length} chars`,
+        untranscribedVideos: 0,
+      };
     }
     return {
       parts: clipParts([{ label: 'Pasted caption', text }]),

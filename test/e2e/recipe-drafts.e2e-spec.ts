@@ -7,12 +7,14 @@ import {
   type User,
   UserRole,
 } from '@src/mongo/models.js';
-import type { PostSourcePart } from '@src/posts/summaries/post-source.js';
 import type {
   DraftCatalog,
-  DraftOutput,
+  DraftRequest,
 } from '@src/recipes/drafts/recipe-draft.js';
-import { RecipeDraftGenerator } from '@src/recipes/drafts/recipe-draft.generator.js';
+import {
+  type DraftResult,
+  RecipeDraftGenerator,
+} from '@src/recipes/drafts/recipe-draft.generator.js';
 import type { RecipeDraftDto } from '@src/recipes/dto/recipe-draft.dto.js';
 import { createE2eApp, type E2eApp } from '@test/support/e2e-app.js';
 import {
@@ -34,14 +36,16 @@ describe('AI recipe drafts (e2e)', () => {
   let memberToken: string;
   let tofu: Ingredient;
   const groupId = randomUUID();
-  const calls: { parts: PostSourcePart[]; catalog: DraftCatalog }[] = [];
-  let answer: (catalog: DraftCatalog) => DraftOutput = () => ({
-    recipe: null,
+  const noRecipe = (): DraftResult => ({
+    output: { recipe: null, researchCalories: false },
+    calorieResearch: 'SKIPPED',
   });
+  const calls: (DraftRequest & { catalog: DraftCatalog })[] = [];
+  let answer: (catalog: DraftCatalog) => DraftResult = noRecipe;
   const generator = {
     modelId: 'fake/draft',
-    generate: (parts: PostSourcePart[], catalog: DraftCatalog) => {
-      calls.push({ parts, catalog });
+    generate: (request: DraftRequest, catalog: DraftCatalog) => {
+      calls.push({ ...request, catalog });
       return Promise.resolve(answer(catalog));
     },
   };
@@ -94,7 +98,7 @@ describe('AI recipe drafts (e2e)', () => {
 
   beforeEach(() => {
     calls.length = 0;
-    answer = () => ({ recipe: null });
+    answer = noRecipe;
   });
 
   it('keeps drafts to admins', async () => {
@@ -107,43 +111,47 @@ describe('AI recipe drafts (e2e)', () => {
 
   it('drafts a recipe from a pasted caption, matched to the catalog', async () => {
     answer = (catalog) => ({
-      recipe: {
-        title: 'Đậu hũ sốt cà chua',
-        description: null,
-        tag: null,
-        servings: 2,
-        prepMinutes: null,
-        cookMinutes: 15,
-        ingredients: [
-          {
-            name: 'tàu hũ',
-            quantity: 300,
-            unit: 'g',
-            note: 'cắt khối',
-            catalogRef: refOf(catalog.ingredients, tofu.id),
-            aliases: [],
-            groupRefs: [],
-          },
-          {
-            name: 'cà chua',
-            quantity: 2,
-            unit: 'quả',
-            note: null,
-            catalogRef: null,
-            aliases: [],
-            groupRefs: [],
-          },
-          {
-            name: 'nấm đông cô',
-            quantity: null,
-            unit: null,
-            note: null,
-            catalogRef: null,
-            aliases: ['nấm hương'],
-            groupRefs: [refOf(catalog.groups, groupId) ?? ''],
-          },
-        ],
-        steps: ['Chiên đậu.', 'Nấu sốt cà chua.'],
+      calorieResearch: 'DONE',
+      output: {
+        researchCalories: true,
+        recipe: {
+          title: 'Đậu hũ sốt cà chua',
+          description: null,
+          tag: null,
+          servings: 2,
+          prepMinutes: null,
+          cookMinutes: 15,
+          ingredients: [
+            {
+              name: 'tàu hũ',
+              quantity: 300,
+              unit: 'g',
+              note: 'cắt khối',
+              catalogRef: refOf(catalog.ingredients, tofu.id),
+              aliases: [],
+              groupRefs: [],
+            },
+            {
+              name: 'cà chua',
+              quantity: 2,
+              unit: 'quả',
+              note: null,
+              catalogRef: null,
+              aliases: [],
+              groupRefs: [],
+            },
+            {
+              name: 'nấm đông cô',
+              quantity: null,
+              unit: null,
+              note: null,
+              catalogRef: null,
+              aliases: ['nấm hương'],
+              groupRefs: [refOf(catalog.groups, groupId) ?? ''],
+            },
+          ],
+          steps: ['Chiên đậu.', 'Nấu sốt cà chua.'],
+        },
       },
     });
 
@@ -158,8 +166,11 @@ describe('AI recipe drafts (e2e)', () => {
         text: 'Đậu hũ sốt cà chua: 300g tàu hũ, 2 quả cà chua, nấm đông cô.',
       },
     ]);
+    expect(calls[0].currentRecipe).toBeNull();
+    expect(calls[0].instruction).toBeNull();
     const body = response.body as RecipeDraftDto;
     expect(body.untranscribedVideos).toBe(0);
+    expect(body.calorieResearch).toBe('DONE');
     expect(body.recipe).toMatchObject({
       title: 'Đậu hũ sốt cà chua',
       servings: 2,
@@ -221,7 +232,11 @@ describe('AI recipe drafts (e2e)', () => {
       { label: 'Post text', text: 'Món chay dễ làm' },
       { label: 'What video 1 says', text: 'Hôm nay mình làm đậu hũ sốt cà.' },
     ]);
-    expect(response.body).toEqual({ recipe: null, untranscribedVideos: 1 });
+    expect(response.body).toEqual({
+      recipe: null,
+      untranscribedVideos: 1,
+      calorieResearch: 'SKIPPED',
+    });
   });
 
   it('reads only the chosen video when mediaId is given', async () => {
@@ -277,6 +292,17 @@ describe('AI recipe drafts (e2e)', () => {
     expect((neither.body as ErrorBody).code).toBe('BAD_REQUEST');
     const both = await draft({ postId: empty.id, text: 'x' }).expect(400);
     expect((both.body as ErrorBody).code).toBe('BAD_REQUEST');
+    const formAndText = await draft({
+      text: 'x',
+      currentRecipe: 'Tên món: Canh nấm',
+    }).expect(400);
+    expect((formAndText.body as ErrorBody).code).toBe('BAD_REQUEST');
+    const requestOnly = await draft({ instruction: 'Tính kcal' }).expect(400);
+    expect((requestOnly.body as ErrorBody).code).toBe('BAD_REQUEST');
+    await draft({
+      currentRecipe: 'Tên món: Canh nấm',
+      instruction: 'x'.repeat(2001),
+    }).expect(400);
     const nothing = await draft({ postId: empty.id }).expect(400);
     expect(nothing.body as ErrorBody).toMatchObject({
       code: 'EMPTY_RECIPE_SOURCE',
@@ -284,6 +310,60 @@ describe('AI recipe drafts (e2e)', () => {
     });
     await draft({ postId: randomUUID() }).expect(404);
     expect(calls).toHaveLength(0);
+  });
+
+  it("revises the form's recipe with the admin's request kept apart from the data", async () => {
+    answer = () => ({
+      calorieResearch: 'FAILED',
+      output: {
+        researchCalories: true,
+        recipe: {
+          title: 'Canh nấm',
+          description: null,
+          tag: null,
+          servings: 4,
+          prepMinutes: null,
+          cookMinutes: null,
+          caloriesPerServing: 120,
+          ingredients: [],
+          steps: ['Nấu nấm.'],
+        },
+      },
+    });
+
+    const response = await draft({
+      currentRecipe: '  Tên món: Canh nấm\nKhẩu phần: 2  ',
+      instruction: '  Đổi thành 4 người và tính lại kcal.  ',
+    }).expect(200);
+
+    expect(calls).toHaveLength(1);
+    expect(calls[0]).toMatchObject({
+      parts: [],
+      currentRecipe: 'Tên món: Canh nấm\nKhẩu phần: 2',
+      instruction: 'Đổi thành 4 người và tính lại kcal.',
+    });
+    const body = response.body as RecipeDraftDto;
+    expect(body.calorieResearch).toBe('FAILED');
+    expect(body.recipe).toMatchObject({
+      title: 'Canh nấm',
+      servings: 4,
+      caloriesPerServing: 120,
+    });
+  });
+
+  it('passes the admin request along with a post', async () => {
+    const post = await createPost(e2e.mongo, {
+      authorId: admin.id,
+      body: 'Canh nấm chay',
+    });
+    await draft({ postId: post.id, instruction: 'Chỉ lấy món canh' }).expect(
+      200,
+    );
+    expect(calls[0]).toMatchObject({
+      parts: [{ label: 'Post text', text: 'Canh nấm chay' }],
+      currentRecipe: null,
+      instruction: 'Chỉ lấy món canh',
+    });
   });
 
   it('reports an AI failure as an upstream error', async () => {

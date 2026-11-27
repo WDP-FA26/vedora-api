@@ -6,15 +6,21 @@ import { IsOptional, IsString, IsUUID, MaxLength } from 'class-validator';
 import { NamedRefDto } from './ingredient.dto.js';
 
 const MAX_TEXT_LENGTH = runtimeConfig.RECIPE_DRAFT_MAX_TEXT_LENGTH;
+const MAX_INSTRUCTION_LENGTH =
+  runtimeConfig.RECIPE_DRAFT_MAX_INSTRUCTION_LENGTH;
 
 const trim = ({ value }: { value: unknown }): unknown =>
   typeof value === 'string' ? value.trim() : value;
 
+export const CALORIE_RESEARCH_STATUSES = ['DONE', 'SKIPPED', 'FAILED'] as const;
+export type CalorieResearchStatus = (typeof CALORIE_RESEARCH_STATUSES)[number];
+
+/** Send exactly one of `postId`, `text` or `currentRecipe`; `instruction` may go with any. */
 export class CreateRecipeDraftDto {
   @ApiPropertyOptional({
     format: 'uuid',
     description:
-      'Read the post: its text and the transcript of each ready video. Send this or `text`.',
+      'Read the post: its text and the transcript of each ready video. Send this, `text` or `currentRecipe`.',
   })
   @IsOptional()
   @IsUUID('4')
@@ -32,13 +38,36 @@ export class CreateRecipeDraftDto {
   @ApiPropertyOptional({
     maxLength: MAX_TEXT_LENGTH,
     description:
-      'A caption or recipe text pasted by the admin. Send this or `postId`.',
+      'A caption or recipe text pasted by the admin. Send this, `postId` or `currentRecipe`.',
   })
   @IsOptional()
   @Transform(trim)
   @IsString()
   @MaxLength(MAX_TEXT_LENGTH)
   text?: string;
+
+  @ApiPropertyOptional({
+    maxLength: MAX_TEXT_LENGTH,
+    description:
+      'The recipe on the admin form now, as plain text, to revise with `instruction`. Send this, `postId` or `text`.',
+  })
+  @IsOptional()
+  @Transform(trim)
+  @IsString()
+  @MaxLength(MAX_TEXT_LENGTH)
+  currentRecipe?: string;
+
+  @ApiPropertyOptional({
+    maxLength: MAX_INSTRUCTION_LENGTH,
+    example: 'Đổi khẩu phần thành 4 người và tính lại Kcal.',
+    description:
+      "The admin's own request. The only part of the body the AI follows as instructions; post text, transcripts and `currentRecipe` are read as data.",
+  })
+  @IsOptional()
+  @Transform(trim)
+  @IsString()
+  @MaxLength(MAX_INSTRUCTION_LENGTH)
+  instruction?: string;
 }
 
 export class IngredientSuggestionDto {
@@ -108,4 +137,11 @@ export class RecipeDraftDto {
       'Videos of the post still waiting for a transcript; what they say is missing from the draft',
   })
   untranscribedVideos!: number;
+
+  @ApiProperty({
+    enum: CALORIE_RESEARCH_STATUSES,
+    description:
+      "`DONE`: kcal checked on the web (see `calorieSources`). `SKIPPED`: no check was needed, e.g. the request only reworded the recipe, or there is no recipe. `FAILED`: the web check failed or found nothing; `caloriesPerServing` is the AI's own estimate or the form's value.",
+  })
+  calorieResearch!: CalorieResearchStatus;
 }

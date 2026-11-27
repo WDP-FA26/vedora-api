@@ -1,6 +1,7 @@
 import { runtimeConfig } from '../../config/runtime-config.js';
 import { z } from 'zod';
 import { RecipeTag } from '../../mongo/models.js';
+import type { PostSourcePart } from '../../posts/summaries/post-source.js';
 
 const MAX_NAME_LENGTH = runtimeConfig.INGREDIENT_NAME_MAX_LENGTH;
 const MAX_ALIASES = runtimeConfig.INGREDIENT_MAX_ALIASES;
@@ -56,9 +57,53 @@ export const draftOutput = z.object({
       steps: z.array(z.string()),
     })
     .nullable(),
+  researchCalories: z.boolean(),
 });
 
 export type DraftOutput = z.infer<typeof draftOutput>;
+export type DraftRecipeOutput = NonNullable<DraftOutput['recipe']>;
+
+/** What one draft call reads. Each piece goes into the prompt in its own tag. */
+export interface DraftRequest {
+  /** Post text, video transcripts or pasted text: written by users, read as data. */
+  parts: readonly PostSourcePart[];
+  /** The recipe on the admin form, to revise; read as data. */
+  currentRecipe: string | null;
+  /** The admin's own request: the only instructions in the request. */
+  instruction: string | null;
+}
+
+/**
+ * Removes the prompt's own tags from text a user wrote, so a caption cannot
+ * close `<source>` early or pose as `<admin_request>`.
+ */
+export function stripDraftTags(text: string): string {
+  return text.replace(
+    /<\/?(?:source|current_recipe|admin_request|catalog|ingredients|groups)\b[^>]*>?/gi,
+    '',
+  );
+}
+
+/** The prompt text after the cached catalog prefix. */
+export function draftRequestText(request: DraftRequest): string {
+  const blocks: string[] = [];
+  if (request.parts.length > 0) {
+    const sections: string[] = [];
+    for (const part of request.parts) {
+      sections.push(`## ${part.label}\n${stripDraftTags(part.text)}`);
+    }
+    blocks.push(`<source>\n${sections.join('\n\n')}\n</source>`);
+  }
+  if (request.currentRecipe) {
+    const recipe = stripDraftTags(request.currentRecipe);
+    blocks.push(`<current_recipe>\n${recipe}\n</current_recipe>`);
+  }
+  if (request.instruction) {
+    const instruction = stripDraftTags(request.instruction);
+    blocks.push(`<admin_request>\n${instruction}\n</admin_request>`);
+  }
+  return blocks.join('\n\n');
+}
 
 export interface CatalogIngredient {
   id: string;

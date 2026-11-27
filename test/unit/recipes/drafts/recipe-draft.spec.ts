@@ -47,7 +47,7 @@ function ingredient(
 }
 
 function output(recipe: Partial<OutputRecipe> | null): DraftOutput {
-  if (!recipe) return { recipe: null };
+  if (!recipe) return { recipe: null, researchCalories: false };
   return {
     recipe: {
       title: 'Đậu hũ sốt cà chua',
@@ -60,6 +60,7 @@ function output(recipe: Partial<OutputRecipe> | null): DraftOutput {
       steps: ['Chiên đậu.'],
       ...recipe,
     },
+    researchCalories: true,
   };
 }
 
