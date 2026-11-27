@@ -228,6 +228,9 @@ Values below are defaults matched to the original source. All values are read at
 | `TRANSCRIPTION_MIN_AVG_LOGPROB` | `-1` |
 | `TRANSCRIPTION_TIMEOUT_MS` | `360000` |
 | `TURNSTILE_VERIFY_TIMEOUT_MS` | `10000` |
+| `TAX_CODE_LOOKUP_URL` | `https://api.vietqr.io/v2/business` |
+| `TAX_CODE_LOOKUP_TIMEOUT_MS` | `8000` |
+| `TAX_CODE_LOOKUP_CACHE_SECONDS` | `86400` |
 | `VERIFICATION_CLEANUP_AGE_SECONDS` | `172800` |
 | `VERIFICATION_MAX_PROOFS` | `6` |
 | `VERIFICATION_MAX_UNSUBMITTED_PROOFS` | `12` |

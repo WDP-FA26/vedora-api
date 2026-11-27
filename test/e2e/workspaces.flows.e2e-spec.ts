@@ -255,6 +255,49 @@ describe('Restaurant page flows (e2e)', () => {
       expect(errorSchema.parse(response.body).code).toBe('FORBIDDEN');
     });
 
+    it("shows admins the tax department's record of a company tax code", async () => {
+      const applied = workspaceSchema.parse(
+        (await apply(ownerToken, owner.id, 201)).body,
+      );
+      const url = `/api/v1/admin/workspaces/${applied.id}/tax-code`;
+      await request(server())
+        .get(url)
+        .auth(ownerToken, { type: 'bearer' })
+        .expect(403);
+
+      // The public source is never called from tests.
+      const lookup = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+        Response.json({
+          code: '00',
+          data: {
+            id: '0123456789',
+            name: 'HỘ KINH DOANH CHAY AN LẠC',
+            address: '12 Hàng Bông, Hà Nội',
+            status: 'NNT đang hoạt động',
+          },
+        }),
+      );
+      try {
+        const response = await request(server())
+          .get(url)
+          .auth(adminToken, { type: 'bearer' })
+          .expect(200);
+        expect(response.body).toMatchObject({
+          status: 'FOUND',
+          taxCode: '0123456789',
+          officialName: 'HỘ KINH DOANH CHAY AN LẠC',
+          taxStatus: 'NNT đang hoạt động',
+          nameMatches: true,
+        });
+        expect(lookup).toHaveBeenCalledWith(
+          expect.stringMatching(/\/0123456789$/),
+          expect.anything(),
+        );
+      } finally {
+        lookup.mockRestore();
+      }
+    });
+
     it('rejects with a reason, then accepts a resubmission', async () => {
       const applied = workspaceSchema.parse(
         (await apply(ownerToken, owner.id, 201)).body,
