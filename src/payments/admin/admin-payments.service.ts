@@ -91,9 +91,6 @@ export class AdminPaymentsService {
   private active(now: Date): PipelineStage[] {
     return [
       { $match: { status: PaymentStatus.SUCCEEDED } },
-      { $sort: { capturedAt: -1, _id: -1 } },
-      { $group: { _id: '$userId', latest: { $first: '$$ROOT' } } },
-      { $replaceRoot: { newRoot: '$latest' } },
       {
         $lookup: {
           from: 'subscription_memberships',
@@ -127,6 +124,10 @@ export class AdminPaymentsService {
           ],
         },
       },
+      // Select the canonical payment before the legacy timestamp tie-breaker.
+      { $sort: { capturedAt: -1, _id: -1 } },
+      { $group: { _id: '$userId', latest: { $first: '$$ROOT' } } },
+      { $replaceRoot: { newRoot: '$latest' } },
       { $set: { normalizedPlan, cycleExpiry } },
       { $match: { capturedAt: { $ne: null }, cycleExpiry: { $gt: now } } },
       {
