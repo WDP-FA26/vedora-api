@@ -282,6 +282,7 @@ phải account cá nhân đang hoạt động). Người không phải thành vi
 | ------ | ---------------------------------------- | -------------------------------------------------- |
 | GET    | `/admin/workspaces?status=&page=&limit=` | Danh sách đơn (phân trang page/limit)              |
 | GET    | `/admin/workspaces/:id`                  | Chi tiết + `proofs` + `warnings`                   |
+| GET    | `/admin/workspaces/:id/tax-code`         | Tra MST trong dữ liệu Cục Thuế (ở dưới)            |
 | POST   | `/admin/workspaces/:id/review`           | Duyệt hoặc từ chối (body ở dưới)                   |
 
 Mỗi item có các trường của `WorkspaceDetail` (gồm cả `legal`), cộng thêm:
@@ -297,6 +298,31 @@ Mỗi item có các trường của `WorkspaceDetail` (gồm cả `legal`), cộ
   - `SAME_TAX_CODE`: đã có page được duyệt dùng cùng MST. Có thể là chi nhánh, nhưng cần xem.
   - `NEARBY_PAGE`: có page được duyệt ghim cách dưới 100 m.
   - `RECENT_REJECTION`: owner có đơn khác bị từ chối trong 30 ngày qua.
+
+### Tra mã số thuế
+
+`GET /admin/workspaces/:id/tax-code` tra MST của đơn trong dữ liệu công khai của Cục Thuế (qua VietQR, giữ kết quả 1 ngày). Gọi riêng, không nằm trong chi tiết đơn, vì nguồn chỉ cho vài lượt mỗi phút.
+
+```json
+{
+  "status": "FOUND",
+  "taxCode": "0101245486",
+  "officialName": "TẬP ĐOÀN VINGROUP - CÔNG TY CP",
+  "shortName": "VINGROUP",
+  "address": "Số 7, Đường Bằng Lăng 1, …, TP Hà Nội",
+  "taxStatus": "NNT đang hoạt động",
+  "nameMatches": true,
+  "sourceUpdatedAt": "2026-11-18T18:43:34.000Z"
+}
+```
+
+- `status`:
+  - `FOUND`: Cục Thuế có MST này.
+  - `NOT_FOUND`: không có MST này. Nên từ chối với lý do `TAX_CODE_MISMATCH` sau khi xem lại.
+  - `NOT_APPLICABLE`: MST cá nhân 12 số (số CCCD, không công khai) hoặc đơn mẫu cũ không có pháp lý.
+  - `UNAVAILABLE`: nguồn lỗi hoặc hết lượt; thử lại sau, không phải lỗi của đơn.
+- `nameMatches`: tên pháp lý trong đơn có khớp tên đăng ký không, bỏ qua dấu, hoa thường và cách viết loại hình ("Công ty TNHH", "CP"…). `null` khi không `FOUND`. Chỉ để admin xem kỹ, không chặn duyệt.
+- `taxStatus`: nguyên văn của Cục Thuế, ví dụ "NNT đang hoạt động", "NNT ngừng hoạt động và đã đóng MST".
 
 ### Duyệt / từ chối
 

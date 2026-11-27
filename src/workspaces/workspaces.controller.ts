@@ -75,6 +75,8 @@ import {
 } from './dto/restaurant-review.dto.js';
 import { RestaurantMenuService } from './restaurant-menu.service.js';
 import { RestaurantReviewsService } from './restaurant-reviews.service.js';
+import { TaxCodeLookupDto } from './dto/tax-code-lookup.dto.js';
+import { TaxCodeLookupService } from './tax-code-lookup.service.js';
 import { WorkspacesService } from './workspaces.service.js';
 
 /** Pages are managed by the person, also while they act as one of their pages. */
@@ -274,7 +276,10 @@ export class WorkspacesController {
 @Roles(UserRole.ADMIN)
 @Controller('admin/workspaces')
 export class AdminWorkspacesController {
-  constructor(private readonly workspaces: WorkspacesService) {}
+  constructor(
+    private readonly workspaces: WorkspacesService,
+    private readonly taxCodes: TaxCodeLookupService,
+  ) {}
 
   @Get()
   @ApiOperation({ summary: 'List page applications (admin only)' })
@@ -294,6 +299,18 @@ export class AdminWorkspacesController {
     @Param('id', ParseUUIDPipe) id: string,
   ): Promise<AdminWorkspaceDetailDto> {
     return this.workspaces.adminDetail(id);
+  }
+
+  @Get(':id/tax-code')
+  @ApiOperation({
+    summary:
+      "The tax department's public data for an application's company tax code (admin only)",
+    description:
+      'Looks up 10-digit and 10-3 codes (VietQR, cached a day). Personal 12-digit codes are not public: NOT_APPLICABLE. A failed or rate-limited lookup is UNAVAILABLE, not an error.',
+  })
+  @ApiOkResponse({ type: TaxCodeLookupDto })
+  taxCode(@Param('id', ParseUUIDPipe) id: string): Promise<TaxCodeLookupDto> {
+    return this.taxCodes.forWorkspace(id);
   }
 
   @Post(':id/review')

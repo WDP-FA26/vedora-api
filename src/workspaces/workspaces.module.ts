@@ -10,6 +10,7 @@ import {
   RestaurantsController,
   WorkspacesController,
 } from './workspaces.controller.js';
+import { TaxCodeLookupService } from './tax-code-lookup.service.js';
 import { WorkspacesService } from './workspaces.service.js';
 
 @Module({
@@ -21,6 +22,7 @@ import { WorkspacesService } from './workspaces.service.js';
   ],
   providers: [
     WorkspacesService,
+    TaxCodeLookupService,
     MenuSearchIndexService,
     MenuSearchService,
     RestaurantMenuService,

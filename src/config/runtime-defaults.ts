@@ -261,6 +261,8 @@ export const numericDefaults = {
   TRANSCRIPTION_MIN_AVG_LOGPROB: -1,
   TRANSCRIPTION_TIMEOUT_MS: 360000,
   TURNSTILE_VERIFY_TIMEOUT_MS: 10000,
+  TAX_CODE_LOOKUP_TIMEOUT_MS: 8000,
+  TAX_CODE_LOOKUP_CACHE_SECONDS: 86400,
   VERIFICATION_CLEANUP_AGE_SECONDS: 172800,
   VERIFICATION_MAX_PROOFS: 6,
   VERIFICATION_MAX_UNSUBMITTED_PROOFS: 12,
@@ -324,6 +326,7 @@ export const stringDefaults = {
   PLANNER_WEB_SEARCH_MODE: 'fast',
   PROFILE_IMAGE_CLEANUP_CRON: '0 0 * * * *',
   SEPAY_QR_IMAGE_BASE_URL: 'https://vietqr.app/img',
+  TAX_CODE_LOOKUP_URL: 'https://api.vietqr.io/v2/business',
   TURNSTILE_VERIFY_URL:
     'https://challenges.cloudflare.com/turnstile/v0/siteverify',
   VERIFICATION_CLEANUP_CRON: '0 0 * * * *',
