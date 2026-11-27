@@ -269,26 +269,21 @@ export function verifyMealPlanAllergiesTool(
         }));
         change = await mealPlan.editPlan(userId, week, removeOps);
 
-        const vacatedKeys = new Set<string>();
+        const affectedKeys = new Set<string>();
         const affectedDays = new Set<Weekday>();
         const affectedSections = new Set<MealSection>();
         for (const slot of slots) {
           const hasFlag = slot.recipeIds.some((id) => flaggedReasons.has(id));
           if (!hasFlag) continue;
-          const remainingCount = slot.recipeIds.filter(
-            (id) => !flaggedReasons.has(id),
-          ).length;
-          if (remainingCount === 0) {
-            vacatedKeys.add(`${slot.day}:${slot.section}`);
-            affectedDays.add(slot.day);
-            affectedSections.add(slot.section);
-          }
+          affectedKeys.add(`${slot.day}:${slot.section}`);
+          affectedDays.add(slot.day);
+          affectedSections.add(slot.section);
         }
 
-        if (vacatedKeys.size > 0) {
+        if (affectedKeys.size > 0) {
           const pinned = [...affectedDays].flatMap((day) =>
             [...affectedSections]
-              .filter((section) => !vacatedKeys.has(`${day}:${section}`))
+              .filter((section) => !affectedKeys.has(`${day}:${section}`))
               .map((section) => ({ day, section })),
           );
           const refill = await mealPlan.fillPlan(userId, {

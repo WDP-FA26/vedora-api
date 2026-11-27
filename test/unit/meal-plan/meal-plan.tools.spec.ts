@@ -880,6 +880,88 @@ describe('Meal planner AI tools', () => {
       expect(mondayLunch?.previous.map(({ id }) => id)).toEqual([recipe1]);
     });
 
+    it('tops up a slot that keeps other dishes after its flagged dish is removed', async () => {
+      const keptId = 'd1a2d3e4-0000-4000-8000-000000000003';
+      const dish = (id: string, title: string) => ({
+        id,
+        title,
+        imageUrl: null,
+        tag: RecipeTag.SOUP,
+        servings: 2,
+        prepMinutes: 10,
+        cookMinutes: 10,
+        ingredients: [],
+        steps: ['Nấu'],
+      });
+      const savedPlan: MealPlanDto = {
+        weekStart: WEEK,
+        currentWeekStart: WEEK,
+        today: WEEK,
+        maxWeekStart: '2026-12-14',
+        minWeekStart: WEEK,
+        editable: true,
+        days: Object.values(Weekday).map((day) => ({
+          day,
+          date: WEEK,
+          editable: true,
+          sections: Object.values(MealSection).map((section) => ({
+            section,
+            recipes:
+              day === Weekday.THU && section === MealSection.BREAKFAST
+                ? [dish(recipe1, 'Flagged dish'), dish(keptId, 'Kept dish')]
+                : [],
+          })),
+        })),
+        problems: [],
+      };
+      mealPlan.find.mockResolvedValue(savedPlan);
+      mealPlan.recipeInstructions.mockImplementation((_user, id) =>
+        Promise.resolve({
+          id,
+          title: id === recipe1 ? 'Flagged dish' : 'Kept dish',
+          description: null,
+          servings: 2,
+          minutes: 20,
+          ingredients: [],
+          steps: ['Nấu'],
+          avoidedIngredients: id === recipe1 ? ['Hành'] : [],
+        }),
+      );
+      const noChange = {
+        weekStart: WEEK,
+        days: [],
+        problems: [],
+        applied: true,
+        errors: [],
+      };
+      mealPlan.editPlan.mockResolvedValue(noChange);
+      mealPlan.fillPlan.mockResolvedValue({
+        ...noChange,
+        filled: 0,
+        allSlotsAlreadyFilled: true,
+      });
+
+      const toolDef = verifyMealPlanAllergiesTool(
+        new MockLanguageModelV4(),
+        mealPlan,
+        userId,
+        WEEK,
+        { allergies: ['Không ăn được hành'], preferences: [] },
+      );
+      await toolDef.execute?.({}, execOptions);
+
+      expect(mealPlan.fillPlan).toHaveBeenCalledWith(
+        userId,
+        expect.objectContaining({
+          days: [Weekday.THU],
+          sections: [MealSection.BREAKFAST],
+          onlyEmpty: true,
+          avoidIds: [recipe1],
+          pinned: [],
+        }),
+      );
+    });
+
     it('only reports flagged dishes when asked not to replace them', async () => {
       const savedPlan = {
         weekStart: WEEK,
