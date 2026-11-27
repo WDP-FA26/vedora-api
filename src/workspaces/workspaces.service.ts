@@ -348,7 +348,7 @@ export class WorkspacesService implements OnApplicationBootstrap {
     workspaceId: string,
     dto: AddWorkspaceMemberDto,
   ): Promise<WorkspaceDetailDto> {
-    await this.mongo.withTransaction(async (session) => {
+    const added = await this.mongo.withTransaction(async (session) => {
       await lockDocument(this.mongo, session, 'workspace', workspaceId);
       const workspace = await this.findWorkspace(session, workspaceId);
       await this.assertOwner(session, workspace.id, personId);
@@ -392,6 +392,14 @@ export class WorkspacesService implements OnApplicationBootstrap {
           'This person already manages the page',
         );
       }
+      return { userId: user.id, workspaceName: workspace.name };
+    });
+    await this.notifications.notify({
+      recipientId: added.userId,
+      actorId: personId,
+      type: NotificationType.WORKSPACE_MANAGER_ADDED,
+      workspaceId,
+      note: added.workspaceName,
     });
     return this.detail(personId, workspaceId);
   }
@@ -401,7 +409,7 @@ export class WorkspacesService implements OnApplicationBootstrap {
     workspaceId: string,
     memberId: string,
   ): Promise<void> {
-    const pageUserId = await this.mongo.withTransaction(async (session) => {
+    const removed = await this.mongo.withTransaction(async (session) => {
       await lockDocument(this.mongo, session, 'workspace', workspaceId);
       const workspace = await this.findWorkspace(session, workspaceId);
       const [actor, target] = await Promise.all([
@@ -430,10 +438,22 @@ export class WorkspacesService implements OnApplicationBootstrap {
           'Only the owner can remove managers',
         );
       await this.members.deleteOne({ _id: target.id }, { session });
-      return workspace.pageUserId;
+      return {
+        pageUserId: workspace.pageUserId,
+        workspaceName: workspace.name,
+        leaving,
+      };
     });
-    if (pageUserId)
-      await this.refreshTokens.revokePageSessions(pageUserId, memberId);
+    if (removed.pageUserId)
+      await this.refreshTokens.revokePageSessions(removed.pageUserId, memberId);
+    if (!removed.leaving)
+      await this.notifications.notify({
+        recipientId: memberId,
+        actorId: personId,
+        type: NotificationType.WORKSPACE_MANAGER_REMOVED,
+        workspaceId,
+        note: removed.workspaceName,
+      });
   }
 
   async adminList(

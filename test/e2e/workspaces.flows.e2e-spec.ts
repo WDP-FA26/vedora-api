@@ -794,6 +794,48 @@ describe('Restaurant page flows (e2e)', () => {
         .auth(managerToken, { type: 'bearer' })
         .expect(404);
     });
+
+    it('tells a person when the owner adds or removes them, but not when they leave', async () => {
+      const { workspaceId } = await approvedPage();
+      const managerNotifications = () =>
+        model<Notification>(Notification.name)
+          .find({ recipientId: manager.id })
+          .sort({ createdAt: 1, _id: 1 })
+          .exec();
+      await addManager(workspaceId);
+      await request(server())
+        .delete(`/api/v1/workspaces/${workspaceId}/members/${manager.id}`)
+        .auth(ownerToken, { type: 'bearer' })
+        .expect(204);
+
+      const notified = await managerNotifications();
+      expect(notified).toHaveLength(2);
+      expect(notified[0]).toMatchObject({
+        type: NotificationType.WORKSPACE_MANAGER_ADDED,
+        actorId: owner.id,
+        workspaceId,
+      });
+      expect(notified[0].note).toEqual(expect.any(String));
+      expect(notified[1]).toMatchObject({
+        type: NotificationType.WORKSPACE_MANAGER_REMOVED,
+        actorId: owner.id,
+        workspaceId,
+      });
+
+      await addManager(workspaceId);
+      await request(server())
+        .delete(`/api/v1/workspaces/${workspaceId}/members/${manager.id}`)
+        .auth(managerToken, { type: 'bearer' })
+        .expect(204);
+      const types = (await managerNotifications()).map(
+        (notification) => notification.type,
+      );
+      expect(types).toEqual([
+        NotificationType.WORKSPACE_MANAGER_ADDED,
+        NotificationType.WORKSPACE_MANAGER_REMOVED,
+        NotificationType.WORKSPACE_MANAGER_ADDED,
+      ]);
+    });
   });
 
   describe('restaurant map', () => {
