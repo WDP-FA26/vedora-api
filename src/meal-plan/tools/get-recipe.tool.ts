@@ -17,7 +17,7 @@ const PILLAR_LABELS: Record<NutritionPillar, string> = {
 export function getRecipeTool(mealPlan: MealPlanService, userId: string) {
   return tool({
     description:
-      "Get one Vedora recipe's full details: description, servings, time, ingredients with quantities, and cooking steps. Use it when the user asks how to cook a dish or wants its ingredients or steps. Pass the exact id returned by searchRecipes.",
+      "Get one Vedora recipe's full details: description, servings, time, ingredients with quantities, and cooking steps. Use it when the user asks how to cook a dish or wants its ingredients or steps. Pass the exact id from getPlan, searchRecipes, or the current screen context.",
     inputSchema: z.object({
       recipeId: z.string().min(1).describe('A recipe id from searchRecipes'),
     }),

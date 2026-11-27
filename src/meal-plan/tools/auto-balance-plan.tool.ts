@@ -35,7 +35,7 @@ export function autoBalancePlanTool(
 ) {
   return tool({
     description:
-      "Automatically rebalance editable days of a week toward the calorie target while keeping existing main dishes: tops up under-calorie days with complementary 2nd/3rd dishes (e.g. main + stir-fry/soup + snack in OTHER) and trims excess secondary dishes on over-budget days. Saves the result to the user's plan at once (the user can rewind it from the chat).",
+      "Automatically rebalance editable days of a week toward the calorie target while keeping existing main dishes: tops up under-calorie days with complementary 2nd/3rd dishes (e.g. main + stir-fry/soup + snack in OTHER) and trims excess secondary dishes on over-budget days. Saves the result to the user's plan at once (the user can rewind it from the chat). Do not use to fill an empty week (use fillSlots) or to swap one specific dish (use editPlan).",
     inputSchema: z.object({
       weekStart: weekStartInput(plannableWeekStarts()),
       days: z

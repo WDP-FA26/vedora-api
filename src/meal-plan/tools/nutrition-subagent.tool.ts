@@ -47,7 +47,7 @@ export function consultNutritionSubagentTool(
 ) {
   return tool({
     description:
-      'Consult the dedicated Nutrition & Web Research Subagent for external street foods, packaged vegan snacks/drinks, micronutrient questions (iron/calcium/B12), or multi-dish calorie budget balancing using web search plus the Vedora recipe catalog. Runs autonomously and returns a concise structured synthesis.',
+      'Consult the dedicated Nutrition & Web Research Subagent for nutrition/calorie estimates of external street foods or packaged vegan snacks/drinks, micronutrient questions (iron/calcium/B12), or multi-dish calorie budget balancing using web search plus the Vedora recipe catalog. Runs autonomously (no user permission needed) and returns a concise structured synthesis. Do not use for non-nutrition general web lookups (use requestWebSearch instead).',
     inputSchema: z.object({
       question: z
         .string()
