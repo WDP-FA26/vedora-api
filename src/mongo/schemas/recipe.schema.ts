@@ -238,6 +238,7 @@ cascadeOnDelete(RecipeSchema, [
   { model: 'RecipeRating', field: 'recipeId', action: 'delete' },
   { model: 'MealPlanEntry', field: 'recipeId', action: 'delete' },
   { model: 'MealLogEntry', field: 'recipeId', action: 'unset' },
+  { model: 'AllergyVerdict', field: 'recipeId', action: 'delete' },
 ]);
 
 @Schema(collectionSchema('recipe_favorites', 'created'))

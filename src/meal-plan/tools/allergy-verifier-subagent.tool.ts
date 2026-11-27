@@ -1,10 +1,6 @@
-import { Logger } from '@nestjs/common';
-import { generateText, type LanguageModel, Output, tool } from 'ai';
+import { tool } from 'ai';
 import { z } from 'zod';
-import { PromptCache } from '../../ai/prompt-cache.js';
 import { MealSection, Weekday } from '../../mongo/models.js';
-import type { DietaryMemoryDto } from '../../recipes/dto/dietary.dto.js';
-import { extractAllergyKeywords } from '../../recipes/nutrition.js';
 import { MEAL_SECTIONS } from '../dto/meal-plan.dto.js';
 import type { DraftOp } from '../meal-plan-draft.js';
 import type { MealPlanService } from '../meal-plan.service.js';
@@ -15,36 +11,6 @@ import {
   mergeChanges,
   type PlanChange,
 } from './proposal-text.js';
-import {
-  ALLERGY_AUDIT_INSTRUCTIONS,
-  buildAllergyAuditPrompt,
-} from './allergy-verifier.prompt.js';
-
-const logger = new Logger('AllergyVerifierSubagentTool');
-
-type RecipeDetails = NonNullable<
-  Awaited<ReturnType<MealPlanService['recipeInstructions']>>
->;
-
-const allergyAuditSchema = z.object({
-  flagged: z
-    .array(
-      z.object({
-        recipeId: z.string(),
-        reason: z
-          .string()
-          .describe(
-            'Lý do ngắn gọn bằng tiếng Việt món này vi phạm dị ứng/lưu ý',
-          ),
-      }),
-    )
-    .describe(
-      'Only recipes that genuinely contain or risk triggering an allergen or restriction',
-    ),
-  summary: z
-    .string()
-    .describe('Tóm tắt kết quả kiểm định ngắn gọn bằng tiếng Việt'),
-});
 
 export interface FlaggedDishReport {
   day: Weekday;
@@ -59,6 +25,7 @@ export interface AllergyVerificationResult {
   safe: boolean;
   checkedDishesCount: number;
   flaggedDishes: FlaggedDishReport[];
+  uncheckedDishes: string[];
   summary: string;
   weekStart?: string;
   days?: PlanChange['days'];
@@ -66,8 +33,10 @@ export interface AllergyVerificationResult {
   applied?: boolean;
 }
 
+type Plan = Awaited<ReturnType<MealPlanService['find']>>;
+
 function editableSlots(
-  plan: Awaited<ReturnType<MealPlanService['find']>>,
+  plan: Plan,
 ): { day: Weekday; section: MealSection; recipeIds: string[] }[] {
   const result: { day: Weekday; section: MealSection; recipeIds: string[] }[] =
     [];
@@ -86,65 +55,74 @@ function editableSlots(
   return result;
 }
 
-function recipeHaystack(recipe: RecipeDetails): string {
-  const ingredientText = recipe.ingredients
-    .map((item) => `${item.name} ${item.note ?? ''}`)
-    .join(' ');
-  return [
-    recipe.title,
-    recipe.description ?? '',
-    ingredientText,
-    ...recipe.steps,
-  ]
-    .join(' ')
-    .normalize('NFC')
-    .toLowerCase();
+function titlesOf(plan: Plan): Map<string, string> {
+  const titles = new Map<string, string>();
+  for (const day of plan.days) {
+    for (const section of day.sections) {
+      for (const recipe of section.recipes) titles.set(recipe.id, recipe.title);
+    }
+  }
+  return titles;
 }
 
-async function runSemanticAllergyAudit(
-  model: LanguageModel,
-  combinedNotes: string,
-  recipes: RecipeDetails[],
-  abortSignal?: AbortSignal,
-): Promise<{
-  flagged: { recipeId: string; reason: string }[];
-  summary?: string;
-}> {
-  const { output } = await generateText({
-    model,
-    output: Output.object({ schema: allergyAuditSchema }),
-    ...PromptCache.singleTurn({
-      session: 'vedora-allergy-verifier',
-      instructions: ALLERGY_AUDIT_INSTRUCTIONS,
-      effort: 'medium',
-      ttl: '5m',
-    }),
-    prompt: buildAllergyAuditPrompt({ allergyNotes: combinedNotes, recipes }),
-    abortSignal,
-  });
-
-  return { flagged: output.flagged, summary: output.summary };
+function verificationSummary(
+  checked: number,
+  flagged: FlaggedDishReport[],
+  unchecked: string[],
+  replaced: boolean,
+): string {
+  const parts: string[] = [];
+  if (flagged.length === 0) {
+    parts.push(
+      `Đã kiểm tra ${checked} món theo hồ sơ dị ứng: không món nào vi phạm.`,
+    );
+  } else {
+    const byRecipe = new Map<
+      string,
+      { title: string; reason: string; slots: string[] }
+    >();
+    for (const dish of flagged) {
+      const slot = `${DAY_NAMES[dish.day]} ${SECTION_NAMES[dish.section]}`;
+      const entry = byRecipe.get(dish.recipeId);
+      if (entry) {
+        entry.slots.push(slot);
+        continue;
+      }
+      byRecipe.set(dish.recipeId, {
+        title: dish.title,
+        reason: dish.reason,
+        slots: [slot],
+      });
+    }
+    const lines: string[] = [];
+    for (const { title, reason, slots } of byRecipe.values()) {
+      lines.push(`- ${title} (${slots.join(', ')}): ${reason}`);
+    }
+    parts.push(
+      `Đã kiểm tra ${checked} món, ${byRecipe.size} món không hợp hồ sơ dị ứng:\n${lines.join('\n')}`,
+    );
+    parts.push(
+      replaced ? 'Đã đổi các món này sang món an toàn.' : 'Chưa đổi món nào.',
+    );
+  }
+  if (unchecked.length > 0) {
+    parts.push(
+      `Chưa kiểm tra được ${unchecked.join(', ')}; giữ nguyên trên lịch, người dùng nên tự xem lại.`,
+    );
+  }
+  return parts.join('\n');
 }
 
 export function verifyMealPlanAllergiesTool(
-  model: LanguageModel,
   mealPlan: MealPlanService,
   userId: string,
   openWeekStart: string,
-  memory: DietaryMemoryDto,
 ) {
   return tool({
     description:
-      'Run the Allergy Verification Subagent on the week’s plan to inspect every dish’s full ingredient list and cooking steps against the user’s natural-language dietary/allergy profile. Use it after you build or change a plan when the user has an allergy note or mentioned an allergy. Replaces any flagged allergen dish with a safe alternative in the saved plan (the user can rewind it from the chat); set replaceFlagged: false to only report when the user asked for a check, not a change.',
+      'Run the Allergy Verification Subagent on the week’s plan to inspect every dish’s full ingredient list and cooking steps against the user’s saved allergy profile. Use it after you build or change a plan when the user has an allergy note or mentioned an allergy; save a newly mentioned allergy with updateMemory first. Replaces any flagged allergen dish with a safe alternative in the saved plan (the user can rewind it from the chat); set replaceFlagged: false to only report when the user asked for a check, not a change.',
     inputSchema: z.object({
       weekStart: weekStartInput(plannableWeekStarts()),
-      allergyDescription: z
-        .string()
-        .max(1000)
-        .optional()
-        .describe(
-          'Optional allergy or intolerance description mentioned in the chat turn to combine with the saved allergies',
-        ),
       replaceFlagged: z
         .boolean()
         .optional()
@@ -152,10 +130,10 @@ export function verifyMealPlanAllergiesTool(
           'Automatically replace any flagged dish with a safe alternative (default true)',
         ),
     }),
-    execute: async (
-      { weekStart, allergyDescription, replaceFlagged },
-      { abortSignal },
-    ): Promise<AllergyVerificationResult> => {
+    execute: async ({
+      weekStart,
+      replaceFlagged,
+    }): Promise<AllergyVerificationResult> => {
       const week = weekStart ?? openWeekStart;
       const plan = await mealPlan.find(userId, week);
       const slots = editableSlots(plan);
@@ -166,82 +144,26 @@ export function verifyMealPlanAllergiesTool(
           safe: true,
           checkedDishesCount: 0,
           flaggedDishes: [],
+          uncheckedDishes: [],
           summary: `Tuần bắt đầu ${week} chưa có món nào trên lịch để kiểm định dị ứng.`,
         };
       }
 
-      const loaded = await Promise.all(
-        uniqueIds.map((id) => mealPlan.recipeInstructions(userId, id)),
-      );
-      const recipeMap = new Map<string, RecipeDetails>();
-      for (const item of loaded) {
-        if (item) recipeMap.set(item.id, item);
-      }
-
-      const combinedNotes = [...memory.allergies, allergyDescription]
-        .filter((value): value is string => Boolean(value && value.trim()))
-        .join(' | ');
-      const keywords = extractAllergyKeywords(combinedNotes);
-
-      const flaggedReasons = new Map<string, string>();
-      for (const recipe of recipeMap.values()) {
-        if (recipe.avoidedIngredients.length > 0) {
-          flaggedReasons.set(
-            recipe.id,
-            `Chứa thành phần tránh: ${recipe.avoidedIngredients.join(', ')}`,
-          );
-          continue;
-        }
-        if (keywords.length > 0) {
-          const text = recipeHaystack(recipe);
-          const matched = keywords.filter((word) => text.includes(word));
-          if (matched.length > 0) {
-            flaggedReasons.set(
-              recipe.id,
-              `Khớp từ khóa dị ứng/kiêng kỵ: ${matched.slice(0, 3).join(', ')}`,
-            );
-          }
-        }
-      }
-
-      const unflaggedRecipes: RecipeDetails[] = [];
-      for (const recipe of recipeMap.values()) {
-        if (!flaggedReasons.has(recipe.id)) unflaggedRecipes.push(recipe);
-      }
-
-      let subagentSummary = '';
-      if (combinedNotes.trim().length > 0 && unflaggedRecipes.length > 0) {
-        try {
-          const audit = await runSemanticAllergyAudit(
-            model,
-            combinedNotes,
-            unflaggedRecipes,
-            abortSignal,
-          );
-          subagentSummary = audit.summary ?? '';
-          for (const item of audit.flagged) {
-            if (!recipeMap.has(item.recipeId)) continue;
-            if (!flaggedReasons.has(item.recipeId)) {
-              flaggedReasons.set(item.recipeId, item.reason);
-            }
-          }
-        } catch (error) {
-          if (abortSignal?.aborted) throw error;
-          logger.warn(`Semantic allergy audit fallback used: ${String(error)}`);
-        }
-      }
-
+      const allergy = await mealPlan.allergyCheck(userId, uniqueIds);
+      const titles = titlesOf(plan);
+      const uncheckedDishes = uniqueIds
+        .filter((id) => allergy.unchecked.has(id))
+        .map((id) => titles.get(id) ?? id);
       const flaggedDishes: FlaggedDishReport[] = [];
       for (const slot of slots) {
         for (const recipeId of slot.recipeIds) {
-          const reason = flaggedReasons.get(recipeId);
-          if (!reason) continue;
-          const title = recipeMap.get(recipeId)?.title ?? recipeId;
+          const reason = allergy.unsafe.get(recipeId);
+          if (reason === undefined) continue;
           flaggedDishes.push({
             day: slot.day,
             section: slot.section,
             recipeId,
-            title,
+            title: titles.get(recipeId) ?? recipeId,
             reason,
           });
         }
@@ -250,12 +172,16 @@ export function verifyMealPlanAllergiesTool(
       if (flaggedDishes.length === 0) {
         return {
           verified: true,
-          safe: true,
+          safe: uncheckedDishes.length === 0,
           checkedDishesCount: uniqueIds.length,
           flaggedDishes: [],
-          summary:
-            subagentSummary ||
-            `Đã kiểm định ${uniqueIds.length} món theo hồ sơ dị ứng: tất cả đều an toàn.`,
+          uncheckedDishes,
+          summary: verificationSummary(
+            uniqueIds.length,
+            [],
+            uncheckedDishes,
+            false,
+          ),
         };
       }
 
@@ -272,40 +198,40 @@ export function verifyMealPlanAllergiesTool(
         const affectedKeys = new Set<string>();
         const affectedDays = new Set<Weekday>();
         const affectedSections = new Set<MealSection>();
-        for (const slot of slots) {
-          const hasFlag = slot.recipeIds.some((id) => flaggedReasons.has(id));
-          if (!hasFlag) continue;
-          affectedKeys.add(`${slot.day}:${slot.section}`);
-          affectedDays.add(slot.day);
-          affectedSections.add(slot.section);
+        for (const dish of flaggedDishes) {
+          affectedKeys.add(`${dish.day}:${dish.section}`);
+          affectedDays.add(dish.day);
+          affectedSections.add(dish.section);
         }
-
-        if (affectedKeys.size > 0) {
-          const pinned = [...affectedDays].flatMap((day) =>
-            [...affectedSections]
-              .filter((section) => !affectedKeys.has(`${day}:${section}`))
-              .map((section) => ({ day, section })),
-          );
-          const refill = await mealPlan.fillPlan(userId, {
-            weekStart: week,
-            days: [...affectedDays],
-            sections: [...affectedSections],
-            onlyEmpty: true,
-            avoidIds: [...flaggedReasons.keys()],
-            pinned,
-          });
-          change = mergeChanges(change, refill);
-        }
+        const pinned = [...affectedDays].flatMap((day) =>
+          [...affectedSections]
+            .filter((section) => !affectedKeys.has(`${day}:${section}`))
+            .map((section) => ({ day, section })),
+        );
+        const refill = await mealPlan.fillPlan(userId, {
+          weekStart: week,
+          days: [...affectedDays],
+          sections: [...affectedSections],
+          onlyEmpty: true,
+          avoidIds: [...allergy.unsafe.keys()],
+          pinned,
+        });
+        change = mergeChanges(change, refill);
       }
 
+      const replaced = change !== undefined && change.applied;
       return {
         verified: true,
-        safe: change !== undefined && change.applied,
+        safe: replaced && uncheckedDishes.length === 0,
         checkedDishesCount: uniqueIds.length,
         flaggedDishes,
-        summary:
-          subagentSummary ||
-          `Phát hiện ${flaggedDishes.length} lượt món có nguy cơ dị ứng (${flaggedDishes.map((d) => `${d.title} - ${DAY_NAMES[d.day]} ${SECTION_NAMES[d.section]}`).join('; ')})${change?.applied ? ' và đã tự động đổi sang món an toàn.' : '.'}`,
+        uncheckedDishes,
+        summary: verificationSummary(
+          uniqueIds.length,
+          flaggedDishes,
+          uncheckedDishes,
+          replaced,
+        ),
         ...(change
           ? {
               weekStart: change.weekStart,
@@ -317,14 +243,10 @@ export function verifyMealPlanAllergiesTool(
       };
     },
     toModelOutput: ({ output }) => {
-      const flaggedLines =
-        output.flaggedDishes.length > 0
-          ? `\nFlagged:\n${output.flaggedDishes.map((item) => `- ${DAY_NAMES[item.day]} ${SECTION_NAMES[item.section]}: ${item.title} — ${item.reason}`).join('\n')}`
-          : '';
       const changeNote = formatChangeNote(output);
       return {
         type: 'text',
-        value: `${output.summary}${flaggedLines}${changeNote}`,
+        value: `${output.summary}${changeNote}`,
       };
     },
   });

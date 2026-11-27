@@ -10,6 +10,12 @@ import {
   type ModerationModel,
 } from '@src/moderation/content-moderation.service.js';
 import { FakeModel, type FakeModelCall } from '@nestjs/ai/testing';
+import { getModelToken as getMongooseModelToken } from '@nestjs/mongoose';
+import type { Model } from 'mongoose';
+import { AllergyVerdict, Ingredient, Recipe } from '@src/mongo/models.js';
+import { AllergyAuditService } from '@src/recipes/allergy-audit.service.js';
+import { fakeAllergyAuditModel } from './fake-allergy-audit.js';
+import { DietaryService } from '@src/recipes/dietary.service.js';
 import { configureApp } from '@src/app.setup.js';
 import { MongoService } from '@src/mongo/mongo.service.js';
 import { MediaService } from '@src/media/media.service.js';
@@ -100,7 +106,29 @@ export async function createE2eApp(
   process.env.DATABASE_URL = createTestMongoUrl(prefix);
   let builder = Test.createTestingModule({ imports: [AppModule] })
     .overrideProvider(CONTENT_MODERATION_MODEL)
-    .useValue(fakeReviewer);
+    .useValue(fakeReviewer)
+    .overrideProvider(AllergyAuditService)
+    .useFactory({
+      factory: (
+        verdicts: Model<AllergyVerdict>,
+        recipes: Model<Recipe>,
+        ingredients: Model<Ingredient>,
+        dietary: DietaryService,
+      ) =>
+        new AllergyAuditService(
+          fakeAllergyAuditModel(),
+          verdicts,
+          recipes,
+          ingredients,
+          dietary,
+        ),
+      inject: [
+        getMongooseModelToken(AllergyVerdict.name),
+        getMongooseModelToken(Recipe.name),
+        getMongooseModelToken(Ingredient.name),
+        DietaryService,
+      ],
+    });
   if (process.env.TEST_USE_REAL_SERVICES !== 'true') {
     builder = builder
       .overrideProvider(QdrantService)

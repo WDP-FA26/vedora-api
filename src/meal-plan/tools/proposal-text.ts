@@ -11,7 +11,7 @@ export function describeProblem(problem: MealPlanProblemDto): string {
     case 'UNKNOWN_RECIPE':
       return `- ${day}: a recipe id does not exist; use ids from searchRecipes.`;
     case 'AVOIDED_INGREDIENT':
-      return `- ${day}: "${recipes}" has ${problem.ingredients.join(', ')}, which the user does not eat.`;
+      return `- ${day}: "${recipes}" does not fit the user's allergy profile: ${problem.reason ?? 'flagged by the allergy check'}.`;
     case 'DAY_CONFLICT':
       return `- ${day}: ${problem.ingredients.join(' and ')} must not be eaten in the same meal (${problem.reason ?? 'incompatible'}); they come from: ${recipes}.`;
   }

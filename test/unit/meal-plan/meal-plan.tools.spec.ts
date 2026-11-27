@@ -1,4 +1,3 @@
-import { MockLanguageModelV4 } from 'ai/test';
 import { z } from 'zod';
 import { type DeepMockProxy, mockDeep } from 'vitest-mock-extended';
 import type { MealPlanDto } from '@src/meal-plan/dto/meal-plan.dto.js';
@@ -197,7 +196,7 @@ describe('Meal planner AI tools', () => {
           { name: 'Hành lá', quantity: null, unit: null, note: 'thái nhỏ' },
         ],
         steps: ['Chiên đậu', 'Sốt cà'],
-        avoidedIngredients: [],
+        allergyWarning: null,
       };
       mealPlan.recipeInstructions.mockResolvedValue(recipe);
 
@@ -235,13 +234,13 @@ describe('Meal planner AI tools', () => {
             { name: 'Chanh dây', quantity: 1, unit: 'quả', note: null },
           ],
           steps: ['Pha trà'],
-          avoidedIngredients: ['Chanh dây'],
+          allergyWarning: 'Chanh dây là thứ người dùng dị ứng.',
         },
       });
       expect(modelOut).toEqual({
         type: 'text',
         value:
-          'Trà chanh dây\nAVOIDED: the user avoids Chanh dây. Warn them before anything else, and never put this recipe in their plan.\n1 khẩu phần | 5 phút\nNguyên liệu:\n- Chanh dây: 1 quả\nCách làm:\n1. Pha trà',
+          'Trà chanh dây\nAVOIDED: Chanh dây là thứ người dùng dị ứng. Warn the user before anything else, and never put this recipe in their plan.\n1 khẩu phần | 5 phút\nNguyên liệu:\n- Chanh dây: 1 quả\nCách làm:\n1. Pha trà',
       });
     });
 
@@ -267,7 +266,7 @@ describe('Meal planner AI tools', () => {
           minutes: 15,
           ingredients: ['Đậu hũ', 'Cà chua'],
           description: 'Món mặn đậm đà',
-          avoidedIngredients: [],
+          allergyWarning: null,
         },
         {
           id: 'rec-2',
@@ -276,7 +275,7 @@ describe('Meal planner AI tools', () => {
           minutes: null,
           ingredients: ['Nấm'],
           description: null,
-          avoidedIngredients: ['Nấm'],
+          allergyWarning: 'Có nấm',
         },
       ];
       mealPlan.suggestions.mockResolvedValue(suggestions);
@@ -307,7 +306,7 @@ describe('Meal planner AI tools', () => {
       expect(modelOut).toEqual({
         type: 'text',
         value:
-          'rec-1 | Đậu hũ sốt cà | STIR_FRY | 15 phút | Đậu hũ, Cà chua | Món mặn đậm đà\nrec-2 | Canh nấm | chưa phân loại | ? phút | Nấm | AVOIDED: Nấm',
+          'rec-1 | Đậu hũ sốt cà | STIR_FRY | 15 phút | Đậu hũ, Cà chua | Món mặn đậm đà\nrec-2 | Canh nấm | chưa phân loại | ? phút | Nấm | AVOIDED: Có nấm',
       });
     });
 
@@ -729,8 +728,8 @@ describe('Meal planner AI tools', () => {
             day: Weekday.TUE,
             recipes: ['Canh hành'],
             recipeIds: ['rec-2'],
-            ingredients: ['Hành'],
-            reason: null,
+            ingredients: [],
+            reason: 'Có hành',
           },
           {
             code: 'DAY_CONFLICT' as const,
@@ -768,7 +767,7 @@ describe('Meal planner AI tools', () => {
         value: [
           'Nothing was saved. Fix these and call again:',
           '- Thứ Hai: a recipe id does not exist; use ids from searchRecipes.',
-          '- Thứ Ba: "Canh hành" has Hành, which the user does not eat.',
+          '- Thứ Ba: "Canh hành" does not fit the user\'s allergy profile: Có hành.',
           '- Thứ Tư: Đậu hũ and Rau bina must not be eaten in the same meal (Oxalat cản canxi); they come from: Đậu hũ, Rau bina.',
           '- Thứ Năm: A and B must not be eaten in the same meal (incompatible); they come from: Món A, Món B.',
           'Not applied:',
@@ -846,44 +845,8 @@ describe('Meal planner AI tools', () => {
       });
     });
 
-    it('detects natural-language allergens via keyword + subagent audit and swaps flagged dishes', async () => {
+    it('removes dishes the allergy check flags and refills the slot', async () => {
       const safeId = 'd1a2d3e4-0000-4000-8000-000000000002';
-      const mockModel = new MockLanguageModelV4({
-        doGenerate: () =>
-          Promise.resolve({
-            content: [
-              {
-                type: 'text' as const,
-                text: JSON.stringify({
-                  flagged: [
-                    {
-                      recipeId: recipe1,
-                      reason: 'Món gỏi có đậu phộng rang gây dị ứng',
-                    },
-                  ],
-                  summary:
-                    'Phát hiện 1 món có đậu phộng và đã đổi sang món an toàn.',
-                }),
-              },
-            ],
-            finishReason: { unified: 'stop' as const, raw: undefined },
-            usage: {
-              inputTokens: {
-                total: 10,
-                noCache: 10,
-                cacheRead: undefined,
-                cacheWrite: undefined,
-              },
-              outputTokens: {
-                total: 10,
-                text: 10,
-                reasoning: undefined,
-              },
-            },
-            warnings: [],
-          }),
-      });
-
       const savedPlan: MealPlanDto = {
         weekStart: WEEK,
         currentWeekStart: WEEK,
@@ -965,28 +928,14 @@ describe('Meal planner AI tools', () => {
         allSlotsAlreadyFilled: false,
       };
       mealPlan.find.mockResolvedValue(savedPlan);
-      mealPlan.recipeInstructions.mockResolvedValue({
-        id: recipe1,
-        title: 'Gỏi ngó sen',
-        description: null,
-        servings: 2,
-        minutes: 20,
-        ingredients: [
-          { name: 'Đậu phộng', quantity: 25, unit: 'g', note: null },
-        ],
-        steps: ['Trộn gỏi và rắc đậu phộng'],
-        avoidedIngredients: [],
+      mealPlan.allergyCheck.mockResolvedValue({
+        unsafe: new Map([[recipe1, 'Món gỏi có đậu phộng rang']]),
+        unchecked: new Set(),
       });
       mealPlan.editPlan.mockResolvedValue(removed);
       mealPlan.fillPlan.mockResolvedValue(replaced);
 
-      const toolDef = verifyMealPlanAllergiesTool(
-        mockModel,
-        mealPlan,
-        userId,
-        WEEK,
-        { allergies: ['Dị ứng đậu phộng nặng'], preferences: [] },
-      );
+      const toolDef = verifyMealPlanAllergiesTool(mealPlan, userId, WEEK);
 
       const output = await toolDef.execute?.({}, execOptions);
       if (!output || Symbol.asyncIterator in output) {
@@ -995,6 +944,7 @@ describe('Meal planner AI tools', () => {
       expect(output.verified).toBe(true);
       expect(output.flaggedDishes).toHaveLength(1);
       expect(output.flaggedDishes[0].recipeId).toBe(recipe1);
+      expect(mealPlan.allergyCheck).toHaveBeenCalledWith(userId, [recipe1]);
       expect(mealPlan.editPlan).toHaveBeenCalledWith(userId, WEEK, [
         {
           op: 'remove',
@@ -1055,18 +1005,10 @@ describe('Meal planner AI tools', () => {
         problems: [],
       };
       mealPlan.find.mockResolvedValue(savedPlan);
-      mealPlan.recipeInstructions.mockImplementation((_user, id) =>
-        Promise.resolve({
-          id,
-          title: id === recipe1 ? 'Flagged dish' : 'Kept dish',
-          description: null,
-          servings: 2,
-          minutes: 20,
-          ingredients: [],
-          steps: ['Nấu'],
-          avoidedIngredients: id === recipe1 ? ['Hành'] : [],
-        }),
-      );
+      mealPlan.allergyCheck.mockResolvedValue({
+        unsafe: new Map([[recipe1, 'Có hành']]),
+        unchecked: new Set(),
+      });
       const noChange = {
         weekStart: WEEK,
         days: [],
@@ -1081,13 +1023,7 @@ describe('Meal planner AI tools', () => {
         allSlotsAlreadyFilled: true,
       });
 
-      const toolDef = verifyMealPlanAllergiesTool(
-        new MockLanguageModelV4(),
-        mealPlan,
-        userId,
-        WEEK,
-        { allergies: ['Không ăn được hành'], preferences: [] },
-      );
+      const toolDef = verifyMealPlanAllergiesTool(mealPlan, userId, WEEK);
       await toolDef.execute?.({}, execOptions);
 
       expect(mealPlan.fillPlan).toHaveBeenCalledWith(
@@ -1137,25 +1073,12 @@ describe('Meal planner AI tools', () => {
         problems: [],
       };
       mealPlan.find.mockResolvedValue(savedPlan);
-      mealPlan.recipeInstructions.mockResolvedValue({
-        id: recipe1,
-        title: 'Canh hành',
-        description: null,
-        servings: 2,
-        minutes: 20,
-        ingredients: [{ name: 'Hành', quantity: 1, unit: 'củ', note: null }],
-        steps: ['Nấu canh'],
-        avoidedIngredients: ['Hành'],
+      mealPlan.allergyCheck.mockResolvedValue({
+        unsafe: new Map([[recipe1, 'Có hành']]),
+        unchecked: new Set(),
       });
 
-      const spyModel = new MockLanguageModelV4();
-      const toolDef = verifyMealPlanAllergiesTool(
-        spyModel,
-        mealPlan,
-        userId,
-        WEEK,
-        { allergies: ['Dị ứng đậu phộng', 'Kiêng hành'], preferences: [] },
-      );
+      const toolDef = verifyMealPlanAllergiesTool(mealPlan, userId, WEEK);
       const output = await toolDef.execute?.(
         { replaceFlagged: false },
         execOptions,
@@ -1165,19 +1088,74 @@ describe('Meal planner AI tools', () => {
       }
 
       expect(output.safe).toBe(false);
-      expect(spyModel.doGenerateCalls).toHaveLength(0);
       expect(output.flaggedDishes).toEqual([
         {
           day: Weekday.MON,
           section: MealSection.DINNER,
           recipeId: recipe1,
           title: 'Canh hành',
-          reason: 'Chứa thành phần tránh: Hành',
+          reason: 'Có hành',
         },
       ]);
+      expect(output.summary).toContain(
+        '1 món không hợp hồ sơ dị ứng:\n- Canh hành (Thứ Hai tối): Có hành',
+      );
       expect(output.applied).toBeUndefined();
       expect(mealPlan.editPlan).not.toHaveBeenCalled();
       expect(mealPlan.fillPlan).not.toHaveBeenCalled();
+    });
+
+    it('keeps dishes the check could not reach and says they are unchecked', async () => {
+      const plan = {
+        weekStart: WEEK,
+        currentWeekStart: WEEK,
+        today: WEEK,
+        maxWeekStart: '2026-12-14',
+        minWeekStart: WEEK,
+        editable: true,
+        days: Object.values(Weekday).map((day) => ({
+          day,
+          date: WEEK,
+          editable: true,
+          sections: Object.values(MealSection).map((section) => ({
+            section,
+            recipes:
+              day === Weekday.TUE && section === MealSection.LUNCH
+                ? [
+                    {
+                      id: recipe1,
+                      title: 'Canh chua',
+                      imageUrl: null,
+                      tag: RecipeTag.SOUP,
+                      servings: 2,
+                      prepMinutes: 10,
+                      cookMinutes: 10,
+                      ingredients: [],
+                      steps: ['Nấu'],
+                    },
+                  ]
+                : [],
+          })),
+        })),
+        problems: [],
+      };
+      mealPlan.find.mockResolvedValue(plan);
+      mealPlan.allergyCheck.mockResolvedValue({
+        unsafe: new Map(),
+        unchecked: new Set([recipe1]),
+      });
+
+      const toolDef = verifyMealPlanAllergiesTool(mealPlan, userId, WEEK);
+      const output = await toolDef.execute?.({}, execOptions);
+      if (!output || Symbol.asyncIterator in output) {
+        throw new Error('expected allergy verification output');
+      }
+
+      expect(output.safe).toBe(false);
+      expect(output.flaggedDishes).toEqual([]);
+      expect(output.uncheckedDishes).toEqual(['Canh chua']);
+      expect(output.summary).toContain('Chưa kiểm tra được Canh chua');
+      expect(mealPlan.editPlan).not.toHaveBeenCalled();
     });
   });
 
@@ -1204,15 +1182,15 @@ describe('Meal planner AI tools', () => {
             day: Weekday.TUE,
             recipes: ['Canh hành'],
             recipeIds: ['rec-2'],
-            ingredients: ['Hành'],
-            reason: null,
+            ingredients: [],
+            reason: 'Có hành',
           },
         ],
         applied: true,
       });
       expect(text).toContain("Saved to the user's plan");
       expect(text).toContain(
-        'Left out, not saved (tell the user why, or pick other dishes):\n- Thứ Ba: "Canh hành" has Hành, which the user does not eat.',
+        'Left out, not saved (tell the user why, or pick other dishes):\n- Thứ Ba: "Canh hành" does not fit the user\'s allergy profile: Có hành.',
       );
     });
   });

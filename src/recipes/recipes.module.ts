@@ -6,6 +6,7 @@ import {
 } from './admin-ingredients.controller.js';
 import { AdminRecipeCategoriesController } from './admin-recipe-categories.controller.js';
 import { AdminRecipesController } from './admin-recipes.controller.js';
+import { AllergyAuditService } from './allergy-audit.service.js';
 import { DietaryController } from './dietary.controller.js';
 import { DietaryService } from './dietary.service.js';
 import { IncompatibilityRulesService } from './incompatibility-rules.service.js';
@@ -43,10 +44,11 @@ import { RecipeDraftsService } from './drafts/recipe-drafts.service.js';
     RecipeCatalogService,
     RecipeFavoritesService,
     DietaryService,
+    AllergyAuditService,
     RecipeRatingsService,
     RecipeDraftsService,
     RecipeDraftGenerator,
   ],
-  exports: [IncompatibilityRulesService, DietaryService],
+  exports: [IncompatibilityRulesService, DietaryService, AllergyAuditService],
 })
 export class RecipesModule {}

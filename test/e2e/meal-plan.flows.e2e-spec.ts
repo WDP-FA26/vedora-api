@@ -307,7 +307,8 @@ describe('Meal plan and shopping list flows (e2e)', () => {
         expect.objectContaining({
           code: 'AVOIDED_INGREDIENT',
           recipeIds: [tofuDish.id],
-          ingredients: ['Đậu hũ'],
+          ingredients: [],
+          reason: 'Có đậu hũ.',
         }),
       ]);
     });

@@ -19,6 +19,7 @@ import { RecipeRelationsService } from '@src/recipes/recipe-relations.service.js
 import { RecipeFavoritesService } from '@src/recipes/recipe-favorites.service.js';
 import { IncompatibilityRulesService } from '@src/recipes/incompatibility-rules.service.js';
 import { DietaryService } from '@src/recipes/dietary.service.js';
+import { fakeAllergyAuditProviders } from '@test/support/fake-allergy-audit.js';
 import type { FavoriteRecipeDto } from '@src/recipes/dto/recipe-favorite.dto.js';
 import type { PaginatedResponseDto } from '@src/common/pagination/index.js';
 import {
@@ -54,6 +55,7 @@ describe('Recipe favorites with MongoDB', () => {
         RecipeRelationsService,
         IncompatibilityRulesService,
         DietaryService,
+        ...fakeAllergyAuditProviders,
         {
           provide: ConfigService,
           useValue: new ConfigService({ API_PREFIX: 'api/v1' }),

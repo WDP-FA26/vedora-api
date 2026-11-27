@@ -16,6 +16,7 @@ import {
 import { MongoModule } from '@src/mongo/mongo.module.js';
 import { MongoService } from '@src/mongo/mongo.service.js';
 import { DietaryService } from '@src/recipes/dietary.service.js';
+import { AllergyAuditService } from '@src/recipes/allergy-audit.service.js';
 import { IncompatibilityRulesService } from '@src/recipes/incompatibility-rules.service.js';
 import {
   createIngredient,
@@ -104,6 +105,13 @@ describe('MealPlannerChatHistoryService', () => {
         MealPlanService,
         DietaryService,
         IncompatibilityRulesService,
+        {
+          provide: AllergyAuditService,
+          useValue: {
+            check: () =>
+              Promise.resolve({ unsafe: new Map(), unchecked: new Set() }),
+          },
+        },
       ],
     }).compile();
     app = moduleRef.createNestApplication();

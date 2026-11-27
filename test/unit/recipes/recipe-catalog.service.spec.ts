@@ -25,6 +25,25 @@ import {
   dropTestDatabase,
   prepareTestDatabase,
 } from '@test/support/mongo-test-db.js';
+import {
+  type AllergyCheck,
+  AllergyAuditService,
+} from '@src/recipes/allergy-audit.service.js';
+
+const flagged = new Map<string, string>();
+const fakeAllergyAudit = {
+  check: (
+    _userId: string,
+    recipeIds: readonly string[],
+  ): Promise<AllergyCheck> => {
+    const unsafe = new Map<string, string>();
+    for (const id of recipeIds) {
+      const reason = flagged.get(id);
+      if (reason !== undefined) unsafe.set(id, reason);
+    }
+    return Promise.resolve({ unsafe, unchecked: new Set<string>() });
+  },
+};
 
 const USER_ID = '4a1e32e4-e18e-4dd7-8b4a-246ef2113ff2';
 const TOFU_ID = 'a1a2d3e4-0000-4000-8000-000000000001';
@@ -55,6 +74,7 @@ describe('RecipeCatalogService', () => {
         RecipeRelationsService,
         IncompatibilityRulesService,
         DietaryService,
+        { provide: AllergyAuditService, useValue: fakeAllergyAudit },
       ],
     }).compile();
     app = moduleRef.createNestApplication();
@@ -196,6 +216,8 @@ describe('RecipeCatalogService', () => {
       { title: 'Nấm xào tỏi', prepMinutes: 5, cookMinutes: 10 },
       [GARLIC_ID, MUSHROOM_ID],
     );
+    flagged.set(avoidedDirect.id, 'Có rau bina');
+    flagged.set(avoidedGroup.id, 'Tỏi thuộc ngũ vị tân');
     const internalConflict = await createRecipe(
       mongo,
       { title: 'Đậu hũ xào nấm', prepMinutes: 5, cookMinutes: 10 },

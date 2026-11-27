@@ -19,6 +19,11 @@ import {
 } from '../mongo/models.js';
 import { MongoService } from '../mongo/mongo.service.js';
 import { allExist } from '../mongo/references.js';
+import {
+  AllergyAuditService,
+  allergyWarningOf,
+  isAllergySafe,
+} from '../recipes/allergy-audit.service.js';
 import { DietaryService } from '../recipes/dietary.service.js';
 import { IncompatibilityRulesService } from '../recipes/incompatibility-rules.service.js';
 import {
@@ -90,7 +95,7 @@ export interface RecipeSuggestion {
   nutritionPillars?: NutritionPillar[];
   ingredients: string[];
   description?: string | null;
-  avoidedIngredients: string[];
+  allergyWarning: string | null;
 }
 
 export interface RecipeInstructions {
@@ -108,7 +113,7 @@ export interface RecipeInstructions {
     note: string | null;
   }[];
   steps: string[];
-  avoidedIngredients: string[];
+  allergyWarning: string | null;
 }
 
 export type MealPlanPreview = MealPlanPreviewDto;
@@ -214,7 +219,12 @@ export class MealPlanService {
     private readonly dietary: DietaryService,
     private readonly rules: IncompatibilityRulesService,
     private readonly mongo: MongoService,
+    private readonly allergy: AllergyAuditService,
   ) {}
+
+  allergyCheck(userId: string, recipeIds: readonly string[]) {
+    return this.allergy.check(userId, recipeIds);
+  }
 
   async find(userId: string, weekStart?: string): Promise<MealPlanDto> {
     const week = currentMealWeek(weekStart);
@@ -404,13 +414,16 @@ export class MealPlanService {
     nutritionGoal: NutritionGoal | null;
     dailyCalorieTarget: number | null;
   }> {
-    const [allergyKeywords, nutrition, rows] = await Promise.all([
-      this.dietary.allergyKeywords(userId),
+    const [nutrition, rows] = await Promise.all([
       Promise.resolve(this.dietary.findNutrition(userId)).then(
         (value) => value ?? null,
       ),
       this.recipeRows(await this.recipes.find().sort({ title: 1 }).exec()),
     ]);
+    const allergy = await this.allergy.check(
+      userId,
+      rows.map(({ id }) => id),
+    );
     const ingredientsById = new Map<string, string[]>();
     const caloriesById = new Map<string, number>();
     const tagById = new Map<string, RecipeTag | null>();
@@ -429,9 +442,7 @@ export class MealPlanService {
 
     const eligible: RecipeRow[] = [];
     for (const recipe of rows) {
-      if (allergyKeywords.some((word) => matchesText(recipe, word, true))) {
-        continue;
-      }
+      if (!isAllergySafe(allergy, recipe.id)) continue;
       if (allowed && !allowed.has(recipe.id)) continue;
       if (denied.has(recipe.id)) continue;
       if (tags && (recipe.tag === null || !tags.includes(recipe.tag))) continue;
@@ -940,7 +951,6 @@ export class MealPlanService {
     query: string | undefined,
     filters: SuggestionFilters = {},
   ): Promise<RecipeSuggestion[]> {
-    const avoided = await this.dietary.allergyKeywords(userId);
     const text = query?.trim().toLowerCase() ?? '';
     const excluded = (filters.exclude ?? [])
       .map((word) => word.trim().toLowerCase())
@@ -983,9 +993,13 @@ export class MealPlanService {
       if (matching.length === MAX_SUGGESTIONS * 2) break;
     }
 
-    const conflicts = await this.rules.findConflictsForEach(
-      matching.map(ingredientIds),
-    );
+    const [conflicts, allergy] = await Promise.all([
+      this.rules.findConflictsForEach(matching.map(ingredientIds)),
+      this.allergy.check(
+        userId,
+        matching.map(({ id }) => id),
+      ),
+    ]);
     const edible: RecipeSuggestion[] = [];
     const flagged: RecipeSuggestion[] = [];
     matching.forEach((recipe, index) => {
@@ -1002,9 +1016,9 @@ export class MealPlanService {
           ({ ingredient }) => ingredient.name,
         ),
         description: recipe.description,
-        avoidedIngredients: avoidedNames(recipe, avoided),
+        allergyWarning: allergyWarningOf(allergy, recipe.id),
       };
-      if (suggestion.avoidedIngredients.length > 0) flagged.push(suggestion);
+      if (suggestion.allergyWarning !== null) flagged.push(suggestion);
       else edible.push(suggestion);
     });
     return [...edible, ...flagged].slice(0, MAX_SUGGESTIONS);
@@ -1017,7 +1031,7 @@ export class MealPlanService {
     const row = await this.recipes.findOne({ _id: recipeId }).exec();
     if (!row) return null;
     const [recipe] = await this.recipeRows([row]);
-    const avoided = await this.dietary.allergyKeywords(userId);
+    const allergy = await this.allergy.check(userId, [recipe.id]);
     const hasTime = recipe.prepMinutes !== null || recipe.cookMinutes !== null;
     const nutritionMeta = recipeNutrition(recipe);
     return {
@@ -1039,7 +1053,7 @@ export class MealPlanService {
         }),
       ),
       steps: recipe.steps,
-      avoidedIngredients: avoidedNames(recipe, avoided),
+      allergyWarning: allergyWarningOf(allergy, recipe.id),
     };
   }
 
@@ -1118,20 +1132,22 @@ export class MealPlanService {
       return recipes.length > 0 ? [{ day, recipes }] : [];
     });
     if (avoidedDays.length > 0) {
-      const avoided = await this.dietary.allergyKeywords(userId);
+      const allergy = await this.allergy.check(
+        userId,
+        avoidedDays.flatMap(({ recipes }) => recipes.map(({ id }) => id)),
+      );
       for (const { day, recipes } of avoidedDays) {
         for (const recipe of recipes) {
-          const hits = avoidedNames(recipe, avoided);
-          if (hits.length > 0) {
-            problems.push({
-              code: 'AVOIDED_INGREDIENT',
-              day,
-              recipes: [recipe.title],
-              recipeIds: [recipe.id],
-              ingredients: hits,
-              reason: null,
-            });
-          }
+          const reason = allergy.unsafe.get(recipe.id);
+          if (reason === undefined) continue;
+          problems.push({
+            code: 'AVOIDED_INGREDIENT',
+            day,
+            recipes: [recipe.title],
+            recipeIds: [recipe.id],
+            ingredients: [],
+            reason,
+          });
         }
       }
     }
@@ -1256,24 +1272,6 @@ function toRecipeDto(recipe: RecipeRow): MealRecipeDto {
       }),
     ),
   };
-}
-
-function avoidedNames(
-  recipe: RecipeRow,
-  allergyKeywords: readonly string[],
-): string[] {
-  if (allergyKeywords.length === 0) return [];
-  const names: string[] = [];
-  for (const { ingredient } of recipe.ingredients) {
-    const labels = [ingredient.name, ...ingredient.aliases].map((label) =>
-      label.normalize('NFC').toLowerCase(),
-    );
-    const matches = allergyKeywords.some((keyword) =>
-      labels.some((label) => label.includes(keyword)),
-    );
-    if (matches) names.push(ingredient.name);
-  }
-  return names;
 }
 
 const TRIM_SECTIONS: readonly {

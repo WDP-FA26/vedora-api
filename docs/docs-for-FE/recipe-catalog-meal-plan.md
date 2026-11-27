@@ -136,7 +136,7 @@ chỉnh từng ô bằng `editPlan` (`set`, `add`, `remove`, `clear`, `move`) v�
 Output của `fillSlots`, `editPlan`, `autoBalancePlan` và `verifyMealPlanAllergies` (khi nó đổi món) có cùng
 dạng thay đổi: `output.weekStart`, `output.days` (chỉ ngày đổi, đủ bốn phần, `previous` là món trước lần gọi,
 `recipes` là món sau), `output.problems` và `output.applied` (`false` khi không lưu gì). Món không tồn tại
-(`UNKNOWN_RECIPE`) hoặc có nguyên liệu khớp dị ứng của người dùng (`AVOIDED_INGREDIENT`) bị **bỏ ra**, phần còn lại vẫn được lưu;
+(`UNKNOWN_RECIPE`) hoặc không hợp hồ sơ dị ứng của người dùng (`AVOIDED_INGREDIENT`, lý do trong `reason`) bị **bỏ ra**, phần còn lại vẫn được lưu;
 hai mã đó nằm trong `output.problems` để FE ghi "Không thêm: …". `applied: false` khi không có thay đổi, hoặc mọi món
 mới đều bị bỏ. FE hiển thị thẻ "Đã cập nhật thực đơn" và tải lại `GET /meal-plan`.
 
@@ -159,8 +159,12 @@ suất cả nồi dùng cho danh sách đi chợ) và `nutritionPillars` (`PLANT
 Trợ lý lên thực đơn nhớ hai danh sách câu ngắn bằng ngôn ngữ tự nhiên, người dùng xem và sửa được trong Hồ sơ ăn uống:
 
 - `allergies`: dị ứng, không dung nạp, thứ không được ăn vì sức khoẻ hay tôn giáo ("Dị ứng đậu phộng", "Ăn chay ngũ vị tân").
-  Backend suy từ khoá dị ứng từ các dòng này để loại món khi lên thực đơn, chặn lưu món (`AVOIDED_INGREDIENT`), lọc
-  `suitableForMe` và đánh dấu món nhà hàng.
+  Backend cho LLM đọc các dòng này cùng tên, nguyên liệu, ghi chú và cách làm của từng món để chấm món nào không hợp;
+  kết quả được lưu theo người dùng và chấm lại khi các dòng dị ứng hoặc công thức thay đổi. Kết quả dùng để loại món khi
+  lên thực đơn, chặn lưu món (`AVOIDED_INGREDIENT`) và lọc `suitableForMe`. Với `AVOIDED_INGREDIENT`, `ingredients` là
+  `[]` và `reason` là lý do ngắn bằng tiếng Việt để FE hiển thị. Món chưa chấm được (LLM lỗi) không được tự xếp và bị ẩn
+  khỏi `suitableForMe`, nhưng người dùng vẫn tự lưu được. Món nhà hàng không còn được đánh dấu bằng code
+  (`avoidedMatches` không còn); trợ lý tự cảnh báo theo hồ sơ.
 - `preferences`: sở thích, thói quen lâu dài ("Không thích nấm", "Chỉ nấu bữa tối", "Nấu cho 3 người"). Chỉ trợ lý đọc.
 
 `PUT /dietary/me` nhận `{ allergies?: string[], preferences?: string[] }`, mỗi danh sách tối đa 30 dòng, mỗi dòng ≤ 200

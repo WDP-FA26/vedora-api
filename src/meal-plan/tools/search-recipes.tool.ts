@@ -94,7 +94,7 @@ function lines(recipes: RecipeSuggestion[]): string {
         nutritionPillars,
         ingredients,
         description,
-        avoidedIngredients,
+        allergyWarning,
       }) => {
         const parts = [
           id,
@@ -114,8 +114,8 @@ function lines(recipes: RecipeSuggestion[]): string {
         let line = parts.join(' | ');
         const note = description?.trim();
         if (note) line += ` | ${note}`;
-        if (avoidedIngredients.length > 0) {
-          line += ` | AVOIDED: ${avoidedIngredients.join(', ')}`;
+        if (allergyWarning !== null) {
+          line += ` | AVOIDED: ${allergyWarning}`;
         }
         return line;
       },

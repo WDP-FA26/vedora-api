@@ -11,7 +11,6 @@ import {
   calculateBmi,
   classifyAsianBmi,
   computeNutritionMetrics,
-  extractAllergyKeywords,
   inferNutritionPillars,
   resolveCaloriesPerServing,
 } from '@src/recipes/nutrition.js';
@@ -112,21 +111,5 @@ describe('nutrition helpers', () => {
       ingredientNames: ['Gạo tẻ', 'Đậu hũ'],
     });
     expect(soup).toBeLessThan(friedRice);
-  });
-
-  it('extracts allergen keywords and Vietnamese derivative families from natural-language notes', () => {
-    const soyKeywords = extractAllergyKeywords('Mình bị dị ứng đậu nành và mè');
-    expect(soyKeywords).toContain('đậu hũ');
-    expect(soyKeywords).toContain('nước tương');
-    expect(soyKeywords).toContain('hạt mè');
-
-    const peanutKeywords = extractAllergyKeywords(
-      'Không ăn được đậu phộng, kiêng ăn cay',
-    );
-    expect(peanutKeywords).toContain('đậu phộng');
-    expect(peanutKeywords).toContain('ớt');
-
-    expect(extractAllergyKeywords('   ')).toEqual([]);
-    expect(extractAllergyKeywords(null)).toEqual([]);
   });
 });

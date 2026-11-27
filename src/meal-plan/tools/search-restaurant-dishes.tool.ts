@@ -8,11 +8,10 @@ import type {
 
 export function searchRestaurantDishesTool(
   restaurantMenu: RestaurantMenuService,
-  avoidedTerms: readonly string[],
 ) {
   return tool({
     description:
-      'Search vegetarian dishes served by approved restaurants on Vedora. Use it only when the user says they want to eat out, asks about restaurants or ready-made food, or asks for restaurant dishes. Do not use it to find a replacement when the user changes a dish on their plan: restaurant dishes cannot be placed on the plan (use searchRecipes for that). Every dish returned is shown to the user as a card in the chat, so only search for what you will recommend. Returns dish details, price in VND, restaurant name, address, star rating, and any AVOIDED ingredient warning.',
+      'Search vegetarian dishes served by approved restaurants on Vedora. Use it only when the user says they want to eat out, asks about restaurants or ready-made food, or asks for restaurant dishes. Do not use it to find a replacement when the user changes a dish on their plan: restaurant dishes cannot be placed on the plan (use searchRecipes for that). Every dish returned is shown to the user as a card in the chat, so only search for what you will recommend. Returns dish details, price in VND, restaurant name, address, and star rating. Check each dish against the allergy profile in your context before recommending it.',
     inputSchema: z.object({
       query: z
         .string()
@@ -30,7 +29,7 @@ export function searchRestaurantDishesTool(
         .describe('Maximum number of restaurant dishes to return (default 8)'),
     }),
     execute: ({ query, limit }) =>
-      restaurantMenu.suggestForPlanner(query, limit ?? 8, avoidedTerms),
+      restaurantMenu.suggestForPlanner(query, limit ?? 8),
     toModelOutput: ({ output }) => ({
       type: 'text',
       value: formatLines(output),
@@ -68,9 +67,6 @@ function formatLines(dishes: PlannerRestaurantDishSuggestion[]): string {
         ),
       ];
       if (dish.description?.trim()) parts.push(dish.description.trim());
-      if (dish.avoidedMatches.length > 0) {
-        parts.push(`AVOIDED: ${dish.avoidedMatches.join(', ')}`);
-      }
       return parts.join(' | ');
     })
     .join('\n');

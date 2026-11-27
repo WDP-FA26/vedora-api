@@ -1,4 +1,4 @@
-import { promptTags } from '../../ai/prompt-tags.js';
+import { promptTags } from '../ai/prompt-tags.js';
 
 export const ALLERGY_AUDIT_INSTRUCTIONS = `You audit a Vedora user's plant-based meal plan for allergens. For each dish inside <recipes> (title, ingredients, notes, and cooking steps), check it against the user's allergy profile, restrictions, and avoided foods inside <allergy_profile>. Flagged dishes will be automatically replaced in the user's calendar. Write any user-facing reasons in concise Vietnamese.
 

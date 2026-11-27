@@ -56,7 +56,6 @@ export interface PlannerRestaurantDishSuggestion {
     averageRating: number | null;
     reviewCount: number;
   };
-  avoidedMatches: string[];
 }
 
 function toItemDto(item: RestaurantMenuItem): RestaurantMenuItemDto {
@@ -74,24 +73,6 @@ function toItemDto(item: RestaurantMenuItem): RestaurantMenuItemDto {
     createdAt: item.createdAt,
     updatedAt: item.updatedAt,
   };
-}
-
-function findAvoidedMatches(
-  item: { name: string; category: string | null; description: string | null },
-  avoidedTerms: readonly string[],
-): string[] {
-  if (avoidedTerms.length === 0) return [];
-  const haystack = [item.name, item.category, item.description]
-    .filter((part): part is string => Boolean(part))
-    .join(' ')
-    .toLowerCase();
-  const matches: string[] = [];
-  for (const term of avoidedTerms) {
-    const clean = term.trim().toLowerCase();
-    if (!clean || !haystack.includes(clean)) continue;
-    if (!matches.includes(term)) matches.push(term);
-  }
-  return matches;
 }
 
 @Injectable()
@@ -300,7 +281,6 @@ export class RestaurantMenuService {
   async suggestForPlanner(
     query: string | undefined,
     limit: number,
-    avoidedTerms: readonly string[],
   ): Promise<PlannerRestaurantDishSuggestion[]> {
     const trimmed = query?.trim();
     let candidates: RestaurantMenuSearchItemDto[];
@@ -322,11 +302,9 @@ export class RestaurantMenuService {
       candidates = candidates.slice(0, limit);
     }
 
-    const edible: PlannerRestaurantDishSuggestion[] = [];
-    const flagged: PlannerRestaurantDishSuggestion[] = [];
+    const suggestions: PlannerRestaurantDishSuggestion[] = [];
     for (const item of candidates) {
-      const avoidedMatches = findAvoidedMatches(item, avoidedTerms);
-      const entry: PlannerRestaurantDishSuggestion = {
+      suggestions.push({
         id: item.id,
         name: item.name,
         category: item.category,
@@ -342,12 +320,9 @@ export class RestaurantMenuService {
           averageRating: item.restaurant.averageRating,
           reviewCount: item.restaurant.reviewCount,
         },
-        avoidedMatches,
-      };
-      if (avoidedMatches.length > 0) flagged.push(entry);
-      else edible.push(entry);
+      });
     }
-    return [...edible, ...flagged];
+    return suggestions;
   }
 
   private async hydrateSearchItems(

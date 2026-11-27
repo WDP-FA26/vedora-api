@@ -172,17 +172,6 @@ describe('DietaryService', () => {
     expect(stored?.allergies).toHaveLength(3);
   });
 
-  it('extracts allergen keywords from the allergy lines', async () => {
-    await service.replace(USER_ID, {
-      allergies: ['Dị ứng đậu nành'],
-      preferences: ['Không thích nấm'],
-    });
-
-    const keywords = await service.allergyKeywords(USER_ID);
-    expect(keywords).toContain('đậu hũ');
-    expect(keywords).not.toContain('nấm');
-  });
-
   it('saves nutrition profile, logs weight check-ins by date, and refuses unsafe underweight loss goals', async () => {
     const saved = await service.saveNutrition(USER_ID, {
       heightCm: 165,

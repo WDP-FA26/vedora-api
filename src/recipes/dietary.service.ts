@@ -22,7 +22,6 @@ import {
 import {
   calculateBmi,
   computeNutritionMetrics,
-  extractAllergyKeywords,
   todayDateInZone,
 } from './nutrition.js';
 import { InvalidInputException } from '../common/exceptions/invalid-input.exception.js';
@@ -66,11 +65,6 @@ export class DietaryService {
       allergies: user.allergies ?? [],
       preferences: user.foodPreferences ?? [],
     };
-  }
-
-  async allergyKeywords(userId: string): Promise<string[]> {
-    const { allergies } = await this.find(userId);
-    return extractAllergyKeywords(allergies.join('\n'));
   }
 
   async replace(

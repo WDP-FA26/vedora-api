@@ -32,9 +32,9 @@ function format(recipe: RecipeInstructions | null): string {
   if (recipe === null) return 'Recipe not found.';
 
   const lines: string[] = [recipe.title];
-  if (recipe.avoidedIngredients.length > 0) {
+  if (recipe.allergyWarning !== null) {
     lines.push(
-      `AVOIDED: the user avoids ${recipe.avoidedIngredients.join(', ')}. Warn them before anything else, and never put this recipe in their plan.`,
+      `AVOIDED: ${recipe.allergyWarning} Warn the user before anything else, and never put this recipe in their plan.`,
     );
   }
   if (recipe.description !== null) {

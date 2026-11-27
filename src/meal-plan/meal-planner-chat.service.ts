@@ -33,7 +33,6 @@ import { NUTRITION_POLICY } from '../ai/guardrails/policies/nutrition.js';
 import { searchKnowledgeTool } from '../knowledge/tools/search-knowledge.tool.js';
 import { KnowledgeSearchService } from '../knowledge/retrieval/knowledge-search.service.js';
 import { DietaryService } from '../recipes/dietary.service.js';
-import { extractAllergyKeywords } from '../recipes/nutrition.js';
 import type { PlannerToolOutputDto } from './dto/meal-plan.dto.js';
 import type { MealPlanVoiceScreenDto } from './dto/meal-plan-voice.dto.js';
 import { MealLogService } from './meal-log/meal-log.service.js';
@@ -310,10 +309,8 @@ export class MealPlannerChatService {
     voice,
     allowWebSearch,
     screen,
-    memory,
     nutrition,
     allergyLines,
-    allergyKeywords,
     onAllergiesSaved,
   }: {
     userId: string;
@@ -322,10 +319,8 @@ export class MealPlannerChatService {
     voice: boolean;
     allowWebSearch: boolean;
     screen?: MealPlanVoiceScreenDto;
-    memory: { allergies: string[]; preferences: string[] };
     nutrition: Awaited<ReturnType<DietaryService['findNutrition']>> | null;
     allergyLines: string[];
-    allergyKeywords: string[];
     onAllergiesSaved: (allergies: string[]) => void;
   }): ToolSet {
     const agentTools: ToolSet = {
@@ -347,17 +342,14 @@ export class MealPlannerChatService {
         allergyLines,
       ),
       verifyMealPlanAllergies: verifyMealPlanAllergiesTool(
-        this.model,
         this.mealPlan,
         userId,
         toolWeek,
-        memory,
       ),
       ...(this.restaurantMenu
         ? {
             searchRestaurantDishes: searchRestaurantDishesTool(
               this.restaurantMenu,
-              allergyKeywords,
             ),
           }
         : {}),
@@ -412,10 +404,8 @@ export class MealPlannerChatService {
       toolWeek: currentMealWeek().weekStart,
       voice: true,
       allowWebSearch: false,
-      memory: { allergies: [], preferences: [] },
       nutrition: null,
       allergyLines: [],
-      allergyKeywords: [],
       onAllergiesSaved: () => undefined,
     });
     const { instructions, ...callOptions } = PromptCache.agent({
@@ -875,18 +865,10 @@ export class MealPlannerChatService {
         plan.weekStart < plan.currentWeekStart
           ? plan.currentWeekStart
           : plan.weekStart;
-      const allergyKeywords = extractAllergyKeywords(
-        memory.allergies.join('\n'),
-      );
       const allergyLines = [...memory.allergies];
       const onAllergiesSaved = (allergies: string[]) => {
         memory.allergies = allergies;
         allergyLines.splice(0, allergyLines.length, ...allergies);
-        allergyKeywords.splice(
-          0,
-          allergyKeywords.length,
-          ...extractAllergyKeywords(allergies.join('\n')),
-        );
       };
       const plannerContext = buildPlannerContext({ memory, plan, nutrition });
       const dynamicContext = screenText
@@ -899,10 +881,8 @@ export class MealPlannerChatService {
         voice,
         allowWebSearch,
         screen,
-        memory,
         nutrition,
         allergyLines,
-        allergyKeywords,
         onAllergiesSaved,
       });
       const agent = new ToolLoopAgent({

@@ -16,7 +16,7 @@ import {
   totalMinutes,
 } from './dto/recipe-catalog.dto.js';
 import { toRecipeCard } from './dto/recipe.dto.js';
-import { DietaryService } from './dietary.service.js';
+import { AllergyAuditService, isAllergySafe } from './allergy-audit.service.js';
 import { IncompatibilityRulesService } from './incompatibility-rules.service.js';
 import {
   RecipeRelationsService,
@@ -34,7 +34,7 @@ export class RecipeCatalogService {
     private readonly favorites: Model<RecipeFavorite>,
     private readonly relations: RecipeRelationsService,
     private readonly rules: IncompatibilityRulesService,
-    private readonly dietary: DietaryService,
+    private readonly allergy: AllergyAuditService,
   ) {}
 
   async list(
@@ -118,11 +118,11 @@ export class RecipeCatalogService {
       });
     }
     if (query.suitableForMe && userId) {
-      const keywords = await this.dietary.allergyKeywords(userId);
-      const allergenIds = await this.allergenIngredientIds(keywords);
-      matching = matching.filter(({ ingredients }) =>
-        ingredients.every(({ ingredientId }) => !allergenIds.has(ingredientId)),
+      const allergy = await this.allergy.check(
+        userId,
+        matching.map(({ id }) => id),
       );
+      matching = matching.filter(({ id }) => isAllergySafe(allergy, id));
       const conflicts = await this.rules.findConflictsForEach(
         matching.map(({ ingredients }) =>
           ingredients.map(({ ingredientId }) => ingredientId),
@@ -134,24 +134,6 @@ export class RecipeCatalogService {
       rows: matching.slice(paging.skip, paging.skip + paging.take),
       total: matching.length,
     };
-  }
-
-  private async allergenIngredientIds(
-    keywords: readonly string[],
-  ): Promise<Set<string>> {
-    if (keywords.length === 0) return new Set();
-    const clauses = keywords.flatMap((keyword) => {
-      const pattern = escapeRegExp(keyword);
-      return [
-        { name: { $regex: pattern, $options: 'i' } },
-        { aliases: { $regex: pattern, $options: 'i' } },
-      ];
-    });
-    const rows = await this.ingredients
-      .find({ $or: clauses })
-      .select('_id')
-      .exec();
-    return new Set(rows.map(({ id }) => id));
   }
 
   private async matchingRecipeIds(text: string): Promise<Set<string>> {

@@ -32,6 +32,7 @@ import { RecipeCatalogService } from '@src/recipes/recipe-catalog.service.js';
 import { RecipeRelationsService } from '@src/recipes/recipe-relations.service.js';
 import { MealPlanService } from '@src/meal-plan/meal-plan.service.js';
 import { DietaryService } from '@src/recipes/dietary.service.js';
+import { fakeAllergyAuditProviders } from '@test/support/fake-allergy-audit.js';
 import {
   createIngredient,
   createPost,
@@ -106,6 +107,7 @@ describe('Recipe catalog with MongoDB', () => {
       providers: [
         IncompatibilityRulesService,
         DietaryService,
+        ...fakeAllergyAuditProviders,
         MealPlanService,
         RecipeCatalogService,
         RecipeRelationsService,

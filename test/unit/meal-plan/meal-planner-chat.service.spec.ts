@@ -1189,7 +1189,6 @@ describe('MealPlannerChatService', () => {
           averageRating: 4.9,
           reviewCount: 15,
         },
-        avoidedMatches: [],
       },
     ]);
     steps = [
@@ -1222,7 +1221,6 @@ describe('MealPlannerChatService', () => {
     expect(restaurantMenu.suggestForPlanner).toHaveBeenCalledWith(
       'bún bò chay',
       5,
-      expect.arrayContaining(['đậu phộng']),
     );
     expect(replyText(chunks)).toBe('Mình đã gợi ý thực đơn.');
   });

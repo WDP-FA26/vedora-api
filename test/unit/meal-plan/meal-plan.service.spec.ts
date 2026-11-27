@@ -25,6 +25,10 @@ import { MongoService } from '@src/mongo/mongo.service.js';
 import { DietaryService } from '@src/recipes/dietary.service.js';
 import { IncompatibilityRulesService } from '@src/recipes/incompatibility-rules.service.js';
 import { MealPlanService } from '@src/meal-plan/meal-plan.service.js';
+import {
+  type AllergyCheck,
+  AllergyAuditService,
+} from '@src/recipes/allergy-audit.service.js';
 
 const USER_ID = '4a1e32e4-e18e-4dd7-8b4a-246ef2113ff2';
 const TOFU_ID = 'a1a2d3e4-0000-4000-8000-000000000001';
@@ -38,6 +42,21 @@ const REASON = 'Oxalat cản hấp thu canxi';
 const WEEK = '2026-11-16';
 const NEXT_WEEK = '2026-11-23';
 const MONDAY_MORNING = new Date('2026-11-15T17:30:00Z');
+const SOY_REASON = 'Đậu hũ làm từ đậu nành';
+const flagged = new Map<string, string>();
+const fakeAllergyAudit = {
+  check: (
+    _userId: string,
+    recipeIds: readonly string[],
+  ): Promise<AllergyCheck> => {
+    const unsafe = new Map<string, string>();
+    for (const id of recipeIds) {
+      const reason = flagged.get(id);
+      if (reason !== undefined) unsafe.set(id, reason);
+    }
+    return Promise.resolve({ unsafe, unchecked: new Set<string>() });
+  },
+};
 
 describe('MealPlanService', () => {
   let app: INestApplication;
@@ -95,7 +114,12 @@ describe('MealPlanService', () => {
     vi.useFakeTimers({ toFake: ['Date'], now: MONDAY_MORNING });
     const moduleRef = await Test.createTestingModule({
       imports: [MongoModule.forTest(createTestMongoUrl('mealplan'))],
-      providers: [MealPlanService, DietaryService, IncompatibilityRulesService],
+      providers: [
+        MealPlanService,
+        DietaryService,
+        IncompatibilityRulesService,
+        { provide: AllergyAuditService, useValue: fakeAllergyAudit },
+      ],
     }).compile();
     app = moduleRef.createNestApplication();
     await app.init();
@@ -105,6 +129,7 @@ describe('MealPlanService', () => {
   });
   beforeEach(async () => {
     vi.setSystemTime(MONDAY_MORNING);
+    flagged.clear();
     for (const collection of [
       'meal_plan_week_entries',
       'recipes',
@@ -229,6 +254,7 @@ describe('MealPlanService', () => {
       { _id: USER_ID },
       { $set: { allergies: ['Dị ứng đậu nành'] } },
     );
+    flagged.set(TOFU_RECIPE, SOY_REASON);
 
     const { problems } = await service.preview(USER_ID, WEEK, [
       {
@@ -246,7 +272,8 @@ describe('MealPlanService', () => {
         day: Weekday.WED,
         recipes: ['Đậu hũ sốt cà'],
         recipeIds: [TOFU_RECIPE],
-        ingredients: ['Đậu hũ'],
+        ingredients: [],
+        reason: SOY_REASON,
       }),
     ]);
   });
@@ -256,11 +283,12 @@ describe('MealPlanService', () => {
       { _id: USER_ID },
       { $set: { allergies: ['Dị ứng đậu nành'] } },
     );
+    flagged.set(TOFU_RECIPE, SOY_REASON);
 
     const recipe = await service.recipeInstructions(USER_ID, TOFU_RECIPE);
     expect(recipe).toMatchObject({
       id: TOFU_RECIPE,
-      avoidedIngredients: ['Đậu hũ'],
+      allergyWarning: SOY_REASON,
     });
 
     const attempt = await service.editPlan(USER_ID, WEEK, [
@@ -472,6 +500,7 @@ describe('MealPlanService', () => {
       { _id: USER_ID },
       { $set: { allergies: ['Dị ứng đậu nành'] } },
     );
+    flagged.set(TOFU_RECIPE, SOY_REASON);
     await ingredients().updateOne(
       { _id: RICE_ID },
       { $set: { aliases: ['brown rice'] } },
@@ -506,11 +535,9 @@ describe('MealPlanService', () => {
     );
     expect(allSafe.at(-1)).toMatchObject({
       id: TOFU_RECIPE,
-      avoidedIngredients: ['Đậu hũ'],
+      allergyWarning: SOY_REASON,
     });
-    expect(allSafe.filter((r) => r.avoidedIngredients.length > 0)).toHaveLength(
-      1,
-    );
+    expect(allSafe.filter((r) => r.allergyWarning !== null)).toHaveLength(1);
     expect(allSafe.map((r) => r.id)).not.toContain(conflictRecipeId);
     expect(allSafe.find((r) => r.id === noTimeRecipeId)?.minutes).toBeNull();
     expect(allSafe.find((r) => r.id === RICE_RECIPE)?.minutes).toBe(15);
