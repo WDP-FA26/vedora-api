@@ -15,3 +15,10 @@ export const PLANNER_REFUSALS: Record<
   harmful:
     'Mình không thể giúp yêu cầu này. Nếu bạn muốn lên thực đơn hay hỏi về món ăn thực vật, mình sẵn sàng hỗ trợ nhé.',
 };
+
+/**
+ * Said when the model's own safety filter declines a planner turn
+ * (`finishReason: 'content-filter'`), which has no server-side fallback.
+ */
+export const PLANNER_MODEL_DECLINED_REPLY =
+  'Yêu cầu này bị bộ lọc an toàn của mô hình AI chặn nên mình không trả lời được. Bạn thử diễn đạt lại, hoặc hỏi mình về thực đơn và món ăn thực vật nhé.';

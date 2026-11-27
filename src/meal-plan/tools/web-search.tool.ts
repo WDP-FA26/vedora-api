@@ -13,7 +13,7 @@ const MAX_REASON_LENGTH = 200;
 export function requestWebSearchTool() {
   return tool({
     description:
-      'Ask the user for permission to search the web for general non-nutrition topics, cooking techniques, or external recipes that searchRecipes and searchKnowledge do not cover, so they get useful information instead of only hearing that Vedora does not have it. Do not use for nutrition/calorie questions on external foods or micronutrients (call nutritionSubagent directly instead). When you also suggest similar Vedora dishes, still offer the search in the same turn. Stop after calling it: the user answers in the next turn.',
+      'Ask the user for permission to search the web for general non-nutrition topics, cooking techniques, or external recipes that searchRecipes and searchKnowledge do not cover, so they get useful information instead of only hearing that Vedora does not have it. Do not use for nutrition/calorie questions on external foods or micronutrients (call consultNutritionSubagent directly instead). When you also suggest similar Vedora dishes, still offer the search in the same turn. Stop after calling it: the user answers in the next turn.',
     inputSchema: z.object({
       reason: z
         .string()

@@ -116,6 +116,17 @@ export function consultNutritionSubagentTool(
           prompt: contextParts.join('\n'),
           abortSignal,
         });
+        // Claude Haiku 5.5 has no server-side fallback: a declined request
+        // ends with no usable answer, so tell the planner instead of passing
+        // back an empty or cut-off summary.
+        if (result.finishReason === 'content-filter') {
+          logger.warn('Nutrition subagent request was declined');
+          return {
+            status: 'declined' as const,
+            summary:
+              'Bộ lọc an toàn của mô hình AI đã từ chối câu hỏi này nên chuyên gia dinh dưỡng không có kết quả. Báo người dùng đúng như vậy và không tự đưa ra số liệu thay thế.',
+          };
+        }
         return {
           status: 'ok' as const,
           summary: result.text.trim(),

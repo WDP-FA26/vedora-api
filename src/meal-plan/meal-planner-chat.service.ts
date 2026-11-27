@@ -21,6 +21,7 @@ import {
 import { PromptCache } from '../ai/prompt-cache.js';
 import { cannedReply } from '../ai/chat/canned-reply.js';
 import { chatErrorCode } from '../ai/chat/errors.js';
+import { refusalNotice } from '../ai/chat/refusal-notice.js';
 import { replyFilter } from '../ai/chat/reply-filter.js';
 import {
   conversationModerationState,
@@ -50,7 +51,10 @@ import {
   plannerVoiceInstructions,
   voiceScreenContext,
 } from './meal-planner.prompt.js';
-import { PLANNER_REFUSALS } from './meal-planner.refusals.js';
+import {
+  PLANNER_MODEL_DECLINED_REPLY,
+  PLANNER_REFUSALS,
+} from './meal-planner.refusals.js';
 import { editPlanTool } from './tools/edit-plan.tool.js';
 import { verifyMealPlanAllergiesTool } from './tools/allergy-verifier-subagent.tool.js';
 import { askUserTool } from './tools/ask-user.tool.js';
@@ -403,10 +407,7 @@ export class MealPlannerChatService {
     if (voice) {
       // Nobody can tap an option mid-call, so choices are asked out loud.
       delete agentTools.askUser;
-      Object.assign(
-        agentTools,
-        this.voiceTools(userId, toolWeek, screen),
-      );
+      Object.assign(agentTools, this.voiceTools(userId, toolWeek, screen));
     }
     return agentTools;
   }
@@ -910,7 +911,16 @@ export class MealPlannerChatService {
         timeout: {
           tools: mode.toolTimeouts,
         },
-        experimental_transform: replyFilter(),
+        experimental_transform: [
+          replyFilter(),
+          refusalNotice(PLANNER_MODEL_DECLINED_REPLY, () => {
+            this.logger.warn(
+              `Meal planner turn was declined by the model safety filter (${
+                voice ? 'voice' : 'text'
+              })`,
+            );
+          }),
+        ],
       });
       const assistantMessageId = randomUUID();
       const uiStream = toUIMessageStream({

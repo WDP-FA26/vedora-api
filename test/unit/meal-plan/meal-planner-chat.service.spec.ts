@@ -27,6 +27,7 @@ import {
   AiUsageService,
   type UsageTicket,
 } from '@src/subscriptions/ai-usage.service.js';
+import { PLANNER_MODEL_DECLINED_REPLY } from '@src/meal-plan/meal-planner.refusals.js';
 import { RestaurantMenuService } from '@src/workspaces/restaurant-menu.service.js';
 
 type StreamPart =
@@ -374,6 +375,30 @@ describe('MealPlannerChatService', () => {
     expect(plannerOr).not.toContain(USER_ID);
     expect(aiUsage.complete).toHaveBeenCalledWith(TICKET);
     expect(aiUsage.refund).not.toHaveBeenCalled();
+  });
+
+  it('tells the user why when the model declines the request', async () => {
+    steps = [
+      [
+        {
+          type: 'finish',
+          finishReason: { unified: 'content-filter', raw: 'refusal' },
+          usage,
+        },
+      ],
+    ];
+    const service = await createService();
+
+    const chunks = await convertReadableStreamToArray(
+      await service.stream(
+        USER_ID,
+        'Lên thực đơn ngày thứ Hai',
+        new AbortController().signal,
+        WEEK,
+      ),
+    );
+
+    expect(replyText(chunks)).toBe(PLANNER_MODEL_DECLINED_REPLY);
   });
 
   it('only asks for web search until the user allows it', async () => {
