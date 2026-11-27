@@ -19,6 +19,7 @@ export * from './schemas/recipe.schema.js';
 export * from './schemas/meal-plan-chat.schema.js';
 export * from './schemas/meal-log.schema.js';
 export * from './schemas/payment.schema.js';
+export * from './schemas/subscription-catalog.schema.js';
 export * from './schemas/ai-usage.schema.js';
 export * from './schemas/ai-request.schema.js';
 export * from './schemas/ai-cost-call.schema.js';
