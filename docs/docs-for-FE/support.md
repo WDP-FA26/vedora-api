@@ -62,7 +62,7 @@ Giới hạn chống lạm dụng: tối đa 5 hồ sơ đang hoạt động m�
 
 ## 4. Soft-delete & Khôi phục bài viết (`PostStatus.REMOVED`)
 - Tác giả xóa (`DELETE /posts/:id`, `DELETE /blogs/:id`): soft-delete (`removal.removedByRole = "AUTHOR"`), ẩn hoàn toàn, không kháng cáo được, admin có thể khôi phục.
-- Admin gỡ (`DELETE /admin/posts/:id`, body tùy chọn `{ reason? }`): soft-delete (`removal.removedByRole = "ADMIN"`), tự đóng report `PENDING`, giữ `postId` trong `POST_REMOVED` để tác giả mở kháng cáo trong 14 ngày.
+- Admin gỡ (`DELETE /admin/posts/:id`, body tùy chọn `{ reason? }`): soft-delete (`removal.removedByRole = "ADMIN"`), tự đóng report `PENDING`, giữ `postId` trong `POST_REMOVED` để tác giả mở kháng cáo trong 14 ngày. Thông báo cho chủ bài được lưu cùng transaction gỡ bài (cả khi chưa có báo cáo hoặc admin gỡ bài của chính mình), SSE phát sau commit; lỗi lưu thông báo rollback thao tác gỡ. Xem [notifications.md](notifications.md).
 - Admin khôi phục (`POST /admin/posts/:id/restore`, body tùy chọn `{ note? }`): trả bài về `previousStatus`, tự đóng hồ sơ kháng cáo đang mở với `outcome = "APPROVED"` và gửi `SUPPORT_TICKET_RESOLVED` (hoặc `POST_RESTORED` nếu không có hồ sơ mở).
 
 ## 5. Thông báo (`NotificationType`)

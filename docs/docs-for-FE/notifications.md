@@ -79,7 +79,24 @@ gửi email cho lần cấp gói. SSE vẫn có giới hạn cùng instance như
 | `POST_REMOVED` | Chủ bài | Admin xoá bài (`DELETE /admin/posts/:id`) | `reason` = lý do bị báo cáo nhiều nhất, `null` nếu bài không có báo cáo; `note` = tiêu đề blog hoặc đầu bài |
 | `REPORTED_POST_REMOVED` | Mọi người đã báo cáo bài đó | Admin xoá bài | `note` = tiêu đề blog hoặc đầu bài |
 
-Bài đã bị xoá nên `POST_REMOVED` và `REPORTED_POST_REMOVED` có `postId` = `null`. Ở hai loại này `note` là đoạn trích bài, **không** phải ghi chú của admin. Admin tự xoá bài của chính mình thì không có `POST_REMOVED`.
+`POST_REMOVED` giữ `postId` của bài bị soft-delete để chủ bài mở `/posts/:id`,
+xem lý do và tạo kháng cáo nếu còn đủ điều kiện. `REPORTED_POST_REMOVED` có
+`postId = null`. Ở cả hai loại, `note` là đoạn trích bài/tên blog (tối đa 80
+ký tự), **không** phải ghi chú admin hay thông tin người báo cáo.
+
+Admin gỡ bài luôn lưu `POST_REMOVED` cho chủ bài còn tồn tại, kể cả bài chưa
+có báo cáo, blog hoặc bài do chính admin đăng. `reason` ưu tiên lý do gỡ do
+admin nhập; nếu bỏ trống dùng lý do báo cáo phổ biến nhất, không có thì null.
+Tác giả tự xóa qua API cá nhân vẫn theo luồng riêng, không tạo thông báo bị
+admin gỡ.
+
+Trạng thái REMOVED, xử lý các báo cáo chờ và thông báo được ghi trong cùng
+Mongo transaction. Nếu việc gỡ đóng một kháng cáo đang mở, thông báo kết quả
+kháng cáo cũng được lưu trong transaction đó. Không lưu được thông báo thì
+rollback, không có bài đã gỡ nhưng mất thông báo. SSE chỉ publish sau commit,
+trước bước dọn search index. Khi offline, chủ bài vẫn xem lại bằng REST và
+unread count. Yêu cầu gỡ lại bài đã REMOVED trả 409, không báo trùng. Nếu bài
+đã được khôi phục rồi bị admin gỡ lần nữa thì có thông báo mới cho lần gỡ mới.
 
 ## Thông báo từ hệ thống (duyệt trang nhà hàng)
 

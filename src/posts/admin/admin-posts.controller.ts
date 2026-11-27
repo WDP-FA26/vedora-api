@@ -110,7 +110,7 @@ export class AdminPostsController {
   @ApiOperation({
     summary: "Soft-delete anyone's post so it can be appealed or restored",
     description:
-      'Marks the post REMOVED, resolves pending reports, and notifies the author (POST_REMOVED with postId) and reporters (REPORTED_POST_REMOVED).',
+      'Atomically marks the post REMOVED, resolves pending reports, and stores notifications for the author (POST_REMOVED with postId, including admin-owned posts) and reporters (REPORTED_POST_REMOVED). Publishes events only after commit; notification persistence failures roll back removal.',
   })
   @ApiNoContentResponse()
   @ApiConflictResponse({
