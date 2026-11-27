@@ -5,8 +5,10 @@ import type { ClientSession, Model, QueryFilter } from 'mongoose';
 import {
   AccountStatus,
   AccountType,
+  BillingPlan,
   PaymentIntent,
   PaymentStatus,
+  NotificationType,
   SubscriptionGrant,
   User,
   UserRole,
@@ -20,6 +22,8 @@ import { AccessDeniedException } from '../common/exceptions/access-denied.except
 import { escapeRegExp } from '../common/text.js';
 import { paymentExpiresAt } from '../payments/payment-expiration.js';
 import { StateConflictException } from '../common/exceptions/state-conflict.exception.js';
+import { NotificationsService } from '../notifications/notifications.service.js';
+import { runtimeConfig } from '../config/runtime-config.js';
 import { SubscriptionCatalogService } from './subscription-catalog.service.js';
 import { SubscriptionsService } from './subscriptions.service.js';
 import type {
@@ -28,7 +32,10 @@ import type {
 } from './subscription-grant.dto.js';
 
 const eligible = {
-  accountType: AccountType.PERSONAL,
+  $or: [
+    { accountType: AccountType.PERSONAL },
+    { accountType: { $exists: false } },
+  ],
   status: {
     $in: [
       AccountStatus.ACTIVE,
@@ -73,21 +80,25 @@ export class SubscriptionGrantsService {
     private readonly mongo: MongoService,
     private readonly subscriptions: SubscriptionsService,
     private readonly catalog: SubscriptionCatalogService,
+    private readonly notifications: NotificationsService,
   ) {}
 
   async search(query: SubscriptionUserQueryDto) {
     const q = query.q?.trim();
-    const filter: QueryFilter<User> = { ...eligible };
-    if (query.status) filter.$and = [{ status: query.status }];
+    const filters: QueryFilter<User>[] = [eligible];
+    if (query.status) filters.push({ status: query.status });
     if (q) {
       const escaped = new RegExp(escapeRegExp(q), 'i');
-      filter.$or = [
-        { _id: q.toLowerCase() },
-        ...['username', 'fullName', 'email'].map((field) => ({
-          [field]: escaped,
-        })),
-      ];
+      filters.push({
+        $or: [
+          { _id: q.toLowerCase() },
+          ...['username', 'fullName', 'email'].map((field) => ({
+            [field]: escaped,
+          })),
+        ],
+      });
     }
+    const filter: QueryFilter<User> = { $and: filters };
     const [rows, total] = await Promise.all([
       this.users
         .find(filter)
@@ -187,7 +198,7 @@ export class SubscriptionGrantsService {
       return grantRow(row);
     };
     try {
-      return await this.mongo.withTransaction(async (session) => {
+      const outcome = await this.mongo.withTransaction(async (session) => {
         // Match account-management lock ordering so deleting a target or
         // revoking an admin cannot race a benefits assignment.
         for (const id of [...new Set([actorId, body.userId])].sort()) {
@@ -212,7 +223,8 @@ export class SubscriptionGrantsService {
           .findOne({ actorId, requestKey: key })
           .session(session)
           .exec();
-        if (prior) return replay(prior); // Never reactivate an overwritten grant on retry.
+        // A retry returns the original result without reassigning or notifying.
+        if (prior) return { grant: replay(prior), notifications: [] };
         await this.target(body.userId, session);
         const now = new Date();
         const current = await this.subscriptions.period(
@@ -264,8 +276,30 @@ export class SubscriptionGrantsService {
           },
           session,
         );
-        return grantRow(row);
+        const expiry = new Intl.DateTimeFormat('vi-VN', {
+          timeZone: runtimeConfig.APP_TIMEZONE,
+          year: 'numeric',
+          month: '2-digit',
+          day: '2-digit',
+          hour: '2-digit',
+          minute: '2-digit',
+          timeZoneName: 'shortOffset',
+        }).format(expiresAt);
+        const name = body.planCode === BillingPlan.PRO ? 'Pro' : 'Plus';
+        const notifications = await this.notifications.storeSystemNotifications(
+          [
+            {
+              recipientId: body.userId,
+              type: NotificationType.SUBSCRIPTION_GRANTED,
+              note: `Bạn đã được quản trị viên cấp gói ${name} trong ${plan.durationDays} ngày, có hiệu lực đến ${expiry}. Xem quyền lợi tại Gói của bạn.`,
+            },
+          ],
+          session,
+        );
+        return { grant: grantRow(row), notifications };
       });
+      await this.notifications.publishStored(outcome.notifications);
+      return outcome.grant;
     } catch (error) {
       if (!isUniqueViolation(error)) throw error;
       const prior = await this.grants

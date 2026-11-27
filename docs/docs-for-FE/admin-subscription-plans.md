@@ -24,6 +24,15 @@ FE dùng 10 kết quả/trang. Trả `{ items, total, page, limit }`, mỗi item
 Chỉ tài khoản PERSONAL ở trạng thái ACTIVE/PENDING_EMAIL/SUSPENDED, bao gồm
 ADMIN. Không cấp gói cá nhân cho PAGE, tài khoản hệ thống hoặc đã xóa.
 
+Tài khoản cũ chưa có field `accountType` được coi là PERSONAL, thống nhất với
+default của schema. Không cần sửa dữ liệu hoặc đăng ký lại. Không coi giá trị
+null/loại không hợp lệ là PERSONAL. Bộ lọc này dùng chung cho search, detail
+và POST cấp gói; tìm `q` không được bỏ qua điều kiện loại tài khoản.
+
+`limit=10` trả tối đa 10 người/trang, không phải toàn bộ users. Xem `total`
+để biết tổng tài khoản phù hợp; gọi `page=2`, ... để xem phần còn lại. `q=`
+rỗng không giới hạn thêm theo tên/email. PAGE/DELETED/SYSTEM không tính vào total.
+
 ### GET /admin/subscription-plans/users/:userId
 
 Trả `{ user, membership, pendingPayment, recentGrants }`:
@@ -76,6 +85,11 @@ Không lộ request key/hash nội bộ.
 - Nhật ký SUBSCRIPTION_PLANS ghi thành công/thất bại. History riêng giữ admin
   ID, lý do, snapshot. Xóa tài khoản dọn assignment hiện hành, giữ history
   để truy vết như lịch sử tài chính.
+- Mỗi lần cấp mới lưu một notification `SUBSCRIPTION_GRANTED` trong cùng
+  transaction. Chỉ publish SSE sau commit; rollback không có notification,
+  retry cùng key không tạo hoặc phát lại notification. Người nhận là tài khoản
+  được cấp, kể cả admin tự cấp. Không gửi nội dung lý do nội bộ cho người nhận.
+  Không tạo bù thông báo cho các lần cấp từ trước khi có tính năng này.
 
 ### QR, hết hạn và báo cáo
 
