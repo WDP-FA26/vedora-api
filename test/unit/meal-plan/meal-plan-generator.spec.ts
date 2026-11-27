@@ -235,4 +235,64 @@ describe('generateMealDays', () => {
     });
     expect(partialOnly[0]?.DINNER).toHaveLength(1);
   });
+
+  it('never fills a main meal with a dessert, drink or snack when every main dish repeats', async () => {
+    const pool = [
+      candidate('rice', RecipeTag.RICE, { caloriesPerServing: 400 }),
+      candidate('soup', RecipeTag.SOUP, { caloriesPerServing: 150 }),
+      candidate('sweet-soup', RecipeTag.DESSERT, { caloriesPerServing: 300 }),
+      candidate('smoothie', RecipeTag.DRINK, { caloriesPerServing: 420 }),
+      candidate('spring-roll', RecipeTag.SNACK, { caloriesPerServing: 250 }),
+    ];
+    const sides = new Set(['sweet-soup', 'smoothie', 'spring-roll']);
+    const saved = new Map<Weekday, SlotRecipeIds>([
+      [
+        Weekday.SUN,
+        { BREAKFAST: ['soup'], LUNCH: ['rice'], DINNER: [], OTHER: [] },
+      ],
+    ]);
+
+    for (let run = 0; run < 30; run += 1) {
+      const generated = await generateMealDays({
+        candidates: pool,
+        saved,
+        days: [Weekday.SUN],
+        sections: [MealSection.DINNER],
+        skip: [],
+        onlyEmpty: true,
+        perSection: 1,
+        ignoreFit: false,
+        nutritionGoal: NutritionGoal.MAINTAIN,
+        dailyCalorieTarget: 2000,
+        areCompatible: allCompatible,
+        random: Math.random,
+      });
+
+      const dinner = generated[0]?.DINNER ?? [];
+      expect(dinner.length).toBeGreaterThan(0);
+      expect(dinner.filter((id) => sides.has(id))).toEqual([]);
+      expect(generated[0]?.LUNCH.filter((id) => sides.has(id))).toEqual([]);
+    }
+  });
+
+  it('keeps a dessert the user asked for by name eligible for a main meal', async () => {
+    const run = (matchesQuery: boolean) =>
+      generateMealDays({
+        candidates: [
+          candidate('sweet-soup', RecipeTag.DESSERT, { matchesQuery }),
+        ],
+        saved: new Map(),
+        days: [Weekday.MON],
+        sections: [MealSection.DINNER],
+        skip: [],
+        onlyEmpty: false,
+        perSection: 1,
+        ignoreFit: false,
+        areCompatible: allCompatible,
+        random: () => 0,
+      });
+
+    expect((await run(true))[0]?.DINNER).toEqual(['sweet-soup']);
+    expect(await run(false)).toEqual([]);
+  });
 });

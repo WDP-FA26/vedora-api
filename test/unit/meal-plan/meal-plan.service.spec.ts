@@ -1081,6 +1081,65 @@ describe('MealPlanService', () => {
       ]);
     });
 
+    it('autoBalancePlan moves a dessert out of dinner and fills dinner with a main dish', async () => {
+      const dessertId = randomUUID();
+      await createRecipe(mongo, {
+        id: dessertId,
+        title: 'Dessert',
+        tag: RecipeTag.DESSERT,
+      });
+      await mongo.connection
+        .collection('recipes')
+        .updateMany({ _id: { $ne: dessertId } }, { $set: { tag: 'SOUP' } });
+      await saved(Weekday.SUN, MealSection.DINNER, dessertId);
+
+      await service.autoBalancePlan(USER_ID, {
+        weekStart: WEEK,
+        days: [Weekday.SUN],
+        targetCalories: 1800,
+      });
+
+      const dinner = await savedIds(WEEK, Weekday.SUN, MealSection.DINNER);
+      expect(dinner.length).toBeGreaterThan(0);
+      expect(dinner).not.toContain(dessertId);
+      expect(await savedIds(WEEK, Weekday.SUN, MealSection.OTHER)).toContain(
+        dessertId,
+      );
+    });
+
+    it('autoBalancePlan keeps a drink that accompanies a main dish', async () => {
+      const drinkId = randomUUID();
+      await createRecipe(mongo, {
+        id: drinkId,
+        title: 'Drink',
+        tag: RecipeTag.DRINK,
+      });
+      await mongo.connection
+        .collection('recipes')
+        .updateMany({ _id: { $ne: drinkId } }, { $set: { tag: 'SOUP' } });
+      await saved(Weekday.SUN, MealSection.BREAKFAST, RICE_RECIPE);
+      await entries().create({
+        _id: randomUUID(),
+        userId: USER_ID,
+        weekStart: WEEK,
+        day: Weekday.SUN,
+        section: MealSection.BREAKFAST,
+        recipeId: drinkId,
+        position: 1,
+      });
+
+      await service.autoBalancePlan(USER_ID, {
+        weekStart: WEEK,
+        days: [Weekday.SUN],
+        targetCalories: 1800,
+      });
+
+      expect(await savedIds(WEEK, Weekday.SUN, MealSection.BREAKFAST)).toEqual([
+        RICE_RECIPE,
+        drinkId,
+      ]);
+    });
+
     it('autoBalancePlan changes nothing when every requested day has passed', async () => {
       vi.setSystemTime(WEDNESDAY);
 

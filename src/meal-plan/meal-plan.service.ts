@@ -38,6 +38,7 @@ import {
 } from './dto/meal-plan.dto.js';
 import {
   generateMealDays,
+  isSideOnlyForMeal,
   type GeneratorCandidate,
 } from './meal-plan-generator.js';
 import {
@@ -399,6 +400,7 @@ export class MealPlanService {
     candidates: GeneratorCandidate[];
     ingredientsById: Map<string, string[]>;
     caloriesById: Map<string, number>;
+    tagById: Map<string, RecipeTag | null>;
     nutritionGoal: NutritionGoal | null;
     dailyCalorieTarget: number | null;
   }> {
@@ -411,9 +413,11 @@ export class MealPlanService {
     ]);
     const ingredientsById = new Map<string, string[]>();
     const caloriesById = new Map<string, number>();
+    const tagById = new Map<string, RecipeTag | null>();
     for (const recipe of rows) {
       ingredientsById.set(recipe.id, ingredientIds(recipe));
       caloriesById.set(recipe.id, recipeNutrition(recipe).caloriesPerServing);
+      tagById.set(recipe.id, recipe.tag);
     }
     const text = dto.query?.trim().toLowerCase() ?? '';
     const excluded = (dto.exclude ?? [])
@@ -462,6 +466,7 @@ export class MealPlanService {
       candidates,
       ingredientsById,
       caloriesById,
+      tagById,
       nutritionGoal: nutrition?.effectiveGoal ?? null,
       dailyCalorieTarget: nutrition?.dailyCalorieTarget ?? null,
     };
@@ -606,6 +611,7 @@ export class MealPlanService {
         candidates,
         ingredientsById,
         caloriesById,
+        tagById,
         nutritionGoal,
         dailyCalorieTarget,
       },
@@ -635,6 +641,7 @@ export class MealPlanService {
     for (const day of targetDays) {
       const slots = base.get(day);
       if (!slots) continue;
+      moveSideOnlyMealsToOther(slots, tagById);
       trimExcessDayDishes(slots, caloriesById, ceiling);
     }
 
@@ -1278,6 +1285,30 @@ const TRIM_SECTIONS: readonly {
   { section: MealSection.LUNCH, minDishes: 1 },
   { section: MealSection.BREAKFAST, minDishes: 1 },
 ];
+
+const MAIN_SECTIONS: readonly MealSection[] = [
+  MealSection.BREAKFAST,
+  MealSection.LUNCH,
+  MealSection.DINNER,
+];
+
+function moveSideOnlyMealsToOther(
+  slots: Record<MealSection, string[]>,
+  tagById: ReadonlyMap<string, RecipeTag | null>,
+): void {
+  for (const section of MAIN_SECTIONS) {
+    const dishes = slots[section];
+    if (dishes.length === 0) continue;
+    const hasMainDish = dishes.some(
+      (id) => !isSideOnlyForMeal(tagById.get(id) ?? null, section),
+    );
+    if (hasMainDish) continue;
+    for (const id of dishes) {
+      if (!slots.OTHER.includes(id)) slots.OTHER.push(id);
+    }
+    slots[section] = [];
+  }
+}
 
 function trimExcessDayDishes(
   slots: Record<MealSection, string[]>,

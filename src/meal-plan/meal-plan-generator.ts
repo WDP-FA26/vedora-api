@@ -235,6 +235,14 @@ function fitScore(tag: RecipeTag | null, section: MealSection): number {
   return 0;
 }
 
+export function isSideOnlyForMeal(
+  tag: RecipeTag | null,
+  section: MealSection,
+): boolean {
+  if (tag === null) return false;
+  return MAIN_MEALS.includes(section) && NOT_FOR_MAIN_MEALS.includes(tag);
+}
+
 function emptyDay(): SlotRecipeIds {
   return { BREAKFAST: [], LUNCH: [], DINNER: [], OTHER: [] };
 }
@@ -444,6 +452,13 @@ async function pickDish(
   const ranked = input.candidates
     .filter((recipe) => {
       if (slotIds.includes(recipe.id)) return false;
+      if (
+        !input.ignoreFit &&
+        !recipe.matchesQuery &&
+        isSideOnlyForMeal(recipe.tag, section)
+      ) {
+        return false;
+      }
       if (
         maxAddedCalories !== undefined &&
         typeof recipe.caloriesPerServing === 'number' &&
