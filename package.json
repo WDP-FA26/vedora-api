@@ -22,6 +22,7 @@
     "redteam": "node scripts/redteam.mts",
     "seed": "tsx src/database/seed-cli.ts",
     "seed:prod": "node dist/database/seed-cli.js",
+    "seed:restaurants": "tsx src/database/seed-restaurant-test-data.ts",
     "fix:blog-covers": "tsx src/database/fix-blog-covers.ts",
     "fix:blog-covers:prod": "node dist/database/fix-blog-covers.js",
     "rewrite:storage-urls": "tsx src/database/rewrite-storage-urls.ts",

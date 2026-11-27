@@ -197,6 +197,16 @@ POST /workspaces
 
 `taxCode` được bỏ khoảng trắng và dấu chấm trước khi kiểm tra.
 
+Mọi `taxCode` 12 số (CCCD) còn phải đúng cấu trúc theo Thông tư 59/2021/TT-BCA, nếu sai trả `400`:
+
+- 3 số đầu là mã tỉnh nơi đăng ký khai sinh, thuộc 63 mã cũ từ `001` (Hà Nội) tới `096` (Cà Mau), có
+  số bị bỏ trống như `003`, `099`.
+- Số thứ 4 là `0`–`3`: `0`/`1` là nam/nữ sinh 1900–1999, `2`/`3` là nam/nữ sinh 2000–2099.
+- Số thứ 5–6 là năm sinh, không được sau năm hiện tại.
+
+Kiểm tra này chỉ chặn số bịa, không chứng minh số đó là của người đứng tên. Admin vẫn phải đối chiếu
+với ảnh CCCD.
+
 **Bước 3, giấy tờ và cam kết:** `proofIds` phải đủ các loại bắt buộc (xem bảng ở trên).
 `confirmsAccuracy` và `consentsToReview` phải là `true`.
 
