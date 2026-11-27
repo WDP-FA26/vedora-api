@@ -227,7 +227,8 @@ export class PostInteractionsController {
   @ApiBearerAuth()
   @ApiOperation({
     summary: 'Report a published post to the admins',
-    description: 'One report per account per post; not your own posts.',
+    description:
+      'One lifetime report per account per post, including after resolution or dismissal; not your own posts. Concurrent duplicates return ALREADY_REPORTED.',
   })
   @ApiCreatedResponse({ type: PostReportDto })
   @ApiConflictResponse({

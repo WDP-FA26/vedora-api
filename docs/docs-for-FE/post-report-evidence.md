@@ -4,6 +4,14 @@ Admin mở **Nội dung → Kiểm duyệt → Bài viết → Bị báo cáo**.
 
 ## Gửi báo cáo
 
+Mỗi tài khoản chỉ báo cáo cùng một bài **một lần**, kể cả báo cáo trước đã
+DISMISSED hoặc RESOLVED, hoặc đổi lý do/ảnh minh chứng. Unique index
+`(postId, reporterId)` vẫn là ràng buộc cuối cùng khi gửi đồng thời. Gửi lại
+trả `409 ALREADY_REPORTED`, không tạo mới/reset báo cáo và không tăng số lượt.
+Upload ảnh mới cũng bị chặn với mã này nếu đã có báo cáo của tài khoản đó.
+FE phải hiện “Bạn đã báo cáo bài viết này rồi”, không hiển thị như vừa gửi
+một báo cáo mới thành công. Người khác vẫn báo cáo bài đó độc lập.
+
 1. Người dùng có thể chọn tối đa 3 ảnh JPG/PNG/WebP, mỗi ảnh tối đa 5 MB (mặc định). Không bắt buộc có ảnh.
 2. `POST /api/v1/posts/:postId/report/evidence`, Bearer token cá nhân, multipart form field **file** (một file mỗi request), trả 201 `{ id: UUID }`.
 3. `POST /api/v1/posts/:postId/report` với `{ reason, details?, evidenceIds?: UUID[] }`. `evidenceIds` không trùng, tối đa 3. Receipt vẫn không trả danh tính người báo cáo hoặc URL minh chứng.

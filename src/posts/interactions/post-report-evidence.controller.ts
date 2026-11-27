@@ -13,6 +13,7 @@ import {
   ApiBearerAuth,
   ApiBody,
   ApiConsumes,
+  ApiConflictResponse,
   ApiCreatedResponse,
   ApiTags,
 } from '@nestjs/swagger';
@@ -20,6 +21,7 @@ import { JwtAuthGuard } from '../../auth-core/jwt-auth.guard.js';
 import { PersonalSessionGuard } from '../../auth-core/personal-session.guard.js';
 import type { AuthenticatedRequest } from '../../auth-core/auth.types.js';
 import { PostReportsService } from './post-reports.service.js';
+import { ErrorBodyDto } from '../../common/exceptions/error-body.dto.js';
 import {
   PostReportEvidenceService,
   REPORT_EVIDENCE_MAX_BYTES,
@@ -36,6 +38,11 @@ export class PostReportEvidenceController {
     private readonly evidence: PostReportEvidenceService,
   ) {}
   @Post()
+  @ApiConflictResponse({
+    type: ErrorBodyDto,
+    description:
+      'ALREADY_REPORTED: this account already reported the post; no new evidence is stored',
+  })
   @ApiConsumes('multipart/form-data')
   @ApiBody({
     schema: {
