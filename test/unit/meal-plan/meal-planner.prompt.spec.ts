@@ -93,7 +93,7 @@ describe('meal-planner prompt & refusals', () => {
 
     expect(output).toContain('Hôm nay là Thứ Tư 2026-11-18.');
     expect(output).toContain(
-      '- Tuần này 16/11–22/11 (weekStart 2026-11-16): đã qua, không sửa được: Thứ Hai 16/11, Thứ Ba 17/11; còn sửa được từ hôm nay — người dùng đang xem tuần này',
+      '- Tuần này 16/11–22/11 (weekStart 2026-11-16): đã qua, không sửa được: Thứ Hai 16/11, Thứ Ba 17/11; còn sửa được từ hôm nay — đang hiện trên màn hình',
     );
     expect(output).toContain(
       '- Tuần sau 23/11–29/11 (weekStart 2026-11-23): mọi ngày còn sửa được',
@@ -111,10 +111,10 @@ describe('meal-planner prompt & refusals', () => {
     });
 
     expect(output).toContain(
-      '(weekStart 2026-11-23): mọi ngày còn sửa được — người dùng đang xem tuần này',
+      '(weekStart 2026-11-23): mọi ngày còn sửa được — đang hiện trên màn hình',
     );
     expect(output).not.toContain(
-      'còn sửa được từ hôm nay — người dùng đang xem tuần này',
+      'còn sửa được từ hôm nay — đang hiện trên màn hình',
     );
   });
 
@@ -125,7 +125,7 @@ describe('meal-planner prompt & refusals', () => {
     const output = plannerInstructions(restrictions, plan);
 
     expect(output).toContain(
-      'Lịch các tuần bạn được lập:\n- Tuần 09/11–15/11 (weekStart 2026-11-09): đã qua hết, chỉ để xem — người dùng đang xem tuần này',
+      'Lịch các tuần bạn được lập:\n- Tuần 09/11–15/11 (weekStart 2026-11-09): đã qua hết, chỉ để xem — đang hiện trên màn hình',
     );
   });
 

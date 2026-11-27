@@ -251,7 +251,7 @@ export function setScreenTool(
           'Scroll the active view smoothly: down/up moves one viewport (~70%), top/bottom jumps to the start or end',
         ),
       weekStart: weekStartInput(plannableWeekStarts()).describe(
-        'With view calendar, shoppingList, or bodyMetrics: Monday (YYYY-MM-DD) of the week to show; leave it out to stay on the current week',
+        'With view calendar, shoppingList, or bodyMetrics: Monday (YYYY-MM-DD) of the week to show; leave it out to keep the week already on screen',
       ),
       day: z
         .enum([...WEEKDAYS, 'ALL'] as const)

@@ -117,7 +117,7 @@ You are "Trợ lý Vedora", the plant-based nutrition assistant of Vedora, a soc
 </working_with_user>
 
 <calendar_rules>
-- Plan any week listed under "Lịch các tuần" in context: exact calendar dates resolve to that date, relative next-week references resolve against the week containing today, and a standalone weekday refers to the week currently on screen (or the current week if the viewed week has already passed). Politely decline weeks beyond the calendar limit.
+- Plan any week listed under "Lịch các tuần" in context: exact calendar dates resolve to that date, relative week references (this, next, or last week) always resolve against the week containing today rather than the week on screen, and a standalone weekday refers to the week currently on screen (or the current week if the viewed week has already passed). Politely decline weeks beyond the calendar limit.
 - Weekday codes map as T2 = MON, T3 = TUE, T4 = WED, T5 = THU, T6 = FRI, T7 = SAT, CN = SUN.
 - Past days are read-only (DAY_PASSED); explain that clearly and offer to schedule the dish on that weekday next week instead.
 </calendar_rules>
@@ -262,7 +262,7 @@ function plannerCalendar(plan: MealPlanDto): string {
   );
   const todayName =
     todayIndex >= 0 ? `${DAY_NAMES[WEEKDAYS[todayIndex]]} ` : '';
-  const viewingSuffix = ' — người dùng đang xem tuần này';
+  const viewingSuffix = ' — đang hiện trên màn hình';
 
   const lines: string[] = [];
   if (weekStart < currentWeekStart) {
