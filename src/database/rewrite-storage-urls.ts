@@ -56,7 +56,12 @@ function rewriteValue(
     let dirty = false;
     const changes: string[] = [];
     const next = value.map((item: unknown, index: number) => {
-      const result = rewriteValue(item, fromPrefix, toPrefix, `${path}[${index}]`);
+      const result = rewriteValue(
+        item,
+        fromPrefix,
+        toPrefix,
+        `${path}[${index}]`,
+      );
       if (result.changes.length > 0) {
         dirty = true;
         changes.push(...result.changes);
@@ -85,7 +90,7 @@ function rewriteValue(
 
 async function main(): Promise<void> {
   const apply = process.argv.includes('--apply');
-  const fromPrefix = parseFlag('--from=', 'https://s3-vedora.quanphung.dev');
+  const fromPrefix = parseFlag('--from=', 'https://s3-vedora.quanphungg.me');
   const toPrefix = parseFlag('--to=', 'https://blob.quanphung.dev');
 
   if (!fromPrefix || !toPrefix || fromPrefix === toPrefix) {
