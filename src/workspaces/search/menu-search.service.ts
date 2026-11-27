@@ -13,6 +13,14 @@ import { MenuSearchIndexService } from './menu-search-index.service.js';
 
 export const MAX_MENU_SEARCH_RESULTS = runtimeConfig.POST_SEARCH_MAX_RESULTS;
 
+/** Up to this many words, a dish must share a word with the query. */
+export const SHORT_QUERY_MAX_WORDS = 2;
+
+/** "cơm", "bánh mì": a dish name rather than a description. */
+export function isShortQuery(query: string): boolean {
+  return query.trim().split(/\s+/).length <= SHORT_QUERY_MAX_WORDS;
+}
+
 export interface MenuSearchPage {
   ids: string[];
   hasMore: boolean;
@@ -56,17 +64,7 @@ export class MenuSearchService {
       );
     }
 
-    const prefetch = [
-      ...(dense
-        ? [
-            {
-              query: dense,
-              using: MENU_DENSE_VECTOR,
-              limit: MAX_MENU_SEARCH_RESULTS,
-              score_threshold: this.minScore,
-            },
-          ]
-        : []),
+    const lexical = [
       {
         query: menuBm25(trimmed, false),
         using: MENU_BM25_VECTOR,
@@ -78,14 +76,38 @@ export class MenuSearchService {
         limit: MAX_MENU_SEARCH_RESULTS,
       },
     ];
+    const page = { offset, limit: limit + 1, with_payload: false };
 
-    const { points } = await this.qdrant.query(this.index.collection, {
-      prefetch,
-      query: { fusion: 'rrf' },
-      offset,
-      limit: limit + 1,
-      with_payload: false,
-    });
+    let request: Parameters<QdrantService['query']>[1];
+    if (dense === null) {
+      request = { ...page, prefetch: lexical, query: { fusion: 'rrf' } };
+    } else if (isShortQuery(trimmed)) {
+      // One or two words: every Vietnamese dish is "close" in meaning to
+      // "cơm" or "chè", so meaning alone pulled in dishes that share no word
+      // with the query. Keep the dishes that share a word, ranked by meaning.
+      request = {
+        ...page,
+        prefetch: lexical,
+        query: dense,
+        using: MENU_DENSE_VECTOR,
+      };
+    } else {
+      // A longer query ("món nước thanh đạm") describes the dish; meaning may
+      // find dishes that share no word with it.
+      const semantic = {
+        query: dense,
+        using: MENU_DENSE_VECTOR,
+        limit: MAX_MENU_SEARCH_RESULTS,
+        score_threshold: this.minScore,
+      };
+      request = {
+        ...page,
+        prefetch: [semantic, ...lexical],
+        query: { fusion: 'rrf' },
+      };
+    }
+
+    const { points } = await this.qdrant.query(this.index.collection, request);
     const ids = points.map(({ id }) => String(id));
     return { ids: ids.slice(0, limit), hasMore: ids.length > limit };
   }
