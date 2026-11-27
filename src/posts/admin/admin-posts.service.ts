@@ -84,11 +84,7 @@ export class AdminPostsService {
   ) {}
 
   async remove(id: string, adminId: string, reason?: string): Promise<void> {
-    const notice = await this.reports.removalNotice(id);
-    const trimmedReason = reason?.trim() || notice?.reason || null;
-    let closedAppeal: SupportTicket | null = null;
-
-    await this.mongo.withTransaction(async (session) => {
+    const notifications = await this.mongo.withTransaction(async (session) => {
       await lockDocument(this.mongo, session, 'post', id);
       const post = await this.posts
         .findOne({ _id: id })
@@ -103,6 +99,10 @@ export class AdminPostsService {
           'Post is already removed',
         );
       }
+      const notice = await this.reports.removalNotice(id, session);
+      if (!notice)
+        throw new ResourceNotFoundException('NOT_FOUND', 'Post not found');
+      const trimmedReason = reason?.trim() || notice.reason || null;
       const now = new Date();
       await this.posts
         .updateOne(
@@ -126,33 +126,40 @@ export class AdminPostsService {
         )
         .exec();
       await this.reports.resolvePendingForPost(session, id, adminId, now);
-      closedAppeal = await this.supportSync.closeActiveAppealOnAdminAction(
-        session,
-        {
+      const closedAppeal =
+        await this.supportSync.closeActiveAppealOnAdminAction(session, {
           postId: id,
           adminId,
           outcome: AppealOutcome.REJECTED,
           note: trimmedReason,
           now,
-        },
+        });
+      const stored = await this.reports.storeRemovalNotifications(
+        notice,
+        session,
+        trimmedReason,
       );
+      if (closedAppeal) {
+        stored.push(
+          ...(await this.notifications.storeSystemNotifications(
+            [
+              {
+                recipientId: closedAppeal.authorId,
+                type: NotificationType.SUPPORT_TICKET_RESOLVED,
+                postId: id,
+                ticketId: closedAppeal.id,
+                reason: 'APPEAL_REJECTED',
+                note: trimmedReason ?? undefined,
+              },
+            ],
+            session,
+          )),
+        );
+      }
+      return stored;
     });
-
+    await this.notifications.publishStored(notifications);
     await this.searchIndex.remove(id);
-    if (closedAppeal !== null) {
-      const closed: SupportTicket = closedAppeal;
-      await this.notifications.notify({
-        recipientId: closed.authorId,
-        type: NotificationType.SUPPORT_TICKET_RESOLVED,
-        postId: id,
-        ticketId: closed.id,
-        reason: 'APPEAL_REJECTED',
-        note: trimmedReason ?? undefined,
-      });
-    }
-    if (notice) {
-      await this.reports.announceRemoval(notice, adminId, trimmedReason);
-    }
   }
 
   async restore(

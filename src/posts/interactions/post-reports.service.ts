@@ -9,6 +9,7 @@ import {
 import { isUniqueViolation } from '../../mongo/errors.js';
 import {
   NotificationType,
+  type Notification,
   Post,
   PostReport,
   PostReportReason,
@@ -212,15 +213,20 @@ export class PostReportsService {
     return dto;
   }
 
-  async removalNotice(postId: string): Promise<PostRemovalNotice | null> {
+  async removalNotice(
+    postId: string,
+    session?: ClientSession,
+  ): Promise<PostRemovalNotice | null> {
     const post = await this.posts
       .findOne({ _id: postId })
       .select('authorId body blog.title')
+      .session(session ?? null)
       .exec();
     if (!post) return null;
     const reports = await this.reports
       .find({ postId })
       .select('reporterId reason')
+      .session(session ?? null)
       .exec();
     return {
       postId,
@@ -254,31 +260,29 @@ export class PostReportsService {
       .exec();
   }
 
-  async announceRemoval(
+  async storeRemovalNotifications(
     notice: PostRemovalNotice,
-    adminId: string,
+    session: ClientSession,
     reasonOverride?: string | null,
-  ): Promise<void> {
+  ): Promise<Notification[]> {
     const note = notice.excerpt ?? undefined;
-    const sends: Promise<void>[] = notice.reporterIds.map((recipientId) =>
-      this.notifications.notify({
-        recipientId,
-        type: NotificationType.REPORTED_POST_REMOVED,
-        note,
-      }),
-    );
-    if (notice.authorId !== adminId) {
-      sends.push(
-        this.notifications.notify({
+    return this.notifications.storeSystemNotifications(
+      [
+        {
           recipientId: notice.authorId,
           type: NotificationType.POST_REMOVED,
           postId: notice.postId,
           reason: reasonOverride ?? notice.reason ?? undefined,
           note,
-        }),
-      );
-    }
-    await Promise.all(sends);
+        },
+        ...notice.reporterIds.map((recipientId) => ({
+          recipientId,
+          type: NotificationType.REPORTED_POST_REMOVED,
+          note,
+        })),
+      ],
+      session,
+    );
   }
 
   private async toAdminDtos(
