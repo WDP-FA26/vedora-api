@@ -4,6 +4,7 @@ import { type DeepMockProxy, mockDeep } from 'vitest-mock-extended';
 import { FeatureUnavailableException } from '@src/common/exceptions/feature-unavailable.exception.js';
 import { AccessDeniedException } from '@src/common/exceptions/access-denied.exception.js';
 import type { SubscriptionsService } from '@src/subscriptions/subscriptions.service.js';
+import type { AiUsageService } from '@src/subscriptions/ai-usage.service.js';
 import type { MealLogService } from '@src/meal-plan/meal-log/meal-log.service.js';
 import type { MealPlanService } from '@src/meal-plan/meal-plan.service.js';
 import type { ShoppingListService } from '@src/meal-plan/shopping-list.service.js';
@@ -48,15 +49,31 @@ function emptyStream() {
 describe('MealPlannerVoiceService', () => {
   let chat: DeepMockProxy<MealPlannerChatService>;
   let subscriptions: DeepMockProxy<SubscriptionsService>;
+  let usage: DeepMockProxy<AiUsageService>;
 
   beforeEach(() => {
     chat = mockDeep<MealPlannerChatService>();
     chat.stream.mockResolvedValue(emptyStream());
     subscriptions = mockDeep<SubscriptionsService>();
+    usage = mockDeep<AiUsageService>();
+    usage.hasAllowance.mockResolvedValue(true);
   });
 
   const service = (config: Record<string, string> = {}) =>
-    new MealPlannerVoiceService(new ConfigService(config), chat, subscriptions);
+    new MealPlannerVoiceService(
+      new ConfigService(config),
+      chat,
+      subscriptions,
+      usage,
+    );
+
+  it('refuses an exhausted text allowance before minting a gateway session or warming the model', async () => {
+    usage.hasAllowance.mockResolvedValue(false);
+    await expect(
+      service({ AI_GATEWAY_API_KEY: 'test-key' }).createSession(USER_ID),
+    ).rejects.toMatchObject({ code: 'AI_QUOTA_EXCEEDED', statusCode: 429 });
+    expect(chat.warmVoiceCache).not.toHaveBeenCalled();
+  });
 
   it('refuses a session when no gateway key is configured', async () => {
     await expect(service().createSession(USER_ID)).rejects.toThrow(
