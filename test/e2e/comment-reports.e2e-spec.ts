@@ -1,3 +1,4 @@
+import { commentReviewVersion } from '@src/posts/interactions/comment-review-version.js';
 import { randomUUID } from 'node:crypto';
 import request from 'supertest';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
@@ -45,11 +46,31 @@ describe('Comment reporting and admin handling (real MongoDB HTTP)', () => {
       .post(reportUrl(postId, commentId))
       .auth(jwt, { type: 'bearer' })
       .send(body);
-  const review = (id: string, action = 'REMOVE', jwt = adminToken) =>
-    request(server())
+  const review = async (id: string, action = 'REMOVE', jwt = adminToken) => {
+    const row = await reports().findById(id);
+    const comment = row ? await comments().findById(row.commentId) : null;
+    return request(server())
       .post(`/api/v1/admin/comment-reports/${id}/review`)
       .auth(jwt, { type: 'bearer' })
-      .send({ action });
+      .send({
+        action,
+        ...(action === 'REMOVE'
+          ? {
+              expectedCommentVersion: comment
+                ? commentReviewVersion(comment)
+                : null,
+            }
+          : {}),
+      });
+  };
+  const expectReview = async (
+    response: Promise<request.Response>,
+    status: number,
+  ) => {
+    const result = await response;
+    expect(result.status).toBe(status);
+    return result;
+  };
   const list = (suffix = '') =>
     request(server())
       .get(`/api/v1/admin/comment-reports${suffix}`)
@@ -98,7 +119,7 @@ describe('Comment reporting and admin handling (real MongoDB HTTP)', () => {
       .get('/api/v1/admin/comment-reports')
       .auth(token, { type: 'bearer' })
       .expect(403);
-    await review(row.id, 'REMOVE', token).expect(403);
+    await expectReview(review(row.id, 'REMOVE', token), 403);
     expect(await comments().exists({ _id: root.id })).not.toBeNull();
   });
 
@@ -117,7 +138,7 @@ describe('Comment reporting and admin handling (real MongoDB HTTP)', () => {
     await list('?status=BAD').expect(400);
     await list('?page=0').expect(400);
     const row = await createReport(post.id, root.id);
-    await review(row.id, 'RESOLVED').expect(400);
+    await expectReview(review(row.id, 'RESOLVED'), 400);
     expect((await reports().findById(row.id))?.status).toBe(
       PostReportStatus.PENDING,
     );
@@ -208,7 +229,7 @@ describe('Comment reporting and admin handling (real MongoDB HTTP)', () => {
   it('dismisses without deleting content and records the reviewer and timestamp', async () => {
     const { post, root } = await fixture();
     const row = await createReport(post.id, root.id);
-    const response = await review(row.id, 'DISMISS').expect(200);
+    const response = await expectReview(review(row.id, 'DISMISS'), 200);
     expect(response.body).toMatchObject({
       status: 'DISMISSED',
       action: 'DISMISSED',
@@ -216,7 +237,7 @@ describe('Comment reporting and admin handling (real MongoDB HTTP)', () => {
     });
     expect((response.body as AdminCommentReportDto).reviewedAt).toBeTruthy();
     expect(await comments().exists({ _id: root.id })).not.toBeNull();
-    await review(row.id).expect(409);
+    await expectReview(review(row.id), 409);
     await submit(post.id, root.id).expect(409);
   });
 
@@ -238,7 +259,7 @@ describe('Comment reporting and admin handling (real MongoDB HTTP)', () => {
     });
     const row = await createReport(post.id, child.id);
     const second = await createReport(post.id, child.id, otherAdminToken);
-    await review(row.id).expect(200);
+    await expectReview(review(row.id), 200);
     expect(await comments().exists({ _id: child.id })).toBeNull();
     expect(await comments().exists({ _id: root.id })).not.toBeNull();
     expect((await comments().findById(sibling.id))?.replyToId).toBeNull();
@@ -266,7 +287,7 @@ describe('Comment reporting and admin handling (real MongoDB HTTP)', () => {
       commentId: child.id,
       type: NotificationType.COMMENT_REPLY,
     });
-    const response = await review(row.id).expect(200);
+    const response = await expectReview(review(row.id), 200);
     expect(response.body).toMatchObject({
       status: 'RESOLVED',
       action: 'REMOVED',
@@ -290,7 +311,7 @@ describe('Comment reporting and admin handling (real MongoDB HTTP)', () => {
       .auth(authorToken, { type: 'bearer' })
       .expect(204);
     expect(await reports().exists({ _id: row.id })).not.toBeNull();
-    const response = await review(row.id).expect(200);
+    const response = await expectReview(review(row.id), 200);
     expect(response.body).toMatchObject({
       action: 'ALREADY_REMOVED',
       comment: { body: root.body, isAvailable: false },
@@ -323,7 +344,7 @@ describe('Comment reporting and admin handling (real MongoDB HTTP)', () => {
         author: { id: disposable.id },
       },
     });
-    await review(row.id).expect(200);
+    await expectReview(review(row.id), 200);
   });
 
   it('allows only one concurrent admin decision', async () => {
@@ -354,7 +375,7 @@ describe('Comment reporting and admin handling (real MongoDB HTTP)', () => {
       { $set: { role: UserRole.USER } },
     );
     const row = await createReport(post.id, root.id);
-    await review(row.id, 'REMOVE', jwt).expect(403);
+    await expectReview(review(row.id, 'REMOVE', jwt), 403);
   });
 
   it('rolls back comment removal when updating reports fails', async () => {
@@ -364,7 +385,7 @@ describe('Comment reporting and admin handling (real MongoDB HTTP)', () => {
       throw new Error('Injected report write failure');
     });
     try {
-      await review(row.id).expect(500);
+      await expectReview(review(row.id), 500);
     } finally {
       spy.mockRestore();
     }
@@ -372,7 +393,7 @@ describe('Comment reporting and admin handling (real MongoDB HTTP)', () => {
     expect((await reports().findById(row.id))?.status).toBe(
       PostReportStatus.PENDING,
     );
-    await review(row.id).expect(200);
+    await expectReview(review(row.id), 200);
   });
 
   it('does not leave orphan reports when reporting races with deletion', async () => {
@@ -392,8 +413,137 @@ describe('Comment reporting and admin handling (real MongoDB HTTP)', () => {
     );
   });
 
+  it('returns global per-comment counts across statuses and pages', async () => {
+    const { post, root } = await fixture();
+    const first = await createReport(post.id, root.id);
+    await createReport(post.id, root.id, adminToken);
+    await expectReview(review(first.id, 'DISMISS'), 200);
+    const snapshot = (await list('?status=PENDING&limit=1&page=1').expect(200))
+      .body as { items: AdminCommentReportDto[] };
+    const version = snapshot.items[0].comment.currentVersion;
+    await createReport(post.id, root.id, otherAdminToken);
+    const current = (await list('?status=PENDING&limit=1&page=1').expect(200))
+      .body as { items: AdminCommentReportDto[] };
+    expect(current.items[0]).toMatchObject({
+      commentId: root.id,
+      reportCount: 3,
+      pendingReportCount: 2,
+      resolvedReportCount: 0,
+      dismissedReportCount: 1,
+    });
+    expect(current.items[0].comment.currentVersion).toBe(version);
+    const second = (await list('?status=PENDING&limit=1&page=2').expect(200))
+      .body as { items: AdminCommentReportDto[] };
+    expect(second.items[0]).toMatchObject({
+      commentId: root.id,
+      reportCount: 3,
+      pendingReportCount: 2,
+      dismissedReportCount: 1,
+    });
+    await request(server())
+      .post(`/api/v1/admin/comment-reports/${current.items[0].id}/review`)
+      .auth(adminToken, { type: 'bearer' })
+      .send({ action: 'REMOVE', expectedCommentVersion: version })
+      .expect(200)
+      .expect(({ body }) =>
+        expect(body).toMatchObject({
+          reportCount: 3,
+          pendingReportCount: 0,
+          resolvedReportCount: 2,
+          dismissedReportCount: 1,
+        }),
+      );
+  });
+
+  it('preserves snapshots from distinct edits and refuses removal based on a stale or missing preview', async () => {
+    const { post, root } = await fixture();
+    const first = await createReport(post.id, root.id);
+    await request(server())
+      .patch(`/api/v1/posts/${post.id}/comments/${root.id}`)
+      .auth(authorToken, { type: 'bearer' })
+      .send({ body: 'Updated comment before second report' })
+      .expect(200);
+    const next = await createReport(post.id, root.id, adminToken);
+    const page = (await list('?limit=50').expect(200)).body as {
+      items: AdminCommentReportDto[];
+    };
+    const old = page.items.find((row) => row.id === first.id)!;
+    const latest = page.items.find((row) => row.id === next.id)!;
+    expect(old.comment).toMatchObject({
+      body: root.body,
+      currentBody: 'Updated comment before second report',
+      isEdited: true,
+    });
+    expect(latest.comment).toMatchObject({
+      body: 'Updated comment before second report',
+      isEdited: false,
+    });
+    const endpoint = `/api/v1/admin/comment-reports/${first.id}/review`;
+    await request(server())
+      .post(endpoint)
+      .auth(adminToken, { type: 'bearer' })
+      .send({ action: 'REMOVE' })
+      .expect(400);
+    await request(server())
+      .patch(`/api/v1/posts/${post.id}/comments/${root.id}`)
+      .auth(authorToken, { type: 'bearer' })
+      .send({ body: 'Edited again after the admin preview' })
+      .expect(200);
+    await request(server())
+      .post(endpoint)
+      .auth(adminToken, { type: 'bearer' })
+      .send({
+        action: 'REMOVE',
+        expectedCommentVersion: old.comment.currentVersion,
+      })
+      .expect(409)
+      .expect(({ body }) =>
+        expect(body).toMatchObject({ code: 'COMMENT_CHANGED' }),
+      );
+    expect((await comments().findById(root.id))?.body).toBe(
+      'Edited again after the admin preview',
+    );
+    expect(
+      await reports().countDocuments({
+        commentId: root.id,
+        status: PostReportStatus.PENDING,
+      }),
+    ).toBe(2);
+    expect((await reports().findById(first.id))?.bodySnapshot).toBe(root.body);
+    await expectReview(review(first.id), 200);
+    expect(await comments().findById(root.id)).toBeNull();
+  });
+
+  it('handles legacy snapshots and rejects an old version when the comment is deleted after preview', async () => {
+    const { post, root } = await fixture();
+    const row = await createReport(post.id, root.id);
+    await reports().updateOne(
+      { _id: row.id },
+      { $unset: { commentVersionSnapshot: 1 } },
+    );
+    const page = (await list('?limit=50').expect(200)).body as {
+      items: AdminCommentReportDto[];
+    };
+    const preview = page.items.find((item) => item.id === row.id)!;
+    expect(preview.comment.isEdited).toBe(false);
+    await request(server())
+      .delete(`/api/v1/posts/${post.id}/comments/${root.id}`)
+      .auth(authorToken, { type: 'bearer' })
+      .expect(204);
+    await request(server())
+      .post(`/api/v1/admin/comment-reports/${row.id}/review`)
+      .auth(adminToken, { type: 'bearer' })
+      .send({
+        action: 'REMOVE',
+        expectedCommentVersion: preview.comment.currentVersion,
+      })
+      .expect(409);
+    await expectReview(review(row.id), 200);
+    expect((await reports().findById(row.id))?.action).toBe('ALREADY_REMOVED');
+  });
+
   it('returns 404 for missing reviews and publishes the API contracts in Swagger', async () => {
-    await review(randomUUID()).expect(404);
+    await expectReview(review(randomUUID()), 404);
     const doc = SwaggerModule.createDocument(
       e2e.app,
       new DocumentBuilder().setTitle('Test').addBearerAuth().build(),

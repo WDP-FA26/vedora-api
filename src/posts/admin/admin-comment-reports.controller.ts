@@ -12,6 +12,8 @@ import {
 } from '@nestjs/common';
 import {
   ApiBearerAuth,
+  ApiBadRequestResponse,
+  ApiConflictResponse,
   ApiOkResponse,
   ApiOperation,
   ApiTags,
@@ -22,6 +24,7 @@ import { Roles } from '../../auth-core/roles.decorator.js';
 import { RolesGuard } from '../../auth-core/roles.guard.js';
 import { ApiPaginatedResponse } from '../../common/pagination/index.js';
 import { UserRole } from '../../mongo/models.js';
+import { ErrorBodyDto } from '../../common/exceptions/error-body.dto.js';
 import {
   AdminCommentReportDto,
   ReviewCommentReportDto,
@@ -39,7 +42,8 @@ export class AdminCommentReportsController {
 
   @Get()
   @ApiOperation({
-    summary: 'List comment reports and preserved evidence, newest first',
+    summary:
+      'List comment reports with global per-comment counts, preserved snapshots and current content versions',
   })
   @ApiPaginatedResponse(AdminCommentReportDto)
   findAll(@Query() query: PostReportsQueryDto) {
@@ -47,6 +51,16 @@ export class AdminCommentReportsController {
   }
 
   @Post(':id/review')
+  @ApiBadRequestResponse({
+    type: ErrorBodyDto,
+    description:
+      'REMOVE requires expectedCommentVersion from the current preview (null for deleted comments)',
+  })
+  @ApiConflictResponse({
+    type: ErrorBodyDto,
+    description:
+      'COMMENT_CHANGED if content changed after preview; CONFLICT if the report was already reviewed',
+  })
   @HttpCode(200)
   @ApiOperation({
     summary:

@@ -1,3 +1,4 @@
+import { commentReviewVersion } from '@src/posts/interactions/comment-review-version.js';
 import { randomUUID } from 'node:crypto';
 import request from 'supertest';
 import type { Subscription } from 'rxjs';
@@ -48,13 +49,25 @@ describe('Comment removal and report notifications (real MongoDB HTTP)', () => {
     expect(response.status).toBe(201);
     return (response.body as { id: string }).id;
   };
-  const review = (id: string, action = 'REMOVE', user = admin) =>
-    auth(
+  const review = async (id: string, action = 'REMOVE', user = admin) => {
+    const row = await model<CommentReport>(CommentReport.name).findById(id);
+    const comment = row ? await comments().findById(row.commentId) : null;
+    return auth(
       user,
       request(server())
         .post(`/api/v1/admin/comment-reports/${id}/review`)
-        .send({ action }),
+        .send({
+          action,
+          ...(action === 'REMOVE'
+            ? {
+                expectedCommentVersion: comment
+                  ? commentReviewVersion(comment)
+                  : null,
+              }
+            : {}),
+        }),
     );
+  };
   const stored = () => notifications().find({ postId: post.id }).exec();
   const listen = (user: User) => {
     const events: NotificationDto[] = [];
