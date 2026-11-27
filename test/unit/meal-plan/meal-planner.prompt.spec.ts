@@ -244,8 +244,9 @@ describe('meal-planner prompt & refusals', () => {
     expect(voicePrompt).not.toContain('clickable choices via askUser');
     expect(voicePrompt).toContain('Voice mode');
     expect(voicePrompt).toContain('<voice_mode>');
-    expect(voicePrompt).toContain('<tool_and_screen_control>');
+    expect(voicePrompt).toContain('<screen_and_tools>');
     expect(voicePrompt).toContain('<spoken_output_format>');
+    expect(voicePrompt).not.toContain('Reserve setScreen');
     expect(voicePrompt).not.toContain('logMeal together with setScreen');
   });
 
