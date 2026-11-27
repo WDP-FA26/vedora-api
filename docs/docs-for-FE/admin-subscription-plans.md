@@ -56,8 +56,9 @@ Thay toàn bộ cấu hình giá/quota trong một lần ghi atomic:
   "không giới hạn". Admin vẫn theo quy tắc miễn quota riêng hiện có.
 - Không nhận tên gói, thời hạn, ngày hết hạn đơn hoặc đặc quyền tự khai báo.
 - Lượt chữ dùng chung theo cơ chế AI usage hiện tại; lượt tạo ảnh tính riêng.
-  Yêu cầu voice chạy planner dùng cùng quota chữ, không phải một ngân sách giây
-  thoại mới. API này không quản lý guest quota hoặc thời lượng phiên voice.
+  Thoại AI hai chiều là đặc quyền cố định của Pro đang còn hạn, kể cả Pro mua
+  trước khi có tính năng. Voice không trừ quota chữ và không có quota phút.
+  API quản lý gói không chỉnh guest quota hoặc thời lượng kỹ thuật mỗi phiên.
 - Gửi đúng `version` từ GET. Hai admin cùng sửa thì chỉ lần ghi đúng revision
   thành công, revision tăng 1. Revision cũ trả `409 SUBSCRIPTION_CATALOG_CONFLICT`.
   FE giữ bản nháp và cho admin chủ động tải lại; không tự ghi đè.

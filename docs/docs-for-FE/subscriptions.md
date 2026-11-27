@@ -7,6 +7,10 @@ Các mức dưới đây là **mặc định ban đầu**. Admin có thể thay 
 tiên hơn env. Giá/quota mới chỉ áp dụng cho đơn mới; đơn QR đang chờ và gói đã
 mua giữ snapshot. Quota Free cập nhật ngay nhưng không reset lượt đã dùng.
 
+Thoại AI hai chiều dành riêng cho Pro còn hiệu lực, gồm cả Pro đã mua trước
+đó. Không tính quota phút và không trừ lượt AI chữ. Free/Plus hoặc Pro hết hạn
+bị từ chối tại API session/turns với `403 PRO_REQUIRED`.
+
 | Gói | Giá / thời hạn | AI văn bản dùng chung | Tạo/chỉnh ảnh AI |
 | --- | --- | --- | --- |
 | FREE | Miễn phí | 5 lượt/ngày, đặt lại 00:00 Asia/Bangkok | 0 |
