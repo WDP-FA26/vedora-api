@@ -36,7 +36,12 @@ import {
   WorkspaceProofKind,
   WorkspaceRejectReason,
 } from '../../mongo/models.js';
-import { VN_PROVINCE_CODES, type VnProvinceCode } from '../vn-provinces.js';
+import {
+  isVnProvinceCode,
+  VN_PROVINCE_CODES,
+  wardName,
+  type VnProvinceCode,
+} from '../vn-admin-units.js';
 import { PaginationQueryDto } from '../../common/pagination/index.js';
 import { PresignedUploadDto } from '../../storage/presigned-upload.dto.js';
 import {
@@ -49,7 +54,6 @@ import {
 export const MAX_ADDRESS_LENGTH = 300;
 export const MAX_PHONE_LENGTH = 30;
 export const MAX_WEBSITE_LENGTH = 300;
-export const MAX_WARD_LENGTH = 100;
 export const MAX_LEGAL_NAME_LENGTH = 200;
 export const MAX_PERSON_NAME_LENGTH = 100;
 export const MAX_OTHER_PLATFORM_URLS = 5;
@@ -217,6 +221,24 @@ class TaxCodeForEntity implements ValidatorConstraintInterface {
   }
 }
 
+/** `wardCode` must be a ward of the sibling `provinceCode`. */
+@ValidatorConstraint({ name: 'wardOfProvince' })
+class WardOfProvince implements ValidatorConstraintInterface {
+  validate(value: unknown, args: ValidationArguments): boolean {
+    if (typeof value !== 'string') return false;
+    const holder: unknown = args.object;
+    if (typeof holder !== 'object' || holder === null) return false;
+    const provinceCode: unknown = Reflect.get(holder, 'provinceCode');
+    // An unknown provinceCode already fails its own check.
+    if (!isVnProvinceCode(provinceCode)) return true;
+    return wardName(provinceCode, value) !== null;
+  }
+
+  defaultMessage(): string {
+    return 'wardCode must be a ward or commune of provinceCode';
+  }
+}
+
 const needsLegalName = (dto: WorkspaceLegalDto): boolean =>
   dto.entityType !== LegalEntityType.INDIVIDUAL;
 
@@ -320,12 +342,14 @@ export class CreateWorkspaceDto extends RestaurantPlaceDto {
   @IsIn(VN_PROVINCE_CODES)
   provinceCode!: VnProvinceCode;
 
-  @ApiProperty({ maxLength: MAX_WARD_LENGTH, description: 'Ward or commune' })
-  @Transform(trim)
+  @ApiProperty({
+    example: '00004',
+    description:
+      'Official 5-digit code of a ward, commune or special zone of provinceCode',
+  })
   @IsString()
-  @MinLength(1)
-  @MaxLength(MAX_WARD_LENGTH)
-  ward!: string;
+  @Validate(WardOfProvince)
+  wardCode!: string;
 
   @ApiProperty({ enum: BusinessForm })
   @IsEnum(BusinessForm)
@@ -435,7 +459,18 @@ export class RestaurantLocationDto {
 export class RestaurantProfileFieldsDto extends RestaurantLocationDto {
   @ApiProperty({ type: String, nullable: true, enum: VN_PROVINCE_CODES })
   provinceCode!: string | null;
-  @ApiProperty({ type: String, nullable: true }) ward!: string | null;
+  @ApiProperty({
+    type: String,
+    nullable: true,
+    description: 'Official ward code; null on applications made before it',
+  })
+  wardCode!: string | null;
+  @ApiProperty({
+    type: String,
+    nullable: true,
+    description: 'Ward name (from wardCode, or as typed on older applications)',
+  })
+  ward!: string | null;
   @ApiProperty({ enum: BusinessForm, nullable: true })
   businessForm!: BusinessForm | null;
   @ApiProperty({ enum: VegetarianLevel, nullable: true })

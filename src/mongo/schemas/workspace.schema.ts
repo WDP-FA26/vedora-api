@@ -102,11 +102,15 @@ export class Workspace extends Identified {
   @Prop({ type: String, default: null })
   website!: string | null;
 
-  /** A `VN_PROVINCES` code. Null on applications made before the 3-step form. */
+  /** An official province code (`VN_PROVINCES`). Null on applications made before the 3-step form. */
   @Prop({ type: String, default: null })
   provinceCode!: string | null;
 
-  /** Ward or commune, as the applicant typed it. */
+  /** Official ward code; null on applications made before the ward dropdown. */
+  @Prop({ type: String, default: null })
+  wardCode!: string | null;
+
+  /** Ward name: looked up from `wardCode`, or typed by hand on older applications. */
   @Prop({ type: String, default: null })
   ward!: string | null;
 

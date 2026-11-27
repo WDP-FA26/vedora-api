@@ -15,6 +15,7 @@ import {
 } from '@src/mongo/models.js';
 import { RefreshTokensService } from '@src/auth/refresh-tokens.service.js';
 import { StorageService } from '@src/storage/storage.service.js';
+import { WorkspacesService } from '@src/workspaces/workspaces.service.js';
 import { createE2eApp, type E2eApp } from '@test/support/e2e-app.js';
 import { createUser } from '@test/support/fixtures.js';
 import {
@@ -371,7 +372,9 @@ describe('Restaurant page flows (e2e)', () => {
         { confirmsAccuracy: false },
         { consentsToReview: undefined },
         { phone: '' },
-        { provinceCode: 'ha-tay' },
+        { provinceCode: 'ha-noi' },
+        { wardCode: '25747' },
+        { wardCode: '4' },
       ])
         await request(server())
           .post('/api/v1/workspaces')
@@ -409,6 +412,32 @@ describe('Restaurant page flows (e2e)', () => {
       }).expect(400);
       expect(errorSchema.parse(partial.body).code).toBe('CHECKLIST_INCOMPLETE');
       await review(second.id, APPROVE_REVIEW).expect(200);
+    });
+
+    it('stores the official ward name and maps old province slugs', async () => {
+      const applied = workspaceSchema.parse(
+        (await apply(ownerToken, owner.id, 201)).body,
+      );
+      const stored = await model<Workspace>(Workspace.name)
+        .findOne({ _id: applied.id })
+        .exec();
+      expect(stored).toMatchObject({
+        provinceCode: '01',
+        wardCode: '00004',
+        ward: 'Phường Ba Đình',
+      });
+
+      await model<Workspace>(Workspace.name).updateOne(
+        { _id: applied.id },
+        { $set: { provinceCode: 'ho-chi-minh' } },
+      );
+      const workspaces = e2e.app.get(WorkspacesService);
+      await workspaces.remapLegacyProvinceCodes();
+      await workspaces.remapLegacyProvinceCodes();
+      const remapped = await model<Workspace>(Workspace.name)
+        .findOne({ _id: applied.id })
+        .exec();
+      expect(remapped?.provinceCode).toBe('79');
     });
 
     it('locks the address and pin of an approved page', async () => {
