@@ -2,8 +2,8 @@ import { ConfigService } from '@nestjs/config';
 import { asSchema, simulateReadableStream, type UIMessageChunk } from 'ai';
 import { type DeepMockProxy, mockDeep } from 'vitest-mock-extended';
 import { FeatureUnavailableException } from '@src/common/exceptions/feature-unavailable.exception.js';
-import { QuotaReachedException } from '@src/common/exceptions/quota-reached.exception.js';
-import type { AiUsageService } from '@src/subscriptions/ai-usage.service.js';
+import { AccessDeniedException } from '@src/common/exceptions/access-denied.exception.js';
+import type { SubscriptionsService } from '@src/subscriptions/subscriptions.service.js';
 import type { MealLogService } from '@src/meal-plan/meal-log/meal-log.service.js';
 import type { MealPlanService } from '@src/meal-plan/meal-plan.service.js';
 import type { ShoppingListService } from '@src/meal-plan/shopping-list.service.js';
@@ -25,7 +25,6 @@ import { buildVoiceScreenContext } from '@src/meal-plan/meal-planner.prompt.js';
 import { MealPlannerVoiceService } from '@src/meal-plan/voice/meal-planner-voice.service.js';
 import type { DietaryService } from '@src/recipes/dietary.service.js';
 import {
-  AiFeature,
   CalorieSource,
   MealLogSource,
   MealSection,
@@ -48,16 +47,16 @@ function emptyStream() {
 
 describe('MealPlannerVoiceService', () => {
   let chat: DeepMockProxy<MealPlannerChatService>;
-  let usage: DeepMockProxy<AiUsageService>;
+  let subscriptions: DeepMockProxy<SubscriptionsService>;
 
   beforeEach(() => {
     chat = mockDeep<MealPlannerChatService>();
     chat.stream.mockResolvedValue(emptyStream());
-    usage = mockDeep<AiUsageService>();
+    subscriptions = mockDeep<SubscriptionsService>();
   });
 
   const service = (config: Record<string, string> = {}) =>
-    new MealPlannerVoiceService(new ConfigService(config), chat, usage);
+    new MealPlannerVoiceService(new ConfigService(config), chat, subscriptions);
 
   it('refuses a session when no gateway key is configured', async () => {
     await expect(service().createSession(USER_ID)).rejects.toThrow(
@@ -65,16 +64,15 @@ describe('MealPlannerVoiceService', () => {
     );
   });
 
-  it('refuses a session once the chat quota is used up', async () => {
-    usage.hasAllowance.mockResolvedValue(false);
+  it('refuses a session without Pro before contacting the gateway', async () => {
+    subscriptions.requireProVoice.mockRejectedValue(
+      new AccessDeniedException('PRO_REQUIRED', 'Need Pro'),
+    );
 
     await expect(
       service({ AI_GATEWAY_API_KEY: 'test-key' }).createSession(USER_ID),
-    ).rejects.toThrow(QuotaReachedException);
-    expect(usage.hasAllowance).toHaveBeenCalledWith(
-      USER_ID,
-      AiFeature.MEAL_PLAN_CHAT,
-    );
+    ).rejects.toThrow(AccessDeniedException);
+    expect(subscriptions.requireProVoice).toHaveBeenCalledWith(USER_ID);
   });
 
   it('streams the planner in voice mode on the chat thread', async () => {
@@ -620,8 +618,7 @@ describe('voice stream effects', () => {
         },
         close: null,
       },
-      screenSummary:
-        'Đã mở danh sách món dùng đậu phụ trong danh sách đi chợ.',
+      screenSummary: 'Đã mở danh sách món dùng đậu phụ trong danh sách đi chợ.',
     });
 
     expect(

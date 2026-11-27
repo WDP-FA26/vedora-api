@@ -202,7 +202,10 @@ describe('SePay payment flows (contract matrix)', () => {
         PaymentEventsService,
         { provide: ConfigService, useValue: new ConfigService(settings) },
       ],
-    }).compile();
+    })
+      .overrideProvider(ConfigService)
+      .useValue(new ConfigService(settings))
+      .compile();
     app = moduleRef.createNestApplication({ rawBody: true });
     configureApp(app);
     await app.init();
@@ -519,7 +522,7 @@ describe('SePay payment flows (contract matrix)', () => {
       expect((await billing(user)).membership.planCode).toBe('PLUS');
     });
 
-    it('returns an identical body, including cancelledAt, when cancelling twice', async () => {
+    it('keeps cancellation data stable while refreshing serverTime on repeated cancellation', async () => {
       const user = await makeUser();
       const payment = await purchase(user);
       const cancel = () =>
@@ -533,7 +536,10 @@ describe('SePay payment flows (contract matrix)', () => {
 
       expect(first.status).toBe('CANCELLED');
       expect(first.cancelledAt).not.toBeNull();
-      expect(second).toEqual(first);
+      const { serverTime: firstTime, ...firstContract } = first;
+      const { serverTime: secondTime, ...secondContract } = second;
+      expect(secondContract).toEqual(firstContract);
+      expect(Date.parse(secondTime)).toBeGreaterThanOrEqual(Date.parse(firstTime));
     });
 
     it('returns 404 NOT_FOUND for an unknown payment id', async () => {

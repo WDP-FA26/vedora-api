@@ -11,8 +11,8 @@ export class AiRequest extends Identified {
   @Prop({ type: String, required: true }) requestKey!: string;
   @Prop({ type: String, enum: Object.values(AiFeature), required: true })
   feature!: AiFeature;
-  @Prop({ type: String, enum: ['TEXT', 'IMAGE'], required: true }) bucket!:
-    'TEXT' | 'IMAGE';
+  @Prop({ type: String, enum: ['TEXT', 'IMAGE', 'VOICE'], required: true })
+  bucket!: 'TEXT' | 'IMAGE' | 'VOICE';
   @Prop({ type: String, required: true }) periodKey!: string;
   @Prop({ type: String, required: true }) promptHash!: string;
   @Prop({ type: [String], default: [] }) requestHashes!: string[];

@@ -125,6 +125,25 @@ export class AiUsageService {
     context: UsageContext = {},
     now = new Date(),
   ): Promise<UsageTicket | null> {
+    return this.reserve(userId, feature, context, now, false);
+  }
+
+  async consumeVoice(
+    userId: string,
+    feature: AiFeature,
+    context: UsageContext = {},
+    now = new Date(),
+  ): Promise<UsageTicket | null> {
+    return this.reserve(userId, feature, context, now, true);
+  }
+
+  private async reserve(
+    userId: string,
+    feature: AiFeature,
+    context: UsageContext,
+    now: Date,
+    voice: boolean,
+  ): Promise<UsageTicket | null> {
     const requestKey = context.requestId ?? randomUUID();
     if (!requestKey.length || requestKey.length > 200)
       throw new InvalidInputException('BAD_REQUEST', 'Invalid AI request ID');
@@ -135,12 +154,21 @@ export class AiUsageService {
       try {
         return await this.mongo.withTransaction(async (session) => {
           await lockDocument(this.mongo, session, 'payer', userId);
-          const period = await this.subscriptions.period(userId, now, session);
+          const period = voice
+            ? await this.subscriptions.requireProVoice(userId, now, session)
+            : await this.subscriptions.period(userId, now, session);
+          const bucket = voice ? 'VOICE' : this.bucket(feature);
           let row = await this.requests
             .findOne({ userId, feature, requestKey })
             .session(session)
             .exec();
           if (row) {
+            if (row.bucket !== bucket) {
+              throw new StateConflictException(
+                'IDEMPOTENCY_CONFLICT',
+                'This AI request ID belongs to another channel',
+              );
+            }
             if (row.promptHash !== promptHash)
               throw new StateConflictException(
                 'IDEMPOTENCY_CONFLICT',
@@ -182,7 +210,7 @@ export class AiUsageService {
               'The original assistant request is unavailable',
             );
           }
-          if (!row?.charged) {
+          if (!row?.charged && !voice) {
             const isAdmin = await this.isAdmin(userId, session);
             if (!isAdmin) {
               const limit =
@@ -202,7 +230,7 @@ export class AiUsageService {
               feature,
               requestKey,
               promptHash,
-              bucket: this.bucket(feature),
+              bucket,
               charged: false,
               requestHashes: [],
             });

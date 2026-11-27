@@ -5,10 +5,11 @@ import { PaymentIntent, PaymentStatus } from '../mongo/models.js';
 import {
   effectivePlan,
   freePeriod,
-  SUBSCRIPTION_LIMITS,
   purchasedLimits,
   type SubscriptionPlan,
 } from './subscription-policy.js';
+import { SubscriptionCatalogService } from './subscription-catalog.service.js';
+import { AccessDeniedException } from '../common/exceptions/access-denied.exception.js';
 
 export interface SubscriptionPeriod {
   planCode: SubscriptionPlan;
@@ -24,7 +25,23 @@ export class SubscriptionsService {
   constructor(
     @InjectModel(PaymentIntent.name)
     private readonly intents: Model<PaymentIntent>,
+    private readonly catalog: SubscriptionCatalogService,
   ) {}
+
+  async requireProVoice(
+    userId: string,
+    now = new Date(),
+    session?: ClientSession,
+  ): Promise<SubscriptionPeriod> {
+    const period = await this.period(userId, now, session);
+    if (period.planCode !== 'PRO') {
+      throw new AccessDeniedException(
+        'PRO_REQUIRED',
+        'Two-way AI voice requires an active Pro subscription',
+      );
+    }
+    return period;
+  }
 
   async period(
     userId: string,
@@ -53,11 +70,12 @@ export class SubscriptionsService {
         };
       }
     }
+    const { freeLimits } = await this.catalog.current(session);
     return {
       planCode: 'FREE',
       ...freePeriod(now),
-      textLimit: SUBSCRIPTION_LIMITS.FREE.text,
-      imageLimit: SUBSCRIPTION_LIMITS.FREE.images,
+      textLimit: freeLimits.textLimit,
+      imageLimit: freeLimits.imageLimit,
     };
   }
 }

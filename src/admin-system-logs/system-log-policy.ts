@@ -16,6 +16,7 @@ const RESOURCES: Record<string, [SystemLogResource, string]> = {
   verification: ['VERIFICATION', 'xác minh chuyên gia'],
   'admin/workspaces': ['WORKSPACE', 'trang nhà hàng'],
   'admin/payments': ['PAYMENT', 'thanh toán'],
+  'admin/subscription-plans': ['SUBSCRIPTION_PLANS', 'gói đăng ký'],
   'admin/ai-costs': ['AI_COST', 'chi phí AI'],
 };
 

@@ -2,6 +2,15 @@
 
 ## Quy tắc đã chốt
 
+Các mức dưới đây là **mặc định ban đầu**. Admin có thể thay giá và quota tại
+[Quản lý gói đăng ký](admin-subscription-plans.md); cấu hình DB đã lưu được ưu
+tiên hơn env. Giá/quota mới chỉ áp dụng cho đơn mới; đơn QR đang chờ và gói đã
+mua giữ snapshot. Quota Free cập nhật ngay nhưng không reset lượt đã dùng.
+
+Thoại AI hai chiều dành riêng cho Pro còn hiệu lực, gồm cả Pro đã mua trước
+đó. Không tính quota phút và không trừ lượt AI chữ. Free/Plus hoặc Pro hết hạn
+bị từ chối tại API session/turns với `403 PRO_REQUIRED`.
+
 | Gói | Giá / thời hạn | AI văn bản dùng chung | Tạo/chỉnh ảnh AI |
 | --- | --- | --- | --- |
 | FREE | Miễn phí | 5 lượt/ngày, đặt lại 00:00 Asia/Bangkok | 0 |
@@ -97,6 +106,8 @@ Không dựa vào JWT hay localStorage để quyết định quyền lợi; BE k
    Hai biến BILLING_PRO_PRICE_VND/BILLING_PREMIUM_PRICE_VND và các biến
    BLOG_AI_DAILY_* cũ không còn điều khiển catalog/quota mới. Nếu từng tùy chỉnh
    giá, chuyển giá phù hợp sang bộ biến mới trước khi deploy.
+   Sau khi admin lưu cấu hình gói vào DB, giá/quota DB được ưu tiên; đổi env
+   không ghi đè các giá trị đã lưu hoặc hợp đồng của đơn cũ.
 2. MongoDB phải chạy replica set. Mongoose thêm collection/index ai_requests;
    không cần script sửa dữ liệu cũ. Đừng xóa lịch sử để đổi tên gói.
 3. Phối hợp deploy BE và FE v2. Client cũ không hiểu PLUS/contract mới; version

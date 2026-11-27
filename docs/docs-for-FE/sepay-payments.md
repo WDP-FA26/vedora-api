@@ -6,14 +6,15 @@ marketplace, báo giá, credit hoặc ví nhà bán của dự án nguồn.
 
 ## Quy tắc được duyệt
 
-- Plus: **49.000 VND / 30 ngày**. Pro: **99.000 VND / 30 ngày**.
+- Giá mặc định ban đầu: Plus **49.000 VND / 30 ngày**, Pro **99.000 VND / 30 ngày**.
+  Admin sửa giá/quota tại [Quản lý gói đăng ký](admin-subscription-plans.md).
 - Mỗi ngày = 24 giờ. Gói bắt đầu tại `capturedAt` (thời điểm BE commit capture),
   không bắt đầu khi tạo QR hoặc dựa trên thời gian mở trình duyệt.
 - Mua mới, kể cả mua lại cùng gói, thay thế thời hạn cũ ngay. Không cộng dồn,
   không prorate, không quy đổi thời gian còn lại. FE thông báo trước khi mua.
 - Quyền lợi AI và chuyển đổi gói cũ được mô tả tại [subscriptions.md](subscriptions.md).
   Không recurring/auto-renew. Hết hạn đọc thành FREE, không cần worker/cron/BullMQ.
-- Price/duration do BE cấu hình; intent snapshot chúng. Thay giá/config ngân
+- Price/duration/quota do BE cấu hình; intent snapshot chúng. Thay giá/config ngân
   hàng không sửa intent cũ. Webhook match tài khoản/bank đã snapshot của intent.
 
 ## API (prefix `/api/v1`)

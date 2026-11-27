@@ -1,6 +1,6 @@
 # Trợ lý giọng nói của meal planner
 
-Người dùng nói chuyện trực tiếp (full duplex) với mô hình giọng nói **GPT-Live 1.1** qua **Vercel AI Gateway**. Phần việc thật (thực đơn, công thức, nhật ký, chỉ số cơ thể) vẫn do **agent planner hiện tại** (Claude Haiku) làm ở API, với cùng tool, quota và lịch sử thread như chat chữ (bỏ qua bước moderation `decide` riêng để giảm latency).
+Người dùng **Pro còn hiệu lực** nói chuyện trực tiếp (full duplex) với mô hình giọng nói **GPT-Live 1.1** qua **Vercel AI Gateway**. Phần việc thật (thực đơn, công thức, nhật ký, chỉ số cơ thể) vẫn do **agent planner hiện tại** (Claude Haiku) làm ở API, dùng chung tool và lịch sử thread với chat chữ (bỏ qua bước moderation `decide` riêng để giảm latency). Voice không trừ lượt AI chữ và không có hạn mức phút theo chu kỳ. Pro đã mua trước đó cũng được dùng; Free, Plus và tài khoản admin không có Pro đều bị từ chối.
 
 ```
 Mic ─► experimental_useRealtime ─WS─► AI Gateway ─► GPT-Live 1.1
@@ -29,7 +29,7 @@ Cấp token ngắn hạn (`vcst_…`, 60 giây để mở WebSocket; phiên đã
 
 `experimental_useRealtime` gọi endpoint token bằng `fetch` không kèm header Authorization, nên FE đặt một route cùng origin (`/api/meal-planner/voice/session`) đọc cookie phiên rồi gọi endpoint này.
 
-Lỗi: `401` chưa đăng nhập, `429 TOO_MANY_REQUESTS` gọi quá nhanh, `429 AI_QUOTA_EXCEEDED` đã dùng hết lượt AI chữ (mỗi lượt nói tính vào quota chat thực đơn, nên không cấp phiên khi không còn lượt; tài khoản admin không bị giới hạn, giống chat chữ), `503 SERVICE_UNAVAILABLE` chưa cấu hình voice.
+Lỗi: `401` chưa đăng nhập, `403 PRO_REQUIRED` không có Pro còn hiệu lực, `429 TOO_MANY_REQUESTS` gọi quá nhanh, `503 SERVICE_UNAVAILABLE` chưa cấu hình voice. API kiểm tra quyền Pro trước khi cấp token; không phụ thuộc số lượt AI chữ còn lại.
 
 ## POST /meal-plan/voice/turns
 
@@ -68,7 +68,7 @@ Phần `text` của tin nhắn cuối (hoặc `data-summary` nếu `text` rỗng
 
 **Hủy:** đóng request (abort) khi người dùng nói tiếp hoặc kết thúc cuộc gọi; agent dừng, những gì đã lưu vẫn giữ. FE báo cho GPT-Live bằng `context-append` kênh `thinking` cho delegation cũ và làm mới lại các cache.
 
-Lỗi (trước khi stream bắt đầu, dạng JSON như mọi endpoint): `429 AI_QUOTA_EXCEEDED` hết lượt AI, `429` gọi quá nhanh, `503` model lỗi, `404` thread không thuộc người dùng. Lỗi giữa stream đến dưới dạng phần `error`. Khi lỗi, FE vẫn gửi một câu `commentary` nói thật là chưa làm xong để GPT-Live không đoán kết quả.
+Lỗi (trước khi stream bắt đầu, dạng JSON như mọi endpoint): `403 PRO_REQUIRED` gói không còn là Pro hoặc đã hết hạn, `429` gọi quá nhanh, `503` model lỗi, `404` thread không thuộc người dùng. API kiểm tra lại quyền ở mỗi lượt, kể cả khi người dùng đã có token phiên trước đó. Lỗi giữa stream đến dưới dạng phần `error`. Khi lỗi, FE vẫn gửi một câu `commentary` nói thật là chưa làm xong để GPT-Live không đoán kết quả.
 
 ## Phía FE
 
@@ -76,4 +76,5 @@ Lỗi (trước khi stream bắt đầu, dạng JSON như mọi endpoint): `429 
 - Câu chào đầu phiên dùng `fullName` của người dùng (gọi bằng tên) nếu có.
 - `sessionConfig`: `instructions` theo template GPT-Live (giữ các mục `Backchannel policy`, `Interruption policy`, `Delegation policy`), `providerOptions.openai.delegation = { type: "client" }` và một tin nhắn `developer` chào đầu phiên trong `providerOptions.openai.input`. AI Gateway chỉ nhận `delegation` đúng `{ type: "client" }` (không có `acknowledgement_delay_ms`).
 - CSP `connect-src` cần `wss://ai-gateway.vercel.sh`; `Permissions-Policy` cần `microphone=(self)`.
-- Thời lượng phiên chỉ được giới hạn ở FE (5 phút). Token không khóa được cấu hình phiên phía server; muốn khóa thì chuyển sang relay (`server-websocket`).
+- FE kiểm tra gói trước khi mở micro và hiện hướng nâng cấp cho Free/Plus. Voice vẫn lưu request/idempotency trong bucket `VOICE`, tách khỏi `TEXT`; không ghi hạn mức phút hoặc ledger tính giây.
+- Giới hạn kỹ thuật một phiên theo `NEXT_PUBLIC_VOICE_MAX_SECONDS` ở FE, không phải quota phút của gói. Token chỉ giới hạn thời gian mở WebSocket, không tự cắt một kết nối đã mở. Quyền session/turn được kiểm tra ở BE; kiến trúc kết nối trực tiếp Gateway hiện có được giữ nguyên.

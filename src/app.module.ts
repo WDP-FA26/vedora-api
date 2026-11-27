@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { AdminAiCostsModule } from './admin-ai-costs/admin-ai-costs.module.js';
+import { AdminSubscriptionPlansModule } from './subscriptions/admin-subscription-plans.module.js';
 import { AdminSystemLogsModule } from './admin-system-logs/admin-system-logs.module.js';
 import { APP_FILTER } from '@nestjs/core';
 import { AppExceptionFilter } from './common/exceptions/app-exception.filter.js';
@@ -61,6 +62,7 @@ import { WorkspacesModule } from './workspaces/workspaces.module.js';
     UsersModule,
     AdminDashboardModule,
     AdminAiCostsModule,
+    AdminSubscriptionPlansModule,
     AdminSystemLogsModule,
     PaymentsModule,
     MediaModule,

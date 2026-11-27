@@ -144,7 +144,10 @@ describe('SePay payments with MongoDB and HTTP', () => {
         PaymentEventsService,
         { provide: ConfigService, useValue: new ConfigService(settings) },
       ],
-    }).compile();
+    })
+      .overrideProvider(ConfigService)
+      .useValue(new ConfigService(settings))
+      .compile();
     app = moduleRef.createNestApplication({ rawBody: true });
     configureApp(app);
     await app.init();
@@ -499,8 +502,8 @@ describe('SePay payments with MongoDB and HTTP', () => {
     }
   });
 
-  it('publishes versioned Plus/Pro prices and shared AI entitlements', () => {
-    expect(service.catalog().plans).toEqual([
+  it('publishes versioned Plus/Pro prices and shared AI entitlements', async () => {
+    expect((await service.catalog()).plans).toEqual([
       {
         code: 'PLUS',
         name: 'Plus',

@@ -10,6 +10,7 @@ import {
 } from '@nestjs/common';
 import {
   ApiBearerAuth,
+  ApiForbiddenResponse,
   ApiOkResponse,
   ApiOperation,
   ApiServiceUnavailableResponse,
@@ -38,8 +39,11 @@ import { MealPlannerVoiceService } from './meal-planner-voice.service.js';
 })
 @ApiTooManyRequestsResponse({
   type: ErrorBodyDto,
-  description:
-    'Too many requests a minute, or `AI_QUOTA_EXCEEDED` when the shared AI text allowance is used up',
+  description: 'Too many voice requests a minute',
+})
+@ApiForbiddenResponse({
+  type: ErrorBodyDto,
+  description: 'PRO_REQUIRED: an active Pro subscription is required',
 })
 @UseGuards(JwtAuthGuard, UserThrottlerGuard)
 @Controller('meal-plan/voice')
@@ -51,7 +55,7 @@ export class MealPlannerVoiceController {
   @ApiOperation({
     summary: 'Start a voice session with the meal planner',
     description:
-      'Mints a short-lived Vercel AI Gateway client secret for the realtime voice model (GPT-Live by default). The browser opens the WebSocket with it; the voice model delegates the actual work to `POST /meal-plan/voice/turns`. Refused with `429 AI_QUOTA_EXCEEDED` when the meal planner chat quota is used up, since every turn would fail.',
+      'Requires an active Pro subscription before minting a short-lived AI Gateway client secret. Existing Pro subscriptions qualify. Voice requests do not consume the shared text allowance; there is no subscription minutes quota.',
   })
   @ApiOkResponse({ type: MealPlanVoiceSessionDto })
   @ApiServiceUnavailableResponse({
@@ -70,7 +74,7 @@ export class MealPlannerVoiceController {
   @ApiOperation({
     summary: 'Answer one spoken turn with the meal planner',
     description:
-      'Streams the meal planner agent in voice mode on what the user said, as an AI SDK UI message stream (SSE) enriched with transient `data-*` events (`data-state`, `data-screen`, `data-progress`, `data-summary`, `data-end-call`). Send `screen` with what the page shows now so the agent can refer to it. The reply text is short and meant to be spoken. Closing the request stops the agent (the user spoke again or hung up); what was saved stays. Uses the meal planner chat quota; skips the extra moderation round-trip for voice latency, and asks the user aloud before calling web search.',
+      'Streams the meal planner agent in voice mode on what the user said, as an AI SDK UI message stream (SSE) enriched with transient `data-*` events (`data-state`, `data-screen`, `data-progress`, `data-summary`, `data-end-call`). Send `screen` with what the page shows now so the agent can refer to it. The reply text is short and meant to be spoken. Closing the request stops the agent (the user spoke again or hung up); what was saved stays. Requires an active Pro subscription and uses the independent VOICE request channel without charging shared text quota; skips the extra moderation round-trip for voice latency.',
   })
   @ApiOkResponse({ description: 'UI message stream (text/event-stream)' })
   @ApiServiceUnavailableResponse({
