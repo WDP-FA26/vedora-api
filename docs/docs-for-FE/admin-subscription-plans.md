@@ -68,7 +68,7 @@ Không lộ request key/hash nội bộ.
 - Bắt đầu ngay, thay gói hiện có, snapshot duration/quota hiện hành (mặc định
   30 ngày). Không cộng dồn, prorate hay giữ lượt cũ. Cấp lại cùng gói bằng yêu
   cầu mới cũng bắt đầu chu kỳ mới. Catalogue đổi sau đó không sửa snapshot.
-- Pro có voice như gói mua, không quota phút, không trừ AI chữ; Plus không có.
+- Pro có voice như gói mua, không quota phút, dùng chung lượt AI chữ; Plus không có.
   Điều kiện xác minh email/trạng thái tài khoản vẫn áp dụng. Với tài khoản
   chưa sử dụng được, chu kỳ vẫn bắt đầu ngay; FE cảnh báo trước khi cấp.
 - History và assignment ghi cùng transaction; khóa user chặn race với xóa
@@ -159,7 +159,7 @@ Thay toàn bộ cấu hình giá/quota trong một lần ghi atomic:
 - Không nhận tên gói, thời hạn, ngày hết hạn đơn hoặc đặc quyền tự khai báo.
 - Lượt chữ dùng chung theo cơ chế AI usage hiện tại; lượt tạo ảnh tính riêng.
   Thoại AI hai chiều là đặc quyền cố định của Pro đang còn hạn, kể cả Pro mua
-  trước khi có tính năng. Voice không trừ quota chữ và không có quota phút.
+  trước khi có tính năng. Yêu cầu planner qua voice trừ chung quota chữ và không có quota phút.
   API quản lý gói không chỉnh guest quota hoặc thời lượng kỹ thuật mỗi phiên.
 - Gửi đúng `version` từ GET. Hai admin cùng sửa thì chỉ lần ghi đúng revision
   thành công, revision tăng 1. Revision cũ trả `409 SUBSCRIPTION_CATALOG_CONFLICT`.

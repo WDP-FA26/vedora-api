@@ -13,6 +13,7 @@ export class AiRequest extends Identified {
   feature!: AiFeature;
   @Prop({ type: String, enum: ['TEXT', 'IMAGE', 'VOICE'], required: true })
   bucket!: 'TEXT' | 'IMAGE' | 'VOICE';
+  @Prop({ type: Boolean }) usesTextQuota?: boolean;
   @Prop({ type: String, required: true }) periodKey!: string;
   @Prop({ type: String, required: true }) promptHash!: string;
   @Prop({ type: [String], default: [] }) requestHashes!: string[];

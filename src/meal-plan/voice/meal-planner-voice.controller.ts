@@ -39,7 +39,8 @@ import { MealPlannerVoiceService } from './meal-planner-voice.service.js';
 })
 @ApiTooManyRequestsResponse({
   type: ErrorBodyDto,
-  description: 'Too many voice requests a minute',
+  description:
+    'AI_QUOTA_EXCEEDED when shared text allowance is exhausted, or TOO_MANY_REQUESTS for rate limits',
 })
 @ApiForbiddenResponse({
   type: ErrorBodyDto,
@@ -55,7 +56,7 @@ export class MealPlannerVoiceController {
   @ApiOperation({
     summary: 'Start a voice session with the meal planner',
     description:
-      'Requires an active Pro subscription before minting a short-lived AI Gateway client secret. Existing Pro subscriptions qualify. Voice requests do not consume the shared text allowance; there is no subscription minutes quota.',
+      'Requires an active Pro subscription and remaining shared text allowance before minting a short-lived AI Gateway client secret. Opening a session does not consume a turn. Successful delegated voice requests consume one shared text turn; there is no subscription minutes quota.',
   })
   @ApiOkResponse({ type: MealPlanVoiceSessionDto })
   @ApiServiceUnavailableResponse({
@@ -74,7 +75,7 @@ export class MealPlannerVoiceController {
   @ApiOperation({
     summary: 'Answer one spoken turn with the meal planner',
     description:
-      'Streams the meal planner agent in voice mode on what the user said, as an AI SDK UI message stream (SSE) enriched with transient `data-*` events (`data-state`, `data-screen`, `data-progress`, `data-summary`, `data-end-call`). Send `screen` with what the page shows now so the agent can refer to it. The reply text is short and meant to be spoken. Closing the request stops the agent (the user spoke again or hung up); what was saved stays. Requires an active Pro subscription and uses the independent VOICE request channel without charging shared text quota; skips the extra moderation round-trip for voice latency.',
+      'Streams the meal planner agent in voice mode on what the user said, as an AI SDK UI message stream (SSE) enriched with transient `data-*` events (`data-state`, `data-screen`, `data-progress`, `data-summary`, `data-end-call`). Send `screen` with what the page shows now so the agent can refer to it. The reply text is short and meant to be spoken. Closing the request stops the agent (the user spoke again or hung up); what was saved stays. Requires an active Pro subscription; each successful delegated turn consumes the shared text allowance. Reservations, refunds and idempotency match text requests; skips the extra moderation round-trip for voice latency.',
   })
   @ApiOkResponse({ description: 'UI message stream (text/event-stream)' })
   @ApiServiceUnavailableResponse({
