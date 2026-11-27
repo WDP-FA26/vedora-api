@@ -13,7 +13,6 @@ import { SUBAGENT_STATIC_INSTRUCTIONS } from './nutrition-subagent.prompt.js';
 
 const logger = new Logger('NutritionSubagentTool');
 const SUBAGENT_MAX_STEPS = 6;
-/** Room for medium-effort thinking plus the answer: thinking counts toward it. */
 const SUBAGENT_MAX_OUTPUT_TOKENS =
   runtimeConfig.PLANNER_NUTRITION_SUBAGENT_MAX_OUTPUT_TOKENS;
 
@@ -116,9 +115,7 @@ export function consultNutritionSubagentTool(
           prompt: contextParts.join('\n'),
           abortSignal,
         });
-        // Claude Haiku 5.5 has no server-side fallback: a declined request
-        // ends with no usable answer, so tell the planner instead of passing
-        // back an empty or cut-off summary.
+
         if (result.finishReason === 'content-filter') {
           logger.warn('Nutrition subagent request was declined');
           return {

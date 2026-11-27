@@ -6,7 +6,6 @@ import {
   MEAL_PLAN_WEEKS_AHEAD,
 } from '../meal-week.js';
 
-/** The Mondays the planner may write to: this week and the weeks ahead, in order. */
 export function plannableWeekStarts(
   now: Date = new Date(),
 ): [string, ...string[]] {
@@ -18,7 +17,6 @@ export function plannableWeekStarts(
   return weeks;
 }
 
-/** The optional `weekStart` a planner tool takes; only the plannable weeks are accepted. */
 export function weekStartInput(weeks: [string, ...string[]]) {
   return z
     .enum(weeks)
@@ -28,7 +26,6 @@ export function weekStartInput(weeks: [string, ...string[]]) {
     );
 }
 
-/** The days in `days` that come before today in the week of `weekStart`. */
 export function passedDays(
   weekStart: string,
   days: readonly Weekday[],
