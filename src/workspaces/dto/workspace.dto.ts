@@ -42,6 +42,7 @@ import {
   wardName,
   type VnProvinceCode,
 } from '../vn-admin-units.js';
+import { isWellFormedCitizenId } from '../citizen-id.js';
 import { PaginationQueryDto } from '../../common/pagination/index.js';
 import { PresignedUploadDto } from '../../storage/presigned-upload.dto.js';
 import {
@@ -213,11 +214,14 @@ class TaxCodeForEntity implements ValidatorConstraintInterface {
     const entityType: unknown = Reflect.get(holder, 'entityType');
     // An unknown entityType already fails its own check.
     if (!isLegalEntityType(entityType)) return true;
-    return taxCodeFormat(entityType).test(value);
+    if (!taxCodeFormat(entityType).test(value)) return false;
+    // A 12-digit tax code is a citizen ID, whose digits encode a province and a birth year.
+    if (value.length === 12) return isWellFormedCitizenId(value);
+    return true;
   }
 
   defaultMessage(): string {
-    return 'taxCode must be 10 digits (10-3 for a branch) for a company, the 12-digit citizen ID for an individual, or either for a household';
+    return 'taxCode must be 10 digits (10-3 for a branch) for a company, a real 12-digit citizen ID for an individual, or either for a household';
   }
 }
 

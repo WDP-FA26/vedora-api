@@ -171,7 +171,7 @@ const APPLICATIONS: ApplicationSpec[] = [
     ],
     legal: {
       entityType: LegalEntityType.HOUSEHOLD,
-      taxCode: '099200000003',
+      taxCode: '079200000003',
       legalName: 'Hộ kinh doanh An Nhiên Chay (TEST)',
       legalAddress: '88 Lê Thánh Tôn, Bến Thành, TP.HCM',
       representativeName: 'Phạm Gia Cường',
@@ -206,7 +206,7 @@ const APPLICATIONS: ApplicationSpec[] = [
     otherPlatformUrls: [],
     legal: {
       entityType: LegalEntityType.INDIVIDUAL,
-      taxCode: '099200000004',
+      taxCode: '046200000004',
       legalName: null,
       legalAddress: '5 Lê Lợi, Thuận Hóa, Huế',
       representativeName: 'Võ Thị Dung',
@@ -236,7 +236,7 @@ const APPLICATIONS: ApplicationSpec[] = [
     otherPlatformUrls: [],
     legal: {
       entityType: LegalEntityType.INDIVIDUAL,
-      taxCode: '099200000004',
+      taxCode: '046200000004',
       legalName: null,
       legalAddress: '5 Lê Lợi, Thuận Hóa, Huế',
       representativeName: 'Võ Thị Dung',

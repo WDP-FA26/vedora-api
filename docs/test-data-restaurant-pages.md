@@ -1,8 +1,9 @@
 # Bộ dữ liệu test: trang nhà hàng
 
 Dùng để test đơn mở trang nhà hàng (form 3 bước), trang duyệt của admin và trang đã duyệt. Mọi dữ
-liệu đều là giả: mã số thuế bắt đầu bằng `99` và số CCCD bắt đầu bằng `099`, đều không phải mã tỉnh,
-nên không trùng doanh nghiệp hay người thật. Ảnh giấy tờ là ảnh màu có ghi
+liệu đều là giả. Mã số thuế 10 số bắt đầu bằng `99`, không phải mã tỉnh nào, nên không trùng doanh
+nghiệp thật. Số CCCD thì phải có mã tỉnh và năm sinh thật mới qua được kiểm tra, nên 6 số cuối được đặt
+là `0000xx`; đừng dùng các số này ở đâu khác. Ảnh giấy tờ là ảnh màu có ghi
 "ẢNH TEST — KHÔNG PHẢI GIẤY TỜ THẬT".
 
 ## Chạy
@@ -23,9 +24,9 @@ npm run seed:restaurants
 | --------- | --- | ---------- | ------------ |
 | `test.chuquan.anh` | **A**: Chay Hoa Sen - Cơm chay (Hà Nội, hộ kinh doanh, MST `9900000001`) | ✅ Đã duyệt, có trang `@test-chay-hoa-sen` | Trang nhà hàng trên bản đồ và profile; chuyển sang dùng trang; địa chỉ và ghim bị khóa khi sửa |
 | `test.chuquan.binh` | **B**: Chay Hoa Sen 2 - Lẩu nấm (Hà Nội, doanh nghiệp, **cùng MST với A**, cách A khoảng 50 m) | ⏳ Chờ duyệt | Admin thấy 2 cảnh báo: **trùng MST** và **có trang gần dưới 100 m** |
-| `test.chuquan.cuong` | **C**: An Nhiên Chay - Bún Huế (TP.HCM, hộ kinh doanh, MST là CCCD `099200000003`) | ⏳ Chờ duyệt | Đơn "sạch": đủ 6 loại giấy (có ATTP và thực đơn), không cảnh báo → **duyệt** |
+| `test.chuquan.cuong` | **C**: An Nhiên Chay - Bún Huế (TP.HCM, hộ kinh doanh, MST là CCCD `079200000003`) | ⏳ Chờ duyệt | Đơn "sạch": đủ 6 loại giấy (có ATTP và thực đơn), không cảnh báo → **duyệt** |
 | `test.chuquan.dung` | **D1**: Xe chè chay cô Dung (Huế, cá nhân) | ❌ Bị từ chối 10 ngày trước (giấy tờ mờ) | Lịch sử từ chối |
-| | **D2**: Xe chè chay cô Dung - Chè đậu (Huế, cá nhân, CCCD `099200000004`) | ⏳ Chờ duyệt | Cảnh báo **vừa bị từ chối trong 30 ngày**; đơn cá nhân không có ô ĐKKD; không có nút "Tra cứu MST" |
+| | **D2**: Xe chè chay cô Dung - Chè đậu (Huế, cá nhân, CCCD `046200000004`) | ⏳ Chờ duyệt | Cảnh báo **vừa bị từ chối trong 30 ngày**; đơn cá nhân không có ô ĐKKD; không có nút "Tra cứu MST" |
 | `test.chuquan.em` | **E**: Bếp Chay Em - Cơm phần (Đà Nẵng, hộ kinh doanh) | ❌ Bị từ chối (MST không khớp, có ghi chú) | Owner thấy lý do từ chối → **"Sửa và gửi lại"** |
 | `test.chuquan.phuong` | **F**: Quán Chay Phương (Cần Thơ) | ⏳ Chờ duyệt | Đơn **mẫu cũ**: không có pháp lý, ảnh không phân loại → nhãn "Đơn theo mẫu cũ", duyệt không cần checklist |
 | `test.nguoimoi` | (chưa có đơn) | | Gửi đơn mới từ đầu bằng form 3 bước |
@@ -68,9 +69,9 @@ Bước 2 (pháp lý). Bảng dưới gồm giá trị **hợp lệ** và giá t
 
 | Loại hình | MST hợp lệ | MST phải bị chặn |
 | --------- | ---------- | ---------------- |
-| Doanh nghiệp | `9900000099`, `9900000099-001` | `099200000099` (12 số) |
-| Hộ kinh doanh | `9900000098` hoặc `099200000098` | `12345` |
-| Cá nhân | `099 200 000 097` (có dấu cách cũng được) | `9900000097` (10 số) |
+| Doanh nghiệp | `9900000099`, `9900000099-001` | `001200000099` (12 số) |
+| Hộ kinh doanh | `9900000098` hoặc `001200000098` | `12345`, `099200000098` (`099` không phải mã tỉnh) |
+| Cá nhân | `001 200 000 097` (có dấu cách cũng được) | `9900000097` (10 số), `001900000097` (số thứ 4 là `9` = sinh sau năm 2100), `001230000097` (sinh năm 2030) |
 
 Người đứng tên: `Ngô Mới Tạo`, email: `test.nguoimoi@seed.vedora.test`.
 

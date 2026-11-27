@@ -356,6 +356,10 @@ describe('Restaurant page flows (e2e)', () => {
           taxCode: '001203004005',
         },
         { ...individual.legal, taxCode: '0123456789' },
+        // 099 is no province's code.
+        { ...individual.legal, taxCode: '099203004005' },
+        // A household's 12-digit tax code is a citizen ID too; 9 is a birth after 2100.
+        { ...APPLICATION.legal, taxCode: '001903004005' },
         { ...APPLICATION.legal, legalName: '' },
       ])
         await request(server())
