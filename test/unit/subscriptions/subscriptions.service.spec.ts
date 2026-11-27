@@ -2,9 +2,12 @@ import { randomUUID } from 'node:crypto';
 import type { INestApplication } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import {
+  AccountStatus,
   BillingPlan,
   PaymentIntent,
   PaymentStatus,
+  User,
+  UserRole,
 } from '@src/mongo/models.js';
 import { MongoModule } from '@src/mongo/mongo.module.js';
 import { MongoService } from '@src/mongo/mongo.service.js';
@@ -25,6 +28,7 @@ describe('SubscriptionsService', () => {
   let service: SubscriptionsService;
 
   const intents = () => db.connection.model<PaymentIntent>(PaymentIntent.name);
+  const users = () => db.connection.model<User>(User.name);
 
   async function seedIntent(overrides: Partial<PaymentIntent> = {}) {
     const id = randomUUID();
@@ -71,6 +75,7 @@ describe('SubscriptionsService', () => {
 
   beforeEach(async () => {
     await intents().deleteMany({});
+    await users().deleteMany({});
   });
 
   afterAll(async () => {
@@ -185,5 +190,41 @@ describe('SubscriptionsService', () => {
     expect((await service.period(USER_ID)).planCode).toBe(BillingPlan.PRO);
     await intents().deleteMany({});
     expect((await service.period(USER_ID)).planCode).toBe('FREE');
+  });
+
+  it('gives an ADMIN the Pro plan for the current calendar month without a payment', async () => {
+    const adminId = randomUUID();
+    await users().create({
+      _id: adminId,
+      username: 'plan.admin',
+      fullName: 'Plan Admin',
+      email: 'plan.admin@vedora.local',
+      role: UserRole.ADMIN,
+      status: AccountStatus.ACTIVE,
+    });
+    await seedIntent({ userId: adminId });
+
+    const expected = {
+      planCode: BillingPlan.PRO,
+      key: 'admin:2026-11',
+      startsAt: new Date('2026-10-31T17:00:00.000Z'),
+      expiresAt: new Date('2026-11-30T17:00:00.000Z'),
+      textLimit: 900,
+      imageLimit: 40,
+    };
+    expect(await service.period(adminId, NOW)).toEqual(expected);
+    await expect(service.requireProVoice(adminId, NOW)).resolves.toEqual(
+      expected,
+    );
+    await expect(
+      db.withTransaction((session) => service.period(adminId, NOW, session)),
+    ).resolves.toEqual(expected);
+  });
+
+  it('still requires Pro for voice when a regular user is on Plus', async () => {
+    await seedIntent();
+    await expect(service.requireProVoice(USER_ID, NOW)).rejects.toMatchObject({
+      code: 'PRO_REQUIRED',
+    });
   });
 });

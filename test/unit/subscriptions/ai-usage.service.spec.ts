@@ -494,7 +494,7 @@ describe('AiUsageService', () => {
     await usage.complete(imageTicket as UsageTicket);
   });
 
-  it('reports an allowance for an ADMIN whose FREE text quota is used up', async () => {
+  it('reports an allowance for an ADMIN whose Pro text quota is used up', async () => {
     const adminId = randomUUID();
     await users().create({
       _id: adminId,
