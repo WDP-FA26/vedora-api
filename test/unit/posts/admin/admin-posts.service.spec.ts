@@ -40,6 +40,7 @@ describe('AdminPostsService', () => {
   let postModeration: DeepMockProxy<PostModerationService>;
   let searchIndex: DeepMockProxy<PostSearchIndexService>;
   let reports: DeepMockProxy<PostReportsService>;
+  let notifications: DeepMockProxy<NotificationsService>;
   let post: Post;
 
   beforeAll(async () => {
@@ -47,6 +48,7 @@ describe('AdminPostsService', () => {
     postModeration = mockDeep<PostModerationService>();
     searchIndex = mockDeep<PostSearchIndexService>();
     reports = mockDeep<PostReportsService>();
+    notifications = mockDeep<NotificationsService>();
     mediaService.toResponse.mockImplementation((item) => ({
       id: item.id,
       type: item.type,
@@ -81,7 +83,7 @@ describe('AdminPostsService', () => {
         { provide: CaptionService, useValue: mockDeep<CaptionService>() },
         {
           provide: NotificationsService,
-          useValue: mockDeep<NotificationsService>(),
+          useValue: notifications,
         },
         SupportSyncService,
       ],
@@ -203,11 +205,12 @@ describe('AdminPostsService', () => {
     );
   });
 
-  it('reads who to notify before soft-deleting a post, then notifies them', async () => {
+  it('stores removal notifications in the transaction and publishes before unindexing', async () => {
     const author = await createUser(db);
     const target = await createPost(db, { authorId: author.id });
     const notice = {
-      authorId: 'author',
+      postId: target.id,
+      authorId: author.id,
       reporterIds: ['reporter'],
       reason: null,
       excerpt: 'Soup',
@@ -221,17 +224,21 @@ describe('AdminPostsService', () => {
       order.push('unindex');
       return Promise.resolve();
     });
-    reports.announceRemoval.mockImplementation(() => {
-      order.push('announce');
+    reports.storeRemovalNotifications.mockImplementation(() => {
+      order.push('store');
+      return Promise.resolve([]);
+    });
+    notifications.publishStored.mockImplementation(() => {
+      order.push('publish');
       return Promise.resolve();
     });
 
     await service.remove(target.id, 'admin', '  Spam  ');
 
-    expect(order).toEqual(['notice', 'unindex', 'announce']);
-    expect(reports.announceRemoval).toHaveBeenCalledWith(
+    expect(order).toEqual(['notice', 'store', 'publish', 'unindex']);
+    expect(reports.storeRemovalNotifications).toHaveBeenCalledWith(
       notice,
-      'admin',
+      expect.anything(),
       'Spam',
     );
     const removed = await db.connection

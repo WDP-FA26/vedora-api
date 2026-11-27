@@ -60,6 +60,8 @@ describe('PostReportsService', () => {
     await db.connection.model(Post.name).deleteMany({});
     post = await createPost(db, { authorId: author.id });
     notifications.notify.mockReset();
+    notifications.storeSystemNotifications.mockReset();
+    notifications.storeSystemNotifications.mockResolvedValue([]);
   });
   afterAll(async () => {
     await dropTestDatabase(app);
@@ -180,33 +182,61 @@ describe('PostReportsService', () => {
     ).resolves.toBeNull();
   });
 
-  it('notifies the author and every reporter once a post is removed', async () => {
-    await service.announceRemoval(
-      {
-        authorId: author.id,
-        reporterIds: [reporter.id],
-        reason: PostReportReason.SPAM,
-        excerpt: 'Canh chua',
-      },
-      'admin-id',
+  it('stores notices for the author and every reporter using the removal transaction', async () => {
+    await db.withTransaction((session) =>
+      service.storeRemovalNotifications(
+        {
+          postId: post.id,
+          authorId: author.id,
+          reporterIds: [reporter.id],
+          reason: PostReportReason.SPAM,
+          excerpt: 'Canh chua',
+        },
+        session,
+      ),
     );
-    expect(notifications.notify).toHaveBeenCalledWith({
-      recipientId: reporter.id,
-      type: NotificationType.REPORTED_POST_REMOVED,
-      note: 'Canh chua',
-    });
-    expect(notifications.notify).toHaveBeenCalledWith({
-      recipientId: author.id,
-      type: NotificationType.POST_REMOVED,
-      reason: PostReportReason.SPAM,
-      note: 'Canh chua',
-    });
+    expect(notifications.storeSystemNotifications).toHaveBeenCalledWith(
+      [
+        {
+          recipientId: author.id,
+          type: NotificationType.POST_REMOVED,
+          postId: post.id,
+          reason: PostReportReason.SPAM,
+          note: 'Canh chua',
+        },
+        {
+          recipientId: reporter.id,
+          type: NotificationType.REPORTED_POST_REMOVED,
+          note: 'Canh chua',
+        },
+      ],
+      expect.anything(),
+    );
 
-    notifications.notify.mockReset();
-    await service.announceRemoval(
-      { authorId: author.id, reporterIds: [], reason: null, excerpt: null },
-      author.id,
+    notifications.storeSystemNotifications.mockClear();
+    await db.withTransaction((session) =>
+      service.storeRemovalNotifications(
+        {
+          postId: post.id,
+          authorId: author.id,
+          reporterIds: [],
+          reason: null,
+          excerpt: null,
+        },
+        session,
+      ),
     );
-    expect(notifications.notify).not.toHaveBeenCalled();
+    expect(notifications.storeSystemNotifications).toHaveBeenCalledWith(
+      [
+        {
+          recipientId: author.id,
+          type: NotificationType.POST_REMOVED,
+          postId: post.id,
+          reason: undefined,
+          note: undefined,
+        },
+      ],
+      expect.anything(),
+    );
   });
 });
