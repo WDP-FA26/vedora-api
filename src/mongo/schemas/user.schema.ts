@@ -137,6 +137,7 @@ UserSchema.index(
 UserSchema.index({ status: 1, emailVerifiedAt: 1, searchIndexedAt: 1 });
 
 cascadeOnDelete(UserSchema, [
+  { model: 'SubscriptionMembership', field: '_id', action: 'delete' },
   { model: 'Post', field: 'authorId', action: 'delete' },
   { model: 'VerificationRequest', field: 'userId', action: 'delete' },
   { model: 'WorkspaceMember', field: 'userId', action: 'delete' },
