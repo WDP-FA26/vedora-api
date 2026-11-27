@@ -47,7 +47,34 @@ export const customerJoin: PipelineStage[] = [
   },
   { $unwind: { path: '$customer', preserveNullAndEmptyArrays: true } },
 ];
-export type AdminIntent = PaymentIntent & { customer?: AdminCustomer };
+export type AdminIntent = PaymentIntent & {
+  customer?: AdminCustomer;
+  source?: 'ADMIN_GRANT';
+  startsAt?: Date;
+  cycleExpiry?: Date;
+};
+export function membershipRow(row: AdminIntent) {
+  if (row.source !== 'ADMIN_GRANT') return orderRow(row);
+  return {
+    id: row._id,
+    userId: row.userId,
+    source: row.source,
+    planCode: row.planCode,
+    startsAt: row.startsAt!.toISOString(),
+    expiresAt: row.cycleExpiry!.toISOString(),
+    textLimit: row.textLimit!,
+    imageLimit: row.imageLimit!,
+    customer: row.customer
+      ? {
+          id: row.customer.id,
+          username: row.customer.username,
+          fullName: row.customer.fullName,
+          email: row.customer.email,
+          status: row.customer.status,
+        }
+      : null,
+  };
+}
 export function orderRow(intent: AdminIntent) {
   const planCode = effectivePlan(intent),
     limits = purchasedLimits(intent);

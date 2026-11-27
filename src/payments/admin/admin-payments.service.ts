@@ -16,6 +16,7 @@ import {
   cycleExpiry,
   normalizedPlan,
   orderRow,
+  membershipRow,
   receiptRow,
   csvCell,
   type AdminIntent,
@@ -93,8 +94,63 @@ export class AdminPaymentsService {
       { $sort: { capturedAt: -1, _id: -1 } },
       { $group: { _id: '$userId', latest: { $first: '$$ROOT' } } },
       { $replaceRoot: { newRoot: '$latest' } },
+      {
+        $lookup: {
+          from: 'subscription_memberships',
+          localField: 'userId',
+          foreignField: '_id',
+          as: 'assignment',
+        },
+      },
+      {
+        $match: {
+          $or: [
+            { assignment: { $size: 0 } },
+            {
+              $expr: {
+                $and: [
+                  {
+                    $eq: [
+                      { $arrayElemAt: ['$assignment.source', 0] },
+                      'PAYMENT',
+                    ],
+                  },
+                  {
+                    $eq: [
+                      { $arrayElemAt: ['$assignment.sourceId', 0] },
+                      '$_id',
+                    ],
+                  },
+                ],
+              },
+            },
+          ],
+        },
+      },
       { $set: { normalizedPlan, cycleExpiry } },
       { $match: { capturedAt: { $ne: null }, cycleExpiry: { $gt: now } } },
+      {
+        $unionWith: {
+          coll: 'subscription_memberships',
+          pipeline: [
+            { $match: { source: 'ADMIN_GRANT', expiresAt: { $gt: now } } },
+            {
+              $project: {
+                _id: '$sourceId',
+                userId: '$_id',
+                source: 1,
+                planCode: 1,
+                normalizedPlan: '$planCode',
+                capturedAt: '$startsAt',
+                startsAt: 1,
+                cycleExpiry: '$expiresAt',
+                textLimit: 1,
+                imageLimit: 1,
+              },
+            },
+          ],
+        },
+      },
       ...customerJoin,
       {
         $match: {
@@ -378,7 +434,7 @@ export class AdminPaymentsService {
       .exec();
     return {
       asOf: now.toISOString(),
-      items: result.items.map(orderRow),
+      items: result.items.map(membershipRow),
       total: result.total[0]?.count ?? 0,
       page: query.page,
       limit: query.limit,
