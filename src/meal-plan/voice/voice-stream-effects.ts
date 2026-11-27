@@ -20,6 +20,7 @@ export type VoiceFocus =
     }
   | { kind: 'eatingLog'; date: string | null }
   | { kind: 'bodyMetrics' }
+  | { kind: 'shoppingList' }
   | { kind: 'planDay'; weekStart: string; day: Weekday | null };
 
 export interface VoiceScreenEvent {
@@ -118,7 +119,8 @@ function isSetScreenOutput(output: unknown): output is SetScreenOutput {
     (output.view === 'calendar' ||
       output.view === 'recipe' ||
       output.view === 'eatingLog' ||
-      output.view === 'bodyMetrics')
+      output.view === 'bodyMetrics' ||
+      output.view === 'shoppingList')
   );
 }
 
@@ -145,6 +147,10 @@ function screenEventFromSetScreen(output: SetScreenOutput): VoiceScreenEvent | n
   }
   if (output.view === 'bodyMetrics') {
     event.focus = { kind: 'bodyMetrics' };
+    return event;
+  }
+  if (output.view === 'shoppingList') {
+    event.focus = { kind: 'shoppingList' };
     return event;
   }
   if (output.view === 'calendar') {
@@ -185,6 +191,9 @@ function summaryFromSetScreen(output: SetScreenOutput): string | null {
     return details.length > 0
       ? `Đã mở bảng chỉ số cơ thể trên màn hình (${details.join(', ')}).`
       : 'Đã mở bảng chỉ số cơ thể trên màn hình.';
+  }
+  if (output.view === 'shoppingList') {
+    return 'Đã mở danh sách đi chợ trên màn hình.';
   }
   if (output.view === 'calendar') {
     return output.day

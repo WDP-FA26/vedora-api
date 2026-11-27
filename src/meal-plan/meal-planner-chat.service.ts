@@ -38,6 +38,7 @@ import type { PlannerToolOutputDto } from './dto/meal-plan.dto.js';
 import type { MealPlanVoiceScreenDto } from './dto/meal-plan-voice.dto.js';
 import { MealLogService } from './meal-log/meal-log.service.js';
 import { MealPlanService } from './meal-plan.service.js';
+import { ShoppingListService } from './shopping-list.service.js';
 import { currentMealWeek } from './meal-week.js';
 import {
   MealPlannerChatHistoryService,
@@ -320,6 +321,7 @@ export class MealPlannerChatService {
     @Optional() private readonly history?: MealPlannerChatHistoryService,
     @Optional() private readonly restaurantMenu?: RestaurantMenuService,
     @Optional() private readonly mealLog?: MealLogService,
+    @Optional() private readonly shoppingList?: ShoppingListService,
   ) {}
 
   /**
@@ -387,7 +389,12 @@ export class MealPlannerChatService {
       ...(this.mealLog
         ? {
             getEatingLog: getEatingLogTool(this.mealLog, userId, toolWeek),
+            logMeal: logMealTool(this.mealLog, userId),
           }
+        : {}),
+      updateBodyMetrics: updateBodyMetricsTool(this.dietary, userId),
+      ...(this.history
+        ? { undoLastChange: undoLastChangeTool(this.history, userId, threadId) }
         : {}),
       ...(voice ? {} : webTools(allowWebSearch)),
     };
@@ -396,7 +403,7 @@ export class MealPlannerChatService {
       delete agentTools.askUser;
       Object.assign(
         agentTools,
-        this.voiceTools(userId, threadId, toolWeek, screen),
+        this.voiceTools(userId, toolWeek, screen),
       );
     }
     return agentTools;
@@ -469,7 +476,6 @@ export class MealPlannerChatService {
    */
   private voiceTools(
     userId: string,
-    threadId: string,
     toolWeek: string,
     screen?: MealPlanVoiceScreenDto,
   ): ToolSet {
@@ -480,13 +486,9 @@ export class MealPlannerChatService {
         userId,
         toolWeek,
         screen,
+        this.shoppingList,
       ),
       endCall: endCallTool(),
-      updateBodyMetrics: updateBodyMetricsTool(this.dietary, userId),
-      ...(this.mealLog ? { logMeal: logMealTool(this.mealLog, userId) } : {}),
-      ...(this.history
-        ? { undoLastChange: undoLastChangeTool(this.history, userId, threadId) }
-        : {}),
     };
   }
 
@@ -862,7 +864,7 @@ export class MealPlannerChatService {
       });
 
       const conversionTools = safeConversionTools({
-        ...this.voiceTools(userId, activeThreadId, toolWeek, screen),
+        ...this.voiceTools(userId, toolWeek, screen),
         ...agentTools,
         askUser: askUserTool(),
         requestWebSearch: requestWebSearchTool(),

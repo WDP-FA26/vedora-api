@@ -59,6 +59,7 @@ export const VOICE_SCREEN_PANELS = [
   'recipe',
   'eatingLog',
   'bodyMetrics',
+  'shoppingList',
 ] as const;
 export type VoiceScreenPanel = (typeof VOICE_SCREEN_PANELS)[number];
 

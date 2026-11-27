@@ -78,7 +78,7 @@ const TEXT_ONLY_RULES = `Text chat presentation and UI
 - The app displays meal plan changes in the chat panel, and the user can click "Quay lại" on their message to restore the meal plan to how it was before that message. When replacing several existing dishes, add a brief reminder that they can click "Quay lại" if they are not happy with it.
 - Do not copy the full meal plan table by default: summarize estimated daily calories and the reasoning behind the dish pairings. If the user asks for a table or another layout, follow their preference.
 - When asking the user to choose (including after reviewing the eating log), look up a few concrete options first (Vedora dish names with ~kcal, or directions like "Cân đối cả tuần" / "Chỉ hôm nay") and present them as clickable choices via askUser; include one short sentence explaining why you are asking. Ask at most once per turn, at the end of the turn.
-- Users log what they ate on the calendar themselves (you do not log for them in text chat).
+- When the user says what they ate, record it with logMeal (using today unless another date is stated). When they share updated height, weight, target weight, or goal, save it with updateBodyMetrics. When they ask to undo the last change, call undoLastChange.
 - Compact Markdown: default to "- " bullet lists with one point per line and no large headings; use tables only when the user asks. No code blocks, and never insert links or images.`;
 
 const WEEKDAYS: readonly Weekday[] = Object.values(Weekday);
@@ -237,7 +237,7 @@ Screen control & tool latency
 - The "Màn hình của người dùng" section in context shows what is currently on screen. Use it to resolve references like "this dish", "that one", "close it", or "next step".
 - Call independent tools in parallel in the same step (for example, logMeal together with setScreen to open eatingLog, or updateBodyMetrics together with setScreen to open bodyMetrics) to reduce latency.
 - Use setScreen to show or scroll the exact view the user needs. When opening a dish by name without a recipeId in context, pass the dish name directly to setScreen's query instead of calling searchRecipes first. On an open recipe you can jump straight to a cooking step with step (1-based) or section (ingredients, steps, top); on any open view or calendar you can also scroll with scroll (down, up, top, bottom). When the user only asks to open, close, or scroll the screen without asking for analysis, set done: true on setScreen to finish right after that step.
-- When they ask to close, dismiss, or go back from an open panel (recipe, eating log, body metrics) without naming another view, switch to view "calendar" (done: true), since the calendar is the main view. Do not confuse closing a panel with ending the voice call itself.
+- When they ask to close, dismiss, or go back from an open panel (recipe, eating log, body metrics, shopping list) without naming another view, switch to view "calendar" (done: true), since the calendar is the main view. Do not confuse closing a panel with ending the voice call itself.
 - Meal plan edits automatically highlight the updated day on the calendar, so do not call setScreen after editing the plan.
 
 Saving data during a call
@@ -256,6 +256,7 @@ Your reply will be read aloud, so write it as natural spoken Vietnamese: flowing
 const SCREEN_PANEL_TEXT = {
   eatingLog: 'nhật ký ăn uống',
   bodyMetrics: 'bảng chỉ số cơ thể (BMI, cân nặng, định mức kcal)',
+  shoppingList: 'danh sách đi chợ',
 } as const;
 
 const RECIPE_SECTION_TEXT = {
@@ -294,6 +295,8 @@ export function voiceScreenContext(
     lines.push(`- Đang mở ${SCREEN_PANEL_TEXT.eatingLog}${date}.`);
   } else if (screen.panel === 'bodyMetrics') {
     lines.push(`- Đang mở ${SCREEN_PANEL_TEXT.bodyMetrics}.`);
+  } else if (screen.panel === 'shoppingList') {
+    lines.push(`- Đang mở ${SCREEN_PANEL_TEXT.shoppingList}.`);
   } else {
     lines.push('- Không có bảng nào mở, người dùng đang xem lịch.');
   }

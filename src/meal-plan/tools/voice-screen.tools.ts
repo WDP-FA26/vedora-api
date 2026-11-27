@@ -12,6 +12,7 @@ import {
 } from '../dto/meal-plan-voice.dto.js';
 import type { Weekday } from '../../mongo/models.js';
 import type { MealPlanService } from '../meal-plan.service.js';
+import type { ShoppingListService } from '../shopping-list.service.js';
 import { BMI_LABELS, DAY_NAMES } from '../meal-planner.prompt.js';
 import { plannableWeekStarts, weekStartInput } from './planner-weeks.js';
 
@@ -55,6 +56,7 @@ const SCREEN_VIEWS = [
   'recipe',
   'eatingLog',
   'bodyMetrics',
+  'shoppingList',
 ] as const;
 type ScreenView = (typeof SCREEN_VIEWS)[number];
 
@@ -70,6 +72,8 @@ export interface SetScreenOutput {
   day: Weekday | null;
   date: string | null;
   metrics: BodyMetricsSummary | null;
+  /** Concise ingredient lines when view is `shoppingList`, so voice can read them aloud. */
+  shoppingItems: string[] | null;
   /** Why nothing changed, worded so the agent can fix the call. */
   problem: string | null;
   done?: boolean;
@@ -91,6 +95,7 @@ function screenOutput(
     day: null,
     date: null,
     metrics: null,
+    shoppingItems: null,
     problem: null,
     ...fields,
   };
@@ -135,6 +140,16 @@ function setScreenText(output: SetScreenOutput): string {
       output.metrics === null ? '' : ` ${bodyMetricsText(output.metrics)}`;
     return `Màn hình đang hiện bảng chỉ số cơ thể${scrollNote}.${metrics}`;
   }
+  if (output.view === 'shoppingList') {
+    const items = output.shoppingItems;
+    if (items && items.length > 0) {
+      return `Màn hình đang hiện danh sách đi chợ${scrollNote}. Nguyên liệu cần mua (${items.length} mục): ${items.join('; ')}.`;
+    }
+    if (items && items.length === 0) {
+      return `Màn hình đang hiện danh sách đi chợ${scrollNote}. Hiện chưa có nguyên liệu nào cần mua từ hôm nay trở đi.`;
+    }
+    return `Màn hình đang hiện danh sách đi chợ${scrollNote}.`;
+  }
   const day =
     output.day === null
       ? ''
@@ -154,10 +169,11 @@ export function setScreenTool(
   userId: string,
   openWeekStart: string,
   screen?: MealPlanVoiceScreenDto,
+  shoppingList?: ShoppingListService,
 ) {
   return tool({
     description:
-      "Change or scroll what the user's screen shows by naming the view they should see. The user is on a call and often has busy hands, so you are the one who opens, scrolls and closes things for them; the screen section of your context says what they see right now. Views: calendar is the week calendar with every panel closed (pass day, and weekStart for another week, to pick a day); recipe is one recipe card with its ingredients and steps (pass recipeId, or query with the dish name to look up and open it directly, section to scroll to ingredients/steps/top, or step with a 1-based step number to jump straight to that step; with neither recipeId nor query on an open recipe this scrolls); eatingLog is the food diary (pass date for a day other than today); bodyMetrics is the BMI, weight and daily kcal panel, and it also returns the current values. Pass scroll (down, up, top, bottom) on any view to scroll its content smoothly. Opening a view closes the panel that was open before. Pass done: true when the user only asked to open, close or scroll the screen and needs no further advice.",
+      "Change or scroll what the user's screen shows by naming the view they should see. The user is on a call and often has busy hands, so you are the one who opens, scrolls and closes things for them; the screen section of your context says what they see right now. Views: calendar is the week calendar with every panel closed (pass day, and weekStart for another week, to pick a day); recipe is one recipe card with its ingredients and steps (pass recipeId, or query with the dish name to look up and open it directly, section to scroll to ingredients/steps/top, or step with a 1-based step number to jump straight to that step; with neither recipeId nor query on an open recipe this scrolls); eatingLog is the food diary (pass date for a day other than today); bodyMetrics is the BMI, weight and daily kcal panel, and it also returns the current values; shoppingList is the weekly shopping list (ingredients to buy). Pass scroll (down, up, top, bottom) on any view to scroll its content smoothly. Opening a view closes the panel that was open before. Pass done: true when the user only asked to open, close or scroll the screen and needs no further advice.",
     inputSchema: z.object({
       view: z
         .enum(SCREEN_VIEWS)
@@ -287,6 +303,28 @@ export function setScreenTool(
             bmiCategory: profile.bmiCategory,
             dailyCalorieTarget: profile.dailyCalorieTarget,
           },
+          scroll,
+          ...doneFlag,
+        });
+      }
+      if (input.view === 'shoppingList') {
+        let shoppingItems: string[] | null = null;
+        if (shoppingList) {
+          const targetWeek = input.weekStart ?? screen?.weekStart ?? openWeekStart;
+          const list = await shoppingList.get(userId, {
+            weekStart: targetWeek,
+            days: [...WEEKDAYS],
+          });
+          shoppingItems = list.items.slice(0, 20).map((item) => {
+            const qty =
+              item.knownQuantity !== null
+                ? [item.knownQuantity, item.unit].filter(Boolean).join(' ')
+                : 'chưa rõ lượng';
+            return `${item.name} (${qty})`;
+          });
+        }
+        return screenOutput('shoppingList', {
+          shoppingItems,
           scroll,
           ...doneFlag,
         });
