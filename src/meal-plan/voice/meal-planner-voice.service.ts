@@ -4,9 +4,7 @@ import { ConfigService } from '@nestjs/config';
 import { type UIMessageChunk } from 'ai';
 import { createGatewayRealtimeClient } from '../../ai/providers/provider-registry.js';
 import { FeatureUnavailableException } from '../../common/exceptions/feature-unavailable.exception.js';
-import { QuotaReachedException } from '../../common/exceptions/quota-reached.exception.js';
-import { AiFeature } from '../../mongo/models.js';
-import { AiUsageService } from '../../subscriptions/ai-usage.service.js';
+import { SubscriptionsService } from '../../subscriptions/subscriptions.service.js';
 import type {
   MealPlanVoiceSessionDto,
   MealPlanVoiceTurnRequestDto,
@@ -28,7 +26,7 @@ export class MealPlannerVoiceService {
   constructor(
     config: ConfigService,
     private readonly chat: MealPlannerChatService,
-    private readonly usage: AiUsageService,
+    private readonly subscriptions: SubscriptionsService,
   ) {
     const apiKey = config.get<string>('AI_GATEWAY_API_KEY', '');
     this.gateway = apiKey ? createGatewayRealtimeClient(apiKey) : null;
@@ -42,20 +40,11 @@ export class MealPlannerVoiceService {
     userId: string,
     threadId?: string,
   ): Promise<MealPlanVoiceSessionDto> {
+    await this.subscriptions.requireProVoice(userId);
     if (!this.gateway) {
       throw new FeatureUnavailableException(
         'SERVICE_UNAVAILABLE',
         'Voice is not configured',
-      );
-    }
-    const allowed = await this.usage.hasAllowance(
-      userId,
-      AiFeature.MEAL_PLAN_CHAT,
-    );
-    if (!allowed) {
-      throw new QuotaReachedException(
-        'AI_QUOTA_EXCEEDED',
-        'Your shared AI text allowance is exhausted',
       );
     }
     void this.chat.warmVoiceCache(userId, threadId);
@@ -72,6 +61,7 @@ export class MealPlannerVoiceService {
     dto: MealPlanVoiceTurnRequestDto,
     abortSignal: AbortSignal,
   ): Promise<ReadableStream<UIMessageChunk>> {
+    await this.subscriptions.requireProVoice(userId);
     const options: PlannerChatOptions = { voice: true };
     if (dto.screen) options.screen = dto.screen;
     return this.chat.stream(
