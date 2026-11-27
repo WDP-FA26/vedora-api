@@ -6,6 +6,8 @@ import type { MealPlanDto } from './dto/meal-plan.dto.js';
 import type { MealPlanVoiceScreenDto } from './dto/meal-plan-voice.dto.js';
 import { addDays } from './meal-week.js';
 import {
+  ActivityLevel,
+  BiologicalSex,
   BmiCategory,
   NutritionGoal,
   NutritionPillar,
@@ -164,6 +166,21 @@ const PILLAR_SHORT_LABELS: Record<NutritionPillar, string> = {
   [NutritionPillar.CALCIUM_RICH]: 'Canxi',
 };
 
+const SEX_LABELS: Record<BiologicalSex, string> = {
+  FEMALE: 'nữ',
+  MALE: 'nam',
+  OTHER: 'khác',
+};
+
+const ACTIVITY_LABELS: Record<ActivityLevel, string> = {
+  SEDENTARY: 'ít vận động',
+  LIGHT: 'vận động nhẹ',
+  MODERATE: 'vận động vừa',
+  ACTIVE: 'vận động nhiều',
+};
+
+const RECENT_HISTORY_LIMIT = 10;
+
 function nutritionSummary(
   nutrition: NutritionProfileDto | null | undefined,
 ): string {
@@ -176,10 +193,23 @@ function nutritionSummary(
   const goal = nutrition.effectiveGoal
     ? GOAL_LABELS[nutrition.effectiveGoal]
     : '';
+  const profileParts: string[] = [];
+  if (nutrition.birthYear !== null) {
+    profileParts.push(`sinh năm ${nutrition.birthYear}`);
+  }
+  if (nutrition.biologicalSex !== null) {
+    profileParts.push(`giới tính sinh học: ${SEX_LABELS[nutrition.biologicalSex]}`);
+  }
+  if (nutrition.activityLevel !== null) {
+    profileParts.push(`vận động: ${ACTIVITY_LABELS[nutrition.activityLevel]}`);
+  }
   const lines = [
     `Hồ sơ cơ thể & Mục tiêu dinh dưỡng (chuẩn BMI Châu Á):`,
     `- Chiều cao ${nutrition.heightCm} cm, cân nặng ${nutrition.weightKg} kg, BMI ~${nutrition.bmi} (${category}).`,
   ];
+  if (profileParts.length > 0) {
+    lines.push(`- Thông tin nền: ${profileParts.join(', ')}.`);
+  }
   if (nutrition.targetWeightKg !== null) {
     lines.push(`- Cân nặng hướng tới: ${nutrition.targetWeightKg} kg.`);
   }
@@ -202,8 +232,16 @@ function nutritionSummary(
       ? `, cảm nhận gần nhất: ${newest.feeling.toLowerCase()}`
       : '';
     lines.push(
-      `- Theo dõi cân nặng gần đây (${oldest.date} → ${newest.date}): ${trend}${feelingNote}.`,
+      `- Theo dõi cân nặng (${oldest.date} → ${newest.date}): ${trend}${feelingNote}.`,
     );
+  }
+  if (nutrition.history.length > 0) {
+    const recent = nutrition.history.slice(-RECENT_HISTORY_LIMIT);
+    const checkpoints = recent.map((entry) => {
+      const feeling = entry.feeling ? `, ${entry.feeling.toLowerCase()}` : '';
+      return `${entry.date}: ${entry.weightKg} kg (BMI ${entry.bmi}${feeling})`;
+    });
+    lines.push(`- Các mốc cân nặng gần nhất: ${checkpoints.join('; ')}.`);
   }
   if (nutrition.safetyNote) {
     lines.push(`- Lưu ý an toàn: ${nutrition.safetyNote}`);
