@@ -61,7 +61,7 @@ export class PaymentsController {
     summary: 'Server-owned Plus/Pro prices and shared AI allowances',
   })
   @ApiOkResponse({ type: BillingCatalogDto })
-  plans(): BillingCatalogDto {
+  plans(): Promise<BillingCatalogDto> {
     return this.payments.catalog();
   }
 

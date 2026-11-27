@@ -32,13 +32,12 @@ import {
 } from './payment-expiration.js';
 import {
   effectivePlan,
-  PAID_PLANS,
   PLAN_VERSION,
   purchasedPlanName,
-  SUBSCRIPTION_LIMITS,
   purchasedLimits,
 } from '../subscriptions/subscription-policy.js';
 import { SubscriptionsService } from '../subscriptions/subscriptions.service.js';
+import { SubscriptionCatalogService } from '../subscriptions/subscription-catalog.service.js';
 import { AiUsageService } from '../subscriptions/ai-usage.service.js';
 import {
   PaymentChanged,
@@ -71,30 +70,13 @@ export class PaymentsService {
     private readonly events: PaymentEventsService,
     private readonly subscriptions: SubscriptionsService,
     private readonly usage: AiUsageService,
+    private readonly planCatalog: SubscriptionCatalogService,
   ) {}
 
-  catalog(): BillingCatalogDto {
-    return {
-      planVersion: PLAN_VERSION,
-      freeLimits: {
-        textLimit: SUBSCRIPTION_LIMITS.FREE.text,
-        imageLimit: SUBSCRIPTION_LIMITS.FREE.images,
-      },
-      paymentsEnabled: this.config.get<boolean>('SEPAY_PAYMENT_ENABLED', false),
-      plans: PAID_PLANS.map((code) => ({
-        code,
-        name: code === BillingPlan.PLUS ? 'Plus' : 'Pro',
-        priceVnd: String(
-          this.config.get<number>(
-            `SUBSCRIPTION_${code}_PRICE_VND`,
-            code === BillingPlan.PLUS ? 49000 : 99000,
-          ),
-        ),
-        durationDays: this.config.get<number>('BILLING_DURATION_DAYS', 30),
-        textLimit: SUBSCRIPTION_LIMITS[code].text,
-        imageLimit: SUBSCRIPTION_LIMITS[code].images,
-      })),
-    };
+  async catalog(): Promise<BillingCatalogDto> {
+    const { planVersion, freeLimits, paymentsEnabled, plans } =
+      await this.planCatalog.current();
+    return { planVersion, freeLimits, paymentsEnabled, plans };
   }
 
   private async lock(
@@ -139,7 +121,7 @@ export class PaymentsService {
       qr:
         intent.status === PaymentStatus.PENDING &&
         paymentExpiresAt(intent).getTime() > Date.now() &&
-        this.catalog().paymentsEnabled
+        this.config.get<boolean>('SEPAY_PAYMENT_ENABLED', false)
           ? this.provider.qr(intent, intent.amount.toString())
           : null,
     };
@@ -246,9 +228,8 @@ export class PaymentsService {
             'ACCOUNT_NOT_PAYABLE',
             'A verified active account is required',
           );
-        const plan = this.catalog().plans.find(
-          (item) => item.code === planCode,
-        );
+        const catalog = await this.planCatalog.current(session);
+        const plan = catalog.plans.find((item) => item.code === planCode);
         if (!plan)
           throw new InvalidInputException(
             'BAD_REQUEST',
