@@ -36,6 +36,7 @@ export interface NotifyInput {
   postId?: string;
   commentId?: string;
   ticketId?: string;
+  workspaceId?: string;
   reason?: string;
   note?: string;
 }
@@ -75,6 +76,7 @@ function toDto({
     postType,
     commentId: notification.commentId,
     ticketId: notification.ticketId ?? null,
+    workspaceId: notification.workspaceId ?? null,
     reason: notification.reason,
     reasonText,
     note: notification.note,

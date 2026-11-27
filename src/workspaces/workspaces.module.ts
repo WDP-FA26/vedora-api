@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { AuthModule } from '../auth/auth.module.js';
+import { NotificationsModule } from '../notifications/notifications.module.js';
 import { ProfileSearchModule } from '../profiles/search/profile-search.module.js';
 import { RestaurantMenuService } from './restaurant-menu.service.js';
 import { RestaurantReviewsService } from './restaurant-reviews.service.js';
@@ -14,7 +15,7 @@ import { TaxCodeLookupService } from './tax-code-lookup.service.js';
 import { WorkspacesService } from './workspaces.service.js';
 
 @Module({
-  imports: [AuthModule, ProfileSearchModule],
+  imports: [AuthModule, NotificationsModule, ProfileSearchModule],
   controllers: [
     WorkspacesController,
     AdminWorkspacesController,

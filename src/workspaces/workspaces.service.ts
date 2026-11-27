@@ -6,6 +6,7 @@ import {
   type OnApplicationBootstrap,
   Optional,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { Cron } from '@nestjs/schedule';
 import { InjectModel } from '@nestjs/mongoose';
 import type { ClientSession, Model, QueryFilter } from 'mongoose';
@@ -14,11 +15,13 @@ import {
   getPaginationArgs,
   PaginatedResponseDto,
 } from '../common/pagination/index.js';
+import { MailService } from '../mail/mail.service.js';
 import { lockDocument } from '../mongo/document-lock.js';
 import {
   AccountStatus,
   AccountType,
   LegalEntityType,
+  NotificationType,
   User,
   UserRole,
   VerificationStatus,
@@ -26,9 +29,11 @@ import {
   WorkspaceMember,
   WorkspaceMemberRole,
   WorkspaceProof,
+  WorkspaceRejectReason,
 } from '../mongo/models.js';
 import { MongoService } from '../mongo/mongo.service.js';
 import { rethrowAsStateConflict } from '../mongo/unique-conflict.js';
+import { NotificationsService } from '../notifications/notifications.service.js';
 import { ProfileSearchIndexService } from '../profiles/search/profile-search-index.service.js';
 import { StorageService, StorageTarget } from '../storage/storage.service.js';
 import { RefreshTokensService } from '../auth/refresh-tokens.service.js';
@@ -88,6 +93,19 @@ const MAX_WARNING_PAGES = 5;
 
 const VIETNAMESE_COLLATOR = new Intl.Collator('vi', { numeric: true });
 
+const WORKSPACE_REJECT_REASON_LABELS: Record<WorkspaceRejectReason, string> = {
+  [WorkspaceRejectReason.BLURRY_DOCUMENTS]: 'Giấy tờ bị mờ hoặc thiếu',
+  [WorkspaceRejectReason.TAX_CODE_MISMATCH]:
+    'Mã số thuế không khớp tên pháp lý',
+  [WorkspaceRejectReason.IDENTITY_MISMATCH]: 'CCCD không khớp người đứng tên',
+  [WorkspaceRejectReason.STOREFRONT_MISMATCH]:
+    'Ảnh mặt tiền không khớp địa chỉ',
+  [WorkspaceRejectReason.UNREACHABLE]: 'Không liên lạc được qua số điện thoại',
+  [WorkspaceRejectReason.NOT_VEGETARIAN]: 'Quán không phục vụ món chay',
+  [WorkspaceRejectReason.DUPLICATE]: 'Trùng với trang đã có',
+  [WorkspaceRejectReason.OTHER]: 'Lý do khác',
+};
+
 type PageUser = Pick<
   User,
   'id' | 'username' | 'fullName' | 'bio' | 'avatarUrl' | 'status'
@@ -120,6 +138,9 @@ export class WorkspacesService implements OnApplicationBootstrap {
     private readonly mongo: MongoService,
     private readonly storage: StorageService,
     private readonly refreshTokens: RefreshTokensService,
+    private readonly notifications: NotificationsService,
+    private readonly mail: MailService,
+    private readonly config: ConfigService,
     @Optional() private readonly profileSearchIndex?: ProfileSearchIndexService,
     @Optional() private readonly reviews?: RestaurantReviewsService,
     @Optional() private readonly menu?: RestaurantMenuService,
@@ -467,65 +488,161 @@ export class WorkspacesService implements OnApplicationBootstrap {
     reviewerId: string,
     dto: ReviewWorkspaceDto,
   ): Promise<AdminWorkspaceDto> {
-    const approvedPageUserId = await this.mongo.withTransaction(
-      async (session) => {
-        await lockDocument(this.mongo, session, 'workspace', workspaceId);
-        const workspace = await this.findWorkspace(session, workspaceId);
-        if (workspace.status !== VerificationStatus.PENDING)
-          throw new StateConflictException(
-            'WORKSPACE_NOT_REVIEWABLE',
-            'This page was already reviewed',
-          );
-        const approving = dto.decision === VerificationStatus.APPROVED;
-        if (approving && workspace.legal && !isChecklistComplete(dto))
-          throw new InvalidInputException(
-            'CHECKLIST_INCOMPLETE',
-            'Tick every checklist item before approving',
-          );
-        const now = new Date();
-        const decision = {
-          status: dto.decision,
-          reviewNote: dto.note || null,
-          rejectReason: approving ? null : (dto.rejectReason ?? null),
-          reviewChecklist: dto.checklist ?? null,
-          reviewedById: reviewerId,
-          reviewedAt: now,
-        };
-        if (dto.decision === VerificationStatus.REJECTED) {
-          await this.workspaces.updateOne(
-            { _id: workspace.id },
-            { $set: decision },
-            { session },
-          );
-          return null;
-        }
-        const pageUserId = await this.createPageAccount(
-          session,
-          workspace,
-          now,
+    const outcome = await this.mongo.withTransaction(async (session) => {
+      await lockDocument(this.mongo, session, 'workspace', workspaceId);
+      const workspace = await this.findWorkspace(session, workspaceId);
+      if (workspace.status !== VerificationStatus.PENDING)
+        throw new StateConflictException(
+          'WORKSPACE_NOT_REVIEWABLE',
+          'This page was already reviewed',
         );
+      const approving = dto.decision === VerificationStatus.APPROVED;
+      if (approving && workspace.legal && !isChecklistComplete(dto))
+        throw new InvalidInputException(
+          'CHECKLIST_INCOMPLETE',
+          'Tick every checklist item before approving',
+        );
+      const now = new Date();
+      const decision = {
+        status: dto.decision,
+        reviewNote: dto.note || null,
+        rejectReason: approving ? null : (dto.rejectReason ?? null),
+        reviewChecklist: dto.checklist ?? null,
+        reviewedById: reviewerId,
+        reviewedAt: now,
+      };
+      if (dto.decision === VerificationStatus.REJECTED) {
         await this.workspaces.updateOne(
           { _id: workspace.id },
-          { $set: { ...decision, pageUserId } },
+          { $set: decision },
           { session },
         );
-        await this.members.updateMany(
-          { workspaceId: workspace.id },
-          { $set: { pageUserId } },
-          { session },
-        );
-        return pageUserId;
-      },
-    );
-    if (approvedPageUserId) {
+        return {
+          approvedPageUserId: null,
+          workspaceName: workspace.name,
+          contactEmail: workspace.legal?.contactEmail ?? null,
+        };
+      }
+      const pageUserId = await this.createPageAccount(session, workspace, now);
+      await this.workspaces.updateOne(
+        { _id: workspace.id },
+        { $set: { ...decision, pageUserId } },
+        { session },
+      );
+      await this.members.updateMany(
+        { workspaceId: workspace.id },
+        { $set: { pageUserId } },
+        { session },
+      );
+      return {
+        approvedPageUserId: pageUserId,
+        workspaceName: workspace.name,
+        contactEmail: workspace.legal?.contactEmail ?? null,
+      };
+    });
+    if (outcome.approvedPageUserId) {
       this.profileSearchIndex?.schedule();
-      await this.menu?.markWorkspaceDirty(workspaceId, approvedPageUserId);
+      await this.menu?.markWorkspaceDirty(
+        workspaceId,
+        outcome.approvedPageUserId,
+      );
     }
+    await this.notifyReviewOutcome(
+      workspaceId,
+      outcome.workspaceName,
+      outcome.contactEmail,
+      dto,
+    );
     const row = await this.workspaces.findOne({ _id: workspaceId }).exec();
     if (!row)
       throw new ResourceNotFoundException('NOT_FOUND', 'Page not found');
     const [reviewed] = await this.toAdminDtos([row]);
     return reviewed;
+  }
+
+  private async notifyReviewOutcome(
+    workspaceId: string,
+    workspaceName: string,
+    contactEmail: string | null,
+    dto: ReviewWorkspaceDto,
+  ): Promise<void> {
+    const ownerMember = await this.members
+      .findOne({ workspaceId, role: WorkspaceMemberRole.OWNER })
+      .select('userId')
+      .exec();
+    const approving = dto.decision === VerificationStatus.APPROVED;
+    const note = dto.note || null;
+    const rejectReason = approving ? null : (dto.rejectReason ?? null);
+
+    if (ownerMember) {
+      await this.notifications.notify({
+        recipientId: ownerMember.userId,
+        type: approving
+          ? NotificationType.WORKSPACE_APPROVED
+          : NotificationType.WORKSPACE_REJECTED,
+        workspaceId,
+        reason: rejectReason ?? undefined,
+        note: note ?? undefined,
+      });
+    }
+
+    const recipients = await this.reviewEmailRecipients(
+      ownerMember?.userId ?? null,
+      contactEmail,
+    );
+    if (recipients.length === 0) return;
+
+    const frontendUrl = this.config.getOrThrow<string>('FRONTEND_URL');
+    const workspaceUrl = new URL(
+      `/home/pages/${workspaceId}`,
+      frontendUrl,
+    ).toString();
+    const rejectReasonLabel = rejectReason
+      ? WORKSPACE_REJECT_REASON_LABELS[rejectReason]
+      : null;
+
+    for (const email of recipients) {
+      try {
+        await this.mail.sendWorkspaceReviewResult(email, {
+          decision: approving ? 'APPROVED' : 'REJECTED',
+          workspaceName,
+          workspaceUrl,
+          rejectReasonLabel,
+          note,
+        });
+      } catch (error: unknown) {
+        this.logger.warn(
+          `Could not email workspace review outcome for ${workspaceId} to ${email}: ${String(error)}`,
+        );
+      }
+    }
+  }
+
+  private async reviewEmailRecipients(
+    ownerId: string | null,
+    contactEmail: string | null,
+  ): Promise<string[]> {
+    const recipients: string[] = [];
+    const seen = new Set<string>();
+    const addEmail = (value: string | null | undefined) => {
+      if (!value) return;
+      const normalized = value.trim().toLowerCase();
+      if (!normalized || seen.has(normalized)) return;
+      seen.add(normalized);
+      recipients.push(value.trim());
+    };
+
+    if (ownerId) {
+      const owner = await this.users
+        .findOne({ _id: ownerId })
+        .select('email status emailVerifiedAt')
+        .exec();
+      if (owner && owner.status === AccountStatus.ACTIVE && owner.emailVerifiedAt) {
+        addEmail(owner.email);
+      }
+    }
+    addEmail(contactEmail);
+    return recipients;
   }
 
   async inView(

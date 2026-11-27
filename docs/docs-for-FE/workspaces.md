@@ -347,7 +347,7 @@ POST /admin/workspaces/:id/review
   - `DUPLICATE`: trùng page đã có;
   - `OTHER`: lý do khác.
 
-  `note` tùy chọn, nhưng bắt buộc khi lý do là `OTHER`. Owner thấy cả `rejectReason` lẫn `note`.
+  `note` tùy chọn, nhưng bắt buộc khi lý do là `OTHER`. Owner thấy cả `rejectReason` lẫn `note`, đồng thời nhận thông báo in-app (`WORKSPACE_APPROVED` / `WORKSPACE_REJECTED`) và email kết quả duyệt/từ chối.
 - Duyệt lại đơn đã xử lý → `409 WORKSPACE_NOT_REVIEWABLE`.
 - Nếu username bị account khác lấy mất trong lúc chờ → `409 USERNAME_TAKEN`. Khi đó từ
   chối với `DUPLICATE` hoặc `OTHER` kèm ghi chú, để owner chọn username khác.

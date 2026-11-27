@@ -33,6 +33,9 @@ export class Notification extends Identified {
   @Prop({ type: String, default: null })
   ticketId?: string | null;
 
+  @Prop({ type: String, default: null })
+  workspaceId?: string | null;
+
   @Prop({ type: Date, default: null })
   readAt!: Date | null;
 

@@ -4,6 +4,8 @@ import {
   AccountStatus,
   AccountType,
   Follow,
+  Notification,
+  NotificationType,
   RefreshToken,
   User,
   UserRole,
@@ -14,6 +16,7 @@ import {
   WorkspaceProofKind,
 } from '@src/mongo/models.js';
 import { RefreshTokensService } from '@src/auth/refresh-tokens.service.js';
+import { MailService } from '@src/mail/mail.service.js';
 import { StorageService } from '@src/storage/storage.service.js';
 import { WorkspacesService } from '@src/workspaces/workspaces.service.js';
 import { createE2eApp, type E2eApp } from '@test/support/e2e-app.js';
@@ -153,6 +156,7 @@ describe('Restaurant page flows (e2e)', () => {
       WorkspaceProof.name,
       RefreshToken.name,
       Follow.name,
+      Notification.name,
     ])
       await model(name).deleteMany({});
     owner = await createUser(e2e.mongo, { username: 'page.owner' });
@@ -206,12 +210,40 @@ describe('Restaurant page flows (e2e)', () => {
       ]);
       expect(application.owner.id).toBe(owner.id);
 
+      const mailSpy = vi
+        .spyOn(e2e.app.get(MailService), 'sendWorkspaceReviewResult')
+        .mockResolvedValue();
       const approved = await review(applied.id, APPROVE_REVIEW).expect(200);
       const pageUserId = z
         .string()
         .parse(
           z.object({ pageUserId: z.unknown() }).parse(approved.body).pageUserId,
         );
+
+      const notifications = await model<Notification>(Notification.name)
+        .find({ recipientId: owner.id })
+        .exec();
+      expect(notifications).toHaveLength(1);
+      expect(notifications[0]).toMatchObject({
+        type: NotificationType.WORKSPACE_APPROVED,
+        workspaceId: applied.id,
+        actorId: null,
+      });
+      expect(mailSpy).toHaveBeenCalledWith(
+        owner.email,
+        expect.objectContaining({
+          decision: 'APPROVED',
+          workspaceName: APPLICATION.name,
+        }),
+      );
+      expect(mailSpy).toHaveBeenCalledWith(
+        APPLICATION.legal.contactEmail,
+        expect.objectContaining({
+          decision: 'APPROVED',
+          workspaceName: APPLICATION.name,
+        }),
+      );
+      mailSpy.mockRestore();
 
       const page = await users().findOne({ _id: pageUserId }).exec();
       expect(page).toMatchObject({
@@ -287,7 +319,7 @@ describe('Restaurant page flows (e2e)', () => {
       }
     });
 
-    it('rejects with a reason, then accepts a resubmission', async () => {
+    it('rejects with a reason, notifies owner, then accepts a resubmission', async () => {
       const applied = workspaceSchema.parse(
         (await apply(ownerToken, owner.id, 201)).body,
       );
@@ -296,11 +328,37 @@ describe('Restaurant page flows (e2e)', () => {
         decision: 'REJECTED',
         rejectReason: 'OTHER',
       }).expect(400);
+
+      const mailSpy = vi
+        .spyOn(e2e.app.get(MailService), 'sendWorkspaceReviewResult')
+        .mockResolvedValue();
       await review(applied.id, {
         decision: 'REJECTED',
         rejectReason: 'BLURRY_DOCUMENTS',
         note: 'Ảnh giấy phép bị mờ',
       }).expect(200);
+
+      const notifications = await model<Notification>(Notification.name)
+        .find({ recipientId: owner.id })
+        .exec();
+      expect(notifications).toHaveLength(1);
+      expect(notifications[0]).toMatchObject({
+        type: NotificationType.WORKSPACE_REJECTED,
+        workspaceId: applied.id,
+        reason: 'BLURRY_DOCUMENTS',
+        note: 'Ảnh giấy phép bị mờ',
+        actorId: null,
+      });
+      expect(mailSpy).toHaveBeenCalledWith(
+        owner.email,
+        expect.objectContaining({
+          decision: 'REJECTED',
+          workspaceName: APPLICATION.name,
+          rejectReasonLabel: 'Giấy tờ bị mờ hoặc thiếu',
+          note: 'Ảnh giấy phép bị mờ',
+        }),
+      );
+      mailSpy.mockRestore();
 
       const resubmitted = await request(server())
         .post(`/api/v1/workspaces/${applied.id}/resubmit`)

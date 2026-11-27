@@ -34,11 +34,14 @@ export class NotificationDto {
   @ApiPropertyOptional({ format: 'uuid', nullable: true, type: String })
   ticketId!: string | null;
 
+  @ApiPropertyOptional({ format: 'uuid', nullable: true, type: String })
+  workspaceId!: string | null;
+
   @ApiProperty({
     nullable: true,
     type: String,
     description:
-      'Moderation: sexual, violence, hate, harassment, self_harm, illegal or spam. REPORT_RESOLVED, REPORT_DISMISSED and POST_REMOVED: the report reason (SPAM, HARASSMENT, …); null on POST_REMOVED when nobody reported the post',
+      'Moderation: sexual, violence, hate, harassment, self_harm, illegal or spam. REPORT_RESOLVED, REPORT_DISMISSED and POST_REMOVED: the report reason (SPAM, HARASSMENT, …); null on POST_REMOVED when nobody reported the post. WORKSPACE_REJECTED: WorkspaceRejectReason.',
   })
   reason!: string | null;
 
@@ -54,7 +57,7 @@ export class NotificationDto {
     nullable: true,
     type: String,
     description:
-      "Moderation: the admin's note. Post removals: the post excerpt. Comment removals and report outcomes: a bounded comment excerpt, never the reporter's details or identity.",
+      "Moderation and workspace review: the admin's note. Post removals: the post excerpt. Comment removals and report outcomes: a bounded comment excerpt, never the reporter's details or identity.",
   })
   note!: string | null;
 

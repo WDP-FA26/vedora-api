@@ -35,6 +35,8 @@ Luồng chỉ phát tới các client đang kết nối vào **cùng một insta
   "actor": { "id": "uuid", "username": "…", "fullName": "…", "avatarUrl": null },
   "postId": "uuid | null",
   "commentId": "uuid | null",
+  "ticketId": "uuid | null",
+  "workspaceId": "uuid | null",
   "readAt": null,
   "createdAt": "2026-10-19T08:00:00.000Z"
 }
@@ -59,3 +61,14 @@ Luồng chỉ phát tới các client đang kết nối vào **cùng một insta
 | `REPORTED_POST_REMOVED` | Mọi người đã báo cáo bài đó | Admin xoá bài | `note` = tiêu đề blog hoặc đầu bài |
 
 Bài đã bị xoá nên `POST_REMOVED` và `REPORTED_POST_REMOVED` có `postId` = `null`. Ở hai loại này `note` là đoạn trích bài, **không** phải ghi chú của admin. Admin tự xoá bài của chính mình thì không có `POST_REMOVED`.
+
+## Thông báo từ hệ thống (duyệt trang nhà hàng)
+
+`actor` luôn là `null`.
+
+| `type` | Người nhận | Khi nào | Trường đi kèm |
+| --- | --- | --- | --- |
+| `WORKSPACE_APPROVED` | Chủ trang (`OWNER`) | Admin duyệt đơn (`POST /admin/workspaces/:id/review` với `APPROVED`) | `workspaceId`, `note` (nếu admin có ghi chú) |
+| `WORKSPACE_REJECTED` | Chủ trang (`OWNER`) | Admin từ chối đơn (`POST /admin/workspaces/:id/review` với `REJECTED`) | `workspaceId`, `reason` (`WorkspaceRejectReason`), `note` (nếu có; bắt buộc khi `reason` là `OTHER`) |
+
+Ngoài thông báo trong ứng dụng, hệ thống cũng gửi email kết quả duyệt/từ chối đến email tài khoản chủ trang (đã xác minh) và `legal.contactEmail` (nếu khác email tài khoản).

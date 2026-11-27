@@ -11,6 +11,14 @@ export interface SupportFollowUpEmail {
   ticketUrl: string;
 }
 
+export interface WorkspaceReviewEmail {
+  decision: 'APPROVED' | 'REJECTED';
+  workspaceName: string;
+  workspaceUrl: string;
+  rejectReasonLabel?: string | null;
+  note?: string | null;
+}
+
 const SUPPORT_FOLLOW_UP_COPY: Record<
   SupportFollowUpKind,
   { subject: string; action: string }
@@ -85,6 +93,86 @@ export class MailService {
 </div>`;
 
     await this.mailer.send({ to, subject, text, html });
+  }
+
+  async sendWorkspaceReviewResult(
+    to: string,
+    review: WorkspaceReviewEmail,
+  ): Promise<void> {
+    const approved = review.decision === 'APPROVED';
+    const subject = approved
+      ? `Trang nhà hàng "${review.workspaceName}" đã được duyệt trên Vedora`
+      : `Đơn mở trang nhà hàng "${review.workspaceName}" chưa được duyệt`;
+    const actionLabel = approved
+      ? 'Xem trang nhà hàng'
+      : 'Chỉnh sửa và gửi lại đơn';
+
+    const textLines: string[] = [];
+    if (approved) {
+      textLines.push(
+        `Chúc mừng! Đơn mở trang nhà hàng "${review.workspaceName}" của bạn đã được quản trị viên Vedora phê duyệt.`,
+      );
+      if (review.note) {
+        textLines.push('', `Ghi chú từ quản trị viên: ${review.note}`);
+      }
+    } else {
+      textLines.push(
+        `Đơn mở trang nhà hàng "${review.workspaceName}" của bạn chưa được duyệt.`,
+      );
+      if (review.rejectReasonLabel) {
+        textLines.push('', `Lý do từ chối: ${review.rejectReasonLabel}`);
+      }
+      if (review.note) {
+        textLines.push(`Chi tiết từ quản trị viên: ${review.note}`);
+      }
+      textLines.push(
+        '',
+        'Bạn có thể cập nhật thông tin và gửi lại đơn bất cứ lúc nào.',
+      );
+    }
+    textLines.push('', `${actionLabel}: ${review.workspaceUrl}`);
+
+    const htmlParts: string[] = [];
+    if (approved) {
+      htmlParts.push(
+        `<p>Chúc mừng! Đơn mở trang nhà hàng <strong>${escapeHtml(review.workspaceName)}</strong> của bạn đã được quản trị viên Vedora phê duyệt.</p>`,
+      );
+      if (review.note) {
+        htmlParts.push(
+          `<p><strong>Ghi chú từ quản trị viên:</strong> ${escapeHtml(review.note)}</p>`,
+        );
+      }
+    } else {
+      htmlParts.push(
+        `<p>Đơn mở trang nhà hàng <strong>${escapeHtml(review.workspaceName)}</strong> của bạn chưa được duyệt.</p>`,
+      );
+      if (review.rejectReasonLabel) {
+        htmlParts.push(
+          `<p><strong>Lý do từ chối:</strong> ${escapeHtml(review.rejectReasonLabel)}</p>`,
+        );
+      }
+      if (review.note) {
+        htmlParts.push(
+          `<p><strong>Chi tiết từ quản trị viên:</strong> ${escapeHtml(review.note)}</p>`,
+        );
+      }
+      htmlParts.push(
+        `<p>Bạn có thể cập nhật thông tin và gửi lại đơn bất cứ lúc nào.</p>`,
+      );
+    }
+
+    const html = `<div style="font-family:system-ui,sans-serif;font-size:15px;line-height:1.5;color:#1c1917">
+  ${htmlParts.join('\n  ')}
+  <p style="margin:24px 0"><a href="${escapeHtml(review.workspaceUrl)}" style="background:#255d32;color:#ffffff;padding:10px 16px;border-radius:6px;text-decoration:none">${actionLabel}</a></p>
+  <p style="color:#78716c;font-size:13px">Bạn nhận email này vì đã gửi đơn đăng ký trang nhà hàng trên Vedora.</p>
+</div>`;
+
+    await this.mailer.send({
+      to,
+      subject,
+      text: textLines.join('\n'),
+      html,
+    });
   }
 
   private async sendCode(
