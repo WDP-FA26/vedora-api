@@ -144,6 +144,72 @@ describe('Post report images and per-post counts (real MongoDB HTTP)', () => {
     ).toEqual([]);
   });
 
+  it.each(['PENDING', 'DISMISSED', 'RESOLVED'])(
+    'keeps one lifetime report per account when the first report is %s',
+    async (status) => {
+      const post = await fixture();
+      const created = await report(post.id).expect(201);
+      const original = created.body as { id: string };
+      if (status !== 'PENDING') {
+        await http()
+          .post(`/api/v1/admin/reports/${original.id}/review`)
+          .auth(adminToken, { type: 'bearer' })
+          .send({ status })
+          .expect(200);
+      }
+      const before = await evidence().countDocuments({ postId: post.id });
+      const storageObjects = bytes.size;
+      await http()
+        .post(`/api/v1/posts/${post.id}/report`)
+        .auth(memberToken, { type: 'bearer' })
+        .send({
+          reason: 'HARASSMENT',
+          details: 'A different reason must not create a new report',
+        })
+        .expect(409)
+        .expect(({ body }) =>
+          expect(body).toMatchObject({ code: 'ALREADY_REPORTED' }),
+        );
+      await upload(post.id)
+        .expect(409)
+        .expect(({ body }) =>
+          expect(body).toMatchObject({ code: 'ALREADY_REPORTED' }),
+        );
+      expect(await evidence().countDocuments({ postId: post.id })).toBe(before);
+      expect(bytes.size).toBe(storageObjects);
+      expect(
+        await e2e.connection
+          .model(PostReport.name)
+          .countDocuments({ postId: post.id }),
+      ).toBe(1);
+      expect(
+        await e2e.connection.model(PostReport.name).findById(original.id),
+      ).toMatchObject({
+        status,
+        reason: 'SPAM',
+        details: 'Private report text',
+      });
+    },
+  );
+
+  it('allows another reporter on the same post and the original reporter on a different post', async () => {
+    const first = await fixture(),
+      second = await fixture();
+    await report(first.id).expect(201);
+    await report(first.id, otherToken).expect(201);
+    await report(second.id).expect(201);
+    expect(
+      await e2e.connection
+        .model(PostReport.name)
+        .countDocuments({ postId: first.id }),
+    ).toBe(2);
+    expect(
+      await e2e.connection
+        .model(PostReport.name)
+        .countDocuments({ postId: second.id }),
+    ).toBe(1);
+  });
+
   it('counts distinct reporters across all statuses and pages, and filters a specific post', async () => {
     const post = await fixture();
     const a = await report(post.id).expect(201);
