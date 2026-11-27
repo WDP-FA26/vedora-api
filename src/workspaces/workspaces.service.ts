@@ -1,6 +1,11 @@
 import { runtimeConfig } from '../config/runtime-config.js';
 import { randomUUID } from 'node:crypto';
-import { Injectable, Logger, Optional } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  type OnApplicationBootstrap,
+  Optional,
+} from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import { InjectModel } from '@nestjs/mongoose';
 import type { ClientSession, Model, QueryFilter } from 'mongoose';
@@ -29,6 +34,7 @@ import { StorageService, StorageTarget } from '../storage/storage.service.js';
 import { RefreshTokensService } from '../auth/refresh-tokens.service.js';
 import { isSystemAccount } from '../users/system-account.js';
 import { RestaurantMenuService } from './restaurant-menu.service.js';
+import { LEGACY_PROVINCE_CODES, wardName } from './vn-admin-units.js';
 import {
   RestaurantReviewsService,
   type RestaurantRatingStats,
@@ -104,7 +110,7 @@ type PinSource = {
 };
 
 @Injectable()
-export class WorkspacesService {
+export class WorkspacesService implements OnApplicationBootstrap {
   private readonly logger = new Logger(WorkspacesService.name);
 
   constructor(
@@ -122,6 +128,38 @@ export class WorkspacesService {
     @Optional() private readonly reviews?: RestaurantReviewsService,
     @Optional() private readonly menu?: RestaurantMenuService,
   ) {}
+
+  async onApplicationBootstrap(): Promise<void> {
+    await this.remapLegacyProvinceCodes();
+  }
+
+  /**
+   * Applications sent before official province codes used slugs such as
+   * `ha-noi`; give them the official code. Does nothing once they are mapped.
+   */
+  async remapLegacyProvinceCodes(): Promise<void> {
+    const rows = await this.workspaces
+      .find({ provinceCode: { $in: Object.keys(LEGACY_PROVINCE_CODES) } })
+      .select('provinceCode')
+      .exec();
+    const updates = [];
+    for (const row of rows) {
+      if (row.provinceCode === null) continue;
+      updates.push({
+        updateOne: {
+          filter: { _id: row.id, provinceCode: row.provinceCode },
+          update: {
+            $set: { provinceCode: LEGACY_PROVINCE_CODES[row.provinceCode] },
+          },
+        },
+      });
+    }
+    if (updates.length === 0) return;
+    await this.workspaces.bulkWrite(updates);
+    this.logger.log(
+      `Mapped ${updates.length} page applications to official province codes`,
+    );
+  }
 
   async createProofUpload(
     personId: string,
@@ -792,7 +830,9 @@ export class WorkspacesService {
       statement: dto.statement ?? null,
       ...this.restaurantFields(dto),
       provinceCode: dto.provinceCode,
-      ward: dto.ward,
+      wardCode: dto.wardCode,
+      // The DTO already checked the ward belongs to the province.
+      ward: wardName(dto.provinceCode, dto.wardCode),
       businessForm: dto.businessForm,
       vegetarianLevel: dto.vegetarianLevel,
       otherPlatformUrls: dto.otherPlatformUrls ?? [],
@@ -1195,6 +1235,7 @@ export class WorkspacesService {
     return {
       ...this.locationDto(workspace),
       provinceCode: workspace.provinceCode,
+      wardCode: workspace.wardCode,
       ward: workspace.ward,
       businessForm: workspace.businessForm,
       vegetarianLevel: workspace.vegetarianLevel,

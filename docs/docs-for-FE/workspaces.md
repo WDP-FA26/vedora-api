@@ -143,8 +143,8 @@ POST /workspaces
   "name": "Chay An Lạc - Bún Huế - Hàng Bông",
   "username": "chay.an.lac",
   "bio": "Quán chay gia đình",
-  "provinceCode": "ha-noi",
-  "ward": "Phường Hoàn Kiếm",
+  "provinceCode": "01",
+  "wardCode": "00004",
   "address": "12 Hàng Bông",
   "longitude": 105.8482,
   "latitude": 21.0302,
@@ -171,9 +171,13 @@ POST /workspaces
 **Bước 1, hồ sơ quán:**
 
 - `username`: cùng quy tắc với đăng ký (3–30 ký tự, `a-z0-9._-`).
-- `provinceCode`: một trong 34 mã tỉnh/thành sau sáp nhập 1/7/2025
-  (`src/workspaces/vn-provinces.ts`, ví dụ `ha-noi`, `ho-chi-minh`, `da-nang`).
-  `ward` là tên phường/xã, tự nhập.
+- `provinceCode`: mã chính thức 2 số của một trong 34 tỉnh/thành sau sáp nhập 1/7/2025
+  (ví dụ `01` Hà Nội, `79` TP.HCM). Danh sách ở `src/workspaces/vn-admin-units.ts`; FE có bản sao
+  ở `features/workspaces/vn-provinces.ts` và `vn-wards.ts`.
+- `wardCode`: mã chính thức 5 số của một phường/xã/đặc khu **thuộc** `provinceCode` (3.321 đơn vị).
+  Sai tỉnh hoặc không tồn tại → `400 VALIDATION_FAILED`. BE tự lưu tên phường vào `ward`.
+- Đơn gửi trước ngày 27/11/2026 dùng mã kiểu `ha-noi`; BE tự đổi sang mã chính thức khi khởi động.
+  Đơn đó có `wardCode: null` và `ward` là tên tự nhập.
 - `businessForm`: `RESTAURANT` (nhà hàng) · `EATERY` (quán ăn) · `STALL` (xe đẩy, quầy) ·
   `ONLINE` (chỉ bán mang đi hoặc online).
 - `vegetarianLevel`: `VEGAN` (thuần chay) · `LACTO_OVO` (chay có trứng sữa) ·
@@ -227,8 +231,9 @@ khóa: gửi `address`, `longitude` hoặc `latitude` khác giá trị hiện t�
   "latitude": 21.0302,
   "phone": "…" | null,
   "website": "…" | null,
-  "provinceCode": "ha-noi" | null,
-  "ward": "…" | null,
+  "provinceCode": "01" | null,
+  "wardCode": "00004" | null,
+  "ward": "Phường Ba Đình" | null,
   "businessForm": "EATERY" | null,
   "vegetarianLevel": "VEGAN" | null,
   "otherPlatformUrls": [],
