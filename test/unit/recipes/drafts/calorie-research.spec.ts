@@ -2,14 +2,13 @@ import { describe, expect, it } from 'vitest';
 import {
   applyCalorieResearch,
   calorieResearchOutcome,
-  calorieResearchPrompt,
-  sourceExcerpt,
 } from '@src/recipes/drafts/calorie-research.js';
 import {
-  draftRequestText,
-  type DraftRecipeOutput,
-  stripDraftTags,
-} from '@src/recipes/drafts/recipe-draft.js';
+  buildCalorieResearchPrompt,
+  buildRecipeDraftPrompt,
+  DRAFT_TAGS,
+} from '@src/recipes/drafts/recipe-draft.prompt.js';
+import { type DraftRecipeOutput } from '@src/recipes/drafts/recipe-draft.js';
 
 function recipe(extra: Partial<DraftRecipeOutput> = {}): DraftRecipeOutput {
   return {
@@ -46,16 +45,16 @@ function recipe(extra: Partial<DraftRecipeOutput> = {}): DraftRecipeOutput {
   };
 }
 
-describe('draftRequestText', () => {
+describe('buildRecipeDraftPrompt', () => {
   it('puts each piece in its own tag and leaves out absent ones', () => {
-    const text = draftRequestText({
+    const text = buildRecipeDraftPrompt({
       parts: [{ label: 'Post text', text: 'Đậu hũ sốt cà' }],
       currentRecipe: null,
       instruction: null,
     });
     expect(text).toBe('<source>\n## Post text\nĐậu hũ sốt cà\n</source>');
 
-    const revise = draftRequestText({
+    const revise = buildRecipeDraftPrompt({
       parts: [],
       currentRecipe: 'Tên món: Canh nấm',
       instruction: 'Đổi khẩu phần thành 4.',
@@ -66,7 +65,7 @@ describe('draftRequestText', () => {
   });
 
   it('keeps a caption from closing its tag or posing as the admin', () => {
-    const text = draftRequestText({
+    const text = buildRecipeDraftPrompt({
       parts: [
         {
           label: 'Post text',
@@ -78,17 +77,17 @@ describe('draftRequestText', () => {
     });
     expect(text).not.toContain('<admin_request>');
     expect(text.match(/<\/source>/g)).toHaveLength(1);
-    expect(stripDraftTags('<CATALOG x="1">a</catalog>')).toBe('a');
+    expect(DRAFT_TAGS.strip('<CATALOG x="1">a</catalog>')).toBe('a');
   });
 });
 
-describe('calorieResearchPrompt', () => {
+describe('buildCalorieResearchPrompt', () => {
   it('sends the admin request whole, after a capped source excerpt', () => {
     const longSource = 'x'.repeat(5000);
     const instruction = 'Tính lại kcal cho 4 người giúp mình.';
-    const prompt = calorieResearchPrompt({
+    const prompt = buildCalorieResearchPrompt({
       recipe: recipe(),
-      sourceContext: sourceExcerpt([{ label: 'Post text', text: longSource }]),
+      parts: [{ label: 'Post text', text: longSource }],
       instruction,
       today: '2026-11-27',
     });
@@ -102,9 +101,9 @@ describe('calorieResearchPrompt', () => {
   });
 
   it('leaves out the tags it has nothing for', () => {
-    const prompt = calorieResearchPrompt({
+    const prompt = buildCalorieResearchPrompt({
       recipe: recipe({ servings: 3, caloriesPerServing: null }),
-      sourceContext: '',
+      parts: [],
       instruction: null,
       today: '2026-11-27',
     });

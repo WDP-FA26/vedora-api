@@ -1,5 +1,5 @@
 import {
-  reviewInstructions,
+  buildReviewInstructions,
   type ReviewEvidence,
   type EvidenceSources,
   verifyEvidence,
@@ -127,9 +127,9 @@ describe('verifyEvidence', () => {
   });
 });
 
-describe('reviewInstructions', () => {
+describe('buildReviewInstructions', () => {
   it('lists the policy categories, the risk levels, and asks for Vietnamese', () => {
-    const text = reviewInstructions({
+    const text = buildReviewInstructions({
       instructions: 'Judge safety.',
       allowDescription: 'Recipes.',
       choices: [
@@ -143,7 +143,7 @@ describe('reviewInstructions', () => {
   });
 
   it('gives only the examples whose category the policy has', () => {
-    const text = reviewInstructions({
+    const text = buildReviewInstructions({
       instructions: 'Judge safety.',
       allowDescription: 'Recipes.',
       choices: [

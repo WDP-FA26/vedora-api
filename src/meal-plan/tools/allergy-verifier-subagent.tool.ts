@@ -15,7 +15,10 @@ import {
   mergeChanges,
   type PlanChange,
 } from './proposal-text.js';
-import { ALLERGY_AUDIT_INSTRUCTIONS } from './allergy-verifier.prompt.js';
+import {
+  ALLERGY_AUDIT_INSTRUCTIONS,
+  buildAllergyAuditPrompt,
+} from './allergy-verifier.prompt.js';
 
 const logger = new Logger('AllergyVerifierSubagentTool');
 
@@ -107,14 +110,6 @@ async function runSemanticAllergyAudit(
   flagged: { recipeId: string; reason: string }[];
   summary?: string;
 }> {
-  const recipeLines = recipes.map((recipe) => {
-    const ingredients = recipe.ingredients
-      .map((item) => (item.note ? `${item.name} (${item.note})` : item.name))
-      .join(', ');
-    const steps = recipe.steps.join(' ');
-    return `- id=${recipe.id} | ${recipe.title} | Nguyên liệu: ${ingredients} | Cách làm: ${steps}`;
-  });
-
   const { output } = await generateText({
     model,
     output: Output.object({ schema: allergyAuditSchema }),
@@ -124,12 +119,7 @@ async function runSemanticAllergyAudit(
       effort: 'medium',
       ttl: '5m',
     }),
-    prompt: [
-      `<allergy_profile>`,
-      `Dị ứng & thứ người dùng không được ăn: ${combinedNotes || 'không có mô tả thêm'}.`,
-      `</allergy_profile>`,
-      `<recipes>\n${recipeLines.join('\n')}\n</recipes>`,
-    ].join('\n\n'),
+    prompt: buildAllergyAuditPrompt({ allergyNotes: combinedNotes, recipes }),
     abortSignal,
   });
 

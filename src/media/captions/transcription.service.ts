@@ -1,4 +1,8 @@
 import { runtimeConfig } from '../../config/runtime-config.js';
+import {
+  buildCaptionTranslationInstructions,
+  buildCaptionTranslationPrompt,
+} from './caption-translation.prompt.js';
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { AiService } from '@nestjs/ai';
@@ -14,8 +18,6 @@ import { type SpeechAudio, toOriginalTime } from './speech-audio.js';
 import type { Cue } from './vtt.js';
 
 const TRANSCRIBE_TIMEOUT_MS = runtimeConfig.TRANSCRIPTION_TIMEOUT_MS;
-
-const NEVER_TRANSLATE = ['Vedora'];
 
 const HALLUCINATIONS = [
   /ghiền mì gõ/i,
@@ -121,8 +123,11 @@ export class TranscriptionService {
   async translate(cues: Cue[], from: string, to: string): Promise<Cue[]> {
     const { object } = await this.ai.generateObject({
       label: 'translate-captions',
-      instructions: `You translate video captions about plant-based cooking from ${languageName(from, 'en')} to ${languageName(to, 'en')}. Return exactly one translated line per input line, in the same order, as {"lines": [...]}. Keep these words unchanged: ${NEVER_TRANSLATE.join(', ')}. Never merge, split or skip lines.`,
-      prompt: JSON.stringify(cues.map((cue) => cue.text)),
+      instructions: buildCaptionTranslationInstructions({
+        fromLanguage: languageName(from, 'en'),
+        toLanguage: languageName(to, 'en'),
+      }),
+      prompt: buildCaptionTranslationPrompt(cues.map((cue) => cue.text)),
       providerOptions: PromptCache.sticky('vedora-caption-translate', from, to),
       schema: translationOutput,
       timeout: '2m',

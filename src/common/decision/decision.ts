@@ -1,4 +1,5 @@
 import { PromptCache } from '../../ai/prompt-cache.js';
+import { promptTags } from '../../ai/prompt-tags.js';
 import { runtimeConfig } from '../../config/runtime-config.js';
 import { generateText, type LanguageModel, Output } from 'ai';
 import { z } from 'zod';
@@ -22,9 +23,7 @@ const DEFAULT_TIMEOUT_MS = runtimeConfig.AI_DECISION_TIMEOUT_MS;
 const MAX_RETRIES = runtimeConfig.AI_DECISION_MAX_RETRIES;
 const MAX_OUTPUT_TOKENS = runtimeConfig.AI_DECISION_MAX_OUTPUT_TOKENS;
 
-function escapeDecisionTags(text: string): string {
-  return text.replace(/<\/?(?:message|conversation|turn)\b[^>]*>?/gi, '');
-}
+const DECISION_TAGS = promptTags(['message', 'conversation', 'turn']);
 
 function isPolicyChoice<V extends string>(
   policy: DecisionPolicy<V>,
@@ -71,14 +70,14 @@ export function decisionInstructions<V extends string>(
   return lines.join('\n');
 }
 
-export function decisionPrompt(state: DecisionState): string {
+export function buildDecisionPrompt(state: DecisionState): string {
   if (typeof state === 'string') {
-    return `Message:\n<message>${escapeDecisionTags(state)}</message>`;
+    return `Message:\n${DECISION_TAGS.inlineData('message', state)}`;
   }
   const lines = ['Conversation, oldest turn first:', '<conversation>'];
   for (const turn of state) {
     lines.push(
-      `<turn role="${turn.role}">${escapeDecisionTags(turn.text)}</turn>`,
+      DECISION_TAGS.inlineData('turn', turn.text, { role: turn.role }),
     );
   }
   lines.push('</conversation>');
@@ -105,7 +104,7 @@ export async function decide<V extends string>(
       scope: [instructions],
       instructions,
     }),
-    prompt: decisionPrompt(state),
+    prompt: buildDecisionPrompt(state),
     output: Output.object({
       schema: z.object({ choice: z.enum(choicesOf(policy)) }),
       name: 'guardrail_decision',

@@ -20,7 +20,7 @@ import {
   deriveVoiceToolEffects,
   withPlannerStreamEffects,
 } from '@src/meal-plan/voice/voice-stream-effects.js';
-import { voiceScreenContext } from '@src/meal-plan/meal-planner.prompt.js';
+import { buildVoiceScreenContext } from '@src/meal-plan/meal-planner.prompt.js';
 import { MealPlannerVoiceService } from '@src/meal-plan/voice/meal-planner-voice.service.js';
 import type { DietaryService } from '@src/recipes/dietary.service.js';
 import {
@@ -266,16 +266,16 @@ describe('voice tools', () => {
   });
 
   it('voiceScreenContext names the open recipe and the part shown', () => {
-    const text = voiceScreenContext(
-      {
+    const text = buildVoiceScreenContext({
+      screen: {
         weekStart: WEEK,
         day: Weekday.FRI,
         panel: 'recipe',
         recipeId: RECIPE_ID,
         recipeSection: 'steps',
       },
-      'Cơm gạo lứt muối mè',
-    );
+      recipeTitle: 'Cơm gạo lứt muối mè',
+    });
 
     expect(text).toContain('Thứ Sáu');
     expect(text).toContain('"Cơm gạo lứt muối mè"');

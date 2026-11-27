@@ -49,7 +49,7 @@ import {
 } from './blog-assistant.moderation.js';
 import {
   BLOG_ASSISTANT_STATIC_INSTRUCTIONS,
-  blogEditorContext,
+  buildBlogEditorContext,
   type LinkedRecipe,
 } from './blog-assistant.prompt.js';
 import {
@@ -164,7 +164,7 @@ export class BlogAssistantService {
       const result = await agent.stream({
         messages: PromptCache.withUserContext(
           modelMessages,
-          blogEditorContext(dto.editor, recipes),
+          buildBlogEditorContext({ editor: dto.editor, recipes }),
         ),
         abortSignal,
         timeout: { tools: { searchKnowledgeMs: SEARCH_TIMEOUT_MS } },

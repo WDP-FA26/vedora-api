@@ -46,10 +46,11 @@ import {
   validatePlannerToolOutput,
 } from './meal-planner-chat-history.service.js';
 import {
-  plannerDynamicContext,
-  plannerStaticInstructions,
-  plannerVoiceInstructions,
-  voiceScreenContext,
+  buildPlannerContext,
+  buildPlannerInstructions,
+  buildPlannerVoiceInstructions,
+  buildVoiceScreenContext,
+  PLANNER_TAGS,
 } from './meal-planner.prompt.js';
 import {
   PLANNER_MODEL_DECLINED_REPLY,
@@ -125,10 +126,6 @@ function withToolInputs(message: StoredChatMessage): StoredChatMessage {
   return { ...message, parts };
 }
 
-function stripPlannerTags(text: string): string {
-  return text.replace(/<\/?(?:planner_context|system-reminder)\b[^>]*>?/gi, '');
-}
-
 const QUICK_WRITE_TOOLS = new Set([
   'logMeal',
   'editMealLog',
@@ -172,7 +169,7 @@ const voiceQuickStop: StopCondition<ToolSet> = ({ steps }) => {
 function plannerModeConfig(voice: boolean, allowWebSearch: boolean) {
   if (voice) {
     return {
-      instructions: plannerVoiceInstructions(),
+      instructions: buildPlannerVoiceInstructions(),
       systemTtl: '1h' as const,
       turnTimeoutMs: Math.min(
         runtimeConfig.AI_CHAT_TIMEOUT_MS,
@@ -192,7 +189,7 @@ function plannerModeConfig(voice: boolean, allowWebSearch: boolean) {
     };
   }
   return {
-    instructions: plannerStaticInstructions(allowWebSearch),
+    instructions: buildPlannerInstructions({ allowWebSearch }),
     systemTtl: '5m' as const,
     turnTimeoutMs: runtimeConfig.AI_CHAT_TIMEOUT_MS,
     stopWhen: isStepCount(MAX_STEPS),
@@ -225,7 +222,8 @@ function toModerationTurns(
   for (const message of messages) {
     if (message.role !== 'user' && message.role !== 'assistant') continue;
     const rawText = extractMessageText(message);
-    const text = message.role === 'user' ? stripPlannerTags(rawText) : rawText;
+    const text =
+      message.role === 'user' ? PLANNER_TAGS.strip(rawText) : rawText;
     if (text.trim().length > 0) {
       turns.push({ role: message.role, text });
     }
@@ -243,7 +241,7 @@ function stripUserPlannerTags(messages: readonly UIMessage[]): UIMessage[] {
     const sanitizedParts: UIMessage['parts'] = [];
     for (const part of message.parts) {
       if (isTextUIPart(part)) {
-        sanitizedParts.push({ ...part, text: stripPlannerTags(part.text) });
+        sanitizedParts.push({ ...part, text: PLANNER_TAGS.strip(part.text) });
       } else {
         sanitizedParts.push(part);
       }
@@ -410,7 +408,7 @@ export class MealPlannerChatService {
     const { instructions, ...callOptions } = PromptCache.agent({
       session: 'vedora-planner',
       scope: [userId, threadId],
-      instructions: plannerVoiceInstructions(),
+      instructions: buildPlannerVoiceInstructions(),
       effort: 'medium',
       systemTtl: '1h',
     });
@@ -459,13 +457,16 @@ export class MealPlannerChatService {
     screen: MealPlanVoiceScreenDto,
   ): Promise<string> {
     if (screen.panel !== 'recipe' || !screen.recipeId) {
-      return voiceScreenContext(screen, null);
+      return buildVoiceScreenContext({ screen, recipeTitle: null });
     }
     const recipe = await this.mealPlan.recipeInstructions(
       userId,
       screen.recipeId,
     );
-    return voiceScreenContext(screen, recipe?.title ?? null);
+    return buildVoiceScreenContext({
+      screen,
+      recipeTitle: recipe?.title ?? null,
+    });
   }
 
   private async validateHistory(
@@ -691,7 +692,7 @@ export class MealPlannerChatService {
       screen,
     }: PlannerChatOptions = {},
   ) {
-    const cleanUserText = stripPlannerTags(message);
+    const cleanUserText = PLANNER_TAGS.strip(message);
     if (cleanUserText.trim().length === 0) {
       throw new InvalidInputException(
         'BAD_REQUEST',
@@ -775,7 +776,7 @@ export class MealPlannerChatService {
           ...extractAllergyKeywords(allergies.join('\n')),
         );
       };
-      const plannerContext = plannerDynamicContext(memory, plan, nutrition);
+      const plannerContext = buildPlannerContext({ memory, plan, nutrition });
       const dynamicContext = screenText
         ? `${plannerContext}\n\n${screenText}`
         : plannerContext;

@@ -11,8 +11,6 @@ import {
   applyCalorieResearch,
   type CalorieResearch,
   calorieResearchOutcome,
-  calorieResearchPrompt,
-  sourceExcerpt,
   submitCalories,
 } from './calorie-research.js';
 import {
@@ -21,11 +19,12 @@ import {
   type DraftRecipeOutput,
   type DraftRequest,
   type DraftSourceLink,
-  describeCatalog,
   draftOutput,
-  draftRequestText,
 } from './recipe-draft.js';
 import {
+  buildCalorieResearchPrompt,
+  buildRecipeDraftCatalogPrompt,
+  buildRecipeDraftPrompt,
   CALORIE_RESEARCH_INSTRUCTIONS,
   RECIPE_DRAFT_INSTRUCTIONS,
 } from './recipe-draft.prompt.js';
@@ -62,8 +61,8 @@ export class RecipeDraftGenerator {
       label: 'draft-recipe',
       instructions: RECIPE_DRAFT_INSTRUCTIONS,
       messages: PromptCache.prefixMessages(
-        `<catalog>\n${describeCatalog(catalog)}\n</catalog>`,
-        draftRequestText(request),
+        buildRecipeDraftCatalogPrompt(catalog),
+        buildRecipeDraftPrompt(request),
         '5m',
       ),
       providerOptions: PromptCache.sticky('vedora-recipe-draft'),
@@ -90,9 +89,9 @@ export class RecipeDraftGenerator {
     recipe: DraftRecipeOutput,
     request: DraftRequest,
   ): Promise<CalorieResearch | null> {
-    const prompt = calorieResearchPrompt({
+    const prompt = buildCalorieResearchPrompt({
       recipe,
-      sourceContext: sourceExcerpt(request.parts),
+      parts: request.parts,
       instruction: request.instruction,
       today: new Date().toISOString().slice(0, 10),
     });

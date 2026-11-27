@@ -1,12 +1,13 @@
+import type { MealPlanVoiceScreenDto } from '@src/meal-plan/dto/meal-plan-voice.dto.js';
 import { MODERATION_VERDICTS } from '@src/ai/guardrails/guardrail.js';
 import type { MealPlanDto } from '@src/meal-plan/dto/meal-plan.dto.js';
 import {
+  buildPlannerContext,
+  buildPlannerInstructions,
+  buildPlannerVoiceInstructions,
+  buildVoiceScreenContext,
   DAY_NAMES,
-  plannerInstructions,
-  plannerStaticInstructions,
-  plannerVoiceInstructions,
   SECTION_NAMES,
-  voiceScreenContext,
 } from '@src/meal-plan/meal-planner.prompt.js';
 import { PLANNER_REFUSALS } from '@src/meal-plan/meal-planner.refusals.js';
 import {
@@ -38,6 +39,24 @@ const emptyPlan = (): MealPlanDto => ({
   })),
   problems: [],
 });
+
+function plannerInstructions(
+  memory: DietaryMemoryDto,
+  plan: MealPlanDto,
+  allowWebSearch = false,
+  nutrition: NutritionProfileDto | null = null,
+): string {
+  const instructions = buildPlannerInstructions({ allowWebSearch });
+  const context = buildPlannerContext({ memory, plan, nutrition });
+  return `${instructions}\n\n${context}`;
+}
+
+function voiceScreenContext(
+  screen: MealPlanVoiceScreenDto,
+  recipeTitle: string | null,
+): string {
+  return buildVoiceScreenContext({ screen, recipeTitle });
+}
 
 describe('meal-planner prompt & refusals', () => {
   it('renders fallback text when dietary profile and meal plan are empty', () => {
@@ -234,8 +253,8 @@ describe('meal-planner prompt & refusals', () => {
   });
 
   it('keeps text-only UI rules out of voice instructions and structures XML blocks cleanly', () => {
-    const textPrompt = plannerStaticInstructions(false);
-    const voicePrompt = plannerVoiceInstructions();
+    const textPrompt = buildPlannerInstructions({ allowWebSearch: false });
+    const voicePrompt = buildPlannerVoiceInstructions();
 
     expect(textPrompt).toContain('Compact Markdown');
     expect(textPrompt).toContain('clickable choices via askUser');

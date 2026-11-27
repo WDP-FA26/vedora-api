@@ -1,4 +1,4 @@
-import { reviewInstructions } from '@src/moderation/content-evidence.js';
+import { buildReviewInstructions } from '@src/moderation/content-evidence.js';
 import {
   DEFAULT_CONTENT_POLICY,
   MANIPULATION_KEY,
@@ -7,7 +7,7 @@ import {
 
 describe('the manipulation rule', () => {
   it('tells the model to rate manipulation as a high risk', () => {
-    const instructions = reviewInstructions(DEFAULT_CONTENT_POLICY);
+    const instructions = buildReviewInstructions(DEFAULT_CONTENT_POLICY);
     expect(instructions).toContain(
       `rate it 3 with category "${MANIPULATION_KEY}"`,
     );

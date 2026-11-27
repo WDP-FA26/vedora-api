@@ -1,6 +1,7 @@
 import { Logger } from '@nestjs/common';
 import { tool } from 'ai';
 import { z } from 'zod';
+import { promptTags } from '../../ai/prompt-tags.js';
 import type {
   KnowledgeHit,
   KnowledgeSearchService,
@@ -37,22 +38,21 @@ export function searchKnowledgeTool(knowledge: KnowledgeSearchService) {
       type: 'text',
       value:
         output.status === 'ok'
-          ? passages(output.hits)
+          ? buildKnowledgePassages(output.hits)
           : SEARCH_UNAVAILABLE_MESSAGE,
     }),
   });
 }
 
-function passages(hits: KnowledgeHit[]): string {
-  if (!hits.length) return 'No relevant passages found.';
-  return hits
-    .map(
-      ({ title, page, text }) =>
-        `<document source="${stripTags(title)}" page="${page}">\n${stripTags(text)}\n</document>`,
-    )
-    .join('\n');
-}
+const KNOWLEDGE_TAGS = promptTags(['document']);
 
-function stripTags(text: string): string {
-  return text.replace(/<\/?document\b[^>]*>?/gi, '').replaceAll('"', "'");
+function buildKnowledgePassages(hits: readonly KnowledgeHit[]): string {
+  if (hits.length === 0) return 'No relevant passages found.';
+  const documents: string[] = [];
+  for (const { title, page, text } of hits) {
+    documents.push(
+      KNOWLEDGE_TAGS.data('document', text, { source: title, page }),
+    );
+  }
+  return documents.join('\n');
 }

@@ -68,33 +68,6 @@ export interface DraftRequest {
   instruction: string | null;
 }
 
-export function stripDraftTags(text: string): string {
-  return text.replace(
-    /<\/?(?:source|current_recipe|admin_request|catalog|ingredients|groups)\b[^>]*>?/gi,
-    '',
-  );
-}
-
-export function draftRequestText(request: DraftRequest): string {
-  const blocks: string[] = [];
-  if (request.parts.length > 0) {
-    const sections: string[] = [];
-    for (const part of request.parts) {
-      sections.push(`## ${part.label}\n${stripDraftTags(part.text)}`);
-    }
-    blocks.push(`<source>\n${sections.join('\n\n')}\n</source>`);
-  }
-  if (request.currentRecipe) {
-    const recipe = stripDraftTags(request.currentRecipe);
-    blocks.push(`<current_recipe>\n${recipe}\n</current_recipe>`);
-  }
-  if (request.instruction) {
-    const instruction = stripDraftTags(request.instruction);
-    blocks.push(`<admin_request>\n${instruction}\n</admin_request>`);
-  }
-  return blocks.join('\n\n');
-}
-
 export interface CatalogIngredient {
   id: string;
   name: string;

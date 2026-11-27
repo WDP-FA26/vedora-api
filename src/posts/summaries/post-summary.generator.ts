@@ -8,7 +8,10 @@ import { DEFAULT_CHAT_MODEL } from '../../ai/models.js';
 import { PromptCache } from '../../ai/prompt-cache.js';
 import { RecipeTag } from '../../mongo/models.js';
 import type { PostSourcePart } from './post-source.js';
-import { POST_SUMMARY_INSTRUCTIONS } from './post-summary.prompt.js';
+import {
+  buildPostSummaryPrompt,
+  POST_SUMMARY_INSTRUCTIONS,
+} from './post-summary.prompt.js';
 
 const TIMEOUT_MS = runtimeConfig.POST_SUMMARY_TIMEOUT_MS;
 
@@ -53,11 +56,7 @@ export class PostSummaryGenerator {
   }
 
   async generate(parts: SummarySourcePart[]): Promise<SummaryOutput> {
-    const sections: string[] = [];
-    for (const part of parts) {
-      sections.push(`## ${part.label}\n${part.text}`);
-    }
-    const prompt = `<post>\n${sections.join('\n\n')}\n</post>`;
+    const prompt = buildPostSummaryPrompt(parts);
     const result = await generateText({
       model: this.model,
       ...PromptCache.singleTurn({

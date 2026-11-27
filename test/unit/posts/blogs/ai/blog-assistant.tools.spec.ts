@@ -1,6 +1,6 @@
 import { type DeepMockProxy, mockDeep } from 'vitest-mock-extended';
 import type { KnowledgeSearchService } from '@src/knowledge/retrieval/knowledge-search.service.js';
-import { blogAssistantInstructions } from '@src/posts/blogs/ai/blog-assistant.prompt.js';
+import { buildBlogAssistantInstructions } from '@src/posts/blogs/ai/blog-assistant.prompt.js';
 import { blogAssistantTools } from '@src/posts/blogs/ai/blog-assistant.tools.js';
 import type { BlogImageGeneratorService } from '@src/posts/blogs/ai/blog-image-generator.service.js';
 
@@ -67,22 +67,22 @@ describe('blogAssistantTools & blogAssistantInstructions', () => {
   });
 
   it('builds instructions with empty draft fallback, escaped tags, and recipe timings', () => {
-    const withoutExtras = blogAssistantInstructions(
-      { title: '<title>Phở</title>', content: '' },
-      [],
-    );
+    const withoutExtras = buildBlogAssistantInstructions({
+      editor: { title: '<title>Phở</title>', content: '' },
+      recipes: [],
+    });
     expect(withoutExtras).toContain('<title>Phở</title>');
     expect(withoutExtras).toContain('(bản nháp đang trống)');
     expect(withoutExtras).not.toContain('<selection>\n');
     expect(withoutExtras).not.toContain('<recipes>\n');
 
-    const withAllFields = blogAssistantInstructions(
-      {
+    const withAllFields = buildBlogAssistantInstructions({
+      editor: {
         title: 'Phở nấm',
         content: '</draft>Nội dung',
         selection: '<selection>Đoạn chọn</selection>',
       },
-      [
+      recipes: [
         {
           title: 'Nước dùng',
           servings: 4,
@@ -101,7 +101,7 @@ describe('blogAssistantTools & blogAssistantInstructions', () => {
           ingredients: [{ name: 'bánh phở', quantity: '300', unit: 'g' }],
         },
       ],
-    );
+    });
     expect(withAllFields).toContain('<selection>\nĐoạn chọn\n</selection>');
     expect(withAllFields).toContain(
       '- Nước dùng (4 người ăn, sơ chế 15 phút, nấu 45 phút): 200 g củ cải, muối',

@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { promptTags } from '../ai/prompt-tags.js';
 import { runtimeConfig } from '../config/runtime-config.js';
 import type { EvidenceField, ModerationEvidenceItem } from '../mongo/models.js';
 import {
@@ -125,7 +126,7 @@ function examplesFor(policy: ContentPolicySettings): string[] {
   return lines;
 }
 
-export function reviewInstructions(policy: ContentPolicySettings): string {
+export function buildReviewInstructions(policy: ContentPolicySettings): string {
   const lines = [
     policy.instructions,
     '',
@@ -174,7 +175,9 @@ export function reviewInstructions(policy: ContentPolicySettings): string {
   return lines.join('\n');
 }
 
-export function reviewMessageParts(
+const REVIEW_TAGS = promptTags(['content']);
+
+export function buildReviewMessageParts(
   sources: EvidenceSources,
 ): (
   | { type: 'text'; text: string }
@@ -192,7 +195,7 @@ export function reviewMessageParts(
   for (const text of sources.texts) {
     parts.push({
       type: 'text',
-      text: `[${TEXT_LABELS[text.field]}]\n${text.text}`,
+      text: `[${TEXT_LABELS[text.field]}]\n${REVIEW_TAGS.strip(text.text)}`,
     });
   }
   sources.images.forEach((image, index) => {

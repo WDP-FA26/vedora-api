@@ -12,7 +12,10 @@ import {
   MEAL_LOG_MAX_REFERENCES,
   type CalorieEstimateDto,
 } from '../dto/meal-log.dto.js';
-import { CALORIE_ESTIMATE_INSTRUCTIONS } from './calorie-estimator.prompt.js';
+import {
+  CALORIE_ESTIMATE_INSTRUCTIONS,
+  buildCalorieEstimatePrompt,
+} from './calorie-estimator.prompt.js';
 
 const TIMEOUT_MS = runtimeConfig.MEAL_LOG_CALORIE_ESTIMATE_TIMEOUT_MS;
 const MAX_OUTPUT_TOKENS =
@@ -62,11 +65,6 @@ export class CalorieEstimator {
   constructor(@InjectModel() private readonly model: LanguageModel) {}
 
   async estimate(question: CalorieQuestion): Promise<CalorieEstimateDto> {
-    const lines = [`Món: ${question.name}`];
-    if (question.details)
-      lines.push(`Mô tả của người dùng: ${question.details}`);
-    lines.push('Ước tính kcal cho một khẩu phần.');
-
     const result = await generateText({
       model: this.model,
       ...PromptCache.singleTurn({
@@ -75,7 +73,11 @@ export class CalorieEstimator {
         effort: 'medium',
         ttl: '5m',
       }),
-      prompt: `Hôm nay là ${new Date().toISOString().slice(0, 10)}.\n<dish>\n${lines.join('\n')}\n</dish>`,
+      prompt: buildCalorieEstimatePrompt({
+        today: new Date().toISOString().slice(0, 10),
+        name: question.name,
+        details: question.details,
+      }),
       maxOutputTokens: MAX_OUTPUT_TOKENS,
       tools: { webSearch: webSearchTool(), submitEstimate },
       abortSignal: AbortSignal.timeout(TIMEOUT_MS),

@@ -15,8 +15,8 @@ import type { ModerationEvidence } from '../mongo/models.js';
 import {
   type EvidenceSources,
   type EvidenceText,
-  reviewInstructions,
-  reviewMessageParts,
+  buildReviewInstructions,
+  buildReviewMessageParts,
   reviewOutput,
   verifyEvidence,
 } from './content-evidence.js';
@@ -163,10 +163,12 @@ export class ContentModerationService {
         abortSignal: AbortSignal.timeout(TIMEOUT_MS),
         ...PromptCache.singleTurn({
           session: SESSION_ID,
-          instructions: reviewInstructions(policy),
+          instructions: buildReviewInstructions(policy),
           enabled: draftPolicy === undefined,
         }),
-        messages: [{ role: 'user', content: reviewMessageParts(readable) }],
+        messages: [
+          { role: 'user', content: buildReviewMessageParts(readable) },
+        ],
         output: Output.object({
           schema: reviewOutput(categoryKeys(policy)),
           name: 'content_review',

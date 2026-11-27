@@ -22,6 +22,7 @@ import type {
   MealPlanVoiceScrollStateDto,
   RecipeSection,
 } from './dto/meal-plan-voice.dto.js';
+import { promptTags } from '../ai/prompt-tags.js';
 import { addDays } from './meal-week.js';
 
 export const DAY_NAMES = {
@@ -94,6 +95,8 @@ const BODY_METRICS_TAB_TEXT: Record<BodyMetricsTab, string> = {
 };
 
 const WEEKDAYS: readonly Weekday[] = Object.values(Weekday);
+
+export const PLANNER_TAGS = promptTags(['planner_context', 'system-reminder']);
 
 const RECENT_HISTORY_LIMIT = 10;
 
@@ -184,31 +187,37 @@ Your reply is spoken aloud, so write one to three concise sentences of flowing, 
 </spoken_output_format>
 </voice_mode>`;
 
-export function plannerStaticInstructions(allowWebSearch = false): string {
+export interface PlannerInstructionsInput {
+  allowWebSearch: boolean;
+}
+
+export interface PlannerContextInput {
+  memory: DietaryMemoryDto;
+  plan: MealPlanDto;
+  nutrition: NutritionProfileDto | null;
+}
+
+export interface VoiceScreenContextInput {
+  screen: MealPlanVoiceScreenDto;
+  recipeTitle: string | null;
+}
+
+export function buildPlannerInstructions({
+  allowWebSearch,
+}: PlannerInstructionsInput): string {
   const webSearch = allowWebSearch ? WEB_SEARCH_ALLOWED : WEB_SEARCH_ASK;
   return `${SHARED_RULES}\n\n${TEXT_ONLY_RULES}\n\n${webSearch}`;
 }
 
-export function plannerVoiceInstructions(): string {
+export function buildPlannerVoiceInstructions(): string {
   return `${SHARED_RULES}\n\n${VOICE_RULES}`;
 }
 
-export function plannerInstructions(
-  memory: DietaryMemoryDto,
-  plan: MealPlanDto,
-  allowWebSearch = false,
-  nutrition?: NutritionProfileDto | null,
-): string {
-  const staticPart = plannerStaticInstructions(allowWebSearch);
-  const dynamicPart = plannerDynamicContext(memory, plan, nutrition);
-  return `${staticPart}\n\n${dynamicPart}`;
-}
-
-export function plannerDynamicContext(
-  memory: DietaryMemoryDto,
-  plan: MealPlanDto,
-  nutrition?: NutritionProfileDto | null,
-): string {
+export function buildPlannerContext({
+  memory,
+  plan,
+  nutrition,
+}: PlannerContextInput): string {
   return `${plannerCalendar(plan)}
 
 ${nutritionSummary(nutrition)}
@@ -246,7 +255,7 @@ function passedDaysText(currentWeekStart: string, todayIndex: number): string {
   return passed.join(', ');
 }
 
-export function plannerCalendar(plan: MealPlanDto): string {
+function plannerCalendar(plan: MealPlanDto): string {
   const { today, currentWeekStart, maxWeekStart, weekStart } = plan;
   const todayIndex = WEEKDAYS.findIndex(
     (_, index) => addDays(currentWeekStart, index) === today,
@@ -285,9 +294,7 @@ ${lines.join('\n')}
 Sau ${lastDay} là ngoài giới hạn, không lập được.`;
 }
 
-function nutritionSummary(
-  nutrition: NutritionProfileDto | null | undefined,
-): string {
+function nutritionSummary(nutrition: NutritionProfileDto | null): string {
   if (!nutrition || nutrition.bmi === null) {
     return 'Hồ sơ BMI & mục tiêu năng lượng: người dùng chưa khai báo chiều cao/cân nặng (vẫn tư vấn cân bằng 5 nhóm chất chay và gợi ý khéo léo nếu phù hợp).';
   }
@@ -369,14 +376,10 @@ function weightCheckpointsLine(history: readonly BodyMetricLogDto[]): string {
   return `- Các mốc cân nặng gần nhất: ${checkpoints.join('; ')}.`;
 }
 
-function stripPlannerContextTags(text: string): string {
-  return text.replace(/<\/?(?:planner_context|system-reminder)\b[^>]*>?/gi, '');
-}
-
 function memoryLines(lines: readonly string[], empty: string): string {
   const shown: string[] = [];
   for (const line of lines) {
-    const clean = stripPlannerContextTags(line).trim();
+    const clean = PLANNER_TAGS.strip(line).trim();
     if (clean !== '') shown.push(`- ${clean}`);
   }
   if (shown.length === 0) return `- (${empty})`;
@@ -428,10 +431,10 @@ function dayNutritionNote(recipes: readonly MealRecipeDto[]): string {
   return ` — ước tính ~${calories} kcal (${pillarNames.join(', ')})`;
 }
 
-export function voiceScreenContext(
-  screen: MealPlanVoiceScreenDto,
-  recipeTitle: string | null,
-): string {
+export function buildVoiceScreenContext({
+  screen,
+  recipeTitle,
+}: VoiceScreenContextInput): string {
   const day = screen.day ? `, đang chọn ${DAY_NAMES[screen.day]}` : '';
   const lines = [
     'Màn hình của người dùng lúc họ nói:',
