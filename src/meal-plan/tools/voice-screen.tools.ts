@@ -4,8 +4,10 @@ import type { BmiCategory } from '../../mongo/models.js';
 import type { DietaryService } from '../../recipes/dietary.service.js';
 import { MAX_GENERATE_QUERY_LENGTH, WEEKDAYS } from '../dto/meal-plan.dto.js';
 import {
+  BODY_METRICS_TABS,
   RECIPE_SECTIONS,
   SCREEN_SCROLL_DIRECTIONS,
+  type BodyMetricsTab,
   type MealPlanVoiceScreenDto,
   type RecipeSection,
   type ScreenScrollDirection,
@@ -70,6 +72,12 @@ export interface SetScreenOutput {
   scroll: ScreenScrollDirection | null;
   weekStart: string | null;
   day: Weekday | null;
+  wholeWeek: boolean;
+  people: number | null;
+  checkItems: string[] | null;
+  uncheckItems: string[] | null;
+  clearChecked: boolean;
+  tab: BodyMetricsTab | null;
   date: string | null;
   metrics: BodyMetricsSummary | null;
   /** Concise ingredient lines when view is `shoppingList`, so voice can read them aloud. */
@@ -93,6 +101,12 @@ function screenOutput(
     scroll: null,
     weekStart: null,
     day: null,
+    wholeWeek: false,
+    people: null,
+    checkItems: null,
+    uncheckItems: null,
+    clearChecked: false,
+    tab: null,
     date: null,
     metrics: null,
     shoppingItems: null,
@@ -118,6 +132,12 @@ const SCROLL_LABELS: Record<ScreenScrollDirection, string> = {
   bottom: 'đã cuộn xuống cuối',
 };
 
+const BODY_METRICS_TAB_LABELS: Record<BodyMetricsTab, string> = {
+  weekly: 'tab Tuần này (biểu đồ dinh dưỡng)',
+  bmi: 'tab BMI',
+  dietary: 'tab Dị ứng & Gu',
+};
+
 function setScreenText(output: SetScreenOutput): string {
   if (!output.applied) return `Màn hình chưa đổi: ${output.problem}`;
   const scrollNote =
@@ -136,19 +156,36 @@ function setScreenText(output: SetScreenOutput): string {
     return `Màn hình đang hiện nhật ký ăn uống ${day}${scrollNote}.`;
   }
   if (output.view === 'bodyMetrics') {
+    const tab = output.tab === null ? '' : ` (${BODY_METRICS_TAB_LABELS[output.tab]})`;
+    const week = output.weekStart === null ? '' : ` của tuần bắt đầu ${output.weekStart}`;
     const metrics =
       output.metrics === null ? '' : ` ${bodyMetricsText(output.metrics)}`;
-    return `Màn hình đang hiện bảng chỉ số cơ thể${scrollNote}.${metrics}`;
+    return `Màn hình đang hiện bảng chỉ số cơ thể${tab}${week}${scrollNote}.${metrics}`;
   }
   if (output.view === 'shoppingList') {
+    const scopeParts: string[] = [];
+    if (output.day !== null) scopeParts.push(DAY_NAMES[output.day]);
+    else if (output.wholeWeek) scopeParts.push('cả tuần');
+    if (output.weekStart !== null) scopeParts.push(`tuần bắt đầu ${output.weekStart}`);
+    if (output.people !== null) scopeParts.push(`${output.people} người ăn`);
+    const scope = scopeParts.length > 0 ? ` (${scopeParts.join(', ')})` : '';
+    const checkNotes: string[] = [];
+    if (output.clearChecked) checkNotes.push('đã bỏ chọn tất cả mục đã mua');
+    if (output.checkItems && output.checkItems.length > 0) {
+      checkNotes.push(`đã đánh dấu đã mua: ${output.checkItems.join(', ')}`);
+    }
+    if (output.uncheckItems && output.uncheckItems.length > 0) {
+      checkNotes.push(`đã bỏ đánh dấu: ${output.uncheckItems.join(', ')}`);
+    }
+    const checkSuffix = checkNotes.length > 0 ? ` ${checkNotes.join('; ')}.` : '';
     const items = output.shoppingItems;
     if (items && items.length > 0) {
-      return `Màn hình đang hiện danh sách đi chợ${scrollNote}. Nguyên liệu cần mua (${items.length} mục): ${items.join('; ')}.`;
+      return `Màn hình đang hiện danh sách đi chợ${scope}${scrollNote}.${checkSuffix} Nguyên liệu cần mua (${items.length} mục): ${items.join('; ')}.`;
     }
     if (items && items.length === 0) {
-      return `Màn hình đang hiện danh sách đi chợ${scrollNote}. Hiện chưa có nguyên liệu nào cần mua từ hôm nay trở đi.`;
+      return `Màn hình đang hiện danh sách đi chợ${scope}${scrollNote}.${checkSuffix} Hiện chưa có nguyên liệu nào cần mua trong phạm vi này.`;
     }
-    return `Màn hình đang hiện danh sách đi chợ${scrollNote}.`;
+    return `Màn hình đang hiện danh sách đi chợ${scope}${scrollNote}.${checkSuffix}`;
   }
   const day =
     output.day === null
@@ -172,8 +209,17 @@ export function setScreenTool(
   shoppingList?: ShoppingListService,
 ) {
   return tool({
-    description:
-      "Change or scroll what the user's screen shows by naming the view they should see. The user is on a call and often has busy hands, so you are the one who opens, scrolls and closes things for them; the screen section of your context says what they see right now. Views: calendar is the week calendar with every panel closed (pass day, and weekStart for another week, to pick a day); recipe is one recipe card with its ingredients and steps (pass recipeId, or query with the dish name to look up and open it directly, section to scroll to ingredients/steps/top, or step with a 1-based step number to jump straight to that step; with neither recipeId nor query on an open recipe this scrolls); eatingLog is the food diary (pass date for a day other than today); bodyMetrics is the BMI, weight and daily kcal panel, and it also returns the current values; shoppingList is the weekly shopping list (ingredients to buy). Pass scroll (down, up, top, bottom) on any view to scroll its content smoothly. Opening a view closes the panel that was open before. Pass done: true when the user only asked to open, close or scroll the screen and needs no further advice.",
+    description: [
+      "Control what the user's screen shows on /meal-planner (open, switch tab/week/day, filter, tick bought items, scroll, or close panels). The user is on a voice call with busy hands; check the screen section of your context first to see what is open now.",
+      'Views (opening a view closes any previous panel):',
+      '- calendar: week calendar with all panels closed. Pass day (MON..SUN) and/or weekStart (YYYY-MM-DD Monday) to navigate.',
+      '- recipe: dish card with ingredients and steps. Pass recipeId or Vietnamese dish query; pass section (top/ingredients/steps) or 1-based step to jump. Omit recipeId and query to scroll the open recipe.',
+      '- eatingLog: food diary. Pass date (YYYY-MM-DD) for any day (switches week automatically if needed); omit date for today.',
+      '- bodyMetrics: nutrition & BMI sheet. Pass tab (weekly = calorie chart & 5 pillars, bmi = BMI/weight, dietary = allergies & preferences) and optional weekStart for another week. Already returns current BMI/target metrics.',
+      '- shoppingList: shopping list. Pass weekStart for another week, day (MON..SUN for one day, or ALL for whole week), people (1-4), checkItems/uncheckItems (ingredient names), or clearChecked: true. Already fetches and returns scaled ingredients.',
+      'Rules: Pass scroll (down/up/top/bottom) on any view. Pass done: true when the user only asked to control/view the screen. Do NOT call getPlan before opening shoppingList or bodyMetrics — this tool already fetches what you need. Do NOT use setScreen to end the voice call (use endCall) or to edit meal slots (use editPlan/fillSlots).',
+      'Examples: "đi chợ thứ 2 tuần sau cho 2 người" -> { view: "shoppingList", weekStart: "YYYY-MM-DD", day: "MON", people: 2, done: true }; "đánh dấu đã mua đậu phụ" -> { view: "shoppingList", checkItems: ["đậu phụ"], done: true }; "mở mục dị ứng" -> { view: "bodyMetrics", tab: "dietary", done: true }.',
+    ].join('\n'),
     inputSchema: z.object({
       view: z
         .enum(SCREEN_VIEWS)
@@ -217,12 +263,49 @@ export function setScreenTool(
           'Scroll the active view smoothly: down/up moves one viewport (~70%), top/bottom jumps to the start or end',
         ),
       weekStart: weekStartInput(plannableWeekStarts()).describe(
-        'Only with view calendar: Monday (YYYY-MM-DD) of the week to show; leave it out to stay on the week shown now',
+        'With view calendar, shoppingList, or bodyMetrics: Monday (YYYY-MM-DD) of the week to show; leave it out to stay on the current week',
       ),
       day: z
-        .enum(WEEKDAYS)
+        .enum([...WEEKDAYS, 'ALL'] as const)
         .optional()
-        .describe('Only with view calendar: the day to select'),
+        .describe(
+          'With view calendar: MON..SUN to select a day. With view shoppingList: MON..SUN for one day, or ALL for the whole week (Cả tuần).',
+        ),
+      people: z
+        .number()
+        .int()
+        .min(1)
+        .max(4)
+        .optional()
+        .describe(
+          'Only with view shoppingList: number of eaters (1 to 4) to scale ingredient quantities',
+        ),
+      checkItems: z
+        .array(z.string().min(1).max(80))
+        .max(20)
+        .optional()
+        .describe(
+          'Only with view shoppingList: ingredient names to tick off as bought',
+        ),
+      uncheckItems: z
+        .array(z.string().min(1).max(80))
+        .max(20)
+        .optional()
+        .describe(
+          'Only with view shoppingList: ingredient names to untick',
+        ),
+      clearChecked: z
+        .boolean()
+        .optional()
+        .describe(
+          'Only with view shoppingList: set true to untick all bought items',
+        ),
+      tab: z
+        .enum(BODY_METRICS_TABS)
+        .optional()
+        .describe(
+          'Only with view bodyMetrics: which tab to open (weekly = calorie chart & 5 pillars, bmi = BMI & weight, dietary = allergies & preferences)',
+        ),
       date: z
         .string()
         .regex(/^\d{4}-\d{2}-\d{2}$/)
@@ -234,7 +317,7 @@ export function setScreenTool(
         .boolean()
         .optional()
         .describe(
-          'Set to true when the user only asked to open, close or scroll the screen and needs no further analysis',
+          'Set to true when the user only asked to open, close, filter, or scroll the screen and needs no further analysis',
         ),
     }),
     execute: async (input): Promise<SetScreenOutput> => {
@@ -295,6 +378,8 @@ export function setScreenTool(
       if (input.view === 'bodyMetrics') {
         const profile = await dietary.findNutrition(userId);
         return screenOutput('bodyMetrics', {
+          tab: input.tab ?? null,
+          weekStart: input.weekStart ?? null,
           metrics: {
             heightCm: profile.heightCm,
             weightKg: profile.weightKg,
@@ -308,22 +393,61 @@ export function setScreenTool(
         });
       }
       if (input.view === 'shoppingList') {
+        const targetWeek = input.weekStart ?? screen?.weekStart ?? openWeekStart;
+        const pickedDay: Weekday | null =
+          input.day && input.day !== 'ALL' ? input.day : null;
+        let targetDays: Weekday[];
+        if (pickedDay) {
+          targetDays = [pickedDay];
+        } else if (input.day === 'ALL') {
+          targetDays = [...WEEKDAYS];
+        } else if (
+          screen?.panel === 'shoppingList' &&
+          screen.shoppingDays &&
+          screen.shoppingDays.length > 0 &&
+          input.weekStart === undefined
+        ) {
+          targetDays = screen.shoppingDays;
+        } else {
+          targetDays = [...WEEKDAYS];
+        }
+        const targetPeople = input.people ?? screen?.shoppingPeople ?? 1;
         let shoppingItems: string[] | null = null;
         if (shoppingList) {
-          const targetWeek = input.weekStart ?? screen?.weekStart ?? openWeekStart;
           const list = await shoppingList.get(userId, {
             weekStart: targetWeek,
-            days: [...WEEKDAYS],
+            days: targetDays,
           });
           shoppingItems = list.items.slice(0, 20).map((item) => {
+            let scaledSum = 0;
+            let knownCount = 0;
+            for (const contrib of item.contributions) {
+              if (contrib.quantity === null) continue;
+              const numeric = Number(contrib.quantity);
+              if (!Number.isFinite(numeric)) continue;
+              const divisor = contrib.servings > 0 ? contrib.servings : 1;
+              scaledSum += (numeric / divisor) * targetPeople;
+              knownCount += 1;
+            }
+            const rounded = Math.round(scaledSum * 100) / 100;
             const qty =
-              item.knownQuantity !== null
-                ? [item.knownQuantity, item.unit].filter(Boolean).join(' ')
+              knownCount > 0
+                ? [rounded, item.unit].filter(Boolean).join(' ')
                 : 'chưa rõ lượng';
             return `${item.name} (${qty})`;
           });
         }
+        const wholeWeek =
+          input.day === 'ALL' ||
+          (!pickedDay && targetDays.length === WEEKDAYS.length);
         return screenOutput('shoppingList', {
+          weekStart: targetWeek,
+          day: pickedDay ?? (targetDays.length === 1 ? targetDays[0] : null),
+          wholeWeek,
+          people: input.people ?? null,
+          checkItems: input.checkItems ?? null,
+          uncheckItems: input.uncheckItems ?? null,
+          clearChecked: input.clearChecked === true,
           shoppingItems,
           scroll,
           ...doneFlag,
@@ -331,7 +455,7 @@ export function setScreenTool(
       }
       return screenOutput('calendar', {
         weekStart: input.weekStart ?? screen?.weekStart ?? openWeekStart,
-        day: input.day ?? null,
+        day: input.day && input.day !== 'ALL' ? input.day : null,
         scroll,
         ...doneFlag,
       });

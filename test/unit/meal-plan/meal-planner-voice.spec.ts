@@ -409,7 +409,7 @@ describe('voice tools', () => {
 });
 
 describe('voice stream effects', () => {
-  it('derives screen, refresh, progress, and summary for voice tools', () => {
+  it('derives screen, state, progress, and summary for voice tools', () => {
     expect(
       deriveVoiceToolEffects('editPlan', {
         weekStart: WEEK,
@@ -417,7 +417,7 @@ describe('voice stream effects', () => {
         days: [{ day: Weekday.MON }, { day: Weekday.SUN }],
       }),
     ).toEqual({
-      refresh: { plan: true },
+      state: { invalidate: ['plan', 'shoppingList'] },
       screen: {
         focus: { kind: 'planDay', weekStart: WEEK, day: Weekday.MON },
         close: null,
@@ -452,6 +452,73 @@ describe('voice stream effects', () => {
         close: null,
       },
       screenSummary: 'Đã mở công thức "Phở chay" trên màn hình, ở bước 3.',
+    });
+
+    expect(
+      deriveVoiceToolEffects('setScreen', {
+        applied: true,
+        view: 'shoppingList',
+        weekStart: '2026-11-30',
+        day: Weekday.MON,
+        wholeWeek: false,
+        people: 2,
+        checkItems: ['đậu phụ'],
+        uncheckItems: null,
+        clearChecked: false,
+        tab: null,
+        recipeId: null,
+        title: null,
+        section: null,
+        step: null,
+        scroll: null,
+        date: null,
+        metrics: null,
+        shoppingItems: ['đậu phụ (200 g)'],
+        problem: null,
+      }),
+    ).toEqual({
+      screen: {
+        focus: {
+          kind: 'shoppingList',
+          weekStart: '2026-11-30',
+          day: Weekday.MON,
+          people: 2,
+          checkItems: ['đậu phụ'],
+        },
+        close: null,
+      },
+      screenSummary:
+        'Đã mở danh sách đi chợ (Thứ Hai, cho 2 người ăn) trên màn hình.',
+    });
+
+    expect(
+      deriveVoiceToolEffects('setScreen', {
+        applied: true,
+        view: 'bodyMetrics',
+        tab: 'dietary',
+        weekStart: null,
+        day: null,
+        wholeWeek: false,
+        people: null,
+        checkItems: null,
+        uncheckItems: null,
+        clearChecked: false,
+        recipeId: null,
+        title: null,
+        section: null,
+        step: null,
+        scroll: null,
+        date: null,
+        metrics: null,
+        shoppingItems: null,
+        problem: null,
+      }),
+    ).toEqual({
+      screen: {
+        focus: { kind: 'bodyMetrics', tab: 'dietary' },
+        close: null,
+      },
+      screenSummary: 'Đã mở mục dị ứng và gu ăn uống trên màn hình.',
     });
 
     expect(deriveVoiceToolEffects('endCall', { ended: true })).toEqual({

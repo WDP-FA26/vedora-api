@@ -1,6 +1,7 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import {
+  IsArray,
   IsBoolean,
   IsIn,
   IsInt,
@@ -14,8 +15,12 @@ import {
   MinLength,
   ValidateNested,
 } from 'class-validator';
-import { Weekday } from '../../mongo/models.js';
-import { MAX_PLANNER_MESSAGE_LENGTH, WEEKDAYS } from './meal-plan.dto.js';
+import { MealSection, Weekday } from '../../mongo/models.js';
+import {
+  MAX_PLANNER_MESSAGE_LENGTH,
+  MEAL_SECTIONS,
+  WEEKDAYS,
+} from './meal-plan.dto.js';
 import { WeekStart } from './week-start.js';
 
 export class MealPlanVoiceSessionRequestDto {
@@ -62,6 +67,10 @@ export const VOICE_SCREEN_PANELS = [
   'shoppingList',
 ] as const;
 export type VoiceScreenPanel = (typeof VOICE_SCREEN_PANELS)[number];
+
+/** Tabs inside the `bodyMetrics` nutrition & BMI companion sheet. */
+export const BODY_METRICS_TABS = ['weekly', 'bmi', 'dietary'] as const;
+export type BodyMetricsTab = (typeof BODY_METRICS_TABS)[number];
 
 /** Parts of a recipe card the screen can be scrolled to. */
 export const RECIPE_SECTIONS = ['top', 'ingredients', 'steps'] as const;
@@ -145,6 +154,29 @@ export class MealPlanVoiceScreenDto {
   recipeStep?: number;
 
   @ApiPropertyOptional({
+    enum: WEEKDAYS,
+    description: 'With `panel: recipe`: the planned weekday when opened from the calendar',
+  })
+  @IsOptional()
+  @IsIn(WEEKDAYS)
+  recipeDay?: Weekday;
+
+  @ApiPropertyOptional({
+    enum: MEAL_SECTIONS,
+    description: 'With `panel: recipe`: the meal section when opened from the calendar',
+  })
+  @IsOptional()
+  @IsIn(MEAL_SECTIONS)
+  recipeMealSection?: MealSection;
+
+  @ApiPropertyOptional({
+    description: 'With `panel: recipe`: whether the planned dish is already marked eaten',
+  })
+  @IsOptional()
+  @IsBoolean()
+  recipeEaten?: boolean;
+
+  @ApiPropertyOptional({
     example: '2026-11-25',
     description: 'With `panel: eatingLog`: the day the diary shows',
   })
@@ -152,6 +184,46 @@ export class MealPlanVoiceScreenDto {
   @IsString()
   @Matches(/^\d{4}-\d{2}-\d{2}$/)
   eatingLogDate?: string;
+
+  @ApiPropertyOptional({
+    enum: BODY_METRICS_TABS,
+    description: 'With `panel: bodyMetrics`: the active tab inside the nutrition sheet',
+  })
+  @IsOptional()
+  @IsIn(BODY_METRICS_TABS)
+  bodyMetricsTab?: BodyMetricsTab;
+
+  @ApiPropertyOptional({
+    enum: WEEKDAYS,
+    isArray: true,
+    description: 'With `panel: shoppingList`: currently selected days (all 7 = whole week)',
+  })
+  @IsOptional()
+  @IsArray()
+  @IsIn(WEEKDAYS, { each: true })
+  shoppingDays?: Weekday[];
+
+  @ApiPropertyOptional({
+    minimum: 1,
+    maximum: 4,
+    description: 'With `panel: shoppingList`: number of eaters currently selected',
+  })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(4)
+  shoppingPeople?: number;
+
+  @ApiPropertyOptional({
+    minimum: 0,
+    maximum: 500,
+    description: 'With `panel: shoppingList`: how many items are currently checked off as bought',
+  })
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(500)
+  shoppingCheckedCount?: number;
 
   @ApiPropertyOptional({
     type: MealPlanVoiceScrollStateDto,

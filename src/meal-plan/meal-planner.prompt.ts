@@ -270,6 +270,12 @@ const RECIPE_SECTION_TEXT = {
  * recipe title comes from the catalog, not the browser, so page text never
  * reaches the prompt.
  */
+const BODY_METRICS_TAB_TEXT: Record<'weekly' | 'bmi' | 'dietary', string> = {
+  weekly: 'tab Tuần này (biểu đồ calo & 5 nhóm dưỡng chất)',
+  bmi: 'tab BMI (chỉ số cơ thể, nhập cân nặng & biểu đồ cân nặng)',
+  dietary: 'tab Dị ứng & Gu ăn uống',
+};
+
 export function voiceScreenContext(
   screen: MealPlanVoiceScreenDto,
   recipeTitle: string | null,
@@ -282,21 +288,56 @@ export function voiceScreenContext(
   if (screen.panel === 'recipe' && screen.recipeId) {
     const title =
       recipeTitle === null ? 'không còn trong danh mục' : `"${recipeTitle}"`;
+    const slotParts: string[] = [];
+    if (screen.recipeDay) slotParts.push(DAY_NAMES[screen.recipeDay]);
+    if (screen.recipeMealSection) {
+      slotParts.push(`bữa ${SECTION_NAMES[screen.recipeMealSection].toLowerCase()}`);
+    }
+    const slot = slotParts.length > 0 ? ` (${slotParts.join(', ')})` : '';
+    const eaten =
+      screen.recipeEaten === true
+        ? ', đã đánh dấu đã ăn'
+        : screen.recipeEaten === false
+          ? ', chưa ăn'
+          : '';
     const section = screen.recipeSection
       ? `, đang ở ${RECIPE_SECTION_TEXT[screen.recipeSection]}`
       : '';
     const step =
       screen.recipeStep !== undefined ? `, bước ${screen.recipeStep}` : '';
     lines.push(
-      `- Đang mở công thức ${title} (id ${screen.recipeId})${section}${step}.`,
+      `- Đang mở công thức ${title} (id ${screen.recipeId})${slot}${eaten}${section}${step}.`,
     );
   } else if (screen.panel === 'eatingLog') {
     const date = screen.eatingLogDate ? ` ngày ${screen.eatingLogDate}` : '';
     lines.push(`- Đang mở ${SCREEN_PANEL_TEXT.eatingLog}${date}.`);
   } else if (screen.panel === 'bodyMetrics') {
-    lines.push(`- Đang mở ${SCREEN_PANEL_TEXT.bodyMetrics}.`);
+    const tab = screen.bodyMetricsTab
+      ? ` — ${BODY_METRICS_TAB_TEXT[screen.bodyMetricsTab]}`
+      : '';
+    lines.push(`- Đang mở ${SCREEN_PANEL_TEXT.bodyMetrics}${tab}.`);
   } else if (screen.panel === 'shoppingList') {
-    lines.push(`- Đang mở ${SCREEN_PANEL_TEXT.shoppingList}.`);
+    const details: string[] = [];
+    if (screen.shoppingDays && screen.shoppingDays.length > 0) {
+      if (screen.shoppingDays.length === 7) {
+        details.push('phạm vi: cả tuần');
+      } else {
+        details.push(
+          `phạm vi: ${screen.shoppingDays.map((d) => DAY_NAMES[d]).join(', ')}`,
+        );
+      }
+    }
+    if (screen.shoppingPeople !== undefined) {
+      details.push(`khẩu phần: ${screen.shoppingPeople} người ăn`);
+    }
+    if (
+      screen.shoppingCheckedCount !== undefined &&
+      screen.shoppingCheckedCount > 0
+    ) {
+      details.push(`đã tick mua ${screen.shoppingCheckedCount} mục`);
+    }
+    const suffix = details.length > 0 ? ` (${details.join('; ')})` : '';
+    lines.push(`- Đang mở ${SCREEN_PANEL_TEXT.shoppingList}${suffix}.`);
   } else {
     lines.push('- Không có bảng nào mở, người dùng đang xem lịch.');
   }

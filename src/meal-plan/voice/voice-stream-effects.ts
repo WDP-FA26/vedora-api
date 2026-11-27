@@ -1,6 +1,7 @@
 import type { UIMessageChunk } from 'ai';
 import type { MealSection, Weekday } from '../../mongo/models.js';
 import type {
+  BodyMetricsTab,
   RecipeSection,
   ScreenScrollDirection,
 } from '../dto/meal-plan-voice.dto.js';
@@ -19,8 +20,21 @@ export type VoiceFocus =
       step?: number | null;
     }
   | { kind: 'eatingLog'; date: string | null }
-  | { kind: 'bodyMetrics' }
-  | { kind: 'shoppingList' }
+  | {
+      kind: 'bodyMetrics';
+      tab?: BodyMetricsTab | null;
+      weekStart?: string | null;
+    }
+  | {
+      kind: 'shoppingList';
+      weekStart?: string | null;
+      day?: Weekday | null;
+      wholeWeek?: boolean;
+      people?: number | null;
+      checkItems?: string[] | null;
+      uncheckItems?: string[] | null;
+      clearChecked?: boolean;
+    }
   | { kind: 'planDay'; weekStart: string; day: Weekday | null };
 
 export interface VoiceScreenEvent {
@@ -159,11 +173,28 @@ function screenEventFromSetScreen(output: SetScreenOutput): VoiceScreenEvent | n
     return event;
   }
   if (output.view === 'bodyMetrics') {
-    event.focus = { kind: 'bodyMetrics' };
+    event.focus = {
+      kind: 'bodyMetrics',
+      ...(output.tab ? { tab: output.tab } : {}),
+      ...(output.weekStart ? { weekStart: output.weekStart } : {}),
+    };
     return event;
   }
   if (output.view === 'shoppingList') {
-    event.focus = { kind: 'shoppingList' };
+    event.focus = {
+      kind: 'shoppingList',
+      ...(output.weekStart ? { weekStart: output.weekStart } : {}),
+      ...(output.day !== null ? { day: output.day } : {}),
+      ...(output.wholeWeek ? { wholeWeek: true } : {}),
+      ...(output.people !== null ? { people: output.people } : {}),
+      ...(output.checkItems && output.checkItems.length > 0
+        ? { checkItems: output.checkItems }
+        : {}),
+      ...(output.uncheckItems && output.uncheckItems.length > 0
+        ? { uncheckItems: output.uncheckItems }
+        : {}),
+      ...(output.clearChecked ? { clearChecked: true } : {}),
+    };
     return event;
   }
   if (output.view === 'calendar') {
@@ -201,12 +232,23 @@ function summaryFromSetScreen(output: SetScreenOutput): string | null {
   }
   if (output.view === 'bodyMetrics') {
     const details = formatBodyMetricsDetails(output.metrics);
+    if (output.tab === 'weekly') {
+      return 'Đã mở biểu đồ dinh dưỡng tuần trên màn hình.';
+    }
+    if (output.tab === 'dietary') {
+      return 'Đã mở mục dị ứng và gu ăn uống trên màn hình.';
+    }
     return details.length > 0
       ? `Đã mở bảng chỉ số cơ thể trên màn hình (${details.join(', ')}).`
       : 'Đã mở bảng chỉ số cơ thể trên màn hình.';
   }
   if (output.view === 'shoppingList') {
-    return 'Đã mở danh sách đi chợ trên màn hình.';
+    const parts: string[] = [];
+    if (output.day) parts.push(DAY_NAMES[output.day]);
+    else if (output.wholeWeek) parts.push('cả tuần');
+    if (output.people) parts.push(`cho ${output.people} người ăn`);
+    const suffix = parts.length > 0 ? ` (${parts.join(', ')})` : '';
+    return `Đã mở danh sách đi chợ${suffix} trên màn hình.`;
   }
   if (output.view === 'calendar') {
     return output.day
