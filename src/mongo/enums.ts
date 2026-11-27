@@ -81,6 +81,7 @@ export enum UserAccountAction {
 }
 
 export enum NotificationType {
+  SUBSCRIPTION_GRANTED = 'SUBSCRIPTION_GRANTED',
   LIKE = 'LIKE',
   COMMENT = 'COMMENT',
   COMMENT_REPLY = 'COMMENT_REPLY',
