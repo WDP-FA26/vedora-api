@@ -1,10 +1,15 @@
 import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import type { ClientSession, Model } from 'mongoose';
+import { runtimeConfig } from '../config/runtime-config.js';
+import { calendarDay, zonedMidnight } from '../config/time-zone.js';
 import {
+  BillingPlan,
   PaymentIntent,
   PaymentStatus,
   SubscriptionMembership,
+  User,
+  UserRole,
 } from '../mongo/models.js';
 import {
   effectivePlan,
@@ -32,6 +37,7 @@ export class SubscriptionsService {
     private readonly intents: Model<PaymentIntent>,
     @InjectModel(SubscriptionMembership.name)
     private readonly memberships: Model<SubscriptionMembership>,
+    @InjectModel(User.name) private readonly users: Model<User>,
     private readonly catalog: SubscriptionCatalogService,
   ) {}
 
@@ -96,6 +102,9 @@ export class SubscriptionsService {
     now = new Date(),
     session?: ClientSession,
   ): Promise<SubscriptionPeriod> {
+    if (await this.isAdmin(userId, session)) {
+      return this.adminPeriod(now, session);
+    }
     const assigned = await this.memberships
       .findById(userId)
       .session(session ?? null)
@@ -116,6 +125,7 @@ export class SubscriptionsService {
       return this.free(now, session);
     }
     // Compatibility for purchases captured before assignments were introduced.
+
     const query = this.intents
       .findOne({ userId, status: PaymentStatus.SUCCEEDED })
       .sort({ capturedAt: -1, _id: -1 });
@@ -153,4 +163,42 @@ export class SubscriptionsService {
       imageLimit: freeLimits.imageLimit,
     };
   }
+
+  private async isAdmin(
+    userId: string,
+    session?: ClientSession,
+  ): Promise<boolean> {
+    const query = this.users.exists({ _id: userId, role: UserRole.ADMIN });
+    if (session) query.session(session);
+    return (await query.exec()) !== null;
+  }
+
+  private async adminPeriod(
+    now: Date,
+    session?: ClientSession,
+  ): Promise<SubscriptionPeriod> {
+    const { plans } = await this.catalog.current(session);
+    const pro = plans.find((plan) => plan.code === BillingPlan.PRO);
+    if (!pro) throw new Error('Subscription catalog has no Pro plan');
+    return {
+      planCode: 'PRO',
+      ...monthPeriod(now),
+      textLimit: pro.textLimit,
+      imageLimit: pro.imageLimit,
+    };
+  }
+}
+
+function monthPeriod(now: Date) {
+  const month = calendarDay(now, runtimeConfig.APP_TIMEZONE).slice(0, 7);
+  const [year, monthNumber] = month.split('-').map(Number);
+  const next =
+    monthNumber === 12
+      ? `${year + 1}-01`
+      : `${year}-${String(monthNumber + 1).padStart(2, '0')}`;
+  return {
+    key: `admin:${month}`,
+    startsAt: zonedMidnight(`${month}-01`, runtimeConfig.APP_TIMEZONE),
+    expiresAt: zonedMidnight(`${next}-01`, runtimeConfig.APP_TIMEZONE),
+  };
 }

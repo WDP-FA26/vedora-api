@@ -184,6 +184,35 @@ describe('Administrative subscription grants (real MongoDB and HTTP)', () => {
     }
   });
 
+  it('keeps role-based Admin Pro ahead of a Plus grant and reads the grant after role removal', async () => {
+    const saved = readGrant(
+      await grant(await input(admin.id, BillingPlan.PLUS)).expect(200),
+    );
+    const subscriptions = e2e.app.get(SubscriptionsService);
+    expect(await subscriptions.requireProVoice(admin.id)).toMatchObject({
+      planCode: 'PRO',
+    });
+    await model(User.name).updateOne(
+      { _id: admin.id },
+      { $set: { role: UserRole.USER } },
+    );
+    try {
+      expect(await subscriptions.period(admin.id)).toMatchObject({
+        planCode: 'PLUS',
+        source: 'ADMIN_GRANT',
+        key: `admin-grant:${saved.id}`,
+      });
+      await expect(
+        subscriptions.requireProVoice(admin.id),
+      ).rejects.toMatchObject({ code: 'PRO_REQUIRED' });
+    } finally {
+      await model(User.name).updateOne(
+        { _id: admin.id },
+        { $set: { role: UserRole.ADMIN } },
+      );
+    }
+  });
+
   it('rolls back history when the current membership cannot be committed', async () => {
     const body = await input();
     const assign = vi

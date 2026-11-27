@@ -10,6 +10,11 @@ Nút **Cấp gói** trên cùng trang: tìm người dùng → xem gói hiện t
 Plus/Pro → nhập lý do → xác nhận. Không cần bật hoặc cấu hình SePay để cấp gói.
 Mọi endpoint dưới đây dùng guard ADMIN và no-store như catalogue.
 
+ADMIN có Pro mặc định theo role từ chính sách chung. Quyền này ưu tiên hơn gói
+mua/cấp và không bị hạ xuống Plus khi cấp Plus cho tài khoản ADMIN. Lần cấp
+vẫn được lưu; nếu tài khoản chuyển về USER thì dùng gói mua/cấp hiện hành còn
+hạn như bình thường. Không thay đổi thời hạn snapshot của lần cấp.
+
 ### GET /admin/subscription-plans/users
 
 Query `q` tìm username/tên/email/UUID (escape regex, không phân biệt hoa thường),

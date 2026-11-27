@@ -471,11 +471,11 @@ describe('Admin subscription catalog and purchased QR contracts (real MongoDB HT
       .auth(memberToken, { type: 'bearer' })
       .send(turn)
       .expect(403);
-    await http()
-      .post(sessionPath)
-      .auth(token, { type: 'bearer' })
-      .send({})
-      .expect(403);
+    // ADMIN has Pro by role on main; check the entitlement without calling
+    // the real voice provider to mint a token.
+    expect(
+      await e2e.app.get(SubscriptionsService).requireProVoice(admin.id),
+    ).toMatchObject({ planCode: 'PRO' });
     const plus = readPayment(await buy().expect(200));
     await pay(plus, 49000).expect(200);
     await http()

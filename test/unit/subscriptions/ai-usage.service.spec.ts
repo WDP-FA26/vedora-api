@@ -494,7 +494,7 @@ describe('AiUsageService', () => {
     await usage.complete(imageTicket as UsageTicket);
   });
 
-  it('reports an allowance for an ADMIN whose FREE text quota is used up', async () => {
+  it('reports an allowance for an ADMIN whose Pro text quota is used up', async () => {
     const adminId = randomUUID();
     await users().create({
       _id: adminId,
@@ -505,15 +505,28 @@ describe('AiUsageService', () => {
       status: AccountStatus.ACTIVE,
     });
     const period = await subscriptions.period(adminId, NOW);
-    for (let i = 0; i < period.textLimit; i++) {
-      const ticket = await usage.consume(
-        adminId,
-        AiFeature.MEAL_PLAN_CHAT,
-        {},
-        NOW,
-      );
-      await usage.complete(ticket as UsageTicket);
-    }
+    // Seed prior completed usage in bulk; only the boundary request needs
+    // the real reserve/complete transaction instead of 900 sequential calls.
+    await requests().insertMany(
+      Array.from({ length: period.textLimit - 1 }, () => ({
+        userId: adminId,
+        feature: AiFeature.MEAL_PLAN_CHAT,
+        requestKey: randomUUID(),
+        periodKey: period.key,
+        bucket: 'TEXT',
+        promptHash: 'fixture',
+        charged: true,
+        status: 'COMPLETED',
+      })),
+    );
+    const ticket = await usage.consume(
+      adminId,
+      AiFeature.MEAL_PLAN_CHAT,
+      {},
+      NOW,
+    );
+    expect(ticket).not.toBeNull();
+    await usage.complete(ticket as UsageTicket);
 
     const quota = await usage.summary(adminId, AiFeature.MEAL_PLAN_CHAT, NOW);
     expect(quota.remaining).toBe(0);

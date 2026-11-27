@@ -16,6 +16,11 @@ Thoại AI hai chiều dành riêng cho Pro còn hiệu lực, gồm cả Pro đ
 đó. Không tính quota phút và không trừ lượt AI chữ. Free/Plus hoặc Pro hết hạn
 bị từ chối tại API session/turns với `403 PRO_REQUIRED`.
 
+Tài khoản `ADMIN` luôn được đọc là **PRO** mà không cần thanh toán: `GET
+/billing/me` trả `membership.planCode: "PRO"` với chu kỳ theo tháng dương lịch
+(Asia/Bangkok), hạn mức hiển thị lấy theo gói Pro hiện tại, và thoại AI hai
+chiều dùng được. Lượt AI của admin vẫn không bị chặn khi hết hạn mức.
+
 | Gói | Giá / thời hạn | AI văn bản dùng chung | Tạo/chỉnh ảnh AI |
 | --- | --- | --- | --- |
 | FREE | Miễn phí | 5 lượt/ngày, đặt lại 00:00 Asia/Bangkok | 0 |
