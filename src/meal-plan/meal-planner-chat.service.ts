@@ -64,6 +64,7 @@ import { autoBalancePlanTool } from './tools/auto-balance-plan.tool.js';
 import { fillSlotsTool } from './tools/fill-slots.tool.js';
 import { editMealLogTool } from './tools/edit-meal-log.tool.js';
 import { getEatingLogTool } from './tools/get-eating-log.tool.js';
+import { getShoppingListTool } from './tools/get-shopping-list.tool.js';
 import { getPlanTool } from './tools/get-plan.tool.js';
 import { getRecipeTool } from './tools/get-recipe.tool.js';
 import { logMealTool } from './tools/log-meal.tool.js';
@@ -367,6 +368,15 @@ export class MealPlannerChatService {
             editMealLog: editMealLogTool(this.mealLog, userId),
           }
         : {}),
+      ...(this.shoppingList
+        ? {
+            getShoppingList: getShoppingListTool(
+              this.shoppingList,
+              userId,
+              toolWeek,
+            ),
+          }
+        : {}),
       updateBodyMetrics: updateBodyMetricsTool(this.dietary, userId),
       ...(this.history
         ? { undoLastChange: undoLastChangeTool(this.history, userId, threadId) }
@@ -375,6 +385,7 @@ export class MealPlannerChatService {
     };
     if (voice) {
       delete agentTools.askUser;
+      delete agentTools.getShoppingList;
       Object.assign(agentTools, this.voiceTools(userId, toolWeek, screen));
     }
     return agentTools;
@@ -911,6 +922,15 @@ export class MealPlannerChatService {
 
       const conversionTools = safeConversionTools({
         ...this.voiceTools(userId, toolWeek, screen),
+        ...(this.shoppingList
+          ? {
+              getShoppingList: getShoppingListTool(
+                this.shoppingList,
+                userId,
+                toolWeek,
+              ),
+            }
+          : {}),
         ...agentTools,
         askUser: askUserTool(),
         requestWebSearch: requestWebSearchTool(),
@@ -934,7 +954,12 @@ export class MealPlannerChatService {
         toolCalls: [
           {
             type: 'before-last-message',
-            tools: ['searchKnowledge', 'getPlan', 'getEatingLog'],
+            tools: [
+              'searchKnowledge',
+              'getPlan',
+              'getEatingLog',
+              'getShoppingList',
+            ],
           },
           {
             type: 'before-last-12-messages',

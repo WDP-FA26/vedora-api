@@ -9,6 +9,10 @@ import { autoBalancePlanTool } from '@src/meal-plan/tools/auto-balance-plan.tool
 import { editPlanTool } from '@src/meal-plan/tools/edit-plan.tool.js';
 import { fillSlotsTool } from '@src/meal-plan/tools/fill-slots.tool.js';
 import { getPlanTool } from '@src/meal-plan/tools/get-plan.tool.js';
+import { getEatingLogTool } from '@src/meal-plan/tools/get-eating-log.tool.js';
+import { getShoppingListTool } from '@src/meal-plan/tools/get-shopping-list.tool.js';
+import type { MealLogService } from '@src/meal-plan/meal-log/meal-log.service.js';
+import type { ShoppingListService } from '@src/meal-plan/shopping-list.service.js';
 import { getRecipeTool } from '@src/meal-plan/tools/get-recipe.tool.js';
 import {
   changeFeedback,
@@ -41,6 +45,142 @@ describe('Meal planner AI tools', () => {
 
   beforeEach(() => {
     mealPlan = mockDeep<MealPlanService>();
+  });
+
+  describe('getShoppingListTool', () => {
+    const contribution = {
+      recipeId: recipe1,
+      day: Weekday.SUN,
+      section: MealSection.BREAKFAST,
+      note: null,
+    };
+
+    it('lists every ingredient scaled to the eaters and flags unknown amounts', async () => {
+      const shoppingList = mockDeep<ShoppingListService>();
+      const filler = Array.from({ length: 25 }, (_, index) => ({
+        ingredientId: `ing-${index}`,
+        name: `Nguyên liệu ${index}`,
+        unit: 'g',
+        knownQuantity: '10.00',
+        hasUnknownQuantity: false,
+        contributions: [
+          {
+            ...contribution,
+            recipeTitle: 'Canh rau',
+            servings: 1,
+            quantity: '10.00',
+          },
+        ],
+      }));
+      shoppingList.get.mockResolvedValue({
+        weekStart: WEEK,
+        days: [Weekday.SAT, Weekday.SUN],
+        quantityBasis: 'RECIPE_PER_OCCURRENCE',
+        items: [
+          ...filler,
+          {
+            ingredientId: 'ing-last',
+            name: 'Nấm rơm',
+            unit: 'g',
+            knownQuantity: '300.00',
+            hasUnknownQuantity: true,
+            contributions: [
+              {
+                ...contribution,
+                recipeTitle: 'Gỏi ngó sen',
+                servings: 4,
+                quantity: '100.00',
+              },
+              {
+                ...contribution,
+                recipeTitle: 'Nấm kho',
+                servings: 3,
+                quantity: '200.00',
+              },
+              {
+                ...contribution,
+                recipeTitle: 'Nấm xào',
+                servings: 2,
+                quantity: null,
+              },
+            ],
+          },
+        ],
+      });
+      const toolDef = getShoppingListTool(shoppingList, userId, WEEK);
+
+      const output = await toolDef.execute?.({ people: 4 }, execOptions);
+      if (!output || !('items' in output)) throw new Error('no output');
+
+      expect(output.items).toHaveLength(26);
+      expect(output.items.at(-1)).toBe(
+        'Nấm rơm (366.67 g + phần chưa rõ lượng; món: Gỏi ngó sen, Nấm kho, Nấm xào)',
+      );
+      expect(shoppingList.get).toHaveBeenCalledWith(userId, {
+        weekStart: WEEK,
+        days: [
+          Weekday.MON,
+          Weekday.TUE,
+          Weekday.WED,
+          Weekday.THU,
+          Weekday.FRI,
+          Weekday.SAT,
+          Weekday.SUN,
+        ],
+      });
+    });
+  });
+
+  describe('getEatingLogTool', () => {
+    const summaryText = async (
+      summary: Awaited<ReturnType<MealLogService['week']>>['summary'],
+    ) => {
+      const toolDef = getEatingLogTool(
+        mockDeep<MealLogService>(),
+        userId,
+        WEEK,
+      );
+      const result = await toolDef.toModelOutput?.({
+        toolCallId: 'call-1',
+        input: {},
+        output: {
+          log: {
+            weekStart: WEEK,
+            today: WEEK,
+            dailyCalorieTarget: null,
+            dailyCalorieMin: null,
+            dailyCalorieMax: null,
+            days: [],
+            summary,
+          },
+        },
+      });
+      return result?.type === 'text' ? result.value : '';
+    };
+
+    it('states the average over complete days, not every logged day', async () => {
+      const text = await summaryText({
+        loggedDays: 3,
+        completeDays: 1,
+        averageCalories: 1110,
+        remainingDays: 2,
+      });
+
+      expect(text).toContain('Đã ghi 3 ngày.');
+      expect(text).toContain('~1110 kcal/ngày, chỉ tính trên 1 ngày');
+    });
+
+    it('does not claim nothing was logged when no average is available', async () => {
+      const text = await summaryText({
+        loggedDays: 1,
+        completeDays: 0,
+        averageCalories: null,
+        remainingDays: 2,
+      });
+
+      expect(text).toContain('Đã ghi 1 ngày; chưa tính được trung bình');
+      expect(text).not.toContain('Chưa có ngày nào được ghi');
+    });
   });
 
   describe('getRecipeTool', () => {

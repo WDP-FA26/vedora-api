@@ -66,10 +66,11 @@ export function getEatingLogTool(
         log.dailyCalorieTarget === null
           ? 'Người dùng chưa có mục tiêu kcal.'
           : `Mục tiêu ~${log.dailyCalorieTarget} kcal/ngày (vùng ${log.dailyCalorieMin}–${log.dailyCalorieMax}).`;
+      const { averageCalories, completeDays, loggedDays } = log.summary;
       const average =
-        log.summary.averageCalories === null
-          ? 'Chưa có ngày nào được ghi.'
-          : `Trung bình ~${log.summary.averageCalories} kcal trên ${log.summary.loggedDays} ngày đã ghi.`;
+        averageCalories === null
+          ? `Đã ghi ${loggedDays} ngày; chưa tính được trung bình vì chưa có ngày nào trước hôm nay mà mọi món đã ghi đều có kcal.`
+          : `Đã ghi ${loggedDays} ngày. Trung bình ~${averageCalories} kcal/ngày, chỉ tính trên ${completeDays} ngày trước hôm nay mà mọi món đã ghi đều có kcal.`;
       return {
         type: 'text',
         value: `Nhật ký tuần ${log.weekStart} (hôm nay ${log.today}). ${target} ${average} Còn ${log.summary.remainingDays} ngày có thể chỉnh.\n${lines.join('\n')}`,

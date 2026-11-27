@@ -15,6 +15,7 @@ import {
 import type { Weekday } from '../../mongo/models.js';
 import type { MealPlanService } from '../meal-plan.service.js';
 import type { ShoppingListService } from '../shopping-list.service.js';
+import { shoppingLines } from './get-shopping-list.tool.js';
 import { BMI_LABELS, DAY_NAMES } from '../meal-planner.prompt.js';
 import { plannableWeekStarts, weekStartInput } from './planner-weeks.js';
 
@@ -176,7 +177,9 @@ function setScreenText(output: SetScreenOutput): string {
       checkNotes.push(`đã bỏ đánh dấu: ${output.uncheckItems.join(', ')}`);
     }
     if (output.expandItems && output.expandItems.length > 0) {
-      checkNotes.push(`đã mở danh sách món dùng: ${output.expandItems.join(', ')}`);
+      checkNotes.push(
+        `đã mở danh sách món dùng: ${output.expandItems.join(', ')}`,
+      );
     }
     if (output.collapseItems && output.collapseItems.length > 0) {
       checkNotes.push(`đã thu gọn: ${output.collapseItems.join(', ')}`);
@@ -429,32 +432,7 @@ export function setScreenTool(
             weekStart: targetWeek,
             days: targetDays,
           });
-          shoppingItems = list.items.slice(0, 20).map((item) => {
-            let scaledSum = 0;
-            let knownCount = 0;
-            for (const contrib of item.contributions) {
-              if (contrib.quantity === null) continue;
-              const numeric = Number(contrib.quantity);
-              if (!Number.isFinite(numeric)) continue;
-              const divisor = contrib.servings > 0 ? contrib.servings : 1;
-              scaledSum += (numeric / divisor) * targetPeople;
-              knownCount += 1;
-            }
-            const rounded = Math.round(scaledSum * 100) / 100;
-            const qty =
-              knownCount > 0
-                ? [rounded, item.unit].filter(Boolean).join(' ')
-                : 'chưa rõ lượng';
-            const dishTitles: string[] = [];
-            for (const contrib of item.contributions) {
-              if (!dishTitles.includes(contrib.recipeTitle)) {
-                dishTitles.push(contrib.recipeTitle);
-              }
-            }
-            const dishesNote =
-              dishTitles.length > 0 ? `; món: ${dishTitles.join(', ')}` : '';
-            return `${item.name} (${qty}${dishesNote})`;
-          });
+          shoppingItems = shoppingLines(list, targetPeople);
         }
         const wholeWeek =
           input.day === 'ALL' ||
