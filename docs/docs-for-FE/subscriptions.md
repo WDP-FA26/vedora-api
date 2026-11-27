@@ -13,8 +13,14 @@ tiên hơn env. Giá/quota mới chỉ áp dụng cho đơn mới; đơn QR đan
 mua giữ snapshot. Quota Free cập nhật ngay nhưng không reset lượt đã dùng.
 
 Thoại AI hai chiều dành riêng cho Pro còn hiệu lực, gồm cả Pro đã mua trước
-đó. Không tính quota phút và không trừ lượt AI chữ. Free/Plus hoặc Pro hết hạn
+đó. Mỗi yêu cầu planner qua voice dùng chung một lượt AI chữ; không tính quota phút. Free/Plus hoặc Pro hết hạn
 bị từ chối tại API session/turns với `403 PRO_REQUIRED`.
+
+Session chỉ kiểm tra còn lượt, không trừ khi mở kết nối. Mỗi delegation được planner
+xử lý thành công trừ một lượt; reservation đồng thời với chat chữ dùng chung giới hạn.
+Lỗi/hủy trước khi hoàn tất hoàn reservation như chat chữ; dữ liệu tool đã lưu vẫn được giữ.
+Hết lượt trả `429 AI_QUOTA_EXCEEDED` trước khi chạy planner hoặc cấp token session.
+Không hồi tố các request voice cũ chưa đánh dấu `usesTextQuota`.
 
 Tài khoản `ADMIN` luôn được đọc là **PRO** mà không cần thanh toán: `GET
 /billing/me` trả `membership.planCode: "PRO"` với chu kỳ theo tháng dương lịch

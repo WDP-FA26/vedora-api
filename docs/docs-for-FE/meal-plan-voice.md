@@ -1,6 +1,6 @@
 # Trợ lý giọng nói của meal planner
 
-Người dùng **Pro còn hiệu lực** nói chuyện trực tiếp (full duplex) với mô hình giọng nói **GPT-Live 1.1** qua **Vercel AI Gateway**. Phần việc thật (thực đơn, công thức, nhật ký, chỉ số cơ thể) vẫn do **agent planner hiện tại** (Claude Haiku) làm ở API, dùng chung tool và lịch sử thread với chat chữ (bỏ qua bước moderation `decide` riêng để giảm latency). Voice không trừ lượt AI chữ và không có hạn mức phút theo chu kỳ. Pro đã mua trước đó cũng được dùng; Free, Plus và tài khoản admin không có Pro đều bị từ chối.
+Người dùng **Pro còn hiệu lực** nói chuyện trực tiếp (full duplex) với mô hình giọng nói **GPT-Live 1.1** qua **Vercel AI Gateway**. Phần việc thật (thực đơn, công thức, nhật ký, chỉ số cơ thể) vẫn do **agent planner hiện tại** (Claude Haiku) làm ở API, dùng chung tool và lịch sử thread với chat chữ (bỏ qua bước moderation `decide` riêng để giảm latency). Mỗi yêu cầu gửi sang planner qua voice dùng chung một lượt AI chữ, không có hạn mức phút theo chu kỳ. Pro đã mua trước đó cũng áp dụng; Free/Plus bị từ chối. Admin giữ cơ chế Pro và miễn chặn quota hiện có.
 
 ```
 Mic ─► experimental_useRealtime ─WS─► AI Gateway ─► GPT-Live 1.1
@@ -29,7 +29,7 @@ Cấp token ngắn hạn (`vcst_…`, 60 giây để mở WebSocket; phiên đã
 
 `experimental_useRealtime` gọi endpoint token bằng `fetch` không kèm header Authorization, nên FE đặt một route cùng origin (`/api/meal-planner/voice/session`) đọc cookie phiên rồi gọi endpoint này.
 
-Lỗi: `401` chưa đăng nhập, `403 PRO_REQUIRED` không có Pro còn hiệu lực, `429 TOO_MANY_REQUESTS` gọi quá nhanh, `503 SERVICE_UNAVAILABLE` chưa cấu hình voice. API kiểm tra quyền Pro trước khi cấp token; không phụ thuộc số lượt AI chữ còn lại.
+Lỗi: `401` chưa đăng nhập, `403 PRO_REQUIRED` không có Pro còn hiệu lực, `429 AI_QUOTA_EXCEEDED` hết lượt AI chữ, `429 TOO_MANY_REQUESTS` gọi quá nhanh, `503 SERVICE_UNAVAILABLE` chưa cấu hình voice. API kiểm tra Pro và còn lượt trước khi cấp token, nhưng mở session không trừ lượt. Proxy FE cùng origin ánh xạ riêng `AI_QUOTA_EXCEEDED` sang 402 để trình realtime hiển thị đúng lý do.
 
 ## POST /meal-plan/voice/turns
 
@@ -68,7 +68,7 @@ Phần `text` của tin nhắn cuối (hoặc `data-summary` nếu `text` rỗng
 
 **Hủy:** đóng request (abort) khi người dùng nói tiếp hoặc kết thúc cuộc gọi; agent dừng, những gì đã lưu vẫn giữ. FE báo cho GPT-Live bằng `context-append` kênh `thinking` cho delegation cũ và làm mới lại các cache.
 
-Lỗi (trước khi stream bắt đầu, dạng JSON như mọi endpoint): `403 PRO_REQUIRED` gói không còn là Pro hoặc đã hết hạn, `429` gọi quá nhanh, `503` model lỗi, `404` thread không thuộc người dùng. API kiểm tra lại quyền ở mỗi lượt, kể cả khi người dùng đã có token phiên trước đó. Lỗi giữa stream đến dưới dạng phần `error`. Khi lỗi, FE vẫn gửi một câu `commentary` nói thật là chưa làm xong để GPT-Live không đoán kết quả.
+Lỗi (trước khi stream bắt đầu, dạng JSON như mọi endpoint): `403 PRO_REQUIRED` gói không còn là Pro hoặc đã hết hạn, `429 AI_QUOTA_EXCEEDED` hết lượt AI chữ, `429 TOO_MANY_REQUESTS` gọi quá nhanh, `503` model lỗi, `404` thread không thuộc người dùng. API kiểm tra lại quyền và giữ chỗ quota ở mỗi lượt, kể cả khi đã có token phiên. Lỗi giữa stream đến dưới dạng phần `error`. Khi lỗi, FE gửi câu `commentary` nói thật là chưa làm xong để GPT-Live không đoán kết quả; nếu hết quota thì dừng kết nối và hiện hướng dẫn trên giao diện.
 
 ## Phía FE
 
@@ -76,5 +76,14 @@ Lỗi (trước khi stream bắt đầu, dạng JSON như mọi endpoint): `403 
 - Câu chào đầu phiên dùng `fullName` của người dùng (gọi bằng tên) nếu có.
 - `sessionConfig`: `instructions` theo template GPT-Live (giữ các mục `Backchannel policy`, `Interruption policy`, `Delegation policy`), `providerOptions.openai.delegation = { type: "client" }` và một tin nhắn `developer` chào đầu phiên trong `providerOptions.openai.input`. AI Gateway chỉ nhận `delegation` đúng `{ type: "client" }` (không có `acknowledgement_delay_ms`).
 - CSP `connect-src` cần `wss://ai-gateway.vercel.sh`; `Permissions-Policy` cần `microphone=(self)`.
-- FE kiểm tra gói trước khi mở micro và hiện hướng nâng cấp cho Free/Plus. Voice vẫn lưu request/idempotency trong bucket `VOICE`, tách khỏi `TEXT`; không ghi hạn mức phút hoặc ledger tính giây.
+- FE kiểm tra gói và lượt còn lại trước khi mở micro; Free/Plus hiện hướng nâng cấp. Khi một lượt kết thúc (thành công, lỗi hoặc hủy), FE đọc lại `/billing/me`. Không ngắt câu trả lời cuối chỉ vì lượt còn lại vừa về 0; yêu cầu kế tiếp bị quota chặn.
+- Request/idempotency vẫn thuộc bucket `VOICE` để giữ chống trùng giữa các kênh; request voice mới có `usesTextQuota: true` và được tính chung với bucket `TEXT` khi kiểm tra/hiển thị quota chữ. Request voice cũ không có cờ không bị tính lại; không cần migration/backfill hoặc env mới.
+- Reservation và commit/refund dùng cùng cơ chế chat chữ: thành công trừ một lượt, lỗi hoặc hủy trước hoàn tất hoàn reservation. Retry cùng request đã hoàn tất không trừ thêm; các tool/subagent bên trong một delegation không trừ thành nhiều lượt. Những câu GPT-Live tự đọc từ công thức đang mở, lời chào và lời đệm không gọi planner nên không tạo lượt quota backend.
 - Giới hạn kỹ thuật một phiên theo `NEXT_PUBLIC_VOICE_MAX_SECONDS` ở FE, không phải quota phút của gói. Token chỉ giới hạn thời gian mở WebSocket, không tự cắt một kết nối đã mở. Quyền session/turn được kiểm tra ở BE; kiến trúc kết nối trực tiếp Gateway hiện có được giữ nguyên.
+
+## Xác minh quota chữ ngày 28/11/2026
+
+- 67 kiểm thử BE cho usage, stream settlement, voice service và planner; 25 kiểm thử HTTP cho quota voice và cấp gói với MongoDB thật: pass.
+- FE: 48 unit test voice và 22 Playwright cho gói/cấp gói, gồm Pro hết quota không mở micro hay gọi session: pass. Build BE/FE và lint pass.
+- Image production Node 26 chạy trong Docker: kiểm tra trừ chung lượt, hoàn/retry, chống trùng, không tính lại voice cũ và race lấy lượt cuối giữa voice/chữ: pass. HTTP billing/session/turns giữ kết quả đúng sau restart; fixture riêng đã dọn.
+- Không gọi dịch vụ AI có tính phí trong lần kiểm tra này; kiểm thử stream dùng model giả và dữ liệu quota trong MongoDB thật.
