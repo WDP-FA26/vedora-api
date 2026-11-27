@@ -9,7 +9,6 @@ The API runs on **4000** (the frontend uses 3000). `README.md` and `docker-compo
 ```bash
 cp .env.example .env                      # first time only; never commit .env
 docker compose up -d mongo qdrant rustfs redis
-docker compose up -d mongo-test          # RAM-backed MongoDB on 27018 that the test suites use
 npm install
 npm run seed                              # catalog + admin user `vedora.admin` (password = SEED_USER_PASSWORD)
 npm run start:dev                         # http://localhost:4000/api/v1, Swagger at /docs
@@ -25,7 +24,7 @@ npm run lint                    # type-aware eslint; also covers test/
 npm run format                  # prettier: single quotes, trailing commas
 npm test                        # unit (Vitest), test/unit/**/*.spec.ts
 npm run test:e2e                # HTTP e2e via supertest, disposable MongoDB database per spec
-npm run test:db                 # opt-in; needs a replica set in TEST_DATABASE_URL (test/db/**/*.db-spec.ts)
+npm run test:db                 # MongoDB integration tests (test/db/**/*.db-spec.ts); uses mongodb-memory-server or TEST_DATABASE_URL
 npx vitest run test/unit/path/to/file.spec.ts
 npm run seed
 ```

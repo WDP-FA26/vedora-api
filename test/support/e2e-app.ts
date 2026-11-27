@@ -13,6 +13,10 @@ import { FakeModel, type FakeModelCall } from '@nestjs/ai/testing';
 import { configureApp } from '@src/app.setup.js';
 import { MongoService } from '@src/mongo/mongo.service.js';
 import { MediaService } from '@src/media/media.service.js';
+import { QdrantService } from '@src/qdrant/qdrant.service.js';
+import { StorageService } from '@src/storage/storage.service.js';
+import { InMemoryQdrantService } from './in-memory-qdrant.js';
+import { InMemoryStorageService } from './in-memory-storage.js';
 import {
   createTestMongoUrl,
   dropTestDatabase,
@@ -104,11 +108,17 @@ export async function createE2eApp(
   override: (builder: TestingModuleBuilder) => TestingModuleBuilder = (b) => b,
 ): Promise<E2eApp> {
   process.env.DATABASE_URL = createTestMongoUrl(prefix);
-  const moduleRef = await override(
-    Test.createTestingModule({ imports: [AppModule] })
-      .overrideProvider(CONTENT_MODERATION_MODEL)
-      .useValue(fakeReviewer),
-  ).compile();
+  let builder = Test.createTestingModule({ imports: [AppModule] })
+    .overrideProvider(CONTENT_MODERATION_MODEL)
+    .useValue(fakeReviewer);
+  if (process.env.TEST_USE_REAL_SERVICES !== 'true') {
+    builder = builder
+      .overrideProvider(QdrantService)
+      .useValue(new InMemoryQdrantService())
+      .overrideProvider(StorageService)
+      .useClass(InMemoryStorageService);
+  }
+  const moduleRef = await override(builder).compile();
   const app = moduleRef.createNestApplication<INestApplication<App>>({
     rawBody: true,
   });

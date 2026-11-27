@@ -374,15 +374,14 @@ Tài liệu tích hợp frontend: [docs/docs-for-FE/pagination.md](docs/docs-for
 npm run start:dev
 npm run build
 npm run lint
-docker compose up -d mongo-test   # MongoDB riêng cho test, dữ liệu nằm trên RAM (cổng 27018)
-npm test            # unit (Vitest)
+npm test            # unit (Vitest, tự khởi động mongodb-memory-server)
 npm run test:e2e    # HTTP e2e (Vitest + supertest)
-npm run test:db     # test DB (mặc định cũng dùng mongo-test, đổi bằng TEST_DATABASE_URL)
+npm run test:db     # test DB (mặc định dùng mongodb-memory-server, đổi bằng TEST_DATABASE_URL)
 npm run seed        # seed tài khoản admin + danh mục khởi đầu
 npm run seed:prod   # chạy seed từ dist (container)
 ```
 
-Test dùng Vitest + `@nestjs/testing` theo [hướng dẫn của NestJS](https://docs.nestjs.com/fundamentals/testing). Unit test (`test/unit/**/*.spec.ts`) và DB test (`test/db/**/*.db-spec.ts`) dựng module với `MongoModule.forTest(...)`, trỏ vào một database tạm riêng cho từng file (`test/support/mongo-test-db.ts`), rồi xoá database đó sau khi chạy. Các database tạm này nằm trên service `mongo-test` (tmpfs, không auth, cổng 27018) thay vì MongoDB dev: tạo/xoá hàng trăm collection và index trên volume đĩa của Docker Desktop/WSL2 chậm hơn vài lần. Khởi động lại container là xoá sạch. E2E (`test/e2e/**/*.e2e-spec.ts`) chạy cả `AppModule` qua HTTP với `configureApp` giống production trên database tạm.
+Test dùng Vitest + `@nestjs/testing` theo [hướng dẫn của NestJS](https://docs.nestjs.com/fundamentals/testing). Unit test (`test/unit/**/*.spec.ts`) và DB test (`test/db/**/*.db-spec.ts`) dựng module với `MongoModule.forTest(...)`, trỏ vào một database tạm riêng cho từng file (`test/support/mongo-test-db.ts`), rồi xoá database đó sau khi chạy. `test/support/global-setup.ts` tự khởi động một single-node MongoDB replica set tạm qua `mongodb-memory-server` (không cần container riêng) và tắt sạch sau khi chạy xong; nếu muốn dùng một replica set ngoài có sẵn, set `TEST_DATABASE_URL`. E2E (`test/e2e/**/*.e2e-spec.ts`) chạy cả `AppModule` qua HTTP với `configureApp` giống production trên database tạm.
 
 Khi sửa schema, sửa class trong `src/mongo/schemas/`: Mongoose tạo collection và index còn thiếu khi API khởi động (`autoIndex`) và trong test qua `prepareTestDatabase`. MongoDB không có migration, nên không có lịch sử thay đổi để review: kiểm tra kỹ thay đổi schema (đặc biệt index unique và partial filter) trước khi merge.
 

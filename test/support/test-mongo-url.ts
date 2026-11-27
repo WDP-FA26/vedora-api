@@ -1,11 +1,15 @@
 /**
- * The MongoDB server the test suites create their disposable databases on:
- * TEST_DATABASE_URL, or the RAM-backed `mongo-test` service from
- * docker-compose.yml (`docker compose up -d mongo-test`).
+ * Returns the MongoDB server URL used by the test suites to create disposable
+ * per-spec databases. Populated by `test/support/global-setup.ts` (either from
+ * an explicit `TEST_DATABASE_URL` env override or the ephemeral
+ * `mongodb-memory-server` replica set).
  */
-const DEFAULT_TEST_MONGO_URL =
-  'mongodb://localhost:27018/?directConnection=true';
-
 export function testMongoServerUrl(): string {
-  return process.env.TEST_DATABASE_URL ?? DEFAULT_TEST_MONGO_URL;
+  const url = process.env.TEST_DATABASE_URL?.trim();
+  if (!url) {
+    throw new Error(
+      'TEST_DATABASE_URL is not set. Run tests via Vitest (globalSetup starts mongodb-memory-server) or set TEST_DATABASE_URL explicitly.',
+    );
+  }
+  return url;
 }

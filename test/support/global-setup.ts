@@ -1,24 +1,47 @@
 import mongoose from 'mongoose';
-import { testMongoServerUrl } from './test-mongo-url.js';
+import { MongoMemoryReplSet } from 'mongodb-memory-server';
 
 /**
- * Fails the run once, up front, when the test MongoDB is down; otherwise every
- * spec would wait out its own server-selection timeout.
+ * Ensures a MongoDB replica set is ready for the test run:
+ * - If `TEST_DATABASE_URL` is set, verifies it is reachable up front.
+ * - Otherwise starts an ephemeral single-node replica set via
+ *   `mongodb-memory-server`, exposes its URI on `process.env.TEST_DATABASE_URL`
+ *   for Vitest workers, and stops it on teardown.
  */
-export default async function checkTestMongo(): Promise<void> {
-  const url = new URL(testMongoServerUrl());
-  const connection = mongoose.createConnection(url.toString(), {
-    serverSelectionTimeoutMS: 3_000,
-  });
-  try {
-    await connection.asPromise();
-  } catch (error) {
-    throw new Error(
-      `Test MongoDB at ${url.host} is unreachable. Start it with ` +
-        '`docker compose up -d mongo-test` or set TEST_DATABASE_URL.',
-      { cause: error },
-    );
-  } finally {
-    await connection.close();
+export default async function setupTestMongo(): Promise<
+  (() => Promise<void>) | void
+> {
+  const externalUrl = process.env.TEST_DATABASE_URL?.trim();
+  if (externalUrl) {
+    const url = new URL(externalUrl);
+    const connection = mongoose.createConnection(url.toString(), {
+      serverSelectionTimeoutMS: 3_000,
+    });
+    try {
+      await connection.asPromise();
+    } catch (error) {
+      throw new Error(`Test MongoDB at ${url.host} is unreachable.`, {
+        cause: error,
+      });
+    } finally {
+      await connection.close();
+    }
+    return;
   }
+
+  const replSet = await MongoMemoryReplSet.create({
+    binary: {
+      version: process.env.MONGOMS_VERSION ?? '8.0.4',
+    },
+    replSet: {
+      count: 1,
+      storageEngine: 'wiredTiger',
+    },
+  });
+
+  process.env.TEST_DATABASE_URL = replSet.getUri();
+
+  return async () => {
+    await replSet.stop();
+  };
 }
