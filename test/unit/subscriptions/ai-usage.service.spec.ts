@@ -535,6 +535,123 @@ describe('AiUsageService', () => {
     ).resolves.toBe(true);
   });
 
+  it('shares new voice requests with text quota without counting historical free voice requests', async () => {
+    const plan = await seedPaid(BillingPlan.PRO);
+    await intents().updateOne({ _id: plan.id }, { $set: { textLimit: 2 } });
+    const period = await subscriptions.period(USER_ID, NOW);
+    await requests().create({
+      userId: USER_ID,
+      feature: AiFeature.MEAL_PLAN_CHAT,
+      requestKey: 'old-free-voice',
+      periodKey: period.key,
+      bucket: 'VOICE',
+      charged: true,
+      status: 'COMPLETED',
+      promptHash: 'old',
+    });
+    expect(
+      await usage.summary(USER_ID, AiFeature.MEAL_PLAN_CHAT, NOW),
+    ).toMatchObject({ used: 0, remaining: 2 });
+    const voice = await usage.consumeVoice(
+      USER_ID,
+      AiFeature.MEAL_PLAN_CHAT,
+      { requestId: 'new-voice' },
+      NOW,
+    );
+    expect(voice).not.toBeNull();
+    expect(
+      await usage.summary(USER_ID, AiFeature.BLOG_CHAT, NOW),
+    ).toMatchObject({ used: 1, remaining: 1 });
+    await usage.complete(voice!);
+    expect(await requests().findById(voice!.id)).toMatchObject({
+      bucket: 'VOICE',
+      usesTextQuota: true,
+      charged: true,
+    });
+    await expect(
+      usage.consumeVoice(
+        USER_ID,
+        AiFeature.MEAL_PLAN_CHAT,
+        { requestId: 'new-voice' },
+        NOW,
+      ),
+    ).rejects.toMatchObject({ code: 'AI_REQUEST_ALREADY_PROCESSED' });
+    const text = await usage.consume(USER_ID, AiFeature.BLOG_CHAT, {}, NOW);
+    await usage.complete(text!);
+    expect(
+      await usage.consumeVoice(USER_ID, AiFeature.MEAL_PLAN_CHAT, {}, NOW),
+    ).toBeNull();
+    expect(
+      await usage.consume(USER_ID, AiFeature.MEAL_PLAN_CHAT, {}, NOW),
+    ).toBeNull();
+    expect(
+      await usage.summary(USER_ID, AiFeature.MEAL_PLAN_CHAT, NOW),
+    ).toMatchObject({ used: 2, remaining: 0 });
+    expect(
+      await usage.consume(USER_ID, AiFeature.BLOG_IMAGE, {}, NOW),
+    ).not.toBeNull();
+  });
+
+  it('refunds failed voice reservations and retries without double charging or crossing channels', async () => {
+    await seedPaid(BillingPlan.PRO);
+    const context = { requestId: 'voice-retry', input: 'same spoken request' };
+    const first = await usage.consumeVoice(
+      USER_ID,
+      AiFeature.MEAL_PLAN_CHAT,
+      context,
+      NOW,
+    );
+    await expect(
+      usage.consume(USER_ID, AiFeature.MEAL_PLAN_CHAT, context, NOW),
+    ).rejects.toMatchObject({ code: 'IDEMPOTENCY_CONFLICT' });
+    await expect(
+      usage.consumeVoice(USER_ID, AiFeature.MEAL_PLAN_CHAT, context, NOW),
+    ).rejects.toMatchObject({ code: 'AI_REQUEST_IN_PROGRESS' });
+    await usage.refund(first!);
+    expect(
+      await usage.summary(USER_ID, AiFeature.MEAL_PLAN_CHAT, NOW),
+    ).toMatchObject({ used: 0 });
+    const retry = await usage.consumeVoice(
+      USER_ID,
+      AiFeature.MEAL_PLAN_CHAT,
+      context,
+      NOW,
+    );
+    expect(retry?.id).toBe(first?.id);
+    await usage.complete(retry!);
+    await usage.complete(retry!);
+    expect(
+      await usage.summary(USER_ID, AiFeature.MEAL_PLAN_CHAT, NOW),
+    ).toMatchObject({ used: 1 });
+  });
+
+  it('lets only one concurrent text or voice reservation take the final shared allowance', async () => {
+    const plan = await seedPaid(BillingPlan.PRO);
+    await intents().updateOne({ _id: plan.id }, { $set: { textLimit: 1 } });
+    const results = await Promise.all([
+      usage.consumeVoice(USER_ID, AiFeature.MEAL_PLAN_CHAT, {}, NOW),
+      usage.consume(USER_ID, AiFeature.BLOG_CHAT, {}, NOW),
+    ]);
+    const reserved = results.filter((result) => result !== null);
+    expect(reserved).toHaveLength(1);
+    await usage.complete(reserved[0]);
+    expect(
+      await usage.summary(USER_ID, AiFeature.MEAL_PLAN_CHAT, NOW),
+    ).toMatchObject({ used: 1, remaining: 0 });
+  });
+
+  it('still refuses voice to Plus and to an expired Pro subscription', async () => {
+    const plus = await seedPaid(BillingPlan.PLUS);
+    await expect(
+      usage.consumeVoice(USER_ID, AiFeature.MEAL_PLAN_CHAT, {}, NOW),
+    ).rejects.toMatchObject({ code: 'PRO_REQUIRED' });
+    await intents().deleteOne({ _id: plus.id });
+    await seedPaid(BillingPlan.PRO, new Date(NOW.getTime() - 31 * 86_400_000));
+    await expect(
+      usage.consumeVoice(USER_ID, AiFeature.MEAL_PLAN_CHAT, {}, NOW),
+    ).rejects.toMatchObject({ code: 'PRO_REQUIRED' });
+  });
+
   it('reports no allowance for a user whose FREE text quota is used up', async () => {
     const period = await subscriptions.period(USER_ID, NOW);
     for (let i = 0; i < period.textLimit; i++) {
