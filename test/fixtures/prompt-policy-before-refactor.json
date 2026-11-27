@@ -3,7 +3,7 @@
     "file": "config/policies/nutrition.json",
     "source": "ai/guardrails/policies/nutrition.ts",
     "sha256": "35b214ab2b6ac20a57a82a6efd667775e6a8e31d000668c6e120181dfcc04d87",
-    "upstreamSha256": "ad698c97dd2f80e46468adf72f55481c0d93091228fa9dab0882bc2fcccb4cec"
+    "upstreamSha256": "f081e6701399119f31570e06195217c4064311bae2501cda4006348fd17eddcc"
   },
   {
     "file": "config/policies/blog-assistant.json",
