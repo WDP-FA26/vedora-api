@@ -2,7 +2,7 @@ import { runtimeConfig } from '../config/runtime-config.js';
 import { createHash, randomUUID } from 'node:crypto';
 import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import type { ClientSession, Model } from 'mongoose';
+import type { ClientSession, Model, QueryFilter } from 'mongoose';
 import { AiFeature, AiRequest, User, UserRole } from '../mongo/models.js';
 import { MongoService } from '../mongo/mongo.service.js';
 import { lockDocument } from '../mongo/document-lock.js';
@@ -56,14 +56,24 @@ export class AiUsageService {
     period: SubscriptionPeriod,
     feature: AiFeature,
     now: Date,
-  ) {
+  ): QueryFilter<AiRequest> {
+    const bucketFilter: QueryFilter<AiRequest> =
+      feature === AiFeature.BLOG_IMAGE
+        ? { bucket: 'IMAGE' }
+        : {
+            $or: [{ bucket: 'TEXT' }, { bucket: 'VOICE', usesTextQuota: true }],
+          };
     return {
       userId,
       periodKey: period.key,
-      bucket: this.bucket(feature),
-      $or: [
-        { charged: true },
-        { status: 'RESERVED' as const, leaseUntil: { $gt: now } },
+      $and: [
+        bucketFilter,
+        {
+          $or: [
+            { charged: true },
+            { status: 'RESERVED' as const, leaseUntil: { $gt: now } },
+          ],
+        },
       ],
     };
   }
@@ -210,7 +220,7 @@ export class AiUsageService {
               'The original assistant request is unavailable',
             );
           }
-          if (!row?.charged && !voice) {
+          if (!row?.charged) {
             const isAdmin = await this.isAdmin(userId, session);
             if (!isAdmin) {
               const limit =
@@ -235,6 +245,8 @@ export class AiUsageService {
               requestHashes: [],
             });
           row.periodKey = period.key;
+          // Keep historical free voice turns outside the shared allowance.
+          if (voice && !row.charged) row.usesTextQuota = true;
           row.status = 'RESERVED';
           row.leaseToken = token;
           row.leaseUntil = new Date(now.getTime() + LEASE_MS);
