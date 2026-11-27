@@ -79,7 +79,7 @@ export function logMealTool(mealLog: MealLogService, userId: string) {
         entry.calories === null ? 'chưa rõ kcal' : `~${entry.calories} kcal`;
       return {
         type: 'text',
-        value: `Đã ghi vào nhật ký ${entry.date}, bữa ${SECTION_NAMES[entry.section]}: ${entry.name} ×${entry.servings} (${kcal}).`,
+        value: `Đã ghi vào nhật ký ${entry.date}, bữa ${SECTION_NAMES[entry.section]}: ${entry.name} ×${entry.servings} (${kcal}) [id: ${entry.id}].`,
       };
     },
   });

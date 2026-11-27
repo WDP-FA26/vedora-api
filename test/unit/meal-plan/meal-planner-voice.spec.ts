@@ -521,6 +521,17 @@ describe('voice stream effects', () => {
       screenSummary: 'Đã mở mục dị ứng và gu ăn uống trên màn hình.',
     });
 
+    expect(
+      deriveVoiceToolEffects('editMealLog', {
+        action: 'delete',
+        entryId: 'entry-1',
+      }),
+    ).toEqual({
+      state: { invalidate: ['mealLog'] },
+      progress: 'Đã cập nhật nhật ký ăn uống, đang làm tiếp.',
+      actionSummary: 'Đã xóa món khỏi nhật ký ăn uống.',
+    });
+
     expect(deriveVoiceToolEffects('endCall', { ended: true })).toEqual({
       endCall: true,
       actionSummary:

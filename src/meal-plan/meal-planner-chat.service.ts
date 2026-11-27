@@ -57,6 +57,7 @@ import { askUserTool } from './tools/ask-user.tool.js';
 import { updateMemoryTool } from './tools/dietary-memory.tool.js';
 import { autoBalancePlanTool } from './tools/auto-balance-plan.tool.js';
 import { fillSlotsTool } from './tools/fill-slots.tool.js';
+import { editMealLogTool } from './tools/edit-meal-log.tool.js';
 import { getEatingLogTool } from './tools/get-eating-log.tool.js';
 import { getPlanTool } from './tools/get-plan.tool.js';
 import { getRecipeTool } from './tools/get-recipe.tool.js';
@@ -141,6 +142,7 @@ function stripPlannerTags(text: string): string {
 
 const QUICK_WRITE_TOOLS = new Set([
   'logMeal',
+  'editMealLog',
   'updateBodyMetrics',
   'undoLastChange',
 ]);
@@ -389,6 +391,7 @@ export class MealPlannerChatService {
         ? {
             getEatingLog: getEatingLogTool(this.mealLog, userId, toolWeek),
             logMeal: logMealTool(this.mealLog, userId),
+            editMealLog: editMealLogTool(this.mealLog, userId),
           }
         : {}),
       updateBodyMetrics: updateBodyMetricsTool(this.dietary, userId),

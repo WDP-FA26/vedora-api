@@ -360,6 +360,39 @@ export function deriveVoiceToolEffects(
     return effects;
   }
 
+  if (toolName === 'editMealLog') {
+    const effects: ToolDerivedEffects = {
+      state: { invalidate: ['mealLog'] },
+      progress: 'Đã cập nhật nhật ký ăn uống, đang làm tiếp.',
+    };
+    if (isRecord(output) && output.action === 'delete') {
+      effects.actionSummary = 'Đã xóa món khỏi nhật ký ăn uống.';
+      return effects;
+    }
+    if (
+      isRecord(output) &&
+      output.action === 'update' &&
+      isRecord(output.entry)
+    ) {
+      const { date, section, name, servings } = output.entry;
+      if (typeof date === 'string') {
+        effects.screen = {
+          focus: { kind: 'eatingLog', date },
+          close: null,
+        };
+      }
+      if (
+        typeof date === 'string' &&
+        typeof name === 'string' &&
+        isMealSection(section) &&
+        typeof servings === 'number'
+      ) {
+        effects.actionSummary = `Đã cập nhật món "${name}" (×${servings}) trong nhật ký bữa ${SECTION_NAMES[section]} ngày ${date}.`;
+      }
+    }
+    return effects;
+  }
+
   if (toolName === 'updateBodyMetrics') {
     const metrics = isRecord(output)
       ? {

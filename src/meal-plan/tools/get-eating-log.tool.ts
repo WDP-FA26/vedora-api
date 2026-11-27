@@ -55,7 +55,7 @@ export function getEatingLogTool(
               ? ', AI ước tính'
               : '';
           dishes.push(
-            `${SECTION_NAMES[entry.section]}: ${entry.name} ×${entry.servings} (${kcal}${estimate})`,
+            `${SECTION_NAMES[entry.section]}: ${entry.name} ×${entry.servings} (${kcal}${estimate}) [id: ${entry.id}]`,
           );
         }
         const unknown =
