@@ -10,6 +10,8 @@ import {
   AiFeature,
   AiRequest,
   BillingPlan,
+  Notification,
+  NotificationType,
   PaymentIntent,
   PaymentRequest,
   PaymentWebhookReceipt,
@@ -28,6 +30,8 @@ import {
 import { SubscriptionsService } from '@src/subscriptions/subscriptions.service.js';
 import { AiUsageService } from '@src/subscriptions/ai-usage.service.js';
 import { SubscriptionGrantsService } from '@src/subscriptions/subscription-grants.service.js';
+import { NotificationsService } from '@src/notifications/notifications.service.js';
+import type { NotificationDto } from '@src/notifications/dto/notification.dto.js';
 import { PaymentDto } from '@src/payments/payment.dto.js';
 import { createE2eApp, type E2eApp } from '@test/support/e2e-app.js';
 import { createUser } from '@test/support/fixtures.js';
@@ -124,6 +128,7 @@ describe('Administrative subscription grants (real MongoDB and HTTP)', () => {
       PaymentRequest.name,
       PaymentWebhookReceipt.name,
       AiRequest.name,
+      Notification.name,
     ])
       await model(name).deleteMany({});
   });
@@ -256,6 +261,156 @@ describe('Administrative subscription grants (real MongoDB and HTTP)', () => {
     await get(`${base}/users`).query({ limit: 1000 }).expect(400);
   });
 
+  it('includes legacy personal accounts without accountType in search, detail and grants', async () => {
+    const legacy = await createUser(e2e.mongo);
+    await model(User.name).updateOne(
+      { _id: legacy.id },
+      { $unset: { accountType: 1 } },
+    );
+    await get(`${base}/users`)
+      .query({ q: legacy.email })
+      .expect(200)
+      .expect(({ body }) =>
+        expect(body).toMatchObject({ total: 1, items: [{ id: legacy.id }] }),
+      );
+    await get(`${base}/users`)
+      .query({ q: '', page: 1, limit: 10 })
+      .expect(200)
+      .expect(({ text }) => {
+        const page = JSON.parse(text) as { items: { id: string }[] };
+        expect(page.items.some((user) => user.id === legacy.id)).toBe(true);
+      });
+    await grant(await input(legacy.id)).expect(200);
+    expect(
+      await e2e.app.get(SubscriptionsService).period(legacy.id),
+    ).toMatchObject({ planCode: 'PRO' });
+  });
+
+  it('paginates all eligible matching accounts without dropping the legacy type filter during search', async () => {
+    const prefix = `page-${randomUUID()}`;
+    const expected = [];
+    for (let index = 0; index < 12; index++) {
+      const user = await createUser(e2e.mongo, { fullName: prefix });
+      if (index % 2 === 0)
+        await model(User.name).updateOne(
+          { _id: user.id },
+          { $unset: { accountType: 1 } },
+        );
+      expected.push(user.id);
+    }
+    await createUser(e2e.mongo, {
+      fullName: prefix,
+      accountType: AccountType.PAGE,
+    });
+    await createUser(e2e.mongo, {
+      fullName: prefix,
+      status: AccountStatus.DELETED,
+    });
+    const first = await get(`${base}/users`)
+      .query({ q: prefix, page: 1, limit: 10 })
+      .expect(200);
+    const second = await get(`${base}/users`)
+      .query({ q: prefix, page: 2, limit: 10 })
+      .expect(200);
+    const pages = [first, second].map(
+      (response) =>
+        JSON.parse(response.text) as { total: number; items: { id: string }[] },
+    );
+    expect(pages.map((page) => page.total)).toEqual([12, 12]);
+    expect(pages.map((page) => page.items.length)).toEqual([10, 2]);
+    expect(
+      pages.flatMap((page) => page.items.map((user) => user.id)).sort(),
+    ).toEqual(expected.sort());
+  });
+
+  it('stores one private system notification with the grant and emits it only to the recipient', async () => {
+    const notices = e2e.app.get(NotificationsService);
+    const events: NotificationDto[] = [],
+      otherEvents: NotificationDto[] = [];
+    const listener = notices
+      .stream(member.id)
+      .subscribe((event) => events.push(event));
+    const other = notices
+      .stream(admin.id)
+      .subscribe((event) => otherEvents.push(event));
+    try {
+      const body = await input(),
+        key = randomUUID();
+      const saved = readGrant(await grant(body, key).expect(200));
+      await grant(body, key).expect(200);
+      const rows = await model<Notification>(Notification.name).find({
+        recipientId: member.id,
+      });
+      expect(rows).toHaveLength(1);
+      expect(rows[0]).toMatchObject({
+        type: NotificationType.SUBSCRIPTION_GRANTED,
+        actorId: null,
+        readAt: null,
+        reason: null,
+      });
+      expect(rows[0].note).toContain('gói Pro trong 30 ngày');
+      expect(rows[0].note).not.toContain(body.reason);
+      expect(events).toHaveLength(1);
+      expect(events[0].id).toBe(rows[0].id);
+      expect(otherEvents).toHaveLength(0);
+      expect(
+        await model<SubscriptionGrant>(SubscriptionGrant.name).findById(
+          saved.id,
+        ),
+      ).not.toBeNull();
+      await get('/api/v1/notifications', memberToken)
+        .expect(200)
+        .expect(({ body }) =>
+          expect(body).toMatchObject({
+            items: [
+              expect.objectContaining({
+                type: 'SUBSCRIPTION_GRANTED',
+                actor: null,
+              }),
+            ],
+          }),
+        );
+      await get('/api/v1/notifications/unread-count', memberToken)
+        .expect(200)
+        .expect(({ body }) => expect(body).toMatchObject({ unreadCount: 1 }));
+    } finally {
+      listener.unsubscribe();
+      other.unsubscribe();
+    }
+  });
+
+  it('rolls back grant, benefits and notification if notification persistence fails before commit', async () => {
+    const notices = e2e.app.get(NotificationsService);
+    const original = notices.storeSystemNotifications.bind(notices);
+    const events: NotificationDto[] = [];
+    const listener = notices
+      .stream(member.id)
+      .subscribe((event) => events.push(event));
+    const persist = vi
+      .spyOn(notices, 'storeSystemNotifications')
+      .mockImplementation(async (inputs, session) => {
+        await original(inputs, session);
+        throw new Error('Fixture notification persistence failed');
+      });
+    try {
+      await expect(
+        e2e.app
+          .get(SubscriptionGrantsService)
+          .create(admin.id, await input(), randomUUID()),
+      ).rejects.toThrow('Fixture notification persistence failed');
+      for (const name of [
+        SubscriptionGrant.name,
+        SubscriptionMembership.name,
+        Notification.name,
+      ])
+        expect(await model(name).countDocuments()).toBe(0);
+      expect(events).toHaveLength(0);
+    } finally {
+      persist.mockRestore();
+      listener.unsubscribe();
+    }
+  });
+
   it('excludes page, deleted and system targets and permits any personal account role', async () => {
     for (const fields of [
       { accountType: AccountType.PAGE },
@@ -365,6 +520,7 @@ describe('Administrative subscription grants (real MongoDB and HTTP)', () => {
     expect(results.map((res) => res.status)).toEqual([200, 200, 200]);
     expect(new Set(results.map((res) => readGrant(res).id)).size).toBe(1);
     expect(await model(SubscriptionGrant.name).countDocuments()).toBe(1);
+    expect(await model(Notification.name).countDocuments()).toBe(1);
     await grant({ ...body, planCode: 'PLUS' }, key).expect(409);
   });
 
