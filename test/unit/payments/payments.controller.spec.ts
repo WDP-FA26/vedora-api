@@ -35,16 +35,16 @@ describe('PaymentsController', () => {
     controller = new PaymentsController(service);
   });
 
-  it('returns the server billing catalog from plans()', () => {
+  it('returns the server billing catalog from plans()', async () => {
     const catalog = {
       planVersion: PLAN_VERSION,
       paymentsEnabled: true,
       freeLimits: { textLimit: 5, imageLimit: 0 },
       plans: [],
     } as BillingCatalogDto;
-    service.catalog.mockReturnValue(catalog);
+    service.catalog.mockResolvedValue(catalog);
 
-    expect(controller.plans()).toBe(catalog);
+    await expect(controller.plans()).resolves.toBe(catalog);
     expect(service.catalog).toHaveBeenCalledOnce();
   });
 

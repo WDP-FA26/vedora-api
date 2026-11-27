@@ -1,3 +1,5 @@
+import { SubscriptionCatalogService } from '@src/subscriptions/subscription-catalog.service.js';
+import { SubscriptionCatalog } from '@src/mongo/models.js';
 import { randomUUID } from 'node:crypto';
 import type { INestApplication } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
@@ -105,7 +107,10 @@ describe('PaymentsService', () => {
         PaymentEventsService,
         { provide: ConfigService, useValue: config },
       ],
-    }).compile();
+    })
+      .overrideProvider(ConfigService)
+      .useValue(config)
+      .compile();
     app = moduleRef.createNestApplication();
     await app.init();
     await prepareTestDatabase(app);
@@ -136,8 +141,8 @@ describe('PaymentsService', () => {
   });
 
   describe('catalog and serialize', () => {
-    it('returns configured catalog values and falls back to defaults when unset', () => {
-      expect(service.catalog()).toEqual({
+    it('returns configured catalog values and falls back to defaults when unset', async () => {
+      expect(await service.catalog()).toEqual({
         planVersion: 2,
         freeLimits: { textLimit: 5, imageLimit: 0 },
         paymentsEnabled: true,
@@ -161,9 +166,10 @@ describe('PaymentsService', () => {
         ],
       });
 
-      const fallbackConfig = {
-        get: (_key: string, fallback?: unknown) => fallback,
-      } as unknown as ConfigService;
+      const fallbackConfig = new ConfigService({
+        BILLING_DURATION_DAYS: 30,
+        SEPAY_PAYMENT_ENABLED: false,
+      });
       const defaultService = new PaymentsService(
         db,
         intents(),
@@ -175,9 +181,13 @@ describe('PaymentsService', () => {
         app.get(PaymentEventsService),
         app.get(SubscriptionsService),
         app.get(AiUsageService),
+        new SubscriptionCatalogService(
+          db.connection.model<SubscriptionCatalog>(SubscriptionCatalog.name),
+          fallbackConfig,
+        ),
       );
 
-      expect(defaultService.catalog()).toMatchObject({
+      expect(await defaultService.catalog()).toMatchObject({
         paymentsEnabled: false,
         plans: [
           { code: BillingPlan.PLUS, priceVnd: '49000', durationDays: 30 },
