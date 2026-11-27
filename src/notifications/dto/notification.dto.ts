@@ -57,7 +57,7 @@ export class NotificationDto {
     nullable: true,
     type: String,
     description:
-      "Moderation and workspace review: the admin's note. Post removals: the post excerpt. Comment removals and report outcomes: a bounded comment excerpt. SUBSCRIPTION_GRANTED: system-generated plan name, duration and expiry; never the admin's internal grant reason.",
+      "Moderation and workspace review: the admin's note. Post removals: the post excerpt. Comment removals and report outcomes: a bounded comment excerpt. SUBSCRIPTION_GRANTED: system-generated plan name, duration and expiry; never the admin's internal grant reason. WORKSPACE_MANAGER_ADDED and WORKSPACE_MANAGER_REMOVED: the page name.",
   })
   note!: string | null;
 

@@ -108,3 +108,14 @@ unread count. Yêu cầu gỡ lại bài đã REMOVED trả 409, không báo tr�
 | `WORKSPACE_REJECTED` | Chủ trang (`OWNER`) | Admin từ chối đơn (`POST /admin/workspaces/:id/review` với `REJECTED`) | `workspaceId`, `reason` (`WorkspaceRejectReason`), `note` (nếu có; bắt buộc khi `reason` là `OTHER`) |
 
 Ngoài thông báo trong ứng dụng, hệ thống cũng gửi email kết quả duyệt/từ chối đến email tài khoản chủ trang (đã xác minh) và `legal.contactEmail` (nếu khác email tài khoản).
+
+## Người quản lý trang nhà hàng
+
+`actor` là chủ trang (tài khoản cá nhân) đã thêm hoặc gỡ người quản lý. `note` là tên trang tại thời điểm đó.
+
+| `type` | Người nhận | Khi nào | Trường đi kèm |
+| --- | --- | --- | --- |
+| `WORKSPACE_MANAGER_ADDED` | Người vừa được thêm | Chủ trang gọi `POST /workspaces/:id/members` | `workspaceId`, `note` (tên trang) |
+| `WORKSPACE_MANAGER_REMOVED` | Người bị gỡ | Chủ trang gọi `DELETE /workspaces/:id/members/:userId`; người quản lý tự rời trang thì **không** có thông báo | `workspaceId`, `note` (tên trang) |
+
+Sau `WORKSPACE_MANAGER_REMOVED`, người nhận không còn mở được `GET /workspaces/:id`, nên đừng dẫn link tới trang quản lý.
