@@ -153,6 +153,16 @@ export class PostReportsService {
         'You cannot report your own post',
       );
     }
+    const reported = await this.reports
+      .exists({ postId, reporterId })
+      .session(session ?? null)
+      .exec();
+    if (reported) {
+      throw new StateConflictException(
+        'ALREADY_REPORTED',
+        'You have already reported this post',
+      );
+    }
   }
 
   async findAll(
