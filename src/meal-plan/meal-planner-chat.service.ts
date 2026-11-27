@@ -16,7 +16,6 @@ import {
   toUIMessageStream,
   TypeValidationError,
   type UIMessage,
-  type UIMessageChunk,
   validateUIMessages,
 } from 'ai';
 import { PromptCache } from '../ai/prompt-cache.js';
@@ -69,7 +68,7 @@ import { undoLastChangeTool } from './tools/undo-last-change.tool.js';
 import { endCallTool } from './tools/end-call.tool.js';
 import { updateBodyMetricsTool } from './tools/update-body-metrics.tool.js';
 import { setScreenTool } from './tools/voice-screen.tools.js';
-import { withVoiceStreamEffects } from './voice/voice-stream-effects.js';
+import { withPlannerStreamEffects } from './voice/voice-stream-effects.js';
 import {
   requestWebSearchTool,
   webSearchTool,
@@ -941,9 +940,7 @@ export class MealPlannerChatService {
           return chatErrorCode(error);
         },
       });
-      const outputStream: ReadableStream<UIMessageChunk> = voice
-        ? withVoiceStreamEffects(uiStream)
-        : uiStream;
+      const outputStream = withPlannerStreamEffects(uiStream, { voice });
       return quotaStream(outputStream, this.usage, ticket);
     } catch (error) {
       await this.usage.refund(ticket);
