@@ -2,6 +2,7 @@ import type { Model } from 'mongoose';
 import type { User, WorkspaceMember } from '../mongo/models.js';
 import { UnauthenticatedException } from '../common/exceptions/unauthenticated.exception.js';
 import { assertAccountActive } from './account-access.js';
+import { presentString } from '../mongo/partial-match.js';
 
 export async function assertPageAccess(
   users: Model<User>,
@@ -11,7 +12,9 @@ export async function assertPageAccess(
 ): Promise<void> {
   const [actor, membership] = await Promise.all([
     users.findOne({ _id: actorId }).select('status').exec(),
-    members.exists({ pageUserId, userId: actorId }).exec(),
+    members
+      .exists({ pageUserId: presentString(pageUserId), userId: actorId })
+      .exec(),
   ]);
   if (!actor)
     throw new UnauthenticatedException(

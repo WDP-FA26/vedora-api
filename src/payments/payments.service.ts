@@ -47,6 +47,7 @@ import { InvalidInputException } from '../common/exceptions/invalid-input.except
 import { ResourceNotFoundException } from '../common/exceptions/resource-not-found.exception.js';
 import { StateConflictException } from '../common/exceptions/state-conflict.exception.js';
 import { FeatureUnavailableException } from '../common/exceptions/feature-unavailable.exception.js';
+import { presentString } from '../mongo/partial-match.js';
 
 const hash = (value: unknown) =>
   createHash('sha256').update(JSON.stringify(value)).digest('hex');
@@ -132,7 +133,7 @@ export class PaymentsService {
     const now = new Date();
     const [period, pending, recent] = await Promise.all([
       this.subscriptions.period(userId, now),
-      this.intents.findOne({ activeIntentKey: userId }).exec(),
+      this.intents.findOne({ activeIntentKey: presentString(userId) }).exec(),
       this.intents
         .find({ userId })
         .sort({ createdAt: -1, _id: -1 })
@@ -188,7 +189,7 @@ export class PaymentsService {
       this.mongo.withTransaction(async (session) => {
         await this.lock(session, 'payer', userId);
         const pending = await this.intents
-          .findOne({ activeIntentKey: userId })
+          .findOne({ activeIntentKey: presentString(userId) })
           .session(session)
           .exec();
         const expired =
@@ -237,7 +238,7 @@ export class PaymentsService {
             'Unknown billing plan',
           );
         let intent: Intent | null = await this.intents
-          .findOne({ activeIntentKey: userId })
+          .findOne({ activeIntentKey: presentString(userId) })
           .session(session)
           .exec();
         if (
@@ -412,7 +413,9 @@ export class PaymentsService {
       if (intent.amount !== BigInt(event.transferAmount))
         return record('AMOUNT_MISMATCH', intent.id);
       const used = await this.intents
-        .findOne({ providerTransactionId: event.providerTransactionId })
+        .findOne({
+          providerTransactionId: presentString(event.providerTransactionId),
+        })
         .select('_id')
         .session(session)
         .exec();

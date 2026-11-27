@@ -19,6 +19,7 @@ import {
 import { MongoService } from '../mongo/mongo.service.js';
 import { assertAccountActive } from '../auth-core/account-access.js';
 import { UnauthenticatedException } from '../common/exceptions/unauthenticated.exception.js';
+import { presentString } from '../mongo/partial-match.js';
 
 export interface IssuedRefreshToken {
   token: string;
@@ -172,7 +173,7 @@ export class RefreshTokensService {
     actorId: string,
   ): Promise<boolean> {
     const membership = await this.members
-      .exists({ pageUserId, userId: actorId })
+      .exists({ pageUserId: presentString(pageUserId), userId: actorId })
       .session(session)
       .exec();
     return membership !== null;
@@ -231,7 +232,10 @@ export class RefreshTokensService {
 
   async revokeAllForUser(userId: string): Promise<void> {
     await this.tokens.updateMany(
-      { $or: [{ userId }, { actorId: userId }], revokedAt: null },
+      {
+        $or: [{ userId }, { actorId: presentString(userId) }],
+        revokedAt: null,
+      },
       { $set: { revokedAt: new Date(), revokedReason: 'REVOKED' } },
     );
   }

@@ -230,8 +230,14 @@ export class Post extends Identified {
 }
 
 export const PostSchema = SchemaFactory.createForClass(Post);
-PostSchema.index({ status: 1, publishedAt: 1 });
-PostSchema.index({ authorId: 1, createdAt: 1 });
+// Timelines sort `publishedAt: -1, _id: -1`; the tie-breaker must be in the
+// index or MongoDB sorts every match in memory. Read backwards, it also serves
+// oldest-first scans such as the summary backfill.
+PostSchema.index({ status: 1, publishedAt: -1, _id: -1 });
+// One author's published posts (profile, following feed) …
+PostSchema.index({ authorId: 1, status: 1, publishedAt: -1, _id: -1 });
+// … and their drafts, newest edit first.
+PostSchema.index({ authorId: 1, status: 1, updatedAt: -1, _id: -1 });
 PostSchema.index({ 'blog.recipeIds': 1 });
 
 cascadeOnDelete(PostSchema, [
@@ -326,7 +332,7 @@ export class PostRepost extends Identified {
 
 export const PostRepostSchema = SchemaFactory.createForClass(PostRepost);
 PostRepostSchema.index({ postId: 1, userId: 1 }, { unique: true });
-PostRepostSchema.index({ userId: 1, createdAt: 1 });
+PostRepostSchema.index({ userId: 1, createdAt: -1, _id: -1 });
 
 @Schema(collectionSchema('post_bookmarks', 'created'))
 export class PostBookmark extends Identified {
@@ -345,7 +351,7 @@ export class PostBookmark extends Identified {
 
 export const PostBookmarkSchema = SchemaFactory.createForClass(PostBookmark);
 PostBookmarkSchema.index({ postId: 1, userId: 1 }, { unique: true });
-PostBookmarkSchema.index({ userId: 1, createdAt: 1 });
+PostBookmarkSchema.index({ userId: 1, createdAt: -1, _id: -1 });
 
 @Schema(collectionSchema('post_reports', 'created'))
 export class PostReport extends Identified {
